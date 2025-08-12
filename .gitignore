@@ -2,8 +2,10 @@
 /storage
 /public
 /.idea
+/docker
 Homestead.json
 Homestead.yaml
 .env
 .phpunit.result.cache
 composer.lock
+docker-compose.yml

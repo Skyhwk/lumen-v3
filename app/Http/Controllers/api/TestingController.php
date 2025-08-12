@@ -236,6 +236,7 @@ class TestingController extends Controller
                 return response()->json(['data' => $kategori], 200);
             case 'update perisapan':
                 // Build the query to retrieve PersiapanSampelHeader records
+                dd('siap');
                 if ($request->mode == 'byNoOrder') {
                     try {
                         //code...

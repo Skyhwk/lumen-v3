@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 */
 
 $router->post('/api/gettoken', 'AuthController@gettoken');
+
 $router->post('/api/cektoken', 'AuthController@checkToken');
 
 $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'log.request', 'decrypt.slice']], function () use ($router) {
