@@ -41,17 +41,15 @@ class CoverLhpController extends Controller
             $orderDetails = $orderDetails->get();
 
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
-            $periodGroups->map(
-                fn($itemGroup) => [
-                    'cfr' => $itemGroup->first()->cfr,
-                    'periode' => $itemGroup->first()->periode,
-                    'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
-                    'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
-                    'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
-                    'total_no_sampel' => $itemGroup->count(),
-                    'order_details' => $itemGroup->toArray(),
-                ]
-            ))->flatten(1)->values();
+            $periodGroups->map(fn($itemGroup) => [
+                'cfr' => $itemGroup->first()->cfr,
+                'periode' => $itemGroup->first()->periode,
+                'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
+                'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
+                'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
+                'total_no_sampel' => $itemGroup->count(),
+                'order_details' => $itemGroup->toArray(),
+            ]))->flatten(1)->values();
 
             return $groupedData;
         } catch (\Throwable $th) {
@@ -61,11 +59,14 @@ class CoverLhpController extends Controller
 
     public function detail(Request $request)
     {
-        $orderHeader = OrderHeader::find($request->id_order_header);
+        $orderHeader = OrderHeader::with('persiapanHeader.psDetail')->find($request->id_order_header);
 
         $groupedData = $this->getGroupedCFRs($orderHeader);
 
-        return response()->json(['groupedCFRs' => $groupedData], 200);
+        return response()->json([
+            'groupedCFRs' => $groupedData,
+            'psHeader' => $orderHeader->persiapanHeader
+        ], 200);
     }
 
     public function generatePdf(Request $request)
@@ -88,26 +89,40 @@ class CoverLhpController extends Controller
                     ->count();
 
                 $categoryName = explode('-', $category)[1];
+                if (
+                    $categoryName == 'Udara Lingkungan Kerja'
+                    || $categoryName == 'Debu'
+                    || $categoryName == 'Pencahayaan'
+                    || $categoryName == 'Kebisingan Personal'
+                    || $categoryName == 'Frekuensi Radio'
+                    || $categoryName == 'Medan Magnet'
+                    || $categoryName == 'Medan Listrik'
+                    || $categoryName == 'Power Density'
+                    || $categoryName == 'Iklim Kerja'
+                    || $categoryName == 'Suhu'
+                    || $categoryName == 'Kelembapan'
+                    || $categoryName == 'Sinar UV'
+                    || $categoryName == 'PM 10'
+                    || $categoryName == 'Getaran (Lengan & Tangan)'
+                    || $categoryName == 'Getaran (Seluruh Tubuh)'
+                    || $categoryName == 'Angka Kuman'
+                ) {
+                    $categoryName = 'Lingkungan Kerja';
+                }
                 $detail[] = "$categoryName - $titikCount Titik";
             }
 
-            // get bas number
-            $no_bas = [];
-            $noDocs = PersiapanSampelHeader::select('no_document')->where('no_order', $request->no_order)->pluck('no_document')->toArray();
-            foreach ($noDocs as $noDoc) {
-                $no_bas[] = str_replace('PS', 'BAS', $noDoc);
-            }
-
-            $formattedOrderDate = Carbon::parse($orderHeader->tanggal_order)->translatedFormat('d F Y');
+            $formattedFirstDate = Carbon::parse($request->tgl_awal)->translatedFormat('d F Y');
+            $formattedLastDate = Carbon::parse($request->tgl_akhir)->translatedFormat('d F Y');
             $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
 
             $data = (object) [
                 'nama_perusahaan' => $orderHeader->nama_perusahaan,
                 'alamat_sampling' => $orderHeader->alamat_sampling,
-                'periode' => "$formattedOrderDate - $formattedNowDate",
+                'periode' => "$formattedFirstDate - $formattedLastDate",
                 'no_order' => $orderHeader->no_order,
                 'no_quotation' => $orderHeader->no_document,
-                'no_bas' => $no_bas,
+                'no_bas' => $request->no_bas,
                 'detail' => $detail
             ];
 
@@ -116,7 +131,7 @@ class CoverLhpController extends Controller
             $fullPath = $directoryPath . '/' . $filename;
 
             if (!File::isDirectory($directoryPath)) {
-                File::makeDirectory($directoryPath, 0777);
+                File::makeDirectory($directoryPath, 0777, true);
             }
 
             $mpdf = new Mpdf([
@@ -174,7 +189,7 @@ class CoverLhpController extends Controller
                                     <td style="font-size: 10px;"></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="3" style="padding-left: 10px;">
+                                    <td colspan="3" style="padding-left: 10px; font-size: 10px;">
                                         <ul>' . $basList . '</ul>
                                     </td>
                                 </tr>
