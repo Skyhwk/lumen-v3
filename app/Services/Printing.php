@@ -9,7 +9,8 @@ use Carbon\Carbon;
 class Printing
 {
     protected static $apikey;
-    protected static $url = 'http://10.88.11.44:5000/api/print';
+    // protected static $url = 'http://10.88.11.44:5000/api/print';
+    protected static $url = 'http://10.88.4.160:1126/';
     protected static $karyawan;
     protected static $file;
     protected static $printer;
@@ -17,6 +18,8 @@ class Printing
     protected static $printer_name;
     protected static $destination;
     protected static $pages;
+    protected static $copies;
+
 
     public static function get()
     {
@@ -86,6 +89,10 @@ class Printing
         if($type == 'pages') {
             self::$pages = $value;
         }
+        
+        if($type == 'copies') {
+            self::$copies = $value;
+        }
 
         return new static;
     }
@@ -111,7 +118,7 @@ class Printing
         if(empty(self::$filename)) {
             throw new \Exception('Filename is required');
         }
-
+        
         // Get file extension
         $extension = strtolower(pathinfo(self::$filename, PATHINFO_EXTENSION));
 
@@ -125,14 +132,26 @@ class Printing
         $filename = explode('/', self::$filename);
         $filename = end($filename);
         
-        $printJob = Http::withHeaders([
-            'Content-Type' => 'application/json'
-        ])->post(self::$url, [
-                'printer' => self::$printer,
-                'filename' => $filename,
-                'url' => self::$file,
-                'pages' => self::$pages
-            ]);
+        // $printJob = Http::withHeaders([
+        //     'Content-Type' => 'application/json'
+        // ])->post(self::$url.'print', [
+        //         'printer_name' => self::$printer,
+        //         'filename' => $filename,
+        //         'pages' => self::$pages,
+        //         'copies' => (int) self::$copies
+        //     ]);
+
+        $printJob = Http::attach('file', fopen(self::$file, 'r'), $filename)
+                        ->post(self::$url.'print', [
+                        'printer_name' => self::$printer_name,
+                        'pages' => self::$pages,
+                        'copies' => self::$copies,
+                        'fit_to_page' => true
+                    ]);
+
+        if ($printJob->failed()) {
+            throw new \Exception('HTTP Request failed with status: ' . $printJob->status() . ' - ' . $printJob->body());
+        }
 
         $response = $printJob->json();
 

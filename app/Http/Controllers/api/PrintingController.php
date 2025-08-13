@@ -32,8 +32,26 @@ class PrintingController extends Controller
         return response()->json(['data' => $data], 200);
     }
 
+    // public function print(Request $request)
+    // {
+    //     $cek_printer = Printers::where('id', $request->printer)->first();
+
+    //     $print = Printing::where('pdf', env('APP_URL').'/public/'.$request->filename)
+    //     ->where('printer', $cek_printer->full_path)
+    //     ->where('karyawan', $this->karyawan)
+    //     ->where('filename', $request->filename)
+    //     ->where('printer_name', $request->printer_name)
+    //     ->where('destination', $request->destination)
+    //     ->where('pages', $request->pages)
+    //     ->print();
+
+    //     return response()->json(['message' => 'Printing success'], 200);
+    // }
+
+
     public function print(Request $request)
     {
+        // dd($request->all());
         $cek_printer = Printers::where('id', $request->printer)->first();
 
         $print = Printing::where('pdf', env('APP_URL').'/public/'.$request->filename)
@@ -43,6 +61,7 @@ class PrintingController extends Controller
         ->where('printer_name', $request->printer_name)
         ->where('destination', $request->destination)
         ->where('pages', $request->pages)
+        ->where('copies', intval($request->copies))
         ->print();
 
         return response()->json(['message' => 'Printing success'], 200);
