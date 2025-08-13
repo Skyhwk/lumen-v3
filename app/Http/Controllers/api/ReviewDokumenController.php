@@ -9,7 +9,10 @@ use App\Models\{
     OrderDetail,
     Parameter,
     MasterBakumutu,
-    TcOrderDetail
+    TcOrderDetail,
+    QuotationKontrakH,
+    QuotationKontrakD,
+    QuotationNonKontrak
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,7 +58,7 @@ class ReviewDokumenController extends Controller
             // $kategoriLabel = $kategoriLabels[$kategoriId];
 
             // Query order detail hanya untuk kategori dan parameter yang sesuai
-            $orderDetails = OrderDetail::where('is_active', true)
+            $orderDetails = OrderDetail::with('orderHeader')->where('is_active', true)
                 ->whereDate('tanggal_sampling', '>', $today)
                 // ->where('kategori_2', $kategoriLabel)
                 ->where('kategori_2', '1-Air')
@@ -146,41 +149,117 @@ class ReviewDokumenController extends Controller
 
      public function updateData(Request $request)
     {
+        DB::beginTransaction();
         try {
-            $data = OrderDetail::where('id', $request->id)->first();
-            $record = new TcOrderDetail();
-            $param = $request->param[0] ?? ''; 
-            $paramArray = array_map('trim', explode(',', $param)); 
+            //---------------Proses Quotation--------------------------------
+            $noQt = $request->no_document;
+            if(\explode('/',$noQt)[1] == 'QTC'){
+                // kontrak
+                $dataQuotation = QuotationKontrakH::where('no_document', $noQt)->first();
+                $dataQuotationDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataQuotation->id)->get();
+                foreach ($dataQuotationDetail as $item) {
+                    $dataPendukungSampling = array_values(json_decode($item->data_pendukung_sampling, true))[0]['data_sampling'] ?? json_decode($item->data_pendukung_sampling, true);
+                    foreach ($dataPendukungSampling as $keys => $value) {
+                        if($value['regulasi'] == $request->regulasi){
+                            if ($request->existing !== null && $request->pengganti !== null) {
+                                foreach ($value['parameter'] as $index => $param) {
+                                    $key = array_search($param, $request->existing);
+                                    if ($key !== false && isset($request->pengganti[$key])) {
+                                        $value['parameter'][$index] = $request->pengganti[$key];
+                                    }
+                                }
+                                
+                                $dataPendukungSampling[$keys]['parameter'] = $value['parameter'];
+                            }
+                        }
+                    }
+                    if ($request->existing !== null && $request->pengganti !== null) {
+                        $item->data_pendukung_sampling = json_encode($dataPendukungSampling);
+                        $item->save();
+                    }
+                }
 
-            $params = $paramArray;
-            $existing = $request->existing;
-            $pengganti = $request->pengganti;
-            if ($existing !== null && $pengganti !== null) {
-                foreach ($params as $index => $value) {
-                    $key = array_search($value, $existing);
-                    if ($key !== false && isset($pengganti[$key])) {
-                        $params[$index] = $pengganti[$key];
+                $dataPendukungHeader = json_decode($dataQuotation->data_pendukung_sampling, true);
+                foreach($dataPendukungHeader as $keys => $value){
+                    if($value['regulasi'] == $request->regulasi){
+                        if ($request->existing !== null && $request->pengganti !== null) {
+                            foreach ($value['parameter'] as $index => $param) {
+                                $key = array_search($param, $request->existing);
+                                if ($key !== false && isset($request->pengganti[$key])) {
+                                    $value['parameter'][$index] = $request->pengganti[$key];
+                                }
+                            }
+                            $dataPendukungHeader[$keys]['parameter'] = $value['parameter'];
+                        }
+                    }
+                }
+                if ($request->existing !== null && $request->pengganti !== null) {
+                    $dataQuotation->data_pendukung_sampling = json_encode($dataPendukungHeader);
+                    $dataQuotation->save();
+                }
+
+            } else {
+                // nnon kontrak
+                $dataQuotation = QuotationNonKontrak::where('no_document', $noQt)->first();
+                $dataPendukungSampling = json_decode($dataQuotation->data_pendukung_sampling, true);
+
+                foreach($dataPendukungSampling as $keys => $value){
+                    if($value['regulasi'] == $request->regulasi){
+                        if ($request->existing !== null && $request->pengganti !== null) {
+                            foreach ($value['parameter'] as $index => $param) {
+                                $key = array_search($param, $request->existing);
+                                if ($key !== false && isset($request->pengganti[$key])) {
+                                    $value['parameter'][$index] = $request->pengganti[$key];
+                                }
+                            }
+                            $dataPendukungSampling[$keys]['parameter'] = $value['parameter'];
+                        }
+                    }
+                }
+                if ($request->existing !== null && $request->pengganti !== null) {
+                    $dataQuotation->data_pendukung_sampling = json_encode($dataPendukungSampling);
+                    $dataQuotation->save();
+                }
+            }
+            //---------------End Proses Quotation--------------------------------
+
+            //---------------Proses Order Detail--------------------------------
+            $dataOrderDetail = OrderDetail::where('no_order', $request->no_order)->where('is_active', true)->get();
+            
+            foreach($dataOrderDetail as $item){
+                $regulasiExist = json_decode($item->regulasi, true) ?? [];
+                if($regulasiExist == $request->regulasi){
+                    $parameterExist = json_decode($item->parameter, true) ?? [];
+                    if($request->existing !== null && $request->pengganti !== null) {
+                        foreach($parameterExist as $index => $param){
+                            $key = array_search($param, $request->existing);
+                            if($key !== false && isset($request->pengganti[$key])){
+                                $parameterExist[$index] = $request->pengganti[$key];
+                            }
+                        }
+
+                        $item->parameter = json_encode($parameterExist) ?? [];
+                        $item->save();
+
+                        $record = new TcOrderDetail();
+                        $record->id_order_detail = $item->id;
+                        $record->no_sampel = $item->no_sampel;
+                        $record->updated_tc_by = $this->karyawan;
+                        $record->updated_tc_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $record->save();
                     }
                 }
             }
 
-            $data->parameter = json_encode($params) ?? null;
-            // $data->regulasi = json_encode($request->regulasi) ?? null;
-            $data->save();
-
-            $record->id_order_detail = $data->id;
-            $record->no_sampel = $data->no_sampel;
-            $record->updated_tc_by = $this->karyawan;
-            $record->updated_tc_at = Carbon::now()->format('Y-m-d H:i:s');
-            $record->save();
-
+            DB::commit();
             return response()->json([
                 'status' => 200,
                 'success' => true,
                 'message' => 'Data berhasil diupdate',
-                'data' => $data
+                // 'data' => $data
             ], 200);
         } catch (\Throwable $th) {
+            DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),

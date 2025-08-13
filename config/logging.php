@@ -1,8 +1,8 @@
 <?php
 
-use Monolog\Handler\NullHandler;
-use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
+use Monolog\Handler\StreamHandler;
+use Monolog\Handler\NullHandler;
 
 return [
 
@@ -118,6 +118,13 @@ return [
         'analyst_approve' => [
             'driver' => 'daily',
             'path' => storage_path('logs/analyst_approve/analyst_approve.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
+
+        'print_lhp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/print_lhp/print_lhp.log'),
             'level' => 'info',
             'days' => 90,
         ],
