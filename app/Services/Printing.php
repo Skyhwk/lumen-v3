@@ -9,7 +9,7 @@ use Carbon\Carbon;
 class Printing
 {
     protected static $apikey;
-    protected static $url = 'http://10.88.11.44:5000/api/print';
+    protected static $url = 'http://10.88.4.160:1126/';
     protected static $karyawan;
     protected static $file;
     protected static $printer;
@@ -17,20 +17,21 @@ class Printing
     protected static $printer_name;
     protected static $destination;
     protected static $pages;
+    protected static $copies;
 
     public static function get()
     {
-        if(empty(self::$apikey)) {
+        if (empty(self::$apikey)) {
             self::$apikey = env('PRINT_NODE_API_KEY');
         }
 
         $response = Http::withBasicAuth(self::$apikey, '')
-            ->get(self::$url."printers");
+            ->get(self::$url . "printers");
 
         if ($response->failed()) {
             throw new \Exception('Failed to get printers');
         }
-        
+
         $result = [];
         foreach ($response->json() as $item) {
             $result[] = [
@@ -47,44 +48,48 @@ class Printing
 
     public static function where($type, $value)
     {
-        if($type == 'pdf' || $type == 'docx' || $type == 'doc' || $type == 'xlsx' || $type == 'xls') {
-            if(empty($value)) {
+        if ($type == 'pdf' || $type == 'docx' || $type == 'doc' || $type == 'xlsx' || $type == 'xls') {
+            if (empty($value)) {
                 throw new \Exception('File is required');
             }
             self::$file = $value;
         }
-        if($type == 'printer') {
-            if(empty($value)) {
+        if ($type == 'printer') {
+            if (empty($value)) {
                 throw new \Exception('Printer is required');
             }
             self::$printer = $value;
         }
-        if($type == 'karyawan') {
-            if(empty($value)) {
+        if ($type == 'karyawan') {
+            if (empty($value)) {
                 throw new \Exception('Karyawan is required');
             }
             self::$karyawan = $value;
         }
-        if($type == 'filename') {
-            if(empty($value)) {
+        if ($type == 'filename') {
+            if (empty($value)) {
                 throw new \Exception('Filename is required');
             }
             self::$filename = $value;
         }
 
-        if($type == 'printer_name') {
-            if(empty($value)) {
+        if ($type == 'printer_name') {
+            if (empty($value)) {
                 throw new \Exception('Printer name is required');
             }
             self::$printer_name = $value;
         }
 
-        if($type == 'destination') {
+        if ($type == 'destination') {
             self::$destination = $value;
         }
 
-        if($type == 'pages') {
+        if ($type == 'pages') {
             self::$pages = $value;
+        }
+
+        if ($type == 'copies') {
+            self::$copies = $value;
         }
 
         return new static;
@@ -92,25 +97,27 @@ class Printing
 
     public static function print()
     {
-        if(empty(self::$apikey)) {
+        if (empty(self::$apikey)) {
             self::$apikey = env('PRINT_NODE_API_KEY');
         }
 
-        if(empty(self::$printer)) {
+        if (empty(self::$printer)) {
             throw new \Exception('Printer is required');
         }
 
-        if(empty(self::$file)) {
-            throw new \Exception('File is required'); 
+        if (empty(self::$file)) {
+            throw new \Exception('File is required');
         }
 
-        if(empty(self::$karyawan)) {
+        if (empty(self::$karyawan)) {
             throw new \Exception('Karyawan is required');
         }
 
-        if(empty(self::$filename)) {
+        if (empty(self::$filename)) {
             throw new \Exception('Filename is required');
         }
+
+        //    dd(self::$filename, self::$printer, self::$karyawan, self::$printer_name, self::$destination, self::$pages, self::$copies);
 
         // Get file extension
         $extension = strtolower(pathinfo(self::$filename, PATHINFO_EXTENSION));
@@ -124,22 +131,38 @@ class Printing
 
         $filename = explode('/', self::$filename);
         $filename = end($filename);
-        
-        $printJob = Http::withHeaders([
-            'Content-Type' => 'application/json'
-        ])->post(self::$url, [
-                'printer' => self::$printer,
-                'filename' => $filename,
-                'url' => self::$file,
-                'pages' => self::$pages
+
+
+
+        // $printJob = Http::withHeaders([
+        //     'Content-Type' => 'application/json'
+        // ])->post(self::$url.'print', [
+        //         'printer_name' => self::$printer,
+        //         'filename' => $filename,
+        //         'pages' => self::$pages,
+        //         'copies' => (int) self::$copies
+        //     ]);
+
+        $printJob = Http::attach('file', fopen(self::$file, 'r'), $filename)
+            ->post(self::$url . 'print', [
+                'printer_name' => self::$printer_name,
+                'pages' => self::$pages,
+                'copies' => self::$copies,
+                'fit_to_page' => true
             ]);
+
+        if ($printJob->failed()) {
+            $error = json_decode($printJob->body(), true);
+            $return_error = $error['message'] ?? $error['detail'];
+            throw new \Exception($return_error);
+        }
 
         $response = $printJob->json();
 
-        if($response['status'] == 'error') {
+        if ($response['status'] == 'error') {
             throw new \Exception($response['message']);
         }
-        
+
         if ($printJob->failed()) {
             throw new \Exception('Failed to print');
         }

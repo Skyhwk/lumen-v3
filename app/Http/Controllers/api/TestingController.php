@@ -235,6 +235,7 @@ class TestingController extends Controller
                 dd($semua_kategori);
                 return response()->json(['data' => $kategori], 200);
             case 'update perisapan':
+
                 // Build the query to retrieve PersiapanSampelHeader records
                 if ($request->mode == 'byNoOrder') {
                     try {
@@ -254,8 +255,6 @@ class TestingController extends Controller
                             $query->where('periode', $request->periode);
                         }
                         $headers = $query->get();
-
-
                         // Extract and flatten 'no_sampel' values from the 'psDetail' relationship
                         $sampleNumbers = $headers->flatMap(function ($header) {
                             return $header->psDetail->pluck('no_sampel');
@@ -302,8 +301,6 @@ class TestingController extends Controller
                             ->whereBetween('tanggal_sampling', ['2025-08-07', '2025-08-31'])
                             ->whereRaw('JSON_LENGTH(no_sampel) > 0');
 
-
-
                         $headers = $query->get();
 
                         // Flatten 'no_sampel' dari relasi psDetail
@@ -311,7 +308,51 @@ class TestingController extends Controller
                             return $header->psDetail->pluck('no_sampel');
                         })->unique()->values();
 
+                        $data = OrderDetail::where('is_active', 1)
+                            ->whereIn('no_sampel', $sampleNumbers)
+                            ->where(function ($query) {
+                                $query->whereJsonDoesntContain('parameter', '309;Pencahayaan')
+                                    ->whereJsonDoesntContain('parameter', '268;Kebisingan')
+                                    ->whereJsonDoesntContain('parameter', '318;Psikologi')
+                                    ->whereJsonDoesntContain('parameter', '230;Ergonomi');
+                            })
+                            ->where('kategori_1', '!=', 'SD')
+                            ->whereNull('tanggal_terima');
 
+                        if (isset($request->periode) && $request->periode != null) {
+                            $data->where('periode', $request->periode);
+                        }
+                        $data->update(['persiapan' => '[]']);
+
+                        $updatePersiapan = PersiapanSampelDetail::whereIn('no_sampel', $sampleNumbers)
+                            ->where('is_active', 1)
+                            ->update(['parameters' => NULL]);
+                        return response()->json('berhasil di kosongkan', 200);
+                    } catch (\Exception $ex) {
+                        //throw $th;
+                        return response()->json(['message' => $ex->getMessage(), 'line' => $ex->getLine()]);
+                    }
+                } else if ($request->mode == 'spek') {
+                    try {
+                        //code...
+                        $query = PersiapanSampelHeader::with([
+                            'psDetail' => function ($q) {
+                                $q->where('is_active', 1)
+                                    ->select('id_persiapan_sampel_header', 'no_sampel', 'parameters');
+                            }
+                        ])
+                            ->whereNotNull('no_sampel')
+                            ->where('is_active', 1)
+                            ->where('no_order', $request->no_order)
+                            ->where('tanggal_sampling', $request->tanggal_sampling)
+                            ->whereRaw('JSON_LENGTH(no_sampel) > 0');
+
+                        $headers = $query->get();
+
+                        // Flatten 'no_sampel' dari relasi psDetail
+                        $sampleNumbers = $headers->flatMap(function ($header) {
+                            return $header->psDetail->pluck('no_sampel');
+                        })->unique()->values();
 
                         $data = OrderDetail::where('is_active', 1)
                             ->whereIn('no_sampel', $sampleNumbers)
@@ -1483,7 +1524,7 @@ class TestingController extends Controller
                         ->where('tanggal_sampling', '>=', '2025-07-09')
                         ->where('is_active', true);
                 })
-                // ->whereIn('no_document', $request->no_document)
+                ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
 
@@ -1493,13 +1534,14 @@ class TestingController extends Controller
                         ->where('tanggal_sampling', '>=', '2025-07-09')
                         ->where('is_active', true);
                 })
-                // ->whereIn('no_document', $request->no_document)
+                ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
 
-            // $dataList = $kontrak->merge($nonKontrak);
-            $dataList = $nonKontrak;
+            $dataList = $kontrak->merge($nonKontrak);
+            // $dataList = $nonKontrak;
 
+            // dd($dataList);
             $masterBakumutu = MasterBakumutu::where('is_active', true);
 
             $processedCount = 0;
@@ -1661,7 +1703,7 @@ class TestingController extends Controller
                                     $regulasiId = explode('-', reset($header->regulasi))[0];
 
                                     if ($masterBakumutu->where('id_regulasi', $regulasiId)->doesntExist()) {
-                                        continue; // Skip jika regulasi tidak ditemukan
+                                        continue;
                                     }
 
                                     $bakumutu = $masterBakumutu->where('id_regulasi', $regulasiId)->get()->toArray();
@@ -1677,24 +1719,15 @@ class TestingController extends Controller
                                         $still = array_values(array_intersect($parameter_new, $parameter_old));
                                         $replace = array_values(array_diff($parameter_old, $still));
                                         $newParams = array_values(array_diff($parameter_new, $parameter_old));
-
                                         $replacement = $this->getReplacement($newParams, $replace);
                                         // dd($still, $replace, $newParams, $replacement);
 
                                         $header->parameter = array_merge($still, $replacement);
+                                        $cache[$header->kategori_2][reset($header->regulasi)] = $header->parameter;
                                         $updated = true;
-                                    }
-
-                                    // Cache untuk periode
-                                    if (isset($header->periode)) {
-                                        foreach ($header->periode as $periode) {
-                                            $cache[$header->kategori_2][reset($header->regulasi)][$periode] = $header->parameter;
-                                        }
                                     }
                                 }
                             }
-
-                            dd($cache);
 
                             if ($updated) {
                                 // Hanya save jika ada perubahan, struktur data tetap sama
@@ -1702,6 +1735,7 @@ class TestingController extends Controller
                                 $data->save();
                             }
                         }
+                        // dd($cache);
 
                         $dataOrder = $data->orderDetail->where('is_active', true)->where('kategori_2', '1-Air');
                         foreach ($dataOrder as $order) {
@@ -1711,14 +1745,15 @@ class TestingController extends Controller
 
                             $regulasiKey = reset($regulasiDecoded);
                             $kategori2 = $order->kategori_3;
-                            $periode = $order->periode;
+                            // $periode = $order->periode;
 
                             // Cek apakah ada parameter di cache
-                            if (isset($cache[$kategori2][$regulasiKey][$periode])) {
-                                $newParameter = $cache[$kategori2][$regulasiKey][$periode];
+                            if (isset($cache[$kategori2][$regulasiKey])) {
+                                $newParameter = $cache[$kategori2][$regulasiKey];
 
                                 // Cek apakah parameter berbeda
                                 $currentParameter = json_decode($order->parameter, true) ?? [];
+                                // dd(json_decode($order->parameter, true), $newParameter);
                                 if ($currentParameter !== $newParameter) {
                                     $order->parameter = json_encode($newParameter, JSON_UNESCAPED_UNICODE);
                                     $order->save();
@@ -1727,8 +1762,8 @@ class TestingController extends Controller
                         }
                     }
 
-                    dd('stop');
-                    // DB::commit();
+                    // dd('stop');
+                    DB::commit();
                     $processedCount++;
 
                 } catch (Throwable $th) {
@@ -1765,6 +1800,53 @@ class TestingController extends Controller
                 'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
             ], 500);
         }
+    }
+
+    private function parseParam($arr)
+    {
+        return array_map(function ($item) {
+            $parts = explode(';', $item, 2);
+            return count($parts) === 2 ? $parts : [$item, ''];
+        }, $arr);
+    }
+
+    private function getReplacement($paramNew, $paramOld)
+    {
+        $baru = $this->parseParam($paramNew);
+        $lama = $this->parseParam($paramOld);
+
+        $idBaru = array_column($baru, 0);
+        $idLama = array_column($lama, 0);
+
+        $oldParam = Parameter::whereIn('id', $idLama)->get();
+        $newParam = Parameter::whereIn('id', $idBaru)->get();
+
+        $temp = array_intersect(
+            $oldParam->pluck('nama_regulasi')->toArray(),
+            $newParam->pluck('nama_regulasi')->toArray()
+        );
+
+        $diff = array_diff($oldParam->pluck('nama_regulasi')->toArray(), $newParam->pluck('nama_regulasi')->toArray());
+
+        $new = $newParam->filter(function ($item) use ($temp) {
+            return in_array($item->nama_regulasi, $temp);
+        });
+
+        $old = $oldParam->filter(function ($item) use ($diff) {
+            return in_array($item->nama_regulasi, $diff);
+        });
+
+        $new = $new->map(function ($item) {
+            return $item->id . ';' . $item->nama_lab;
+        })->values()->toArray();
+
+        $old = $old->map(function ($item) {
+            return $item->id . ';' . $item->nama_lab;
+        })->values()->toArray();
+
+        $replacement = array_merge($old, $new);
+
+        return $replacement;
     }
 
     private function cleanName($name)
@@ -1814,53 +1896,6 @@ class TestingController extends Controller
         // Similarity match
         similar_text($oldLower, $newLower, $percent);
         return $percent >= 50 ? 'fuzzy' : 'none';
-    }
-
-    private function parseParam($arr)
-    {
-        return array_map(function ($item) {
-            $parts = explode(';', $item, 2);
-            return count($parts) === 2 ? $parts : [$item, ''];
-        }, $arr);
-    }
-
-    private function getReplacement($paramNew, $paramOld)
-    {
-        $baru = $this->parseParam($paramNew);
-        $lama = $this->parseParam($paramOld);
-
-        $idBaru = array_column($baru, 0);
-        $idLama = array_column($lama, 0);
-
-        $oldParam = Parameter::whereIn('id', $idLama)->get();
-        $newParam = Parameter::whereIn('id', $idBaru)->get();
-
-        $temp = array_intersect(
-            $oldParam->pluck('nama_regulasi')->toArray(),
-            $newParam->pluck('nama_regulasi')->toArray()
-        );
-
-        $diff = array_diff($oldParam->pluck('nama_regulasi')->toArray(), $newParam->pluck('nama_regulasi')->toArray());
-
-        $new = $newParam->filter(function ($item) use ($temp) {
-            return in_array($item->nama_regulasi, $temp);
-        });
-
-        $old = $oldParam->filter(function ($item) use ($diff) {
-            return in_array($item->nama_regulasi, $diff);
-        });
-
-        $new = $new->map(function ($item) {
-            return $item->id . ';' . $item->nama_lab;
-        })->values()->toArray();
-
-        $old = $old->map(function ($item) {
-            return $item->id . ';' . $item->nama_lab;
-        })->values()->toArray();
-
-        $replacement = array_merge($old, $new);
-
-        return $replacement;
     }
 
     public function getSimilarParameter($paramNew, $paramOld)
