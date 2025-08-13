@@ -30,7 +30,7 @@ class CoverLhpController extends Controller
     private function getGroupedCFRs($orderHeader, $selectedCFRs = null)
     {
         try {
-            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
+            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3', 'kategori_1')
                 ->where([
                     'id_order_header' => $orderHeader->id,
                     'is_active' => true
@@ -41,17 +41,16 @@ class CoverLhpController extends Controller
             $orderDetails = $orderDetails->get();
 
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
-            $periodGroups->map(
-                fn($itemGroup) => [
-                    'cfr' => $itemGroup->first()->cfr,
-                    'periode' => $itemGroup->first()->periode,
-                    'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
-                    'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
-                    'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
-                    'total_no_sampel' => $itemGroup->count(),
-                    'order_details' => $itemGroup->toArray(),
-                ]
-            ))->flatten(1)->values();
+            $periodGroups->map(fn($itemGroup) => [
+                'cfr' => $itemGroup->first()->cfr,
+                'periode' => $itemGroup->first()->periode,
+                'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
+                'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
+                'kategori_1' => $itemGroup->pluck('kategori_1')->toArray(),
+                'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
+                'total_no_sampel' => $itemGroup->count(),
+                'order_details' => $itemGroup->toArray(),
+            ]))->flatten(1)->values();
 
             return $groupedData;
         } catch (\Throwable $th) {
@@ -61,11 +60,14 @@ class CoverLhpController extends Controller
 
     public function detail(Request $request)
     {
-        $orderHeader = OrderHeader::find($request->id_order_header);
+        $orderHeader = OrderHeader::with('persiapanHeader.psDetail')->find($request->id_order_header);
 
         $groupedData = $this->getGroupedCFRs($orderHeader);
 
-        return response()->json(['groupedCFRs' => $groupedData], 200);
+        return response()->json([
+            'groupedCFRs' => $groupedData,
+            'psHeader' => $orderHeader->persiapanHeader
+        ], 200);
     }
 
     public function generatePdf(Request $request)
@@ -77,9 +79,14 @@ class CoverLhpController extends Controller
 
             if ($groupedCFRs->isEmpty()) return response()->json(['message' => 'Tidak ada lhp yang dipilih'], 400);
 
-            $arrayOfCategories = $groupedCFRs->map(fn($cfr) => $cfr['kategori_3'])->flatten()->unique()->values()->toArray();
+            $formattedFirstDate = Carbon::parse($request->tgl_awal)->translatedFormat('d F Y');
+            $formattedLastDate = Carbon::parse($request->tgl_akhir)->translatedFormat('d F Y');
+            $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
+
+            $arrayOfSamplingStatus = $groupedCFRs->map(fn($cfr) => $cfr['kategori_1'])->flatten()->filter(fn($v) => filled($v))->unique()->values()->toArray();
 
             $detail = [];
+            $arrayOfCategories = $groupedCFRs->map(fn($cfr) => $cfr['kategori_3'])->flatten()->unique()->values()->toArray();
             foreach ($arrayOfCategories as $category) {
                 $filteredCFRs = $groupedCFRs->filter(fn($item) => in_array($category, $item['kategori_3']));
                 $titikCount = $groupedCFRs
@@ -88,26 +95,37 @@ class CoverLhpController extends Controller
                     ->count();
 
                 $categoryName = explode('-', $category)[1];
+                if (
+                    $categoryName == 'Udara Lingkungan Kerja'
+                    || $categoryName == 'Debu'
+                    || $categoryName == 'Pencahayaan'
+                    || $categoryName == 'Kebisingan Personal'
+                    || $categoryName == 'Frekuensi Radio'
+                    || $categoryName == 'Medan Magnet'
+                    || $categoryName == 'Medan Listrik'
+                    || $categoryName == 'Power Density'
+                    || $categoryName == 'Iklim Kerja'
+                    || $categoryName == 'Suhu'
+                    || $categoryName == 'Kelembapan'
+                    || $categoryName == 'Sinar UV'
+                    || $categoryName == 'PM 10'
+                    || $categoryName == 'Getaran (Lengan & Tangan)'
+                    || $categoryName == 'Getaran (Seluruh Tubuh)'
+                    || $categoryName == 'Angka Kuman'
+                ) {
+                    $categoryName = 'Lingkungan Kerja';
+                }
                 $detail[] = "$categoryName - $titikCount Titik";
             }
-
-            // get bas number
-            $no_bas = [];
-            $noDocs = PersiapanSampelHeader::select('no_document')->where('no_order', $request->no_order)->pluck('no_document')->toArray();
-            foreach ($noDocs as $noDoc) {
-                $no_bas[] = str_replace('PS', 'BAS', $noDoc);
-            }
-
-            $formattedOrderDate = Carbon::parse($orderHeader->tanggal_order)->translatedFormat('d F Y');
-            $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
 
             $data = (object) [
                 'nama_perusahaan' => $orderHeader->nama_perusahaan,
                 'alamat_sampling' => $orderHeader->alamat_sampling,
-                'periode' => "$formattedOrderDate - $formattedNowDate",
+                'periode' => "$formattedFirstDate - $formattedLastDate",
                 'no_order' => $orderHeader->no_order,
                 'no_quotation' => $orderHeader->no_document,
-                'no_bas' => $no_bas,
+                'no_bas' => $request->no_bas,
+                'status_sampling' => implode(', ', array_map(fn($s) => $s === 'SD' ? 'Sampel Diantar' : 'Sampling', $arrayOfSamplingStatus)),
                 'detail' => $detail
             ];
 
@@ -116,7 +134,7 @@ class CoverLhpController extends Controller
             $fullPath = $directoryPath . '/' . $filename;
 
             if (!File::isDirectory($directoryPath)) {
-                File::makeDirectory($directoryPath, 0777);
+                File::makeDirectory($directoryPath, 0777, true);
             }
 
             $mpdf = new Mpdf([
@@ -153,10 +171,10 @@ class CoverLhpController extends Controller
                 <table class="sampling-signature">
                     <tr>
                         <td class="sampling-cell">
-                            <div class="section-title">Sampling</div>
+                            <div class="section-title">' . $data->status_sampling . '</div>
                             <table style="margin-top: 15px;">
                                 <tr>
-                                    <td colspan="3" style="font-size: 8px;">Dokumen Pendukung</td>
+                                    <td colspan="3" style="font-size: 10px;">Dokumen Pendukung</td>
                                 </tr>
                                 <tr>
                                     <td style="font-size: 10px;">No. Order</td>
@@ -174,7 +192,7 @@ class CoverLhpController extends Controller
                                     <td style="font-size: 10px;"></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="3" style="padding-left: 10px;">
+                                    <td colspan="3" style="padding-left: 10px; font-size: 10px;">
                                         <ul>' . $basList . '</ul>
                                     </td>
                                 </tr>
