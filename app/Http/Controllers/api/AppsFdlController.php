@@ -51,6 +51,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 
 // SERVICE
+use App\Services\SaveFileServices;
 use App\Services\SendTelegram;
 use App\Services\GetAtasan;
 
@@ -11419,12 +11420,10 @@ class AppsFdlController extends Controller
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
-        // if (!file_exists(public_path() . '/dokumentasi/'.DATE('Ymd'))) {
-        //     mkdir(public_path() . '/dokumentasi/'.DATE('Ymd') , 0777, true);
-        // }
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 
@@ -12020,13 +12019,12 @@ class AppsFdlController extends Controller
 
     public function saveImage($foto = '', $user = '', $type)
     {
-
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $type . '_' . $user . '.jpg';
-        $destinationPath = public_path().'/dokumentasi/aduanSampler/';
-        // dd($destinationPath);
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/aduanSampler';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 

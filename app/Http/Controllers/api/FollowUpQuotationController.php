@@ -1176,7 +1176,7 @@ class FollowUpQuotationController extends Controller
                         mkdir(public_path() . '/barcode/sampling', 0777, true);
                     }
 
-                    file_put_contents(public_path() . '/barcode/sampling/' . \str_replace("/", "-", $no_sampling) . '.png', $generator->getBarcode($no_sampling, $generator::TYPE_CODE_128, 3, 100));
+                     o(public_path() . '/barcode/sampling/' . \str_replace("/", "-", $no_sampling) . '.png', $generator->getBarcode($no_sampling, $generator::TYPE_CODE_128, 3, 100));
 
                     if (!file_exists(public_path() . '/barcode/sample')) {
                         mkdir(public_path() . '/barcode/sample', 0777, true);
@@ -1286,7 +1286,7 @@ class FollowUpQuotationController extends Controller
 
                     FtcT::create([
                         'no_sample' => $no_sample
-                    ]);
+                    ]88);
 
                     foreach ($value->parameter as $v) {
                         $insert_analisa[] = [

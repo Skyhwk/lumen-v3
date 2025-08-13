@@ -433,7 +433,10 @@ class VerifikasiBotolController extends Controller
             }
 
             // Save file
-            $bytesWritten = file_put_contents($fullPath, $decodedContent);
+
+            $service = new SaveFileServices();
+        
+            $bytesWritten = $service->saveFile($path ,  $fileName, $fileName,$decodedContent);
 
             if ($bytesWritten === false) {
                 return [
@@ -512,23 +515,5 @@ class VerifikasiBotolController extends Controller
         ];
 
         return $mimeExtensionMap[$mimeType] ?? null;
-    }
-
-
-
-   
-
-    public function convertFile($foto, $name)
-    {
-        $img = str_replace('data:image/jpeg;base64,', '', $foto);
-        $file = base64_decode($img);
-        $safeName = $name . '_' . date("YmdHis") . '.jpeg';
-        // $destinationPath = public_path() . '/sampel/dokumentasi/';
-        $destinationPath = public_path() . '/qc_lapangan/';
-        if (!file_exists($destinationPath)) mkdir($destinationPath, 0777, true);
-
-        file_put_contents($destinationPath . $safeName, $file);
-
-        return $safeName;
     }
 }

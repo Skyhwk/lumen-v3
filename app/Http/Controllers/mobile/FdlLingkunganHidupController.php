@@ -11,24 +11,17 @@ use App\Models\DetailLingkunganHidup;
 // MASTER DATA
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
-use App\Models\MasterKategori;
-use App\Models\MasterKaryawan;
-use App\Models\Parameter;
 use App\Models\ParameterFdl;
-use App\Services\InsertActivityFdl;
 
 // SERVICE
-use App\Services\SendTelegram;
+use App\Services\SaveFileServices;
+use App\Services\InsertActivityFdl;
+
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
 
 class FdlLingkunganHidupController extends Controller
 {
@@ -835,12 +828,10 @@ class FdlLingkunganHidupController extends Controller
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
-        // if (!file_exists(public_path() . '/dokumentasi/'.DATE('Ymd'))) {
-        //     mkdir(public_path() . '/dokumentasi/'.DATE('Ymd') , 0777, true);
-        // }
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

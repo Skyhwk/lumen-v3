@@ -20,21 +20,31 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-use App\Services\Crypto;
+use App\Services\SaveFileServices;
 use App\Helpers\Helper;
 use Carbon\Carbon;
 
 
 class RecruitmentController extends Controller{
 
-    public function convertFile($foto = '',$p , $user = '')
+    // public function convertFile($foto = '',$p , $user = '')
+    // {
+    //     $img = str_replace('data:image/jpeg;base64,', '', $foto);
+    //     // $file = base64_decode($img);
+    //     $safeName = $user.'_'.$p.'.jpeg';
+    //     // $destinationPath = public_path() . '/recruitment/foto/';
+    //     return $safeName;
+    // }
+
+         public function convertFile($foto = '', $p = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
-        $safeName = $user.'_'.$p.'.jpeg';
-        $destinationPath = public_path() . '/recruitment/foto/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
-        return $safeName;
+            $safeName = $user.'_'.$p.'.jpeg';
+        $path = 'recruitment/foto';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
+         return $safeName;
     }
 
     public function cabang(Request $request) {

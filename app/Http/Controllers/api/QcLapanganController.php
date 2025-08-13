@@ -7,7 +7,10 @@ use App\Models\DataLapanganAir;
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
 use App\Models\MasterKaryawan;
-use App\Models\Parameter;
+
+// service
+use App\Services\SaveFileServices;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -71,13 +74,14 @@ class QcLapanganController extends Controller
             
     }
 
-    public function convertImg($foto = '', $type = '', $user = '')
+          public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/qc/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/qc';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 

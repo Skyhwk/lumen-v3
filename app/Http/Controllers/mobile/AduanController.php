@@ -10,10 +10,12 @@ use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
 use App\Models\MasterKategori;
 use App\Models\MasterKaryawan;
-use App\Models\Parameter;
 use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+
+// service
+use App\Services\SaveFileServices;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -310,14 +312,15 @@ class AduanController extends Controller{
         }
     }
 
-    public function saveImage($foto = '', $user = '', $type)
-    {
 
+         public function saveImage($foto = '', $type = '', $user = '')
+    {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $type . '_' . $user . '.jpg';
-        $destinationPath = public_path().'/dokumentasi/aduanSampler/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/aduanSampler';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }
