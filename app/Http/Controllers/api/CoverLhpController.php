@@ -30,7 +30,7 @@ class CoverLhpController extends Controller
     private function getGroupedCFRs($orderHeader, $selectedCFRs = null)
     {
         try {
-            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
+            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3', 'kategori_1')
                 ->where([
                     'id_order_header' => $orderHeader->id,
                     'is_active' => true
@@ -46,6 +46,7 @@ class CoverLhpController extends Controller
                 'periode' => $itemGroup->first()->periode,
                 'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
                 'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
+                'kategori_1' => $itemGroup->pluck('kategori_1')->toArray(),
                 'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
                 'total_no_sampel' => $itemGroup->count(),
                 'order_details' => $itemGroup->toArray(),
@@ -78,9 +79,14 @@ class CoverLhpController extends Controller
 
             if ($groupedCFRs->isEmpty()) return response()->json(['message' => 'Tidak ada lhp yang dipilih'], 400);
 
-            $arrayOfCategories = $groupedCFRs->map(fn($cfr) => $cfr['kategori_3'])->flatten()->unique()->values()->toArray();
+            $formattedFirstDate = Carbon::parse($request->tgl_awal)->translatedFormat('d F Y');
+            $formattedLastDate = Carbon::parse($request->tgl_akhir)->translatedFormat('d F Y');
+            $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
+
+            $arrayOfSamplingStatus = $groupedCFRs->map(fn($cfr) => $cfr['kategori_1'])->flatten()->filter(fn($v) => filled($v))->unique()->values()->toArray();
 
             $detail = [];
+            $arrayOfCategories = $groupedCFRs->map(fn($cfr) => $cfr['kategori_3'])->flatten()->unique()->values()->toArray();
             foreach ($arrayOfCategories as $category) {
                 $filteredCFRs = $groupedCFRs->filter(fn($item) => in_array($category, $item['kategori_3']));
                 $titikCount = $groupedCFRs
@@ -112,10 +118,6 @@ class CoverLhpController extends Controller
                 $detail[] = "$categoryName - $titikCount Titik";
             }
 
-            $formattedFirstDate = Carbon::parse($request->tgl_awal)->translatedFormat('d F Y');
-            $formattedLastDate = Carbon::parse($request->tgl_akhir)->translatedFormat('d F Y');
-            $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
-
             $data = (object) [
                 'nama_perusahaan' => $orderHeader->nama_perusahaan,
                 'alamat_sampling' => $orderHeader->alamat_sampling,
@@ -123,6 +125,7 @@ class CoverLhpController extends Controller
                 'no_order' => $orderHeader->no_order,
                 'no_quotation' => $orderHeader->no_document,
                 'no_bas' => $request->no_bas,
+                'status_sampling' => implode(', ', array_map(fn($s) => $s === 'SD' ? 'Sampel Diantar' : 'Sampling', $arrayOfSamplingStatus)),
                 'detail' => $detail
             ];
 
@@ -168,10 +171,10 @@ class CoverLhpController extends Controller
                 <table class="sampling-signature">
                     <tr>
                         <td class="sampling-cell">
-                            <div class="section-title">Sampling</div>
+                            <div class="section-title">' . $data->status_sampling . '</div>
                             <table style="margin-top: 15px;">
                                 <tr>
-                                    <td colspan="3" style="font-size: 8px;">Dokumen Pendukung</td>
+                                    <td colspan="3" style="font-size: 10px;">Dokumen Pendukung</td>
                                 </tr>
                                 <tr>
                                     <td style="font-size: 10px;">No. Order</td>
