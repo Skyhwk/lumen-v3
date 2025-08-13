@@ -1028,6 +1028,7 @@ class ReadyOrderController extends Controller
                         if ($value->kategori_1 == '4-Udara' || $value->kategori_1 == '5-Emisi') {
                             $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                 ->whereIn('parameter', $value->parameter)
+                                ->where('is_active', true)
                                 ->get();
                             $persiapan = []; // Pastikan inisialisasi array sebelum digunakan
                             foreach ($cek_ketentuan_parameter as $ketentuan) {
@@ -1832,6 +1833,7 @@ class ReadyOrderController extends Controller
                         if ($value->kategori_1 == '4-Udara' || $value->kategori_1 == '5-Emisi') {
                             $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                 ->whereIn('parameter', $value->parameter)
+                                ->where('is_active', true)
                                 ->get();
                             $persiapan = []; // Pastikan inisialisasi array sebelum digunakan
                             foreach ($cek_ketentuan_parameter as $ketentuan) {
@@ -2243,6 +2245,7 @@ class ReadyOrderController extends Controller
                                     if ($value->kategori_1 == '4-Udara' || $value->kategori_1 == '5-Emisi') {
                                         $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                             ->whereIn('parameter', $value->parameter)
+                                            ->where('is_active', true)
                                             ->get();
                                         $persiapan = [];
                                         foreach ($cek_ketentuan_parameter as $ketentuan) {
@@ -3091,6 +3094,7 @@ class ReadyOrderController extends Controller
                         if ($value->kategori_1 == '4-Udara' || $value->kategori_1 == '5-Emisi') {
                             $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                 ->whereIn('parameter', $value->parameter)
+                                ->where('is_active', true)
                                 ->get();
                             $persiapan = [];
                             foreach ($cek_ketentuan_parameter as $ketentuan) {

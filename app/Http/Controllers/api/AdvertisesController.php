@@ -7,8 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
-
-
+use App\Services\SaveFileServices;
 use App\Models\Advertise;
 
 use Datatables;
@@ -35,7 +34,8 @@ class AdvertisesController extends Controller
         $file = $request->file('filename');
         $filename = Str::random(40) . '.' . $file->getClientOriginalExtension();
 
-        file_put_contents(public_path('advertises/' . $filename), file_get_contents($file->getRealPath()));
+        $saveFile = new SaveFileServices();
+        $saveFile->saveFile('advertises', $filename, file_get_contents($file->getRealPath()));
 
         $advertise = new Advertise();
 
