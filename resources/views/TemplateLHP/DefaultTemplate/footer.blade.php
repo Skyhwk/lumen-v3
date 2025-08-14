@@ -3,11 +3,9 @@
     $file_qr = '';
     $tanggal_qr = '';
     $pading = '';
-
-    // Kondisi untuk menentukan teks footer dan file QR
     if ($mode == 'downloadWSDraft') {
         $pading = 'margin-bottom: 40px;';
-        $halaman = 'Halaman {PAGENO} - {nbpg}'; // Teks halaman untuk mode WSDraft
+        $halaman = 'Halaman {PAGENO} - {nbpg}'; 
     } else if($mode == 'downloadLHP' || $mode == 'downloadLHPFinal'){
         if (!is_null($header->file_qr)) {
             $halaman = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
