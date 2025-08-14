@@ -172,13 +172,16 @@ class LhpTemplate
         }
         $this->generateStylesheet();
         $last = true;
-        if(!empty($customs)) {
-            $last = false;
+        if($mode != 'downloadWSDraft') {
+            if(!empty($customs)) {
+                $last = false;
+            }
         }
+    
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
         $filePath = $dir . '/' . $filename;
-        
+
         $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
         $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
@@ -220,12 +223,19 @@ class LhpTemplate
             $mpdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
             $mpdf->showWatermarkImage = true;
         }
-        
-        $mpdf->SetHTMLHeader($htmlHeader);
-        $mpdf->SetHTMLFooter($htmlFooter);
-        $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
-        $mpdf->WriteHTML($htmlBody);
-        $mpdf->SetHTMLFooter($htmlLastFooter);
+
+        if ($mode == 'downloadWSDraft') {
+            $mpdf->SetHTMLHeader($htmlHeader); 
+            $mpdf->SetHTMLFooter($htmlFooter);
+            $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
+            $mpdf->WriteHTML($htmlBody);
+        } else {
+            $mpdf->SetHTMLHeader($htmlHeader); 
+            $mpdf->SetHTMLFooter($htmlFooter); 
+            $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
+            $mpdf->WriteHTML($htmlBody);
+            $mpdf->SetHTMLFooter($htmlLastFooter); 
+        }
 
         if(isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
             foreach ($htmlCustomBody as $page => $custom) {

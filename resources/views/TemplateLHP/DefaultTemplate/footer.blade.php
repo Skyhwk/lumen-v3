@@ -1,19 +1,22 @@
 @php
-    $qr = '';
+    $halaman = '';
     $file_qr = '';
     $tanggal_qr = '';
     $pading = '';
+
+    // Kondisi untuk menentukan teks footer dan file QR
     if ($mode == 'downloadWSDraft') {
         $pading = 'margin-bottom: 40px;';
-        $qr = 'Halaman {PAGENO} - {nbpg}';
+        $halaman = 'Halaman {PAGENO} - {nbpg}'; // Teks halaman untuk mode WSDraft
     } else if($mode == 'downloadLHP' || $mode == 'downloadLHPFinal'){
         if (!is_null($header->file_qr)) {
-            $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            $halaman = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
         } else {
-            $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            $halaman = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
         }
     }
-    if (!is_null($header->file_qr) && $mode != 'downloadWSDraft') {
+
+    if (!is_null($header->file_qr)) {
         $file_qr = public_path('qr_documents/' . $header->file_qr . '.svg');
         $tanggal_qr = 'Tangerang, ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_lhp);
     }
@@ -32,12 +35,12 @@
             <br>Halaman {PAGENO} - {nbpg}
             @endif
         </td>
-        <!-- signature -->
         <td width="26%" style="position: relative; padding: 0; text-align: right;">
-            @if (isset($last) && $last)
+            @if ($mode != 'downloadWSDraft')
+              @if (isset($last) && $last && $mode)
                 @if($mode == 'downloadLHP')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        style="position: absolute; bottom: 50px; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
@@ -49,7 +52,7 @@
                     <table
                         style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
-                    >
+                    >  
                         <tr><td>{{$tanggal_qr}}</td></tr>
                         <tr><td><img src="{{$file_qr}}" width="70px" height="70px"></td></tr>
                         <tr><td style="height: 70px;"></td></tr>
@@ -57,17 +60,24 @@
                     </table>
                 @endif
             @endif
+            @else 
 
-            <table 
-                style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
-            >
-                @if($mode == 'downloadLHP')
-                <tr>
-                    <td><img src="{{$file_qr}}" width="50px" height="50px"></td>
-                </tr>
+            @endif
+                <table
+                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        width="260"
+                    >
+                @if($mode == 'downloadWSDraft')
+                        @if (!is_null($header->file_qr))
+                        <tr><td>{{$tanggal_qr}}</td></tr>
+                        <tr><td><img src="{{$file_qr}}" width="70px" height="70px"></td></tr>
+                        <tr><td style="height: 70px;"></td></tr>
+                        <tr><td style="height: 10px;"></td></tr>
+                        @endif
                 @endif
-                <tr><td>{{$qr}}</td></tr>
+                <tr><td>{{$halaman}}</td></tr>
             </table>
+         
         </td>
     </tr>
     <tr>
