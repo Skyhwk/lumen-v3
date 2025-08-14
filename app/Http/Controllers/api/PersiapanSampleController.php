@@ -1010,13 +1010,27 @@ class PersiapanSampleController extends Controller
 
     private function compareSampleNumber($psHeader, $request)
     {
+        
         $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
-        $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
-        $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
-        if ($missingSampleNumbers || $extraSampleNumbers)
-            return true;
+        if($sampelNumbers == []){
+      
+            $sampelNumbers = json_decode($psHeader->no_sampel, true) ?? [];
+            return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
+        }else{
+            return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
+            $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
+            $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
+            if ($missingSampleNumbers || $extraSampleNumbers)
+                return true;
+        }
+        /* 
+            $noSampelDb = json_decode($item->no_sampel, true) ?? [];
+            return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
+        */
+       
+        
 
-        return false;
+        // return false;
     }
 
     private function compareByPersiapan($orderDetail, $psDetail)
@@ -1050,20 +1064,20 @@ class PersiapanSampleController extends Controller
     {
 
         $psHeader = PersiapanSampelHeader::with([
-            'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
+            // 'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
             'orderHeader.orderDetail'
         ])
             ->where('no_quotation', $request->no_quotation)
             ->where('no_order', $request->no_order)
             ->where('is_active', 1)
-            ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
+            // ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
             ->first();
-
+        // dd($psHeader);
         if (!$psHeader || !$psHeader->psDetail)
             return response()->json(['message' => 'Sampel belum disiapkan update'], 404);
 
         $diffSampleNumbers = $this->compareSampleNumber($psHeader, $request);
-        if ($diffSampleNumbers)
+        if (!$diffSampleNumbers)
             return response()->json(['message' => 'No Sampel tidak sesuai'], 500);
 
         foreach ($psHeader->psDetail as $psd) {

@@ -57,6 +57,7 @@ class DraftUdaraController extends Controller
     // AmanghandleDatadetail
     public function index(Request $request)
     {
+        
         $kategori = $request->kategori;
         if ($kategori == null || $kategori == '') {
             $subKategori = MasterSubKategori::where('id_kategori', 4)
@@ -172,6 +173,7 @@ class DraftUdaraController extends Controller
                     ->get();
 
             } else if ($request->parameter == 'Ergonomi') {
+                
                 $data = OrderDetail::with([
                     'lhps_ergonomi',
                     'orderHeader'

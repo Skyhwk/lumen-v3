@@ -1,51 +1,56 @@
 <?php
 
 namespace App\Http\Controllers\api;
-use App\Models\HistoryAppReject;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsGetaranDetail;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsMedanLMHeader;
-use App\Models\LhpsMedanLMDetail;
+use App\Models\{HistoryAppReject,
+    LhpsKebisinganHeader,
+    LhpsKebisinganDetail,
+    LhpsLingHeader,
+    LhpsLingDetail,
+    LhpsPencahayaanHeader,
+    LhpsGetaranHeader,
+    LhpsGetaranDetail,
+    LhpsPencahayaanDetail,
+    LhpsMedanLMHeader,
+    LhpsMedanLMDetail,
+    LhpsKebisinganHeaderHistory,
+    LhpsKebisinganDetailHistory,
+    LhpsGetaranHeaderHistory,
+    LhpsGetaranDetailHistory,
+    LhpsPencahayaanHeaderHistory,
+    LhpsPencahayaanDetailHistory,
+    LhpsMedanLMHeaderHistory,
+    LhpsMedanLMDetailHistory,
+    LhpSinarUVHeaderHistory,
+    LhpsSinarUVDetailHistory,
+    LhpsLingHeaderHistory,
+    LhpsLingDetailHistory,
+    MasterSubKategori,
+    OrderDetail,
+    MetodeSampling,
+    MasterBakumutu,
+    MasterKaryawan,
+    LingkunganHeader,
+    QrDocument,
+    PencahayaanHeader,
+    KebisinganHeader,
+    Subkontrak,
+    MedanLMHeader,
+    SinarUVHeader,
+    GetaranHeader,
+    DataLapanganErgonomi,
+    Parameter,
+    DirectLainHeader,
+    GenerateLink
+};
 
-use App\Models\LhpsKebisinganHeaderHistory;
-use App\Models\LhpsKebisinganDetailHistory;
-use App\Models\LhpsGetaranHeaderHistory;
-use App\Models\LhpsGetaranDetailHistory;
-use App\Models\LhpsPencahayaanHeaderHistory;
-use App\Models\LhpsPencahayaanDetailHistory;
-use App\Models\LhpsMedanLMHeaderHistory;
-use App\Models\LhpsMedanLMDetailHistory;
-use App\Models\LhpSinarUVHeaderHistory;
-use App\Models\LhpsSinarUVDetailHistory;
-use App\Models\LhpsLingHeaderHistory;
-use App\Models\LhpsLingDetailHistory;
+// service
+use App\Services\{
+    SendEmail,
+    TemplateLhps,
+    GenerateQrDocumentLhp
+};
 
-use App\Models\MasterSubKategori;
-use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\MasterKaryawan;
-use App\Models\LingkunganHeader;
-use App\Models\QrDocument;
-use App\Models\PencahayaanHeader;
-use App\Models\KebisinganHeader;
-use App\Models\Subkontrak;
-use App\Models\MedanLMHeader;
-use App\Models\SinarUVHeader;
-use App\Models\GetaranHeader;
-use App\Models\DataLapanganErgonomi;
-use App\Models\Parameter;
-use App\Models\DirectLainHeader;
-use App\Models\GenerateLink;
-use App\Services\SendEmail;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
+// others
 use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,12 +66,6 @@ class DraftUlkErgonomiController extends Controller
     {
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
-            'lhps_getaran',
-            'lhps_kebisingan',
-            'lhps_ling',
-            'lhps_medanlm',
-            'lhps_pencahayaan',
-            'lhps_sinaruv',
             'orderHeader'
             => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
@@ -74,10 +73,8 @@ class DraftUlkErgonomiController extends Controller
         ])
             ->where('is_approve', 0)
             ->where('is_active', true)
-            ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->groupBy('cfr')
-            ->where('parameter', 'like', '%Ergonomi%');
+            ->whereJsonContains('parameter','230;Ergonomi')
+            ->groupBy('no_sampel');
 
         return Datatables::of($data)->make(true);
     }

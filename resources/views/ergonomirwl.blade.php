@@ -189,7 +189,6 @@
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
@@ -478,5 +477,4 @@
             diduplikat sebagian dengan tanpa izin tertulis dari pihak laboratorium.</div>
     </div>
 </body>
-
 </html>

@@ -589,7 +589,7 @@ class StpsController extends Controller
                                     ->where('kategori_1', '!=', 'SD')
                                     ->where('is_active', 1)
                                     ->pluck('no_sampel')->toArray(),
-                            ];
+                            ];//8298
 
                             return $data;
                         }, $item['data_sampling']);
