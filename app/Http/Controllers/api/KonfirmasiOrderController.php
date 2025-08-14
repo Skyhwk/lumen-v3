@@ -27,7 +27,7 @@ use App\Models\MasterKaryawan;
 use App\Services\SamplingPlanServices;
 use App\Services\GetBawahan;
 use App\Models\SampelDiantar;
-use App\Services\{Notification, GetAtasan};
+use App\Services\{Notification, GetAtasan, SaveFileServices};
 use App\Helpers\WorkerOperation;
 use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
 use App\Jobs\RenderSamplingPlan;
@@ -557,9 +557,10 @@ class KonfirmasiOrderController extends Controller
 			}
 
 			// Save file
-			$bytesWritten = file_put_contents($fullPath, $decodedContent);
+			 $service = new SaveFileServices();
+            $service->saveFile($path , $fileName,$decodedContent);
 
-			if ($bytesWritten === false) {
+			if ($service === false) {
 				return [
 					'success' => false,
 					'message' => 'Gagal menyimpan file'
@@ -584,7 +585,7 @@ class KonfirmasiOrderController extends Controller
 			return [
 				'success' => true,
 				'filename' => $fileName,
-				'bytes_written' => $bytesWritten
+				'bytes_written' => $service
 			];
 
 		} catch (\Exception $e) {
@@ -659,8 +660,9 @@ class KonfirmasiOrderController extends Controller
 	public function base64ImageToPdf($base64Content, $imageExtension, $path, $fileName)
 	{
 
-		$outputPath = public_path($path . $fileName);
-		file_put_contents($outputPath, base64_decode($base64Content));
+	
+		 $service = new SaveFileServices();
+         $service->saveFile($path , $fileName, base64_decode($base64Content));
 
 		return true;
 	}

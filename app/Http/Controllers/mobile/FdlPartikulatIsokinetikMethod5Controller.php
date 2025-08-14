@@ -21,16 +21,13 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\InsertActivityFdl;
+use App\Services\SaveFileServices;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
 
 class FdlPartikulatIsokinetikMethod5Controller extends Controller
 {
@@ -931,13 +928,14 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
         }
     }
 
-    public function convertImg($foto = '', $type = '', $user = '')
+ public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

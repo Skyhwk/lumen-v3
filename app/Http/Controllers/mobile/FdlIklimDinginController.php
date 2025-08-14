@@ -17,7 +17,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 
 // SERVICE
-use App\Services\SendTelegram;
+use App\Services\SaveFileServices;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
@@ -317,8 +317,9 @@ class FdlIklimDinginController extends Controller
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

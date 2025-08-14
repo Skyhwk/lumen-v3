@@ -21,7 +21,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 
 // SERVICE
-use App\Services\SendTelegram;
+use App\Services\SaveFileServices;
 use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
@@ -784,16 +784,15 @@ class AppsSenyawaVolatileController extends Controller
 
     }
     
-    public function convertImg($foto = '', $type = '', $user = '')
+ 
+       public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
-        // if (!file_exists(public_path() . '/dokumentasi/'.DATE('Ymd'))) {
-        //     mkdir(public_path() . '/dokumentasi/'.DATE('Ymd') , 0777, true);
-        // }
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

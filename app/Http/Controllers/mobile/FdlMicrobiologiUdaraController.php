@@ -11,18 +11,11 @@ use App\Models\DetailMicrobiologi;
 // MASTER DATA
 use App\Models\OrderDetail;
 use App\Models\MasterSubKategori;
-use App\Models\MasterKategori;
-use App\Models\MasterKaryawan;
-use App\Models\Parameter;
-use App\Models\OrderHeader;
-use App\Models\QuotationKontrakH;
-use App\Models\QuotationNonKontrak;
 use App\Models\ParameterFdl;
 
 // SERVICE
-use App\Services\SendTelegram;
+use App\Services\SaveFileServices;
 use App\Services\InsertActivityFdl;
-use App\Services\GetAtasan;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -489,13 +482,14 @@ class FdlMicrobiologiUdaraController extends Controller
     }
 
 
-    public function convertImg($foto = '', $type = '', $user = '')
+      public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

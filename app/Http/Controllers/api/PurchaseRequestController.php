@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\PurchaseRequest;
-use App\Models\MasterKaryawan;
+use App\Services\SaveFileServices;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -109,7 +109,9 @@ class PurchaseRequestController extends Controller
             $data->status = 'WAITING PROCESS';
             $filename = $batch_id;
             $content = $request->no_katalog;
-            file_put_contents(public_path('purchase_request/' . $filename), $content);
+            // file_put_contents(public_path('purchase_request/' . $filename), $content);
+            $service = new SaveFileServices();
+            $service->saveFile('purchase_request/' ,  $filename, $content);
             $data->no_katalog = $batch_id;
 
             // $data->no_katalog = $request->no_katalog;

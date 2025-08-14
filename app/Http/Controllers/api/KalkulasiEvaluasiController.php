@@ -930,17 +930,13 @@ class KalkulasiEvaluasiController extends Controller
         // // //===================================================== GRAFIK ================================================
         if (!empty($result_disc)) {
             $g = $i + 4;
-            // dd($g);
             $sheet->setCellValue('H' . $g, 'Grafik');
             $sheet->mergeCells('H' . $g . ':L' . $g);
             $sheet->getStyle('H' . $g . ':L' . $g)->applyFromArray($titlecolumn);
 
-            $img = str_replace('data:image/png;base64,', '', $request->chart);
-            $file = base64_decode($img);
+
             $safeName = $request->id_user . '_.png';
-            $destinationPath = public_path() . '/recruitment/foto/';
-            $success = file_put_contents($destinationPath . $safeName, $file);
-            $filePath = public_path() . '/recruitment/foto/' . $safeName;
+        
             $pe = $g + 1;
             $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
             $drawing->setName('Paid');

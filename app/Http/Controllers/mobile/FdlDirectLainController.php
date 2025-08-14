@@ -19,7 +19,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\ParameterFdl;
 
 // SERVICE
-use App\Services\SendTelegram;
+use App\Services\SaveFileServices;
 use App\Services\InsertActivityFdl;
 
 use Illuminate\Http\Request;
@@ -270,7 +270,6 @@ class FdlDirectLainController extends Controller
                     $file2 = base64_decode($img2);
                     $safeName2 = DATE('YmdHis') . '_' . $this->user_id . $pf . '.jpeg';
                     $destinationPath2 = public_path() . '/dokumentasi/sampling/';
-                    $success2 = file_put_contents($destinationPath2 . $safeName2, $file2);
 
                     if ($request->kateg_uji[$in] == '24 Jam') {
                         $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift1[$in]);
@@ -328,7 +327,6 @@ class FdlDirectLainController extends Controller
                     $file2 = base64_decode($img2);
                     $safeName2 = DATE('YmdHis') . '_' . $this->user_id . $pf . '.jpeg';
                     $destinationPath2 = public_path() . '/dokumentasi/sampling/';
-                    $success2 = file_put_contents($destinationPath2 . $safeName2, $file2);
                     if ($request->kateg_uji2[$in] == '24 Jam') {
                         $shift_peng = $request->kateg_uji2[$in] . '-' . json_encode($request->shift2[$in]);
                     } else if ($request->kateg_uji2[$in] == '8 Jam') {
@@ -385,7 +383,6 @@ class FdlDirectLainController extends Controller
                     $file2 = base64_decode($img2);
                     $safeName2 = DATE('YmdHis') . '_' . $this->user_id . $pf . '.jpeg';
                     $destinationPath2 = public_path() . '/dokumentasi/sampling/';
-                    $success2 = file_put_contents($destinationPath2 . $safeName2, $file2);
                     if ($request->kateg_uji3[$in] == '24 Jam') {
                         $shift_peng = $request->kateg_uji3[$in] . '-' . json_encode($request->shift3[$in]);
                     } else if ($request->kateg_uji3[$in] == '8 Jam') {
@@ -535,13 +532,14 @@ class FdlDirectLainController extends Controller
         }
     }
 
-    public function convertImg($foto = '', $type = '', $user = '')
+       public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 }

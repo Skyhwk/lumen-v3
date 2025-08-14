@@ -2096,7 +2096,6 @@ class TestingController extends Controller
                             mkdir(public_path() . '/barcode/botol', 0777, true);
                         }
 
-                        // file_put_contents(public_path() . '/barcode/botol/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
                         self::generateQR($koding, '/barcode/botol');
                     }
 
@@ -2129,7 +2128,6 @@ class TestingController extends Controller
                                 mkdir(public_path() . '/barcode/penjerap', 0777, true);
                             }
 
-                            // file_put_contents(public_path() . '/barcode/penjerap/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
                             self::generateQR($koding, '/barcode/penjerap');
                         }
                         // dd($persiapan, 'persiapan');

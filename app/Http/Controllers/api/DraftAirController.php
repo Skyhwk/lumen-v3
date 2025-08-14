@@ -85,7 +85,7 @@ class DraftAirController extends Controller
             } else {
                 $history = $header->replicate();
                 $history->setTable((new LhpsAirHeaderHistory())->getTable());
-                $history->id = $header->id;
+                // $history->id = $header->id;
                 $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $history->save();
             }

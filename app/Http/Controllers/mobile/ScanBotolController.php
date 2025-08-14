@@ -5,12 +5,12 @@ namespace App\Http\Controllers\mobile;
 use App\Models\OrderDetail;
 use App\Models\PersiapanSampelDetail;
 use App\Models\ScanBotol;
+use App\Services\SaveFileServices;
 
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
 
 class ScanBotolController extends Controller
 {
@@ -216,7 +216,9 @@ class ScanBotolController extends Controller
 			}
 
 			// Save file
-			$bytesWritten = file_put_contents($fullPath, $decodedContent);
+			 $service = new SaveFileServices();
+       
+			$bytesWritten =  $service->saveFile($path ,  $fileName, $decodedContent);
 
 			if ($bytesWritten === false) {
 				return [
@@ -311,9 +313,8 @@ class ScanBotolController extends Controller
 	 */
 	public function base64ImageToPdf($base64Content, $imageExtension, $path, $fileName)
 	{
-
-		$outputPath = public_path($path . $fileName);
-		file_put_contents($outputPath, base64_decode($base64Content));
+		 $service = new SaveFileServices();
+		 $service->saveFile($path ,  $fileName, base64_decode($base64Content));
 
 		return true;
 	}

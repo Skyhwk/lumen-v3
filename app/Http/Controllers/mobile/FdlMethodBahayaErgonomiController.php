@@ -17,7 +17,7 @@ use App\Models\QuotationNonKontrak;
 
 // SERVICE
 use App\Services\SendTelegram;
-use App\Services\GetAtasan;
+use App\Services\SaveFileServices;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
@@ -673,36 +673,16 @@ class FdlMethodBahayaErgonomiController extends Controller
         return $totalDurasi;
     }
 
-    public function convertImg($foto = '', $type = '', $user = '')
+ 
+     public function convertImg($foto = '', $type = '', $user = '')
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
         $safeName = DATE('YmdHis') . '_' . $user . $type . '.jpeg';
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        $success = file_put_contents($destinationPath . $safeName, $file);
+        $path = 'dokumentasi/sampling';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 
-    public function convertBase64File($base64Data = '', $type = '', $user = '', $extension = 'jpeg')
-    {
-        // Deteksi dan potong header base64
-        if (strpos($base64Data, 'base64,') !== false) {
-            $base64Data = explode('base64,', $base64Data)[1];
-        }
-
-        // Decode base64
-        $fileData = base64_decode($base64Data);
-
-        // Nama file unik
-        $safeName = date('YmdHis') . '_' . $user . $type . '.' . $extension;
-
-        // Tentukan path (atur berdasarkan jenis file juga boleh)
-        $destinationPath = public_path() . '/dokumentasi/sampling/';
-        
-        // Simpan file
-        $success = file_put_contents($destinationPath . $safeName, $fileData);
-
-        // Return nama file kalau sukses, atau false
-        return $success ? $safeName : false;
-    }
 }

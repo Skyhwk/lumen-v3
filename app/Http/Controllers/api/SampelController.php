@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\SampelSD;
 use Illuminate\Http\Request;
 use App\Models\MasterPelanggan;
+use App\Services\SaveFileServices;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 
@@ -52,31 +53,16 @@ class SampelController extends Controller
         ]);
     }
 
-    // lama public function convertFile($foto, $name)
-    // {
-    //     $img = str_replace('data:image/jpeg;base64,', '', $foto);
-    //     $file = base64_decode($img);
-    //     $safeName = $name . '_' . date("YmdHis") . '.jpeg';
-    //     // $destinationPath = public_path() . '/sampel/dokumentasi/';
-    //     $destinationPath = '/var/www/html/lims/backend/public/sampel/dokumentasi/';
-    //     if (!file_exists($destinationPath)) mkdir($destinationPath, 0777, true);
+   
 
-    //     file_put_contents($destinationPath . $safeName, $file);
-
-    //     return $safeName;
-    // }
-
-    public function convertFile($foto, $name)
+         public function convertFile($foto, $name)
     {
         $img = str_replace('data:image/jpeg;base64,', '', $foto);
         $file = base64_decode($img);
-        $safeName = $name . '_' . date("YmdHis") . '.jpeg';
-        // $destinationPath = public_path() . '/sampel/dokumentasi/';
-        $destinationPath = public_path() . '/sampel_datang/dokumentasi/';
-        if (!file_exists($destinationPath)) mkdir($destinationPath, 0777, true);
-
-        file_put_contents($destinationPath . $safeName, $file);
-
+       $safeName = $name . '_' . date("YmdHis") . '.jpeg';
+        $path = 'sampel_datang/dokumentasi';
+        $service = new SaveFileServices();
+        $service->saveFile($path ,  $safeName, $file);
         return $safeName;
     }
 
