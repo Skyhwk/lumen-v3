@@ -1,0 +1,22 @@
+<?php
+namespace App\HelpersFormula;
+
+
+class spektroFenol
+{
+    public function index($data, $id_parameter, $mdl){
+		$rumus =number_format(($data->hp / 100) * 1000 * $data->fp, 4);
+		if($id_parameter==68){
+			if(!is_null($mdl) && $rumus<$mdl)$rumus = '<' . $mdl;
+		}
+		$rumus = str_replace(",", "", $rumus);
+        
+		$data = [
+			'hasil' => $rumus,
+			'hasil_2' => '',
+			'rpd' => '',
+			'recovery' => '',
+		];
+		return $data;
+	}
+}
