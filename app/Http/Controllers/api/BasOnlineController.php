@@ -902,6 +902,7 @@ class BasOnlineController extends Controller
                 // $parts = explode(" - ", $item);
                 array_push($noSample, $request->no_order . '/' . $item);
             }
+          
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
