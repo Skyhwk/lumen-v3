@@ -143,8 +143,4 @@ class PortalCustomerSideController extends Controller
         // }
     }
 
-    public function testRelasi (Request $request)
-    {
-        $data
-    }
 }
