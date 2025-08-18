@@ -4,34 +4,14 @@ namespace App\Http\Controllers\api;
 
 use App\Models\MasterFeeSampling;
 use Illuminate\Http\Request;
-use App\Models\SamplingPlan;
 use App\Models\MasterKaryawan;
-use App\Models\Jadwal;
-use App\Models\JadwalLibur;
-use App\Models\MasterDriver;
-use App\Models\PraNoSample;
-use App\Models\QuotationKontrakH;
-use App\Models\MasterCabang;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Jobs\RenderSamplingPlan;
-use App\Services\JadwalServices;
-use App\Services\GetAtasan;
-use App\Services\Notification;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Jobs\RenderAndEmailJadwal;
-use App\Models\JobTask;
 
 
 class LevelSamplerController extends Controller
 {
-
-
-
     public function getsamplerApi(Request $request)
     {
         try {
@@ -44,11 +24,13 @@ class LevelSamplerController extends Controller
 
             $samplers = $samplers->where('is_active', true)
                 ->orderBy('nama_lengkap')
+                ->whereNotNull('warna')
                 ->get();
 
             $privateSampler = MasterKaryawan::with('jabatan')
                 ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35])
                 ->where('is_active', true)
+                ->whereNotNull('warna')
                 ->orderBy('nama_lengkap')
                 ->get();
 
@@ -90,6 +72,18 @@ class LevelSamplerController extends Controller
         return response()->json(['data' => $labels], 200);
     }
 
+    public function getSamplerNew()
+    {
+        $samplers = MasterKaryawan::with('jabatan')
+            ->where('id_jabatan', 94) // 'Sampler'
+            ->where('is_active', true)
+            ->whereNull('warna')
+            ->orderBy('nama_lengkap')
+            ->get();
+
+        return response()->json(['data' => $samplers], 200);
+    }
+
     public function updateLevelSampling(Request $request)
     {
         $sampler = MasterKaryawan::where('id', $request->id)->first();
@@ -107,12 +101,12 @@ class LevelSamplerController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Level sampling updated successfully',
+                'message' => 'Level Sampler Berhasil Di Update!',
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
-                'message' => 'Failed to update level sampling: ' . $th->getMessage(),
+                'message' => 'Failed to update level sampler: ' . $th->getMessage(),
                 'status' => '500'
             ], 500);
         }
