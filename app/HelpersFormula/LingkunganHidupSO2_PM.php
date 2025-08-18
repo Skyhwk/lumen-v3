@@ -36,7 +36,6 @@ class LingkunganHidupSO2
         $Vs = null;
         $vl = null;
         $st = null;
-        $satuan = null;
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         if($Vu != 0.0) {
@@ -44,10 +43,10 @@ class LingkunganHidupSO2
         }else {
             $C = 0;
         }
-        // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        // $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
 
-        $satuan = 'µg/Nm³';
+        $satuan = 'ppm';
 
         $data = [
             'tanggal_terima' => $data->tanggal_terima,

@@ -45,15 +45,16 @@ class LingkunganHidupNO2
         }else {
             $C = 0;
         }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
-        if (floatval($C) < 0.4623)
-            $C = '<0.4623';
-        if (floatval($C1) < 0.00046)
-            $C1 = '<0.00046';
-        if (floatval($C2) < 0.00025)
-            $C2 = '<0.00025';
 
+        $usingC1 = [];
+        $usingC2 = [];
+
+        if(!is_null($mdl) && $C < $mdl){
+            $C = '<'.$mdl;
+        }
+
+        $satuan = 'µg/Nm³';
+        
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
@@ -68,9 +69,9 @@ class LingkunganHidupNO2
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
+            'hasil1' => $C,
+            'hasil2' => $C1,
+            'hasil3' => $C2,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

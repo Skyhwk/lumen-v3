@@ -3,10 +3,10 @@
 namespace App\HelpersFormula;
 
 use Carbon\Carbon;
-
-class LingkunganHidupSO2
+class LingkunganHidupNO2_PM
 {
     public function index($data, $id_parameter, $mdl) {
+        
         $ks = null;
         // dd(count($data->ks));
         if (is_array($data->ks)) {
@@ -39,17 +39,22 @@ class LingkunganHidupSO2
         $satuan = null;
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+        // dd($Vu);
         if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format((floatval($ks) / floatval($Vu)) * 1000, 4));
+            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * (10 / 25) * 1000, 4));
         }else {
             $C = 0;
         }
-        // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        // $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
 
-        $satuan = 'µg/Nm³';
+        if(!is_null($mdl) && $C2 < $mdl){
+            $C2 = '<'.$mdl;
+        }
 
-        $data = [
+        $satuan = 'ppm';
+
+        $processed = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
             'durasi' => $data->durasi,
@@ -63,10 +68,9 @@ class LingkunganHidupSO2
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $C,
+            'hasil1' => $C2,
             'hasil2' => null,
             'hasil3' => null,
-            'hasil4' => null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
@@ -78,7 +82,7 @@ class LingkunganHidupSO2
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
 
-        return $data;
+        return $processed;
     }
 
 }
