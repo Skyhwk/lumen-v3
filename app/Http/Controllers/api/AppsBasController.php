@@ -2328,18 +2328,22 @@ class AppsBasController extends Controller
 
 
         $status = 'selesai';
-        foreach ($parameters as $parameter) {
-            // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
-            if ($parameter['parameter'] == 'Gelombang Elektro') {
-                continue; // Skip Gelombang Elektro
-            }
+        if (empty($parameters)) {
+            foreach ($parameters as $parameter) {
+                // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
+                if ($parameter['parameter'] == 'Gelombang Elektro') {
+                    continue; // Skip Gelombang Elektro
+                }
 
-            $verified = $this->verifyStatus($sample->no_sample, $parameter);
-            if (!$verified) {
-                // dd("Parameter {$parameter['parameter']} tidak memenuhi syarat");
-                $status = 'belum selesai';
-                break;
+                $verified = $this->verifyStatus($sample->no_sample, $parameter);
+                if (!$verified) {
+                    // dd("Parameter {$parameter['parameter']} tidak memenuhi syarat");
+                    $status = 'belum selesai';
+                    break;
+                }
             }
+        } else {
+            $status = 'belum selesai';
         }
 
         return $status;
