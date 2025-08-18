@@ -12,7 +12,6 @@ class IklimDingin
         foreach ($data as $indx => $val) {
             if ($val->pengukuran != null) {
                 // Decode JSON menjadi array asosiatif PHP
-                // dd($val);
                 $dataa = json_decode($val->pengukuran, true);
                 $totData = count($dataa);
                 $totHasilSuhu = 0;
