@@ -892,13 +892,17 @@ class BasOnlineController extends Controller
             $tipe = explode("/", $request->no_document);
             $request->kategori = explode(",", $request->kategori);
 
+            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)->where('no_quotation', $request->no_document)->where('tanggal_sampling', $request->tanggal_sampling)->where('is_active', true)->first();
+
+            $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+
             // Get No Sample
             $noSample = [];
-            foreach ($request->kategori as $item) {
-                $parts = explode(" - ", $item);
-                array_push($noSample, $request->no_order . '/' . $parts[1]);
+            foreach ($kategori_request as $item) {
+                // $parts = explode(" - ", $item);
+                array_push($noSample, $request->no_order . '/' . $item);
             }
-
+          
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
@@ -995,7 +999,6 @@ class BasOnlineController extends Controller
                 ->whereIn('tanggal_sampling', $jadwal)
                 // ->where('is_active', true)
                 ->get();
-            // dd($orderD); 
 
             $tipe = explode("/", $request->no_document);
             $tahun = "20" . explode("-", $tipe[2])[0];
@@ -1054,14 +1057,14 @@ class BasOnlineController extends Controller
             $status = [];
             $hariTanggal = [];
             foreach ($data_sampling as $sample) {
-                // dd($sample);
+                
                 $dataLapangan = $this->getDataLapangan(
                     $sample->kategori_2,
                     $sample->kategori_3,
                     $sample->no_sample,
                     $sample->parameter
                 );
-
+                // dump($sample->no_sample);
                 // $status[$sample->no_sample] = !is_null($dataLapangan) ? 'selesai' : 'belum selesai';
                 // $status[$sample->no_sample] = $this->getStatusSampling($sample);
 
@@ -1370,6 +1373,17 @@ class BasOnlineController extends Controller
 
                 if (isset($samplerKategoriMap[$sampleNumber])) {
                     $assignedSamplers = $samplerKategoriMap[$sampleNumber];
+                    $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
+
+                    // Create combined key for samplers working together
+                    $samplerKey = count($assignedSamplers) > 2 ? implode(', ', $assignedSamplers) : implode(' & ', $assignedSamplers);
+
+                    if (!isset($samplingBySampler[$samplerKey])) {
+                        $samplingBySampler[$samplerKey] = [];
+                    }
+                    $samplingBySampler[$samplerKey][] = $sampling;
+                } else {
+                    $assignedSamplers = $samplerKategoriMap['001'];
                     $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
 
                     // Create combined key for samplers working together
@@ -1900,9 +1914,15 @@ class BasOnlineController extends Controller
 
         return $data;
     }
+    /**
+     * Get the status of the sampling process for a given sample.
+     *
+     * @param mixed $sample The sample to check the status of.
+     * @return string The status of the sampling process: 'selesai' or 'belum selesai'.
+     */
     private function getStatusSampling($sample) // return selesai / blm selesai
     {
-
+        // dump($sample->no_sample);
         $parametersRaw = json_decode($sample->parameter);
         $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample) {
             $parameterName = explode(";", $item)[1] ?? null;
@@ -1926,22 +1946,26 @@ class BasOnlineController extends Controller
         // dd($parameters);
 
         $status = 'selesai';
-
-        foreach ($parameters as $parameter) {
-            $verified = $this->verifyStatus($sample->no_sample, $parameter);
-            if (!$verified) {
-                $status = 'belum selesai';
-                break;
+        if (!empty($parameters)) {
+            foreach ($parameters as $parameter) {
+                // dump($sample->no_sample);
+                $verified = $this->verifyStatus($sample->no_sample, $parameter);
+                if (!$verified) {
+                    $status = 'belum selesai';
+                    break;
+                }
             }
+        } else {
+            $status = 'belum selesai';
         }
         return $status;
     }
     private function verifyStatus($sample_number, $parameter)
     {
         if (empty($parameter['model'])) {
-            return true;
+            return null;
         }
-
+        // dump($sample_number);
         $model = $parameter['model'];
         $model2 = isset($parameter['model2']) ? $parameter['model2'] : null;
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
