@@ -163,8 +163,13 @@ class CoverLhpController extends Controller
             $mpdf->WriteHTML($html);
 
             $basList = '';
-            foreach ($data->no_bas as $no_bas) {
-                $basList .= "<li>{$no_bas}</li>";
+
+            if($data->status_sampling != "Sampel Diantar"){
+                foreach ($data->no_bas as $no_bas) {
+                    $basList .= "<li>{$no_bas}</li>";
+                }
+            } else {
+                $basList = '-';
             }
 
             $mpdf->SetHTMLFooter('

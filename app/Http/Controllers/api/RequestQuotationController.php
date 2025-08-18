@@ -818,7 +818,7 @@ class RequestQuotationController extends Controller
                         //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                         // }) ?? $ambil_data->first();
 
-                        // // fix bug 
+                        // // fix bug
                         // if ($cek_harga_parameter) {
                         //     $harga_db[] = $cek_harga_parameter->harga;
                         //     $volume_db[] = $cek_harga_parameter->volume;
@@ -1513,7 +1513,7 @@ class RequestQuotationController extends Controller
 
         DB::beginTransaction();
         try {
-            // Update Master Pelanggan by 565 : 01-05-2025 
+            // Update Master Pelanggan by 565 : 01-05-2025
             $cek_master_customer = MasterPelanggan::where('id_pelanggan', $payload->informasi_pelanggan->pelanggan_ID)->where('is_active', true)->first();
             if ($cek_master_customer != null) {
                 // Update Kontak pelanggan
@@ -1694,7 +1694,7 @@ class RequestQuotationController extends Controller
                     //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                     // }) ?? $ambil_data->first();
 
-                    // // fix bug 
+                    // // fix bug
                     // if ($cek_harga_parameter) {
                     //     $harga_db[] = $cek_harga_parameter->harga;
                     //     $volume_db[] = $cek_harga_parameter->volume;
@@ -2810,7 +2810,7 @@ class RequestQuotationController extends Controller
             $data_diskon = $payload->data_diskon;
             if (isset($payload->keterangan_tambahan))
                 $keterangan_tambahan = $payload->keterangan_tambahan;
-            
+
             foreach ($data_pendukung as $index => $pengujian) {
                 $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
                 $penamaanTitik = $pengujian->penamaan_titik ?? [];
@@ -2978,7 +2978,7 @@ class RequestQuotationController extends Controller
                         //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                         // }) ?? $ambil_data->first();
                         // if($i == 13) dd($cek_harga_parameter,  $payload->informasi_pelanggan->tgl_penawaran);
-                        // fix bug 
+                        // fix bug
                         // if ($cek_harga_parameter) {
                         //     $harga_db[] = $cek_harga_parameter->harga;
                         //     $volume_db[] = $cek_harga_parameter->volume;
@@ -4347,153 +4347,146 @@ class RequestQuotationController extends Controller
                     $dataD->biaya_akhir = $biaya_akhir;
 
                     //==========================END BIAYA DI LUAR PAJAK======================================
-                    // if($k == 11) dd($dataD);
                     $dataD->save();
-                    // if ($k == ($num - 1) && $num < $detailCount) {
-                    //     $deleted = QuotationKontrakD::whereNotIn('id', $id_det)->where('id_request_quotation_kontrak_h', $dataH->id)->delete();
-                    // }
-                    // END FOR
-                    if ($k == ($num - 1)) {
-                        // SUM DATA DETAIL FOR TOTAL HEADER
-                        $Dd = DB::select(" SELECT SUM(harga_air) as harga_air, SUM(harga_udara) as harga_udara,
-                                                    SUM(harga_emisi) as harga_emisi,
-                                                    SUM(harga_padatan) as harga_padatan,
-                                                    SUM(harga_swab_test) as harga_swab_test,
-                                                    SUM(harga_tanah) as harga_tanah,
-                                                    SUM(transportasi) as transportasi,
-                                                    SUM(perdiem_jumlah_orang) as perdiem_jumlah_orang,
-                                                    SUM(perdiem_jumlah_hari) as perdiem_jumlah_hari,
-                                                    SUM(jumlah_orang_24jam) as jumlah_orang_24jam,
-                                                    SUM(jumlah_hari_24jam) as jumlah_hari_24jam,
-                                                    SUM(harga_transportasi) as harga_transportasi,
-                                                    SUM(harga_transportasi_total) as harga_transportasi_total,
-                                                    SUM(harga_personil) as harga_personil,
-                                                    SUM(harga_perdiem_personil_total) as harga_perdiem_personil_total,
-                                                    SUM(harga_24jam_personil) as harga_24jam_personil,
-                                                    SUM(harga_24jam_personil_total) as harga_24jam_personil_total,
-                                                    SUM(discount_air) as discount_air,
-                                                    SUM(total_discount_air) as total_discount_air,
-                                                    SUM(discount_non_air) as discount_non_air,
-                                                    SUM(total_discount_non_air) as total_discount_non_air,
-                                                    SUM(discount_udara) as discount_udara,
-                                                    SUM(total_discount_udara) as total_discount_udara,
-                                                    SUM(discount_emisi) as discount_emisi,
-                                                    SUM(total_discount_emisi) as total_discount_emisi,
-                                                    SUM(discount_gabungan) as discount_gabungan,
-                                                    SUM(total_discount_gabungan) as total_discount_gabungan,
-                                                    SUM(cash_discount_persen) as cash_discount_persen,
-                                                    SUM(total_cash_discount_persen) as total_cash_discount_persen,
-                                                    SUM(discount_consultant) as discount_consultant,
-                                                    SUM(discount_group) as discount_group,
-                                                    SUM(total_discount_group) as total_discount_group,
-                                                    SUM(total_discount_consultant) as total_discount_consultant,
-                                                    SUM(cash_discount) as cash_discount,
-                                                    SUM(total_custom_discount) as total_custom_discount,
-                                                    SUM(discount_transport) as discount_transport,
-                                                    SUM(total_discount_transport) as total_discount_transport,
-                                                    SUM(discount_perdiem) as discount_perdiem,
-                                                    SUM(total_discount_perdiem) as total_discount_perdiem,
-                                                    SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
-                                                    SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
-                                                    SUM(ppn) as ppn,
-                                                    SUM(total_ppn) as total_ppn,
-                                                    SUM(total_pph) as total_pph,
-                                                    SUM(pph) as pph,
-                                                    SUM(biaya_lain) as biaya_lain,
-                                                    SUM(total_biaya_lain) as total_biaya_lain,
-                                                    SUM(total_biaya_preparasi) as total_biaya_preparasi,
-                                                    SUM(biaya_di_luar_pajak) as biaya_di_luar_pajak,
-                                                    SUM(total_biaya_di_luar_pajak) as total_biaya_di_luar_pajak,
-                                                    SUM(grand_total) as grand_total,
-                                                    SUM(total_discount) as total_discount,
-                                                    SUM(total_dpp) as total_dpp,
-                                                    SUM(piutang) as piutang,
-                                                    SUM(biaya_akhir) as biaya_akhir FROM request_quotation_kontrak_D WHERE id_request_quotation_kontrak_h = '$dataH->id' GROUP BY id_request_quotation_kontrak_h ");
-                        // UPDATE HEADER DATA
-                        // dd($Dd);
-                        $editH = QuotationKontrakH::where('id', $dataH->id)
-                            ->first();
-                        $editH->syarat_ketentuan = json_encode($payload->syarat_ketentuan);
-                        // dd($syarat);
-                        if (isset($payload->keterangan_tambahan) && $payload->keterangan_tambahan != null)
-                            $editH->keterangan_tambahan = json_encode($payload->keterangan_tambahan);
-                        if ($tgl == null || !isset($tgl)) {
-                            $tgl = date('Y-m-d', strtotime("+30 days", strtotime(DATE('Y-m-d'))));
-                        }
-                        // dd($Dd);
-                        $editH->expired = $tgl;
-                        $editH->total_harga_air = $Dd[0]->harga_air;
-                        $editH->total_harga_udara = $Dd[0]->harga_udara;
-                        $editH->total_harga_emisi = $Dd[0]->harga_emisi;
-                        $editH->total_harga_padatan = $Dd[0]->harga_padatan;
-                        $editH->total_harga_swab_test = $Dd[0]->harga_swab_test;
-                        $editH->total_harga_tanah = $Dd[0]->harga_tanah;
-                        $editH->transportasi = $Dd[0]->transportasi;
-                        $editH->perdiem_jumlah_orang = $Dd[0]->perdiem_jumlah_orang;
-                        $editH->perdiem_jumlah_hari = $Dd[0]->perdiem_jumlah_hari;
-                        $editH->jumlah_orang_24jam = $Dd[0]->jumlah_orang_24jam;
-                        $editH->jumlah_hari_24jam = $Dd[0]->jumlah_hari_24jam;
-                        if (!is_null($Dd[0]->harga_transportasi))
-                            $editH->harga_transportasi = $Dd[0]->harga_transportasi;
-                        if (!is_null($Dd[0]->harga_transportasi_total))
-                            $editH->harga_transportasi_total = $Dd[0]->harga_transportasi_total;
-                        if (!is_null($Dd[0]->harga_personil))
-                            $editH->harga_personil = $Dd[0]->harga_personil;
-                        if (!is_null($Dd[0]->harga_perdiem_personil_total))
-                            $editH->harga_perdiem_personil_total = $Dd[0]->harga_perdiem_personil_total;
-
-                        if (!is_null($Dd[0]->harga_24jam_personil))
-                            $editH->harga_24jam_personil = $Dd[0]->harga_24jam_personil;
-                        if (!is_null($Dd[0]->harga_24jam_personil_total))
-                            $editH->harga_24jam_personil_total = $Dd[0]->harga_24jam_personil_total;
-
-                        $editH->total_discount_air = $Dd[0]->total_discount_air;
-
-                        $editH->total_discount_non_air = $Dd[0]->total_discount_non_air;
-
-                        $editH->total_discount_udara = $Dd[0]->total_discount_udara;
-
-                        $editH->total_discount_emisi = $Dd[0]->total_discount_emisi;
-
-                        $editH->total_discount_gabungan = $Dd[0]->total_discount_gabungan;
-
-                        $editH->total_cash_discount_persen = $Dd[0]->total_cash_discount_persen;
-                        $editH->total_discount_group = $Dd[0]->total_discount_group;
-                        $editH->total_discount_consultant = $Dd[0]->total_discount_consultant;
-                        if (!is_null($Dd[0]->cash_discount))
-                            $editH->total_cash_discount = round($Dd[0]->cash_discount);
-
-                        $editH->total_discount_transport = $Dd[0]->total_discount_transport;
-
-                        $editH->total_discount_perdiem = $Dd[0]->total_discount_perdiem;
-
-                        $editH->total_discount_perdiem_24jam = $Dd[0]->total_discount_perdiem_24jam;
-
-                        $editH->total_custom_discount = $Dd[0]->total_custom_discount;
-
-                        $editH->total_ppn = $Dd[0]->total_ppn;
-                        $editH->total_pph = $Dd[0]->total_pph;
-
-                        $editH->total_biaya_lain = $Dd[0]->total_biaya_lain;
-                        // dd($Dd[0]->total_biaya_preparasi);
-                        $editH->total_biaya_preparasi = $Dd[0]->total_biaya_preparasi;
-                        $editH->biaya_diluar_pajak = json_encode($diluar_pajak);
-                        $editH->total_biaya_di_luar_pajak = $Dd[0]->total_biaya_di_luar_pajak;
-                        $editH->grand_total = $Dd[0]->grand_total;
-                        $editH->total_discount = $Dd[0]->total_discount;
-                        $editH->total_dpp = $Dd[0]->total_dpp;
-                        $editH->piutang = $Dd[0]->piutang;
-                        $editH->biaya_akhir = $Dd[0]->biaya_akhir;
-                        $editH->updated_by = $this->karyawan;
-                        $editH->updated_at = date('Y-m-d H:i:s');
-                        $editH->save();
-                    }
+                    // END FOR EACH
                 }
 
                 // ----------------- Start Delete If Periode Not Exist In Current Quotation ---------------------- //
                 $deleted = QuotationKontrakD::whereNotIn('periode_kontrak', $period)->where('id_request_quotation_kontrak_h', $dataH->id)->delete();
                 // ----------------- End Delete If Periode Not Exist In Current Quotation   --------------------- //
 
+                $Dd = DB::select(" SELECT SUM(harga_air) as harga_air, SUM(harga_udara) as harga_udara,
+                                            SUM(harga_emisi) as harga_emisi,
+                                            SUM(harga_padatan) as harga_padatan,
+                                            SUM(harga_swab_test) as harga_swab_test,
+                                            SUM(harga_tanah) as harga_tanah,
+                                            SUM(transportasi) as transportasi,
+                                            SUM(perdiem_jumlah_orang) as perdiem_jumlah_orang,
+                                            SUM(perdiem_jumlah_hari) as perdiem_jumlah_hari,
+                                            SUM(jumlah_orang_24jam) as jumlah_orang_24jam,
+                                            SUM(jumlah_hari_24jam) as jumlah_hari_24jam,
+                                            SUM(harga_transportasi) as harga_transportasi,
+                                            SUM(harga_transportasi_total) as harga_transportasi_total,
+                                            SUM(harga_personil) as harga_personil,
+                                            SUM(harga_perdiem_personil_total) as harga_perdiem_personil_total,
+                                            SUM(harga_24jam_personil) as harga_24jam_personil,
+                                            SUM(harga_24jam_personil_total) as harga_24jam_personil_total,
+                                            SUM(discount_air) as discount_air,
+                                            SUM(total_discount_air) as total_discount_air,
+                                            SUM(discount_non_air) as discount_non_air,
+                                            SUM(total_discount_non_air) as total_discount_non_air,
+                                            SUM(discount_udara) as discount_udara,
+                                            SUM(total_discount_udara) as total_discount_udara,
+                                            SUM(discount_emisi) as discount_emisi,
+                                            SUM(total_discount_emisi) as total_discount_emisi,
+                                            SUM(discount_gabungan) as discount_gabungan,
+                                            SUM(total_discount_gabungan) as total_discount_gabungan,
+                                            SUM(cash_discount_persen) as cash_discount_persen,
+                                            SUM(total_cash_discount_persen) as total_cash_discount_persen,
+                                            SUM(discount_consultant) as discount_consultant,
+                                            SUM(discount_group) as discount_group,
+                                            SUM(total_discount_group) as total_discount_group,
+                                            SUM(total_discount_consultant) as total_discount_consultant,
+                                            SUM(cash_discount) as cash_discount,
+                                            SUM(total_custom_discount) as total_custom_discount,
+                                            SUM(discount_transport) as discount_transport,
+                                            SUM(total_discount_transport) as total_discount_transport,
+                                            SUM(discount_perdiem) as discount_perdiem,
+                                            SUM(total_discount_perdiem) as total_discount_perdiem,
+                                            SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
+                                            SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
+                                            SUM(ppn) as ppn,
+                                            SUM(total_ppn) as total_ppn,
+                                            SUM(total_pph) as total_pph,
+                                            SUM(pph) as pph,
+                                            SUM(biaya_lain) as biaya_lain,
+                                            SUM(total_biaya_lain) as total_biaya_lain,
+                                            SUM(total_biaya_preparasi) as total_biaya_preparasi,
+                                            SUM(biaya_di_luar_pajak) as biaya_di_luar_pajak,
+                                            SUM(total_biaya_di_luar_pajak) as total_biaya_di_luar_pajak,
+                                            SUM(grand_total) as grand_total,
+                                            SUM(total_discount) as total_discount,
+                                            SUM(total_dpp) as total_dpp,
+                                            SUM(piutang) as piutang,
+                                            SUM(biaya_akhir) as biaya_akhir FROM request_quotation_kontrak_D WHERE id_request_quotation_kontrak_h = '$dataH->id' GROUP BY id_request_quotation_kontrak_h ");
+                // UPDATE HEADER DATA
+                // dd($Dd);
+                $editH = QuotationKontrakH::where('id', $dataH->id)
+                    ->first();
+                $editH->syarat_ketentuan = json_encode($payload->syarat_ketentuan);
+                // dd($syarat);
+                if (isset($payload->keterangan_tambahan) && $payload->keterangan_tambahan != null)
+                    $editH->keterangan_tambahan = json_encode($payload->keterangan_tambahan);
+                if ($tgl == null || !isset($tgl)) {
+                    $tgl = date('Y-m-d', strtotime("+30 days", strtotime(DATE('Y-m-d'))));
+                }
+                // dd($Dd);
+                $editH->expired = $tgl;
+                $editH->total_harga_air = $Dd[0]->harga_air;
+                $editH->total_harga_udara = $Dd[0]->harga_udara;
+                $editH->total_harga_emisi = $Dd[0]->harga_emisi;
+                $editH->total_harga_padatan = $Dd[0]->harga_padatan;
+                $editH->total_harga_swab_test = $Dd[0]->harga_swab_test;
+                $editH->total_harga_tanah = $Dd[0]->harga_tanah;
+                $editH->transportasi = $Dd[0]->transportasi;
+                $editH->perdiem_jumlah_orang = $Dd[0]->perdiem_jumlah_orang;
+                $editH->perdiem_jumlah_hari = $Dd[0]->perdiem_jumlah_hari;
+                $editH->jumlah_orang_24jam = $Dd[0]->jumlah_orang_24jam;
+                $editH->jumlah_hari_24jam = $Dd[0]->jumlah_hari_24jam;
+                if (!is_null($Dd[0]->harga_transportasi))
+                    $editH->harga_transportasi = $Dd[0]->harga_transportasi;
+                if (!is_null($Dd[0]->harga_transportasi_total))
+                    $editH->harga_transportasi_total = $Dd[0]->harga_transportasi_total;
+                if (!is_null($Dd[0]->harga_personil))
+                    $editH->harga_personil = $Dd[0]->harga_personil;
+                if (!is_null($Dd[0]->harga_perdiem_personil_total))
+                    $editH->harga_perdiem_personil_total = $Dd[0]->harga_perdiem_personil_total;
+
+                if (!is_null($Dd[0]->harga_24jam_personil))
+                    $editH->harga_24jam_personil = $Dd[0]->harga_24jam_personil;
+                if (!is_null($Dd[0]->harga_24jam_personil_total))
+                    $editH->harga_24jam_personil_total = $Dd[0]->harga_24jam_personil_total;
+
+                $editH->total_discount_air = $Dd[0]->total_discount_air;
+
+                $editH->total_discount_non_air = $Dd[0]->total_discount_non_air;
+
+                $editH->total_discount_udara = $Dd[0]->total_discount_udara;
+
+                $editH->total_discount_emisi = $Dd[0]->total_discount_emisi;
+
+                $editH->total_discount_gabungan = $Dd[0]->total_discount_gabungan;
+
+                $editH->total_cash_discount_persen = $Dd[0]->total_cash_discount_persen;
+                $editH->total_discount_group = $Dd[0]->total_discount_group;
+                $editH->total_discount_consultant = $Dd[0]->total_discount_consultant;
+                if (!is_null($Dd[0]->cash_discount))
+                    $editH->total_cash_discount = round($Dd[0]->cash_discount);
+
+                $editH->total_discount_transport = $Dd[0]->total_discount_transport;
+
+                $editH->total_discount_perdiem = $Dd[0]->total_discount_perdiem;
+
+                $editH->total_discount_perdiem_24jam = $Dd[0]->total_discount_perdiem_24jam;
+
+                $editH->total_custom_discount = $Dd[0]->total_custom_discount;
+
+                $editH->total_ppn = $Dd[0]->total_ppn;
+                $editH->total_pph = $Dd[0]->total_pph;
+
+                $editH->total_biaya_lain = $Dd[0]->total_biaya_lain;
+                // dd($Dd[0]->total_biaya_preparasi);
+                $editH->total_biaya_preparasi = $Dd[0]->total_biaya_preparasi;
+                $editH->biaya_diluar_pajak = json_encode($diluar_pajak);
+                $editH->total_biaya_di_luar_pajak = $Dd[0]->total_biaya_di_luar_pajak;
+                $editH->grand_total = $Dd[0]->grand_total;
+                $editH->total_discount = $Dd[0]->total_discount;
+                $editH->total_dpp = $Dd[0]->total_dpp;
+                $editH->piutang = $Dd[0]->piutang;
+                $editH->biaya_akhir = $Dd[0]->biaya_akhir;
+                $editH->updated_by = $this->karyawan;
+                $editH->updated_at = date('Y-m-d H:i:s');
+                $editH->save();
 
                 $data_lama = null;
                 if ($dataH->data_lama != null)
@@ -4853,7 +4846,7 @@ class RequestQuotationController extends Controller
                         //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
                         // }) ?? $ambil_data->first();
 
-                        // // fix bug 
+                        // // fix bug
                         // if ($cek_harga_parameter) {
                         //     $harga_db[] = $cek_harga_parameter->harga;
                         //     $volume_db[] = $cek_harga_parameter->volume;
@@ -5529,7 +5522,7 @@ class RequestQuotationController extends Controller
                         }
                     }
 
-                    
+
                     // dump($data_sampling);
                     // foreach ($data_sampling as $index => $newItem) {
                     //     $checkOldQt = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)->where('periode_kontrak', $per)->first();
@@ -6536,7 +6529,7 @@ class RequestQuotationController extends Controller
                                         ->update(['periode' => $value['after']]);
                                 }
                             }
-                            // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru 
+                            // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
                             SamplingPlan::where('no_quotation', $dataOld->no_document)
                                 ->update([
                                     'no_quotation' => $dataH->no_document,
@@ -6991,7 +6984,7 @@ class RequestQuotationController extends Controller
     //                     //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
     //                     // }) ?? $ambil_data->first();
 
-    //                     // // fix bug 
+    //                     // // fix bug
     //                     // if ($cek_harga_parameter) {
     //                     //     $harga_db[] = $cek_harga_parameter->harga;
     //                     //     $volume_db[] = $cek_harga_parameter->volume;
@@ -8528,7 +8521,7 @@ class RequestQuotationController extends Controller
     //                                     ->update(['periode' => $value['after']]);
     //                             }
     //                         }
-    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru 
+    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
     //                         SamplingPlan::where('no_quotation', $dataOld->no_document)
     //                             ->update([
     //                                 'no_quotation' => $dataH->no_document,
@@ -8984,7 +8977,7 @@ class RequestQuotationController extends Controller
     //                     //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
     //                     // }) ?? $ambil_data->first();
 
-    //                     // // fix bug 
+    //                     // // fix bug
     //                     // if ($cek_harga_parameter) {
     //                     //     $harga_db[] = $cek_harga_parameter->harga;
     //                     //     $volume_db[] = $cek_harga_parameter->volume;
@@ -10573,7 +10566,7 @@ class RequestQuotationController extends Controller
     //                                     ->update(['periode' => $value['after']]);
     //                             }
     //                         }
-    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru 
+    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
     //                         SamplingPlan::where('no_quotation', $dataOld->no_document)
     //                             ->update([
     //                                 'no_quotation' => $dataH->no_document,
@@ -11027,7 +11020,7 @@ class RequestQuotationController extends Controller
     //                     //     return explode(' ', $item->created_at)[0] <= $payload->informasi_pelanggan->tgl_penawaran;
     //                     // }) ?? $ambil_data->first();
 
-    //                     // // fix bug 
+    //                     // // fix bug
     //                     // if ($cek_harga_parameter) {
     //                     //     $harga_db[] = $cek_harga_parameter->harga;
     //                     //     $volume_db[] = $cek_harga_parameter->volume;
@@ -12356,7 +12349,7 @@ class RequestQuotationController extends Controller
     //                                     ->update(['periode' => $value['after']]);
     //                             }
     //                         }
-    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru 
+    //                         // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
     //                         SamplingPlan::where('no_quotation', $dataOld->no_document)
     //                             ->update([
     //                                 'no_quotation' => $dataH->no_document,
@@ -12550,7 +12543,7 @@ class RequestQuotationController extends Controller
             // 'password' => $cek->nama_pic_order[4].DATE('dym', strtotime($cek->add_at)),
             'created_at' => DATE('Y-m-d'),
             'created_by' => $data['userid'],
-            // 'fileName' => json_encode($data_file) , 
+            // 'fileName' => json_encode($data_file) ,
             // 'fileName_pdf' => $fileName,
             'type' => null
         ];
@@ -12991,7 +12984,7 @@ class RequestQuotationController extends Controller
                                     continue;
                                 }
 
-                                // Sort regulasi dan parameter 
+                                // Sort regulasi dan parameter
                                 $regulasi = $detailSampling['regulasi'] ?? [];
                                 $parameter = $detailSampling['parameter'] ?? [];
 
@@ -13012,7 +13005,7 @@ class RequestQuotationController extends Controller
                                 $regulasiJson = json_encode($regulasi, JSON_UNESCAPED_UNICODE);
                                 $parameterJson = str_replace('\\', '', str_replace(',', ', ', json_encode($parameter, JSON_UNESCAPED_UNICODE)));
 
-                                // Filter order detail sesuai criteria 
+                                // Filter order detail sesuai criteria
                                 $order_detail = $sortedOrderDetail
                                     ->whereNotIn('no_sampel', $substract)
                                     ->where('periode', $periode)
@@ -13117,7 +13110,7 @@ class RequestQuotationController extends Controller
                                     continue;
                                 }
 
-                                // Normalisasi array 
+                                // Normalisasi array
                                 $itemRegulasi = $item['regulasi'] ?? [];
                                 $itemParameter = $item['parameter'] ?? [];
                                 $headerRegulasi = $header['regulasi'] ?? [];

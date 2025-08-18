@@ -27,6 +27,7 @@ use App\Models\FtcT;
 use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
+use App\Jobs\RenderSamplingPlan;
 
 class ReadyOrderController extends Controller
 {
