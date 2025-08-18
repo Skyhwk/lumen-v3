@@ -49,7 +49,7 @@ class SendEmailPortal
 
     public static function registerAccount()
     {
-        $data = CustomerAccount::where('email', $this->email)->first();
+        $data = CustomerAccount::where('email', self::$instance->email)->first();
         $key = 'skyhwk12';
         $btn_data = $data->id . "|" . $data->email . "|Email Verification|" . env('PUBLIC_TOKEN');
         $btn_encrypted = self::encrypt($btn_data, $key);
@@ -121,7 +121,7 @@ class SendEmailPortal
 
     public static function forgotPassword()
     {
-        $data = CustomerAccount::where('email', $this->email)->first();
+        $data = CustomerAccount::where('email', self::$instance->email)->first();
         $key = 'skyhwk12';
         $btn_data = $data->id . "|" . $data->email . "|Forgot Password|" . env('PUBLIC_TOKEN');
         $btn_encrypted = self::encrypt($btn_data, $key);
