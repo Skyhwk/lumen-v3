@@ -4,7 +4,6 @@ use Carbon\Carbon;
 class IklimDingin
 {
     public function index($data, $id_parameter, $mdl){
-        $totalShifts = 0;
         $hasil = 0;
         $hasil_suhu_terpapar = [];
         $hasil_angin_terpapar = [];
@@ -407,7 +406,6 @@ class IklimDingin
                 break;
             default:
                 $hasil = 'Tidak ada data';
-
         }
 
         return [
