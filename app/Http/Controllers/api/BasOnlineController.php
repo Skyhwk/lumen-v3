@@ -898,7 +898,7 @@ class BasOnlineController extends Controller
                 $parts = explode(" - ", $item);
                 array_push($noSample, $request->no_order . '/' . $parts[1]);
             }
-            dd($noSample);
+
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
@@ -994,8 +994,8 @@ class BasOnlineController extends Controller
                 ->whereIn('no_sampel', $noSample)
                 ->whereIn('tanggal_sampling', $jadwal)
                 // ->where('is_active', true)
-                ->get()->pluck('no_sampel')->toArray();
-            dd($orderD);
+                ->get();
+            // dd($orderD); 
 
             $tipe = explode("/", $request->no_document);
             $tahun = "20" . explode("-", $tipe[2])[0];
@@ -1050,7 +1050,7 @@ class BasOnlineController extends Controller
                     $dat_param[] = $vv->codingSampling;
                 }
             }
-            dd($data_sampling);
+
             $status = [];
             $hariTanggal = [];
             foreach ($data_sampling as $sample) {
