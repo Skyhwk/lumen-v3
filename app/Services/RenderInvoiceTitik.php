@@ -2,17 +2,17 @@
 
 namespace App\Services;
 
-use App\Models\Parameter;
-use App\Models\QuotationNonKontrak;
 use App\Models\Invoice;
-use App\Models\QuotationKontrakD;
-use App\Models\QrDocument;
-use App\Models\SamplingPlan;
 use App\Models\Jadwal;
+use App\Models\Parameter;
+use App\Models\QrDocument;
+use App\Models\QuotationKontrakD;
+use App\Models\QuotationNonKontrak;
+use App\Models\SamplingPlan;
 use Illuminate\Support\Facades\DB;
 use Mpdf\Mpdf;
 
-class RenderInvoice
+class RenderInvoiceTitik
 {
     protected $pdf;
     protected $data;
