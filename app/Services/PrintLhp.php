@@ -18,35 +18,34 @@ class PrintLhp
         // Implement the logic for handling the print LHP request
         DB::beginTransaction();
         try {
-            $no_sampel = $no_sampel;
-            // dd($no_sampel);
             $header = LhpsAirHeader::where('no_sampel', $no_sampel)->where('is_active', true)->first();
             $detail = LhpsAirDetail::where('id_header', $header->id)->get();
             $kan = $this->cekAkreditasi($detail, $no_sampel);
             // dd($kan);
             $id_printer = 67; // Default printer ID
-            if($kan) $id_printer = 68;
-            
+            if ($kan)
+                $id_printer = 68;
+
             $cek_printer = Printers::where('id', $id_printer)->first();
             // return $cek_printer;
-            if($kan) {
-                $print = Printing::where('pdf', env('APP_URL').'/public/dokumen/LHP/'.$header->file_lhp)
-                ->where('printer', $cek_printer->full_path)
-                ->where('karyawan', 'System')
-                ->where('filename', 'dokumen/LHP/'.$header->file_lhp)
-                ->where('printer_name', $cek_printer->name)
-                ->where('destination', $cek_printer->full_path)
-                // ->where('pages', $request->pages)
-                ->print();
+            if ($kan) {
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $header->file_lhp)
+                    ->where('printer', $cek_printer->full_path)
+                    ->where('karyawan', 'System')
+                    ->where('filename', 'dokumen/LHP/' . $header->file_lhp)
+                    ->where('printer_name', $cek_printer->name)
+                    ->where('destination', $cek_printer->full_path)
+                    // ->where('pages', $request->pages)
+                    ->print();
             } else {
-                $print = Printing::where('pdf', env('APP_URL').'/public/dokumen/LHP/'.$header->file_lhp)
-                ->where('printer', $cek_printer->full_path)
-                ->where('karyawan', 'System')
-                ->where('filename', 'dokumen/LHP/'.$header->file_lhp)
-                ->where('printer_name', $cek_printer->name)
-                ->where('destination', $cek_printer->full_path)
-                // ->where('pages', $request->pages)
-                ->print();
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $header->file_lhp)
+                    ->where('printer', $cek_printer->full_path)
+                    ->where('karyawan', 'System')
+                    ->where('filename', 'dokumen/LHP/' . $header->file_lhp)
+                    ->where('printer_name', $cek_printer->name)
+                    ->where('destination', $cek_printer->full_path)
+                    // ->where('pages', $request->pages)
+                    ->print();
             }
             if (!$print) {
                 // return false; // If printing fails, return false
@@ -67,21 +66,21 @@ class PrintLhp
             ], 500);
         }
     }
-    
+
     public function printPsikologi($no_sampel)
-    { 
+    {
         // Implement the logic for handling the print LHP request
         DB::beginTransaction();
         try {
             $header = LhpUdaraPsikologiHeader::where('no_cfr', $no_sampel)->where('is_active', true)->first();
-            if(!$header) {
+            if (!$header) {
                 return false;
             }
             $cek_printer = Printers::where('id', 47)->first();
-                $print = Printing::where('pdf', env('APP_URL').'/public/dokumen/LHP/'.$header->no_dokumen)
+            $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $header->no_dokumen)
                 ->where('printer', $cek_printer->full_path)
                 ->where('karyawan', 'System')
-                ->where('filename', 'dokumen/LHP/'.$header->no_dokumen)
+                ->where('filename', 'dokumen/LHP/' . $header->no_dokumen)
                 ->where('printer_name', '\\itcom2\EPSON L360 Series')
                 ->where('destination', '\\itcom2\EPSON L360 Series')
                 // ->where('pages', $request->pages)
@@ -109,13 +108,13 @@ class PrintLhp
 
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
-        
+
         // $orderDetail = OrderDetail::where('no_sampel', $no_sampel)->first();
 
         // $kategori = explode('-', $orderDetail->kategori_2)[0];
         foreach ($data as $key => $value) {
             // $parameter = Parameter::where('nama_lab', $value)->where('id_kategori', $kategori)->first();
-            if($value->akr != 'ẍ') {
+            if ($value->akr != 'ẍ') {
                 $parameterAkreditasi++;
             } else {
                 $parameterNonAkreditasi++;
@@ -127,12 +126,12 @@ class PrintLhp
             return false;
         }
 
-        if($total / $parameterAkreditasi >= 0.6) {
+        if ($total / $parameterAkreditasi >= 0.6) {
             return true;
         } else {
             return false;
         }
 
-        
+
     }
 }
