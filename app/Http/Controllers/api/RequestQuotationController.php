@@ -5419,7 +5419,7 @@ class RequestQuotationController extends Controller
                                     if($alreadyOrdered && $foundOldPenamaanTitik !== null){
                                         // dump('sudah Ordered');
                                         // dump($i, $countOld, $oldKeys);
-                                        if($i < $countOld){
+                                        if($i < count($keysOldFoundPenamaanTitik)){
                                             $penamaan_titik_fixed[] = (object) [$keysOldFoundPenamaanTitik[$i] => $namaTitik];
                                         } else {
                                             $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
