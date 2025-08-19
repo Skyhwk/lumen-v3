@@ -562,9 +562,32 @@ class StpsController extends Controller
                     });
                 } else {
                     $data_detail_penawaran = json_decode($dataPenawaran->detail()->where('periode_kontrak', $request->periode)->first()->data_pendukung_sampling, true);
-                    
+
                     $data_detail_penawaran = array_map(function ($item) use ($dataOrder, $pra_no_sample) {
                         $maping = array_map(function ($data_sampling) use ($item, $dataOrder, $pra_no_sample) {
+                            $sampleNumbersFromOrder = $dataOrder->orderDetail()
+                                ->where('kategori_1', '!=', 'SD')
+                                ->where('kategori_2', $data_sampling['kategori_1'])
+                                ->where('kategori_3', $data_sampling['kategori_2'])
+                                ->whereJsonContains('regulasi', $data_sampling['regulasi'])
+                                ->whereJsonContains('parameter', $data_sampling['parameter'])
+                                ->where('periode', $item['periode_kontrak'])
+                                ->whereIn('no_sampel', $pra_no_sample)
+                                ->where('is_active', 1)
+                                ->pluck('no_sampel')
+                                ->toArray();
+
+                            $penawaran_keys = array_merge(...array_map('array_keys', $data_sampling['penamaan_titik']));
+
+                            $sampleNumbers = [];
+                            foreach ($sampleNumbersFromOrder as $sampleNumber) {
+                                $number = explode('/', $sampleNumber)[1];
+
+                                if (in_array($number, $penawaran_keys)) {
+                                    $sampleNumbers[] = $sampleNumber;
+                                }
+                            }
+
                             $data = [
                                 'kategori_3' => \explode('-', $data_sampling['kategori_2'])[1],
                                 'periode' => $item['periode_kontrak'],
@@ -580,16 +603,7 @@ class StpsController extends Controller
                                     '( ' . number_format($data_sampling['volume'] / 1000, 1) . ' L )' : '',
                                 'total_parameter' => $data_sampling['total_parameter'],
                                 'jumlah_titik' => $data_sampling['jumlah_titik'],
-                                'no_sampel' => $dataOrder->orderDetail()
-                                    ->where('kategori_3', $data_sampling['kategori_2'])
-                                    ->where('kategori_2', $data_sampling['kategori_1'])
-                                    ->whereJsonContains('regulasi', $data_sampling['regulasi'])
-                                    ->whereJsonContains('parameter', $data_sampling['parameter'])
-                                    ->where('periode', $item['periode_kontrak'])
-                                    ->whereIn('no_sampel', $pra_no_sample)
-                                    ->where('kategori_1', '!=', 'SD')
-                                    ->where('is_active', 1)
-                                    ->pluck('no_sampel')->toArray(),
+                                'no_sampel' => $sampleNumbers,
                             ];
 
                             return $data;
@@ -701,7 +715,7 @@ class StpsController extends Controller
                     // jika data jadwalnya parsial
                     // dd($pra_no_sample);
                     $dataOrderDetailPerPeriode = $dataOrder->orderDetail()
-                        ->select('no_sampel','kategori_3', 'kategori_2', 'kategori_1', 'regulasi', 'keterangan_1', 'parameter', 'persiapan')
+                        ->select('no_sampel', 'kategori_3', 'kategori_2', 'kategori_1', 'regulasi', 'keterangan_1', 'parameter', 'persiapan')
                         ->whereIn('kategori_3', $kategori_sample)
                         ->whereIn('no_sampel', $pra_no_sample)
                         ->where('kategori_1', '!=', 'SD')
@@ -763,7 +777,7 @@ class StpsController extends Controller
                     $data_detail_penawaran = json_decode($dataPenawaran->data_pendukung_sampling, true);
                     // dd($dataPenawaran, 'test');
                     $data_detail_penawaran = array_map(function ($data_sampling) use ($dataOrder, $pra_no_sample) {
-                        
+
                         return [
                             'kategori_3' => \explode('-', $data_sampling['kategori_2'])[1],
                             'periode' => NULL,
@@ -791,7 +805,7 @@ class StpsController extends Controller
                                 ->pluck('no_sampel')->toArray(),
                         ];
                     }, $data_detail_penawaran);
-                    
+
                     $data_detail_penawaran = array_values($data_detail_penawaran);
 
                     $dataOrderDetailPerPeriode = $data_detail_penawaran;
@@ -1200,7 +1214,7 @@ class StpsController extends Controller
             $pe = 0;
             // dd($dataOrderDetailPerPeriode);
             foreach ($dataOrderDetailPerPeriode as $key => $value) {
-                // dd($value);
+                // dump($value);
                 $value = (object) $value;
                 $regulasiText = '';
                 if (!empty($value->regulasi) && is_array($value->regulasi)) {
