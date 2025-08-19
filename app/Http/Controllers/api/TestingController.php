@@ -2,24 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
-use Yajra\DataTables\Facades\DataTables;
-use Throwable;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
-use Log;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Http\Request;
-use Carbon\Carbon;
-use App\Services\{
-    GetAtasan,
-    SamplingPlanServices,
-    RenderSamplingPlan,
-    JadwalServices,
-    RenderInvoice,
-    GeneratePraSampling,
-    GenerateQrDocumentLhp,
-    LhpTemplate
-};
+use App\Http\Controllers\Controller;
 use App\Models\{
     QuotationKontrakH,
     SamplingPlan,
@@ -38,7 +21,25 @@ use App\Models\{
     KelengkapanKonfirmasiQs,
     Parameter
 };
-use App\Http\Controllers\Controller;
+use App\Services\{
+    GetAtasan,
+    SamplingPlanServices,
+    RenderSamplingPlan,
+    JadwalServices,
+    RenderInvoice,
+    RenderInvoiceTitik,
+    GeneratePraSampling,
+    GenerateQrDocumentLhp,
+    LhpTemplate
+};
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Log;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Throwable;
+use Yajra\DataTables\Facades\DataTables;
 
 
 
@@ -645,9 +646,16 @@ class TestingController extends Controller
 
     public function bulkRenderInvoice(Request $request)
     {
-        foreach ($request->no_invoice as $item) {
-            $render = new RenderInvoice();
-            $render->renderInvoice($item);
+        if ($request->mode == 'copy') {
+            foreach ($request->no_invoice as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->no_invoice as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
         }
     }
 
