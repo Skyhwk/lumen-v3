@@ -87,7 +87,7 @@ class FlowMeterController extends BaseController
             // Update mesin_absen jika ada
             if (DB::table('mesin_absen')->where('kode_mesin', $kode)->exists()) {
                 DB::table('mesin_absen')->where('kode_mesin', $kode)->update([
-                    'status' => $status,
+                    'status_device' => $status,
                     'last_update' => $now,
                     'ipaddress' => $ip
                 ]);
