@@ -604,7 +604,7 @@ class TestingController extends Controller
                                     $data->persiapan = json_encode($botol);
                                     $data->save();
                         } else {
-                            dd('ssaccc');
+                            
                             if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
                                 $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                     ->whereIn('parameter', json_decode($data->parameter) ?? [])
