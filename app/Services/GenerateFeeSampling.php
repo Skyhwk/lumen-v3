@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use App\Models\MasterFeeSampling;
 use App\Models\Jadwal;
 use App\Models\LiburPerusahaan;
@@ -14,10 +13,6 @@ class GenerateFeeSampling
     public function rekapFeeSampling($userId, $level, $tanggal)
     {
         try {
-            // $tanggalKamis = Carbon::parse($cutoffKamis);
-            // $tanggalMulai = $tanggalKamis->copy()->subDays(60)->startOfDay();
-            // $tanggalAkhir = $tanggalKamis->endOfDay();
-
             // 1. Ambil fee berdasarkan level
             $fee = MasterFeeSampling::where('kategori', $level)->first();
             if (!$fee) {
@@ -32,9 +27,11 @@ class GenerateFeeSampling
                 ->toArray();
 
             // 3. Ambil semua jadwal sampling
-            $jadwal = Jadwal::where('is_active', 1)
+            $jadwal = Jadwal::with('persiapanHeader')
+                ->where('is_active', 1)
                 ->where('userid', $userId)
                 ->whereIn('tanggal', $tanggal)
+                ->whereHas('persiapanHeader')
                 ->get()
                 ->groupBy('tanggal');
 
@@ -132,6 +129,7 @@ class GenerateFeeSampling
                             $feeTambahanRincian['luar_kota'] += $fee->sampling_luar_kota;
                         }
                     }
+                    // dd($ptAirOnly, $ptCampurAtauNonAir);
 
                     // Hari libur & sampling 24 jam
                     // $hasilLibur24 = $this->hitungFeeHariLiburDanSampling24Jam($item->tanggal, $durasiValue, $fee, $liburKantor);
@@ -185,23 +183,21 @@ class GenerateFeeSampling
                 }
 
                 // Hitung tempat dari PT campur/non-air
-                $nonAirTempat = count($ptCampurAtauNonAir);
+                $nonAirTempat = count($ptCampurAtauNonAir) >= 1 ? 1 : 0;
+
 
                 // Total tempat
-                $tempat = $airTempat + $nonAirTempat;
+                if (isset($airTempat) && isset($nonAirTempat)) {
+                    $tempat = $airTempat;
+                } else if (isset($airTempat)) {
+                    $tempat = $airTempat;
+                } else {
+                    $tempat = $nonAirTempat;
+                }
+                // $tempat = $airTempat + $nonAirTempat;
+                // dd($titikAirGabungan, $nonAirTempat, $tempat);
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
-
-                // Hitung tempat sampling
-                // dd($titik);
-                // $tempat = 0;
-                // if ($titik <= 10) {
-                //     $tempat = 1;
-                // } elseif ($titik <= 20) {
-                //     $tempat = 2;
-                // } else {
-                //     $tempat = 3;
-                // }
 
                 // Fee Pokok
                 $feePokokDasar = $fee->titik_1;
@@ -248,11 +244,11 @@ class GenerateFeeSampling
                 'level' => $level,
                 'harian' => collect($rekap)->sortBy('tanggal')->values()->all(),
                 'total_mingguan' => $total,
+                'overtime' => MasterFeeSampling::where('kategori', $level)->first()->sampling_24jam,
             ];
         } catch (\Throwable $th) {
             dd($th);
         }
-
     }
 
     private function hitungFeeHariLiburDanSampling24Jam($tanggalAwal, $durasi, $fee, $liburKantor)
@@ -310,6 +306,4 @@ class GenerateFeeSampling
             'rincian' => $feeRincian
         ];
     }
-
-
 }
