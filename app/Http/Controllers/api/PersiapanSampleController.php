@@ -308,7 +308,7 @@ class PersiapanSampleController extends Controller
             $parsingCollection = $query_cek->get();
             $filtered_empty = $query_cek->get()->pluck('persiapan')->toArray();
             $filtered_empty = in_array("[]", $filtered_empty, true);
-            
+
             if ($filtered_empty) {
                 $newRequest = new \Illuminate\Http\Request();
                 $newRequest->replace(
@@ -321,8 +321,8 @@ class PersiapanSampleController extends Controller
                 $orderD = RekapSampelController::generatePersiapan($newRequest);
             }
 
-            $orderD = $orderD->whereIn('no_sampel',$request->no_sampel)->get();
-            
+            $orderD = $orderD->whereIn('no_sampel', $request->no_sampel)->get();
+
             $dataBotol = [];
             foreach ($orderD as $val) {
                 if ($val->kategori_2 == '1-Air') {
@@ -470,7 +470,6 @@ class PersiapanSampleController extends Controller
                 'emisi' => array_values($param_emisi),
                 'padatan' => array_values($param_padatan),
             ], 200);
-
         } catch (Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -533,9 +532,9 @@ class PersiapanSampleController extends Controller
             // ->where('tanggal_sampling', $request->tanggal_sampling)
             ->where('is_active', 1)
             ->get();
-        
+
         $psh = $dataList->first(function ($item) use ($request) {
-             $noSampelDb = json_decode($item->no_sampel, true) ?? [];
+            $noSampelDb = json_decode($item->no_sampel, true) ?? [];
             return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
         });
 
@@ -622,7 +621,7 @@ class PersiapanSampleController extends Controller
         return $psh;
 
     } */
-   
+
 
     /* 2025-08-05 private function saveDetail($request, $psh)
     {
@@ -734,8 +733,7 @@ class PersiapanSampleController extends Controller
             ->pluck('id_persiapan_sampel_header')
             ->unique()
             ->toArray();
-        
-        
+
         $psh = null;
 
         if (count($existingPsd) === 1) {
@@ -784,7 +782,7 @@ class PersiapanSampleController extends Controller
             'sarung_tangan_bintik',
             'tambahan'
         ]));
-        
+
         $psh->no_sampel = json_encode($noSampel, JSON_UNESCAPED_SLASHES);
         $psh->periode = $request->periode ?? $psh->periode;
 
@@ -818,14 +816,14 @@ class PersiapanSampleController extends Controller
                 'deleted_by' => $this->karyawan,
                 'deleted_at' => Carbon::now()
             ]);
-        
+
         foreach ($request->detail as $sampleNumber => $categories) {
-            
+
             $existingPsd = PersiapanSampelDetail::where([
                 'id_persiapan_sampel_header' => $psh->id,
                 'no_sampel' => $sampleNumber
             ])->first();
-             
+
             foreach ($categories as $category => &$params) {
                 $od = $orderDetail->firstWhere('no_sampel', $sampleNumber);
                 if (!$od) continue;
@@ -849,21 +847,19 @@ class PersiapanSampleController extends Controller
             $psd->no_sampel = $sampleNumber;
             $psd->id_persiapan_sampel_header = $psh->id;
             $psd->parameters = json_encode($categories);
-           
+
             if ($existingPsd) {
                 $psd->updated_by = $this->karyawan;
                 $psd->updated_at = Carbon::now();
                 $psd->is_active = 1;
-                
             } else {
                 $psd->created_by = $this->karyawan;
                 $psd->created_at = Carbon::now();
-                
             }
 
             $psd->save();
         }
-       
+
 
         $psh->no_sampel = json_encode($allSamples, JSON_UNESCAPED_SLASHES);
         $psh->save();
@@ -878,7 +874,7 @@ class PersiapanSampleController extends Controller
         try {
             $psh = $this->saveHeader($request);
             $this->saveDetail($request, $psh);
-            
+
             $this->saveQrDocument($psh);
 
             JobTask::insert([
@@ -893,7 +889,6 @@ class PersiapanSampleController extends Controller
             DB::commit();
 
             return response()->json(['message' => 'Saved successfully'], 200);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -902,12 +897,18 @@ class PersiapanSampleController extends Controller
             ], 500);
         }
     }
-   
+
 
     private function generateQr($noDocument)
     {
         $filename = str_replace("/", "_", $noDocument);
-        $path = public_path() . "/qr_documents/$filename.svg";
+        $dir = public_path("qr_documents");
+
+        if (!file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $path = $dir . "/$filename.svg";
         $link = 'https://www.intilab.com/validation/';
         $unique = 'isldc' . (int) floor(microtime(true) * 1000);
 
@@ -915,6 +916,7 @@ class PersiapanSampleController extends Controller
 
         return $unique;
     }
+
 
     private function saveQrDocument($psh)
     {
@@ -1009,31 +1011,13 @@ class PersiapanSampleController extends Controller
 
     private function compareSampleNumber($psHeader, $request)
     {
-        
         $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
-        if($sampelNumbers == []){
-      
-            $sampelNumbers = json_decode($psHeader->no_sampel, true) ?? [];
-            if(empty($sampelNumbers)){
-                return false;
-            }else{
-                return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
-            }
-        }else{
-            return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
-            $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
-            $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
-            if ($missingSampleNumbers || $extraSampleNumbers)
-                return true;
-        }
-        /* 
-            $noSampelDb = json_decode($item->no_sampel, true) ?? [];
-            return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
-        */
-       
-        
+        $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
+        $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
+        if ($missingSampleNumbers || $extraSampleNumbers)
+            return true;
 
-        // return false;
+        return false;
     }
 
     private function compareByPersiapan($orderDetail, $psDetail)
@@ -1067,21 +1051,20 @@ class PersiapanSampleController extends Controller
     {
 
         $psHeader = PersiapanSampelHeader::with([
-            // 'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
+            'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
             'orderHeader.orderDetail'
         ])
             ->where('no_quotation', $request->no_quotation)
             ->where('no_order', $request->no_order)
             ->where('is_active', 1)
-            // ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
+            ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
             ->first();
-        // dd($psHeader);
+
         if (!$psHeader || !$psHeader->psDetail)
             return response()->json(['message' => 'Sampel belum disiapkan update'], 404);
 
         $diffSampleNumbers = $this->compareSampleNumber($psHeader, $request);
-        dd($diffSampleNumbers);
-        if (!$diffSampleNumbers)
+        if ($diffSampleNumbers)
             return response()->json(['message' => 'No Sampel tidak sesuai'], 500);
 
         foreach ($psHeader->psDetail as $psd) {
