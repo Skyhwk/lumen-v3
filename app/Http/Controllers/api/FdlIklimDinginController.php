@@ -23,6 +23,10 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+// SERVICE
+use App\Services\AnalystFormula;
+use App\Models\AnalystFormula as Formula;
+
 class FdlIklimDinginController extends Controller
 {
     public function index(Request $request)
@@ -161,7 +165,6 @@ class FdlIklimDinginController extends Controller
                         // Pastikan elemen kedua tersedia setelah explode
                         $parameterValue = $parts[1] ?? 'Data tidak valid';
 
-                        // dd($parameterValue); // Output: "Pencahayaan"
                     } else {
                         dd("Parameter tidak valid atau bukan JSON");
                     }
@@ -171,441 +174,43 @@ class FdlIklimDinginController extends Controller
                 }
 
                 $parameter = Parameter::where('nama_lab', $parameterValue)->first();
-                // $check = IklimHeader::where('no_sampel', $no_sample)->where('is_active', true)->first();
-
-                // if ($check) {
-                //     return response()->json([
-                //         'message' => 'Data sudah di Calculate'
-                //     ], 401);
-                // }
+                
 
                 $dataL = DataLapanganIklimDingin::select('no_sampel', 'pengukuran', 'shift_pengambilan', 'akumulasi_waktu_paparan')
                     ->where('no_sampel', $no_sample)->get();
+                
                 $totalL = $dataL->count();
 
-                $totalShifts = 0;
-                $hasil = 0;
 
                 $getTotalApprove = DataLapanganIklimDingin::where('no_sampel', $no_sample)
-                    // ->where('parameter', $parameter)
                     ->select(DB::raw('COUNT(no_sampel) AS total'))
                     ->where('is_approve', true)
                     ->first();
 
-                $hasil_suhu_terpapar = [];
-                $hasil_angin_terpapar = [];
-                $total_waktu_paparan = 0; // Menampung jumlah total waktu paparan
 
                 if ($getTotalApprove->total + 1 == $totalL) {
+                    
+                    $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
+                    
+                    $data_kalkulasi = AnalystFormula::where('function', $function)
+                        ->where('data', $dataL)
+                        ->where('id_parameter', $parameter->id)
+                        ->process();
 
-                    foreach ($dataL as $indx => $val) {
-                        if ($val->pengukuran != null) {
-                            // Decode JSON menjadi array asosiatif PHP
-                            // dd($val);
-                            $dataa = json_decode($val->pengukuran, true);
-                            $totData = count($dataa);
-                            $totHasilSuhu = 0;
-                            $totHasilAngin = 0;
-                            $waktuPaparan = $val->akumulasi_waktu_paparan; // Ambil waktu paparan dari setiap data
-                            foreach ($dataa as $idx => $vl) {
-                                // dd($dataa);
-                                $totHasilSuhu += $vl['suhu_kering'];
-                                $totHasilAngin += $vl['kecepatan_angin'];
-                            }
-                            // array_push($hasil_rata_suhu, $totHasilSuhu / $totData);
-                            // array_push($hasil_rata_angin, $totHasilAngin / $totData);
-
-                            // Menghitung rata-rata suhu dan angin untuk data ini
-                            $rataSuhu = $totHasilSuhu / $totData;
-                            $rataAngin = $totHasilAngin / $totData;
-
-                            // Menampung hasil perhitungan rata-rata suhu dan angin dikali waktu paparan ke dalam array
-                            $hasil_suhu_terpapar[] = $rataSuhu * $waktuPaparan;
-                            $hasil_angin_terpapar[] = $rataAngin * $waktuPaparan;
-                            $total_waktu_paparan += $waktuPaparan; // Menambahkan waktu paparan ke total waktu paparan  
-                        }
+                    if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+                        return (object)[
+                            'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+                            'status' => 404
+                        ];
                     }
-                    // $rataSuhu = array_sum($hasil_rata_suhu) / $totalL;
-                    // $rataAngin = array_sum($hasil_rata_angin) / $totalL;
-
-                    // Setelah loop selesai, menghitung total suhu dan angin terpapar
-                    $total_suhu_terpapar = array_sum($hasil_suhu_terpapar);
-                    $total_angin_terpapar = array_sum($hasil_angin_terpapar);
-
-                    // Menghitung rata-rata suhu dan angin terpapar
-                    $rataSuhu = $total_suhu_terpapar / $total_waktu_paparan;
-                    $rataAngin = $total_angin_terpapar / $total_waktu_paparan;
-                    // dd($rataSuhu, $rataAngin, $total_waktu_paparan);
-
-
-                    // RATA-RATA SUHU KERING
-                    if ($rataSuhu > 4.4) {
-                        $rataSuhu = 10;
-                    } else if ($rataSuhu > -1.1 && $rataSuhu <= 4.4) {
-                        $rataSuhu = 4.4;
-                    } else if ($rataSuhu > -6.7 && $rataSuhu <= -1.1) {
-                        $rataSuhu = -1.1;
-                    } else if ($rataSuhu > -12.2 && $rataSuhu <= -6.7) {
-                        $rataSuhu = -6.7;
-                    } else if ($rataSuhu > -17.8 && $rataSuhu <= -12.2) {
-                        $rataSuhu = -12.2;
-                    } else if ($rataSuhu > -23.3 && $rataSuhu <= -17.8) {
-                        $rataSuhu = -17.8;
-                    } else if ($rataSuhu > -28.9 && $rataSuhu <= -23.3) {
-                        $rataSuhu = -23.3;
-                    } else if ($rataSuhu > -34.4 && $rataSuhu <= -28.9) {
-                        $rataSuhu = -28.9;
-                    } else if ($rataSuhu > -40.0 && $rataSuhu <= -34.4) {
-                        $rataSuhu = -34.4;
-                    } else if ($rataSuhu > -45.6 && $rataSuhu <= -40.0) {
-                        $rataSuhu = -40.0;
-                    } else if ($rataSuhu <= -45.6) {
-                        $rataSuhu = -45.6;
-                    }
-
-
-
-                    // Bulatkan kecepatan angin ke atas menjadi kelipatan 5
-                    $bulatKecepatanAngin = ceil($rataAngin / 5) * 5;
-                    // Batasi maksimal rata-rata kecepatan angin menjadi 40
-                    $rataRataKecepatanAngin = min(40, $bulatKecepatanAngin);
-
-                    // dd($rataSuhu, $rataRataKecepatanAngin);
-                    switch ($rataRataKecepatanAngin) {
-                        case 5:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = 8.9;
-                                    break;
-                                case 4.4:
-                                    $hasil = 2.8;
-                                    break;
-                                case -1.1:
-                                    $hasil = -2.8;
-                                    break;
-                                case -6.7:
-                                    $hasil = -8.9;
-                                    break;
-                                case -12.2:
-                                    $hasil = -14.4;
-                                    break;
-                                case -17.8:
-                                    $hasil = -20.6;
-                                    break;
-                                case -23.3:
-                                    $hasil = -26.1;
-                                    break;
-                                case -28.9:
-                                    $hasil = -32.2;
-                                    break;
-                                case -34.4:
-                                    $hasil = -37.8;
-                                    break;
-                                case -40.0:
-                                    $hasil = -43.9;
-                                    break;
-                                case -45.6:
-                                    $hasil = -49.4;
-                                    break;
-                                case -51.1:
-                                    $hasil = -55.6;
-                                    break;
-                            }
-                            break;
-                        // KECEPATAN ANGIN 10
-                        case 10:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = 4.4;
-                                    break;
-                                case 4.4:
-                                    $hasil = -2.2;
-                                    break;
-                                case -1.1:
-                                    $hasil = -8.9;
-                                    break;
-                                case -6.7:
-                                    $hasil = -15.6;
-                                    break;
-                                case -12.2:
-                                    $hasil = -22.8;
-                                    break;
-                                case -17.8:
-                                    $hasil = -31.1;
-                                    break;
-                                case -23.3:
-                                    $hasil = -36.1;
-                                    break;
-                                case -28.9:
-                                    $hasil = -43.3;
-                                    break;
-                                case -34.4:
-                                    $hasil = -50.0;
-                                    break;
-                                case -40.0:
-                                    $hasil = -56.7;
-                                    break;
-                                case -45.6:
-                                    $hasil = -63.9;
-                                    break;
-                                case -51.1:
-                                    $hasil = -70.6;
-                                    break;
-                            }
-                            break;
-                        // KECEPATAN ANGIN 15
-                        case 15:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = 2.2;
-                                    break;
-                                case 4.4:
-                                    $hasil = -5.6;
-                                    break;
-                                case -1.1:
-                                    $hasil = -12.8;
-                                    break;
-                                case -6.7:
-                                    $hasil = -20.6;
-                                    break;
-                                case -12.2:
-                                    $hasil = -27.8;
-                                    break;
-                                case -17.8:
-                                    $hasil = -35.6;
-                                    break;
-                                case -23.3:
-                                    $hasil = -42.8;
-                                    break;
-                                case -28.9:
-                                    $hasil = -50.0;
-                                    break;
-                                case -34.4:
-                                    $hasil = -57.8;
-                                    break;
-                                case -40.0:
-                                    $hasil = -65.0;
-                                    break;
-                                case -45.6:
-                                    $hasil = -72.8;
-                                    break;
-                                case -51.1:
-                                    $hasil = -80.0;
-                                    break;
-                            }
-                            break;
-                        // KECEPATAN ANGIN 20
-                        case 20:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = 0.0;
-                                    break;
-                                case 4.4:
-                                    $hasil = -7.8;
-                                    break;
-                                case -1.1:
-                                    $hasil = -15.6;
-                                    break;
-                                case -6.7:
-                                    $hasil = -23.3;
-                                    break;
-                                case -12.2:
-                                    $hasil = -31.7;
-                                    break;
-                                case -17.8:
-                                    $hasil = -39.4;
-                                    break;
-                                case -23.3:
-                                    $hasil = -47.2;
-                                    break;
-                                case -28.9:
-                                    $hasil = -55.0;
-                                    break;
-                                case -34.4:
-                                    $hasil = -63.3;
-                                    break;
-                                case -40.0:
-                                    $hasil = -71.1;
-                                    break;
-                                case -45.6:
-                                    $hasil = -78.9;
-                                    break;
-                                case -51.1:
-                                    $hasil = -80.0;
-                                    break;
-                            }
-                            break;
-                        case 25:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = -1.1;
-                                    break;
-                                case 4.4:
-                                    $hasil = -8.9;
-                                    break;
-                                case -1.1:
-                                    $hasil = -17.8;
-                                    break;
-                                case -6.7:
-                                    $hasil = -26.1;
-                                    break;
-                                case -12.2:
-                                    $hasil = -33.9;
-                                    break;
-                                case -17.8:
-                                    $hasil = -42.2;
-                                    break;
-                                case -23.3:
-                                    $hasil = -50.6;
-                                    break;
-                                case -28.9:
-                                    $hasil = -58.9;
-                                    break;
-                                case -34.4:
-                                    $hasil = -66.7;
-                                    break;
-                                case -40.0:
-                                    $hasil = -75.6;
-                                    break;
-                                case -45.6:
-                                    $hasil = -83.3;
-                                    break;
-                                case -51.1:
-                                    $hasil = -91.7;
-                                    break;
-                            }
-                            break;
-                        case 30:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = -2.2;
-                                    break;
-                                case 4.4:
-                                    $hasil = -10.6;
-                                    break;
-                                case -1.1:
-                                    $hasil = -18.9;
-                                    break;
-                                case -6.7:
-                                    $hasil = -27.8;
-                                    break;
-                                case -12.2:
-                                    $hasil = -36.1;
-                                    break;
-                                case -17.8:
-                                    $hasil = -44.4;
-                                    break;
-                                case -23.3:
-                                    $hasil = -52.8;
-                                    break;
-                                case -28.9:
-                                    $hasil = -61.7;
-                                    break;
-                                case -34.4:
-                                    $hasil = -70.0;
-                                    break;
-                                case -40.0:
-                                    $hasil = -78.3;
-                                    break;
-                                case -45.6:
-                                    $hasil = -87.2;
-                                    break;
-                                case -51.1:
-                                    $hasil = -95.6;
-                                    break;
-                            }
-                            break;
-                        case 35:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = -2.8;
-                                    break;
-                                case 4.4:
-                                    $hasil = -11.7;
-                                    break;
-                                case -1.1:
-                                    $hasil = -20.0;
-                                    break;
-                                case -6.7:
-                                    $hasil = -28.9;
-                                    break;
-                                case -12.2:
-                                    $hasil = -37.2;
-                                    break;
-                                case -17.8:
-                                    $hasil = -46.1;
-                                    break;
-                                case -23.3:
-                                    $hasil = -55.0;
-                                    break;
-                                case -28.9:
-                                    $hasil = -63.3;
-                                    break;
-                                case -34.4:
-                                    $hasil = -72.2;
-                                    break;
-                                case -40.0:
-                                    $hasil = -80.6;
-                                    break;
-                                case -45.6:
-                                    $hasil = -89.4;
-                                    break;
-                                case -51.1:
-                                    $hasil = -98.3;
-                                    break;
-                            }
-                            break;
-                        case 40:
-                            switch ($rataSuhu) {
-                                case 10:
-                                    $hasil = -3.3;
-                                    break;
-                                case 4.4:
-                                    $hasil = -12.2;
-                                    break;
-                                case -1.1:
-                                    $hasil = -21.2;
-                                    break;
-                                case -6.7:
-                                    $hasil = -21.1;
-                                    break;
-                                case -12.2:
-                                    $hasil = -38.3;
-                                    break;
-                                case -17.8:
-                                    $hasil = -47.2;
-                                    break;
-                                case -23.3:
-                                    $hasil = -56.1;
-                                    break;
-                                case -28.9:
-                                    $hasil = -65.0;
-                                    break;
-                                case -34.4:
-                                    $hasil = -73.3;
-                                    break;
-                                case -40.0:
-                                    $hasil = -82.2;
-                                    break;
-                                case -45.6:
-                                    $hasil = -91.1;
-                                    break;
-                                case -51.1:
-                                    $hasil = -100.0;
-                                    break;
-                            }
-                            break;
-                        default:
-                            $hasil = 'Tidak ada data';
-
-                    }
-
 
                     $headUdara = new IklimHeader;
                     $headUdara->no_sampel = $no_sample;
                     $headUdara->id_parameter = $parameter->id;
                     $headUdara->parameter = $parameter->nama_lab;
                     $headUdara->is_approve = true;
+                    $headUdara->rata_suhu = $data_kalkulasi['rataSuhu'];
+                    $headUdara->rata_kecepatan_angin = $data_kalkulasi['rataAngin'];
                     $headUdara->approved_by = $this->karyawan;
                     $headUdara->approved_at = Carbon::now();
                     $headUdara->created_by = $this->karyawan;
@@ -616,7 +221,7 @@ class FdlIklimDinginController extends Controller
                     $ws->id_iklim_header = $headUdara->id;
                     $ws->no_sampel = $no_sample;
                     $ws->id_po = $po->id;
-                    $ws->hasil1 = $hasil;
+                    $ws->hasil1 = $data_kalkulasi['hasil'];
                     $ws->save();
 
                     $data->is_approve = true;
@@ -630,20 +235,13 @@ class FdlIklimDinginController extends Controller
                     $data->approved_at = Carbon::now();
                     $data->save();
                 }
-                app(NotificationFdlService::class)->sendApproveNotification("Iklim Dingin pada Shift $data->shift_pengambilan", $data->no_sampel, $this->karyawan, $data->created_by);
                 DB::commit();
                 return response()->json([
                     'message' => "FDL IKLIM DINGIN dengan No sample $no_sample Telah di Approve oleh $this->karyawan",
                     'cat' => 1
                 ], 200);
 
-                if ($cek_sampler->pin_user != null) {
-                    $nama = $this->name;
-                    $txt = "FDL IKLIM DINGIN dengan No sample $no_sample Telah di Approve oleh $nama";
-
-                    $telegram = new Telegram();
-                    $telegram->send($cek_sampler->pin_user, $txt);
-                }
+                app(NotificationFdlService::class)->sendApproveNotification('Lingkungan Kerja', $data->no_sampel, $this->karyawan, $data->created_by);
             } else {
                 return response()->json([
                     'message' => "FDL IKLIM DINGIN dengan No sample $no_sample Gagal di Approve oleh $this->karyawan"
@@ -660,8 +258,6 @@ class FdlIklimDinginController extends Controller
         if (isset($request->id) && $request->id != null) {
             $data = DataLapanganIklimDingin::where('id', $request->id)->first();
             $no_sample = $data->no_sampel;
-            // $check = IklimHeader::where('no_sample', $no_sample)->where('active', 0)->first();
-            //$ws = Valuewsudara::where('no_sample', $no_sample)->first();
 
             $data->is_approve = false;
             $data->rejected_at = Carbon::now();
