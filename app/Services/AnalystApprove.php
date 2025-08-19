@@ -66,7 +66,7 @@ class AnalystApprove
     private function getTimeRange()
     {
         $now = Carbon::now();
-        $fiveHoursAgo = $now->copy()->subHours(5);
+        $fiveHoursAgo = $now->copy()->subHours(24);
 
         return $fiveHoursAgo;
     }
