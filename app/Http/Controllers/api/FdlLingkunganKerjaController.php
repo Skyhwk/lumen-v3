@@ -152,7 +152,6 @@ class FdlLingkunganKerjaController extends Controller
                         ], 404);
                     }
 
-
                     // Cek di Tabel Parameter
 
                     $parameter = [];
@@ -192,66 +191,67 @@ class FdlLingkunganKerjaController extends Controller
                         ->get();
 
                     $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
-                    
                         
-                    if ($filtered) {
+                    if ($filtered->isNotEmpty()) {
                         foreach ($filtered as $p) {
                             $masterParameter = Parameter::where('nama_lab', $p->parameter)->first();   
                         }
-                        $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
-                        $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->data_lapangan = collect($filtered)->all();
-                        $hasil = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $masterParameter->id)
-                            ->process();
+                        if(!empty($masterParameter)) {
+                            $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
+                            $data_parsing = $request->all();
+                            $data_parsing = (object) $data_parsing;
+                            $data_parsing->data_lapangan = collect($filtered)->all();
+                            $hasil = AnalystFormula::where('function', $function)
+                                ->where('data', $data_parsing)
+                                ->where('id_parameter', $masterParameter->id)
+                                ->process();
 
-                        // Simpan Header
-                        $header = LingkunganHeader::updateOrCreate(
-                            [
-                                'no_sampel' => $data->no_sampel,
-                                'parameter' => $masterParameter->nama_lab,
-                            ],
-                            [
-                                'id_parameter' => $masterParameter->id ?? null,
-                                'template_stp' => 30,
-                                'tanggal_terima' => $tanggalTerima,
-                                'created_by' => $this->karyawan,
-                                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                            ]
-                        );
+                            // Simpan Header
+                            $header = LingkunganHeader::updateOrCreate(
+                                [
+                                    'no_sampel' => $data->no_sampel,
+                                    'parameter' => $masterParameter->nama_lab,
+                                ],
+                                [
+                                    'id_parameter' => $masterParameter->id ?? null,
+                                    'template_stp' => 30,
+                                    'tanggal_terima' => $tanggalTerima,
+                                    'created_by' => $this->karyawan,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                ]
+                            );
 
-                        // id header
-                        $id_header = $header->id;
+                            // id header
+                            $id_header = $header->id;
 
-                        // Simpan ke WsValueLingkungan
-                        WsValueLingkungan::updateOrCreate(
-                            [
-                                'lingkungan_header_id' => $id_header,
-                                'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
-                            ],
-                            [
-                                'C' => $hasil['hasil'],
-                                'tanggal_terima' =>$tanggalTerima,
-                                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                            ]
-                        );
+                            // Simpan ke WsValueLingkungan
+                            WsValueLingkungan::updateOrCreate(
+                                [
+                                    'lingkungan_header_id' => $id_header,
+                                    'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
+                                ],
+                                [
+                                    'C' => $hasil['hasil'],
+                                    'tanggal_terima' =>$tanggalTerima,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                ]
+                            );
 
-                        // Simpan ke WsValueUdara
-                        WsValueUdara::updateOrCreate(
-                            [
-                                'id_lingkungan_header' => $id_header,
-                                'no_sampel' => $data->no_sampel,
-                            ],
-                            [
-                                'hasil1' => $hasil['hasil'],
-                                'satuan' => $hasil['satuan'],
-                            ]
-                        );
+                            // Simpan ke WsValueUdara
+                            WsValueUdara::updateOrCreate(
+                                [
+                                    'id_lingkungan_header' => $id_header,
+                                    'no_sampel' => $data->no_sampel,
+                                ],
+                                [
+                                    'hasil1' => $hasil['hasil'],
+                                    'satuan' => $hasil['satuan'],
+                                ]
+                            );
+                        }
                     }
 
-                    if($foundParams){
+                    if(!empty($foundParams)) {
                         // Loop setiap parameter
                         foreach ($foundParams as $index => $param) {
                             $column = $targetParams[$param];
