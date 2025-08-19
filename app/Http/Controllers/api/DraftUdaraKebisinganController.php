@@ -22,6 +22,7 @@ use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
+use App\Services\LhpTemplate;
 use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -237,18 +238,27 @@ class DraftUdaraKebisinganController extends Controller
                         $groupedByPage[$page][] = $item;
                     }
                 }
+                // $job = new RenderLhp($header, $details, 'downloadWSDraft', $groupedByPage);
+                // $this->dispatch($job);
 
-                $job = new RenderLhp($header, $details, 'downloadWSDraft', $groupedByPage);
-                $this->dispatch($job);
+                // $job = new RenderLhp($header, $details, 'downloadLHP', $groupedByPage);
+                // $this->dispatch($job);
 
-                $job = new RenderLhp($header, $details, 'downloadLHP', $groupedByPage);
-                $this->dispatch($job);
+                // $job = new RenderLhp($header, $details, 'downloadLHPFinal', $groupedByPage);
+                // $this->dispatch($job);
+          
 
-                $job = new RenderLhp($header, $details, 'downloadLHPFinal', $groupedByPage);
-                $this->dispatch($job);
-
-                $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
-
+                if($parameter[0] == 'Kebisingan' || $parameter[0] == 'Kebisingan (8 Jam)'){
+                $fileName = LhpTemplate::setDataDetail($details)
+                            ->setDataHeader($header)
+                            ->whereView('DraftKebisingan')
+                            ->render();
+                } else {
+                     $fileName = LhpTemplate::setDataDetail($details)
+                                    ->setDataHeader($header)
+                                    ->whereView('DraftKebisinganPersonal')
+                                    ->render();
+                }
                 $header->file_lhp = $fileName;
                 $header->save();
             }
@@ -301,8 +311,8 @@ class DraftUdaraKebisinganController extends Controller
                     //     $data1[$i]['paparan'] = $val->data_lapangan_personal->waktu_paparan;
                     // } else {  // }
                     $data1[$i]['lokasi'] = $val->data_lapangan->lokasi_titik_sampling ?? $val->data_lapangan->keterangan ?? $val->data_lapangan_personal->keterangan ?? null;
-                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran;
-                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat;
+                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran ?? null;
+                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat ?? null;
                     $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
                     $data1[$i]['id'] = $val->id;
                     $data1[$i]['no_sampel'] = $val->no_sampel;

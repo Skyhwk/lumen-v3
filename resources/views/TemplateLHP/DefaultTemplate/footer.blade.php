@@ -13,6 +13,7 @@
             $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
         }
     }
+
     if (!is_null($header->file_qr) && $mode != 'downloadWSDraft') {
         $file_qr = public_path('qr_documents/' . $header->file_qr . '.svg');
         $tanggal_qr = 'Tangerang, ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_lhp);
@@ -37,11 +38,11 @@
             @if (isset($last) && $last)
                 @if($mode == 'downloadLHP')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px; margin-bottom: 40px; margin-right: 40px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
-                        <tr><td style="height: 70px;"></td></tr>
+                        <tr><td style="height: 70px;"><img src="{{$file_qr}}" width="50px" height="50px"></td></tr>
                         <tr><td><strong>(<u>{{$header->nama_karyawan}}</u>)</strong></td></tr>
                         <tr><td>{{$header->jabatan_karyawan}}</td></tr>
                     </table>
@@ -61,12 +62,7 @@
             <table 
                 style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
             >
-                @if($mode == 'downloadLHP')
-                <tr>
-                    <td><img src="{{$file_qr}}" width="50px" height="50px"></td>
-                </tr>
-                @endif
-                <tr><td>{{$qr}}</td></tr>
+                <tr><td>{{$qr}}</td></tr>  
             </table>
         </td>
     </tr>

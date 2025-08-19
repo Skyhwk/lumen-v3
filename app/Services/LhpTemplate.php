@@ -171,9 +171,10 @@ class LhpTemplate
             mkdir($dir, 0777, true);
         }
         $this->generateStylesheet();
+        
         $last = true;
         if(!empty($customs)) {
-            $last = false;
+             $last = false;
         }
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
