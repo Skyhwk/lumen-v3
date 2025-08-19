@@ -129,7 +129,7 @@ class PrintDraftServices
                     $processedCount++;
                     Log::channel('print_lhp')->info('[WorkerPrintDraft] Successfully approved and printed ' . $dataH->no_sampel);
 
-                    // DB::commit();
+                    DB::commit();
                 } catch (Throwable $th) {
                     DB::rollBack();
                     Log::channel('print_lhp')->info('[WorkerPrintDraft] Failed to print ' . $dataH->no_sampel . ' caused by ' . $th->getMessage());
