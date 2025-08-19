@@ -5072,7 +5072,7 @@ class RequestQuotationController extends Controller
                     }
                 }
 
-                $biggestNumberOfSampel = 1;
+                $biggestNumberOfSampel = 0;
 
                 if ($alreadyOrdered) {
                     $OrderDetails = OrderDetail::where('id_order_header', $id_order_header)->get();
@@ -5096,11 +5096,11 @@ class RequestQuotationController extends Controller
                         }
                     }
                 }
-                // dd($biggestNumberOfSampel);
+                $biggestNumberOfSampel++;
                 $diffPeriod = array_diff($period, $oldPeriod);
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 foreach ($period as $k => $per) {
-                    // dump($per);
+                    dump($per);
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -5320,7 +5320,6 @@ class RequestQuotationController extends Controller
                             // dump($per, $isSameCount, $oldNumberMappingForGroup, $xyz->penamaan_titik);
 
                             if(!$checkOldQt && $checkOldQtRemaining->count() > 0){
-                                // dump("parameter new", $xyz->kategori_1, $xyz->regulasi);
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
                                 // dump("parameter old");
@@ -5374,7 +5373,7 @@ class RequestQuotationController extends Controller
                                     foreach ($xyz->penamaan_titik as $i => $pt) {
                                         $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                         if($alreadyOrdered){
-                                            // dump('sudah Ordered');
+                                            dump('sudah Ordered');
                                             if($i < $countOld){
                                                 $penamaan_titik_fixed[] = (object) [$oldKeys[$i] => $namaTitik];
                                             } else {
@@ -5391,7 +5390,6 @@ class RequestQuotationController extends Controller
                                 // dump('-----');
                             } else {
                                 // kalau ada data lama yang sama periodenya
-                                // dump('ada data lama yang sama periodenya');
                                 $foundOldPenamaanTitik = null;
                                 if($checkOldQt){
                                     $dataSamplingOld = json_decode($checkOldQt->data_pendukung_sampling, true);
@@ -5405,15 +5403,24 @@ class RequestQuotationController extends Controller
                                                 continue;
                                             }
 
-                                            $foundOldPenamaanTitik = reset($oldSampling['penamaan_titik']) ?? [];
+                                            $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
                                             $tempUsedOldData[] = $oldSampling;
+                                            break;
                                         } 
                                     }
                                 }
 
+                                $keysOldFoundPenamaanTitik = [];
+                                
                                 if($foundOldPenamaanTitik !== null){
-                                    $keysOldFoundPenamaanTitik = array_keys($foundOldPenamaanTitik);
+                                    foreach ($foundOldPenamaanTitik as $item) {
+                                        $keysOldFoundPenamaanTitik = array_merge(
+                                            $keysOldFoundPenamaanTitik,
+                                            array_keys($item)
+                                        );
+                                    }
                                 }
+                                
                                 foreach ($xyz->penamaan_titik as $i => $pt) {
                                     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                     if($alreadyOrdered && $foundOldPenamaanTitik !== null){
