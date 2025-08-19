@@ -6,7 +6,6 @@ use App\Models\RekeningKaryawan;
 use App\Models\MasterKaryawan;
 use App\Models\LiburPerusahaan;
 use App\Models\Jadwal;
-use App\Models\FeeSampling;
 use App\Models\MasterFeeSampling;
 use App\Models\PengajuanFeeSampling;
 use App\Models\{
@@ -31,13 +30,9 @@ use App\Services\GenerateFeeSampling;
 use App\Services\InsertActivityFdl;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
 use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
 
 class FeeSamplingController extends Controller
 {
@@ -119,190 +114,6 @@ class FeeSamplingController extends Controller
 
 
 
-    /* Unused
-    public function rekapFeeSamplingBackup(Request $request)
-    {
-        $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
-        if ($master_karyawan->warna == null) {
-            return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 404);
-        }
-        $level = MasterFeeSampling::where('warna', $master_karyawan->warna)->where('is_active', true)->first();
-        $generate = new GenerateFeeSampling();
-        $rekap = $generate->rekapFeeSampling($this->user_id, $level->kategori, 'THURSDAY');
-        // dd($rekap);
-        return response()->json(['data' => $rekap], 200);
-    }*/
-
-    /*public function rekapFeeSampling(Request $request)
-    {
-        if (!is_array($request->tanggal) || empty($request->tanggal)) {
-            return response()->json(['message' => 'Tanggal Tidak Boleh Kosong'], 404);
-        }
-
-        $jadwals = Jadwal::with('orderDetail')
-            ->where('is_active', true)
-            ->where('userid', $this->user_id)
-            ->whereIn('tanggal', $request->tanggal)
-            ->get();
-
-        if ($jadwals->isEmpty()) {
-            return response()->json(['message' => 'Jadwal Tidak Ditemukan Untuk Tanggal Tersebut'], 404);
-        }
-
-        foreach ($jadwals as $jadwal) {
-            $order = $jadwal->orderDetail;
-
-            $noOrder = $order->first()->no_order;
-            $kategoriList = json_decode($jadwal->kategori);
-
-            $noSampelList = [];
-            foreach ($kategoriList as $kategori) {
-                if (preg_match('/^(.*?)\s*-\s*(\d{3})$/', $kategori, $matches)) {
-                    $namaKategori = $matches[1];
-                    $kode = $matches[2];
-                    array_push($noSampelList, [
-                        'category' => $namaKategori,
-                        'no_sampel' => $noOrder . '/' . $kode
-                    ]);
-                }
-            }
-
-            $groupedSampel = [];
-            foreach ($noSampelList as $item) {
-                $kategori = $item['category'];
-                $noSampel = $item['no_sampel'];
-
-                $groupedSampel[$kategori][] = $noSampel;
-            }
-
-            $tanggalApprove = [];
-            foreach ($groupedSampel as $kategori => $noSampelList) {
-                if (strpos($kategori, 'Air')) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganAir::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if (strpos($kategori, 'Emisi Sumber Tidak Bergerak')) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganEmisiCerobong::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if (strpos($kategori, 'Emisi Kendaraan')) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganEmisiKendaraan::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if (in_array($kategori, ["Udara Ambient", "Udara Lingkungan Kerja", "Udara Angka Kuman"])) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganPartikulatMeter::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            if ($kategori == "Udara Ambient") {
-                                $markhidup = DataLapanganLingkunganHidup::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                                $markVolatile = DataLapanganSenyawaVolatile::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                                if ($markhidup && $markVolatile) {
-                                    array_push($tanggalApprove, $jadwal->tanggal);
-                                    continue;
-                                }
-                            } else if ($kategori == "Udara Lingkungan Kerja") {
-                                $markKerja = DataLapanganLingkunganKerja::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                                $markVolatile = DataLapanganSenyawaVolatile::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                                if ($markKerja && $markVolatile) {
-                                    array_push($tanggalApprove, $jadwal->tanggal);
-                                    continue;
-                                }
-                            } else if ($kategori == "Udara Angka Kuman") {
-                                if (DataLapanganMicrobiologi::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                                    array_push($tanggalApprove, $jadwal->tanggal);
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                } else if ($kategori == "Kebisingan") {
-                    foreach ($noSampelList as $noSampel) {
-                        $markKebisingan = DataLapanganKebisingan::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                        $markKebisinganPersonal = DataLapanganKebisinganPersonal::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                        if ($markKebisingan && $markKebisinganPersonal) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if ($kategori == "Kebisingan (24 Jam)") {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganKebisingan::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if ($kategori == "Pencahayaan") {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganCahaya::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if (in_array($kategori, ["Getaran (Mesin)", "Getaran (Kejut Bangunan)", "Getaran"])) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganGetaran::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if (in_array($kategori, ["Getaran (Lengan & Tangan)", "Getaran (Seluruh Tubuh)"])) {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganGetaranPersonal::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if ($kategori == "Iklim Kerja") {
-                    foreach ($noSampelList as $noSampel) {
-                        $markPanas = DataLapanganIklimPanas::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                        $markDingin = DataLapanganIklimDingin::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist();
-                        if ($markPanas && $markDingin) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if ($kategori == "Udara Swab Test") {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganSwab::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                } else if ($kategori == "Ergonomi") {
-                    foreach ($noSampelList as $noSampel) {
-                        if (DataLapanganErgonomi::where('no_sampel', $noSampel)->where('is_approve', true)->doesntExist()) {
-                            array_push($tanggalApprove, $jadwal->tanggal);
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-        $tanggalApprove = array_unique($tanggalApprove);
-
-        if (!empty($tanggalApprove)) {
-            return response()->json([
-                'message' => 'Terdapat Data Lapangan Yang Belum Diapprove Pada Tanggal ' . implode(', ', $tanggalApprove),
-            ], 401);
-        }
-
-        $master_karyawan = MasterKaryawan::where('id', $this->user_id)->first();
-        if ($master_karyawan->warna == null) {
-            return response()->json(['message' => 'Level Sampler Belum Ditentukan'], 401);
-        }
-        $level = MasterFeeSampling::where('warna', $master_karyawan->warna)->where('is_active', true)->first();
-        $generate = new GenerateFeeSampling();
-        $rekap = $generate->rekapFeeSampling($this->user_id, $level->kategori, $request->tanggal);
-        return response()->json(['data' => $rekap], 200);
-    }*/
 
     public function rekapFeeSampling(Request $request)
     {
@@ -325,7 +136,6 @@ class FeeSamplingController extends Controller
             return response()->json(['message' => 'Jadwal Tidak Ditemukan Untuk Tanggal Tersebut'], 404);
         }
 
-        // Mapping kategori ke model untuk menghindari if-else chains
         $categoryMappings = [
             'Air' => [[DataLapanganAir::class]],
             'Emisi Sumber Tidak Bergerak' => [[DataLapanganEmisiCerobong::class]],
@@ -369,7 +179,6 @@ class FeeSamplingController extends Controller
             ], 401);
         }
 
-        // Kumpulkan semua sampel dari semua jadwal
         $allSamples = [];
         foreach ($jadwals as $jadwal) {
             $noOrder = $jadwal->orderDetail->first()->no_order;
@@ -401,57 +210,6 @@ class FeeSamplingController extends Controller
         }
 
         $tanggalApprove = [];
-
-        // Cek approval untuk setiap kategori
-        // foreach ($samplesByCategory as $category => $samples) {
-        //     if (!isset($categoryMappings[$category])) {
-        //         continue; // Skip kategori yang tidak dikenal
-        //     }
-
-        //     $modelGroups = $categoryMappings[$category];
-        //     $noSampels = array_column($samples, 'no_sampel');
-
-        //     foreach ($samples as $sample) {
-        //         $isUnapproved = false;
-
-        //         // Cek setiap group model (AND logic antar group, OR logic dalam group)
-        //         foreach ($modelGroups as $modelGroup) {
-        //             $groupApproved = false;
-
-        //             // Untuk group dengan multiple model, cek semua model (AND logic)
-        //             if (count($modelGroup) > 1) {
-        //                 $allModelsApproved = true;
-        //                 foreach ($modelGroup as $model) {
-        //                     if (
-        //                         $model::where('no_sampel', $sample['no_sampel'])
-        //                             ->where('is_approve', true)
-        //                             ->doesntExist()
-        //                     ) {
-        //                         $allModelsApproved = false;
-        //                         break;
-        //                     }
-        //                 }
-        //                 $groupApproved = $allModelsApproved;
-        //             } else {
-        //                 // Untuk group dengan single model
-        //                 $model = $modelGroup[0];
-        //                 $groupApproved = $model::where('no_sampel', $sample['no_sampel'])
-        //                     ->where('is_approve', true)
-        //                     ->exists();
-        //             }
-
-        //             // Jika ada group yang tidak approved, tandai sebagai unapproved
-        //             if (!$groupApproved) {
-        //                 $isUnapproved = true;
-        //                 break;
-        //             }
-        //         }
-
-        //         if ($isUnapproved) {
-        //             $tanggalApprove[] = $sample['tanggal'];
-        //         }
-        //     }
-        // }
 
         $tanggalApprove = array_unique($tanggalApprove);
 
@@ -500,20 +258,6 @@ class FeeSamplingController extends Controller
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
-            if (FeeSampling::where('user_id', $this->user_id)->exists()) {
-                $data2 = FeeSampling::where('user_id', $this->user_id)->first();
-                $data2->tgl_claim = $data->tgl_pengajuan;
-                $data2->updated_by = $this->karyawan;
-                $data2->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data2->save();
-            } else {
-                $data2 = new FeeSampling();
-                $data2->user_id = $this->user_id;
-                $data2->tgl_claim = $data->tgl_pengajuan;
-                $data2->created_by = $this->karyawan;
-                $data2->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data2->save();
-            }
 
             InsertActivityFdl::by($this->user_id)->action('input')->target("Fee Sampling dengan total fee $request->total_fee")->save();
 
@@ -528,5 +272,4 @@ class FeeSamplingController extends Controller
             ], 500);
         }
     }
-
 }

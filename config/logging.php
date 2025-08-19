@@ -122,6 +122,13 @@ return [
             'days' => 7,
         ],
 
+        'print_lhp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/print_lhp/print_lhp.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'transaction' => [
             'driver' => 'daily',
             'path' => storage_path('logs/transaction/transaction.log'),

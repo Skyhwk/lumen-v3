@@ -15,6 +15,10 @@ class Jadwal extends Sector
     {
         return $this->belongsTo(SamplingPlan::class, "id_sampling", "id");
     }
+    public function persiapanHeader()
+    {
+        return $this->belongsTo(PersiapanSampelHeader::class, "no_quotation", "no_quotation");
+    }
     public function orderDetail()
     {
         return $this->hasMany(OrderDetail::class, "no_quotation", "no_quotation");
@@ -29,5 +33,4 @@ class Jadwal extends Sector
     {
         return $this->belongsTo(QuotationNonKontrak::class, "no_quotation", "no_document");
     }
-
 }
