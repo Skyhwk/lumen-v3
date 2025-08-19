@@ -61,12 +61,6 @@ class DraftUlkErgonomiController extends Controller
     {
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
-            'lhps_getaran',
-            'lhps_kebisingan',
-            'lhps_ling',
-            'lhps_medanlm',
-            'lhps_pencahayaan',
-            'lhps_sinaruv',
             'orderHeader'
             => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
@@ -74,10 +68,8 @@ class DraftUlkErgonomiController extends Controller
         ])
             ->where('is_approve', 0)
             ->where('is_active', true)
-            ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->groupBy('cfr')
-            ->where('parameter', 'like', '%Ergonomi%');
+            ->whereJsonContains('parameter','230;Ergonomi')
+            ->groupBy('no_sampel');
 
         return Datatables::of($data)->make(true);
     }
