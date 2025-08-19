@@ -26,7 +26,7 @@ class ReviewDokumenController extends Controller
 
     public function index()
     {
-        $today = Carbon::today();
+        $today = "2025-08-12";
 
         // Ambil semua parameter expired dan aktif, sekaligus
         $expiredParameters = Parameter::select('id', 'nama_lab', 'id_kategori')

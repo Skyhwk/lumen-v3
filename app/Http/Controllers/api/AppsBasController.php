@@ -2328,7 +2328,7 @@ class AppsBasController extends Controller
 
 
         $status = 'selesai';
-        if (empty($parameters)) {
+        if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro') {

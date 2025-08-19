@@ -8,6 +8,8 @@ use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
 
 
 class LevelSamplerController extends Controller
@@ -97,7 +99,10 @@ class LevelSamplerController extends Controller
         try {
             $warnaSampler = MasterFeeSampling::where('id', $request->id_label)->first();
             $sampler->warna = $warnaSampler->warna;
+            $sampler->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $sampler->updated_by = $this->karyawan;
             $sampler->save();
+
             DB::commit();
 
             return response()->json([
