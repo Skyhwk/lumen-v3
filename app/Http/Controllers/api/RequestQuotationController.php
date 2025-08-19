@@ -5072,7 +5072,7 @@ class RequestQuotationController extends Controller
                     }
                 }
 
-                $biggestNumberOfSampel = 1;
+                $biggestNumberOfSampel = 0;
 
                 if ($alreadyOrdered) {
                     $OrderDetails = OrderDetail::where('id_order_header', $id_order_header)->get();
@@ -5096,7 +5096,7 @@ class RequestQuotationController extends Controller
                         }
                     }
                 }
-                // dd($biggestNumberOfSampel);
+                $biggestNumberOfSampel++;
                 $diffPeriod = array_diff($period, $oldPeriod);
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 foreach ($period as $k => $per) {
