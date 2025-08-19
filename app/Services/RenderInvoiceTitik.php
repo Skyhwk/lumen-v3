@@ -122,31 +122,31 @@ class RenderInvoice
                 array_push($data1, $dataDetail);
                 array_push($harga1, $hargaDetail);
 
-            } else {
-                $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot.*')
-                ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, biaya_lain AS keterangan_biaya, biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, biaya_di_luar_pajak, total_biaya_di_luar_pajak, piutang, biaya_akhir, is_active, id_cabang, biaya_preparasi_padatan AS biaya_preparasi FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
-                ->where('no_invoice', $noInvoice)
-                ->where('invoice.no_quotation', $value->no_quotation)
-                ->where('quot.is_active', true)
-                ->where('invoice.is_active', true)
-                ->orderBy('invoice.no_order')
-                ->first();
-                
-                $hargaDetail = Invoice::select(DB::raw('SUM(total_discount) AS diskon, SUM(total_ppn) AS ppn, SUM(grand_total) AS sub_total, SUM(total_pph) AS pph, SUM(biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(piutang) AS sisa_tagihan, keterangan, SUM(invoice.total_tagihan) AS total_tagihan, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem'))
-                ->where('no_invoice', $noInvoice)
-                ->where('quot.no_document', $value->no_quotation)
-                ->where('invoice.is_active', true)
-                ->leftJoin(DB::raw('(SELECT no_document, grand_total, total_discount, total_dpp, biaya_akhir, total_ppn, total_pph, total_discount_gabungan, total_discount_consultant, total_discount_group, cash_discount, is_active, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
-                ->where('quot.is_active', true)
-                ->groupBy('keterangan', 'biaya_di_luar_pajak', 'total_discount_perdiem', 'total_discount_transport')
-                ->first();
-                
-                array_push($data1, $dataDetail);
-                array_push($harga1, $hargaDetail);
-                
+                } else {
+                    $dataDetail = Invoice::select('invoice.*', 'invoice.nama_perusahaan as perusahaan', 'order_header.*', 'quot.*')
+                    ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                    ->leftJoin(DB::raw('(SELECT no_document, wilayah, data_pendukung_sampling, transportasi, harga_transportasi_total, harga_transportasi, jumlah_orang_24jam AS jam_jumlah_orang_24, harga_24jam_personil_total, perdiem_jumlah_orang, harga_perdiem_personil_total, total_biaya_lain AS biaya_lain, biaya_lain AS keterangan_biaya, biaya_preparasi_padatan, grand_total, discount_air, total_discount_air, discount_non_air, total_discount_non_air, discount_udara, total_discount_udara, discount_emisi, total_discount_emisi, discount_transport, total_discount_transport, discount_perdiem, total_discount_perdiem, discount_perdiem_24jam, total_discount_perdiem_24jam, discount_gabungan, total_discount_gabungan, discount_consultant, total_discount_consultant, discount_group, total_discount_group, cash_discount_persen, total_cash_discount_persen, cash_discount, custom_discount, syarat_ketentuan, keterangan_tambahan, total_dpp, total_ppn, total_pph, pph, biaya_di_luar_pajak, total_biaya_di_luar_pajak, piutang, biaya_akhir, is_active, id_cabang, biaya_preparasi_padatan AS biaya_preparasi FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
+                    ->where('no_invoice', $noInvoice)
+                    ->where('invoice.no_quotation', $value->no_quotation)
+                    ->where('quot.is_active', true)
+                    ->where('invoice.is_active', true)
+                    ->orderBy('invoice.no_order')
+                    ->first();
+                    
+                    $hargaDetail = Invoice::select(DB::raw('SUM(total_discount) AS diskon, SUM(total_ppn) AS ppn, SUM(grand_total) AS sub_total, SUM(total_pph) AS pph, SUM(biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(piutang) AS sisa_tagihan, keterangan, SUM(invoice.total_tagihan) AS total_tagihan, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem'))
+                    ->where('no_invoice', $noInvoice)
+                    ->where('quot.no_document', $value->no_quotation)
+                    ->where('invoice.is_active', true)
+                    ->leftJoin(DB::raw('(SELECT no_document, grand_total, total_discount, total_dpp, biaya_akhir, total_ppn, total_pph, total_discount_gabungan, total_discount_consultant, total_discount_group, cash_discount, is_active, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem FROM request_quotation) AS quot'), 'invoice.no_quotation', '=', 'quot.no_document')
+                    ->where('quot.is_active', true)
+                    ->groupBy('keterangan', 'biaya_di_luar_pajak', 'total_discount_perdiem', 'total_discount_transport')
+                    ->first();
+                    
+                    array_push($data1, $dataDetail);
+                    array_push($harga1, $hargaDetail);
+                    
+                }
             }
-        }
 
             
             $mpdfConfig = array(
@@ -521,10 +521,25 @@ class RenderInvoice
                                         <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span><br>
                                         ');  
                                     } else {
+                                        $penamaan_titik = [];
+                                        foreach($dataSampling->penamaan_titik as $valll => $keyyyy) {
+                                            foreach($keyyyy as $keyyy => $valv) {
+                                                $penamaan_titik[] = $valv;
+                                            }
+                                        }
+                                        $penamaan_titik = array_unique($penamaan_titik);
+                                        $hasil = '';
+                                        if($kategori2 == '118-Psikologi') {
+                                            $hasil = '';
+                                        } else {
+                                            $hasil = implode(", ", $penamaan_titik);
+                                            $hasil = ' (' . $hasil . ') - ';
+                                        }
+
                                         $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik * count($dataSampling->periode)));
                                         $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . $hasil . $dataSampling->total_parameter . ' Parameter</span><br>
                                         ');
 
                                         foreach ($dataSampling->regulasi as $rg => $v) {
@@ -770,7 +785,7 @@ class RenderInvoice
                                     }
 
                                     $kategori2 = explode("-", $datasp->kategori_2);
-
+                                    // dd($datasp);
                                     if (isset($datasp->keterangan_pengujian)) {
                                         $keterangan_pengujian = $datasp->keterangan_pengujian;
                                         $harga_total = self::rupiah($datasp->harga_total);
@@ -780,7 +795,23 @@ class RenderInvoice
                                             <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
                                     ');
                                     } else {
-                                        $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
+                                        $penamaan_titik = [];
+                                        foreach($datasp->penamaan_titik as $valll => $keyyyy) {
+                                            foreach($keyyyy as $keyyy => $valv) {
+                                                $penamaan_titik[] = $valv;
+                                            }
+                                        }
+                                        $penamaan_titik = array_unique($penamaan_titik);
+                                        $hasil = '';
+                                        if($kategori2 == '118-Psikologi') {
+                                            $hasil = '';
+                                        } else {
+                                            $hasil = implode(", ", $penamaan_titik);
+                                            $hasil = ' (' . $hasil . ') - ';
+                                        }
+
+                                        // dd($hasil);
+                                        $keterangan_pengujian = strtoupper($kategori2[1]). $hasil . $datasp->total_parameter . ' Parameter';
                                         $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
 
                                         $pdf->writeHTML('
@@ -929,7 +960,7 @@ class RenderInvoice
 
                     }
                 }
-
+                // dd('test');
                 $no++;
 
             }
