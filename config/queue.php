@@ -30,15 +30,14 @@ return [
 
     'connections' => [
         'sync' => [
-            // 'driver' => env('QUEUE_CONNECTION'),
-            'driver' => 'sync',
+            'driver' => env('QUEUE_CONNECTION','sync'),
         ],
 
         'database' => [
             'driver' => env('QUEUE_DRIVER', 'database'),
             'table' => env('QUEUE_TABLE', 'jobs'),
             'queue' => 'default',
-            'retry_after' => 120,
+            'retry_after' => 610,
         ],
 
         'beanstalkd' => [
@@ -61,7 +60,7 @@ return [
             'driver' => 'redis',
             'connection' => env('QUEUE_REDIS_CONNECTION', 'default'),
             'queue' => 'default',
-            'retry_after' => 90,
+            'retry_after' => 610,
             'block_for' => null,
         ],
 
