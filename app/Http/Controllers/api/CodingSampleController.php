@@ -538,7 +538,11 @@ class CodingSampleController extends Controller
             }
 
             $pdf->WriteHTML('</table></body></html>');
+             $dir = public_path("cs");
 
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
             $pdf->Output(public_path() . '/cs/' . $filename, 'F');
             if ($bsDocument !== null) {
                 return response()->json(['status' => true, 'data' => $bsDocument], 200);
@@ -775,6 +779,10 @@ class CodingSampleController extends Controller
             }
 
             $pdf->WriteHTML('</table></body></html>');
+             $dir = public_path("cs");
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
 
             $pdf->Output(public_path() . '/cs/' . $filename, 'F');
 
@@ -975,7 +983,11 @@ class CodingSampleController extends Controller
         }
 
         $pdf->WriteHTML('</table></body></html>');
+        $dir = public_path("cs");
 
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
         $pdf->Output(public_path() . '/cs/' . $filename, 'F');
 
         return $filename;

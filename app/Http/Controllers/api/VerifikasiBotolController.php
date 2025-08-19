@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Http\Controllers\Controller;
 use App\Models\{QcLapangan, OrderDetail, Ftc, ScanSampelTc, ScanBotol, PersiapanSampelDetail, DataLapanganAir};
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class VerifikasiBotolController extends Controller
 {
@@ -33,7 +33,7 @@ class VerifikasiBotolController extends Controller
             })
             ->make(true);
     }
-    
+
     // Mobile Scan Sampel TC
     public function index_scan(Request $request)
     {
@@ -82,8 +82,8 @@ class VerifikasiBotolController extends Controller
     }
 
 
-    
-        public function scan(Request $request)
+
+    public function scan(Request $request)
     {
         try {
             $datachek = explode('/', $request->no_sampel);
@@ -135,7 +135,7 @@ class VerifikasiBotolController extends Controller
                 // dd($data);
                 $lapangan = DataLapanganAir::where('no_sampel', $data->no_sampel)->first();
                 $scan = ScanSampelTc::where('no_sampel', $data->no_sampel)->first();
-                $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active',1)->first();
+                $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters) ?? null;
 
@@ -167,7 +167,11 @@ class VerifikasiBotolController extends Controller
                     }
                 }
             }
-            // dd($lapangan, $data, $dataDisplay);
+            foreach ($dataDisplay as $item) {
+                if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
+                    $item->disiapkan = '1';
+                }
+            }
 
             if ($scan) {
                 $scanData = json_decode($scan->data_detail, true);
@@ -202,7 +206,7 @@ class VerifikasiBotolController extends Controller
         }
     }
 
-        public function save(Request $request)
+    public function save(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -216,15 +220,14 @@ class VerifikasiBotolController extends Controller
                         return $item['koding'];
                     }, $request->data_detail);
 
-                      $no_sampel = OrderDetail::whereNotNull('persiapan')
-                    ->whereJsonContains('persiapan', ['koding' => $koding_map[0] ?? $koding_map[1] ?? $koding_map[2]])
-                    ->first()->no_sampel;
+                    $no_sampel = OrderDetail::whereNotNull('persiapan')
+                        ->whereJsonContains('persiapan', ['koding' => $koding_map[0] ?? $koding_map[1] ?? $koding_map[2]])
+                        ->first()->no_sampel;
 
-                if (!$no_sampel) {
-                    return response()->json(["message" => "No Sampel tidak ditemukan", "code" => 404], 404);
+                    if (!$no_sampel) {
+                        return response()->json(["message" => "No Sampel tidak ditemukan", "code" => 404], 404);
+                    }
                 }
-                }
-                // dd($request->data_detail);
 
                 if (!empty($request->kondisi_sampel)) {
                     $base64Files = is_array($request->kondisi_sampel) ? $request->kondisi_sampel : [$request->kondisi_sampel];
@@ -383,7 +386,7 @@ class VerifikasiBotolController extends Controller
         }
     }
 
-     protected function processAndSaveFile($base64File, $path, $prefix = null, $no_sampel)
+    protected function processAndSaveFile($base64File, $path, $prefix = null, $no_sampel)
     {
         try {
             // Extract file information from base64 string
@@ -433,7 +436,10 @@ class VerifikasiBotolController extends Controller
             }
 
             // Save file
-            $bytesWritten = file_put_contents($fullPath, $decodedContent);
+
+            $service = new SaveFileServices();
+
+            $bytesWritten = $service->saveFile($path,  $fileName, $fileName, $decodedContent);
 
             if ($bytesWritten === false) {
                 return [
@@ -512,23 +518,5 @@ class VerifikasiBotolController extends Controller
         ];
 
         return $mimeExtensionMap[$mimeType] ?? null;
-    }
-
-
-
-   
-
-    public function convertFile($foto, $name)
-    {
-        $img = str_replace('data:image/jpeg;base64,', '', $foto);
-        $file = base64_decode($img);
-        $safeName = $name . '_' . date("YmdHis") . '.jpeg';
-        // $destinationPath = public_path() . '/sampel/dokumentasi/';
-        $destinationPath = public_path() . '/qc_lapangan/';
-        if (!file_exists($destinationPath)) mkdir($destinationPath, 0777, true);
-
-        file_put_contents($destinationPath . $safeName, $file);
-
-        return $safeName;
     }
 }
