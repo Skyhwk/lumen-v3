@@ -247,7 +247,6 @@ class PersiapanSampleController extends Controller
     public function preview(Request $request)
     {
         try {
-            
             $tipe = explode("/", $request->no_document);
             $jadwal = [];
             if ($tipe[1] == "QT") {
