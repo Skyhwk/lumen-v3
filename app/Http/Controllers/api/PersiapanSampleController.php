@@ -559,7 +559,7 @@ class PersiapanSampleController extends Controller
     private function saveHeader(Request $request)
     {
         $noSampel = !empty($request->all_category) ? $request->all_category : [];
-        dd($noSampel, $request->all_category);
+        // dd($noSampel, $request->all_category);
         $existingPsd = PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
             ->where('is_active', 1)
             ->pluck('id_persiapan_sampel_header')
