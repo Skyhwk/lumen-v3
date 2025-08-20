@@ -559,7 +559,6 @@ class PersiapanSampleController extends Controller
     private function saveHeader(Request $request)
     {
         $noSampel = !empty($request->all_category) ? $request->all_category : [];
-        // dd($noSampel, $request->all_category);
         $existingPsd = PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
             ->where('is_active', 1)
             ->pluck('id_persiapan_sampel_header')
@@ -639,7 +638,7 @@ class PersiapanSampleController extends Controller
 
         $noSampels = array_keys($request->detail);
         $orderDetail = OrderDetail::whereIn('no_sampel', $noSampels)->get();
-        $allSamples = [];
+        // $allSamples = [];
 
         PersiapanSampelDetail::whereNotIn('no_sampel', $noSampels)
             ->where('id_persiapan_sampel_header', $psh->id)
@@ -674,7 +673,7 @@ class PersiapanSampleController extends Controller
             }
 
             $psd = $existingPsd ?? new PersiapanSampelDetail();
-            $allSamples[] = $sampleNumber;
+            // $allSamples[] = $sampleNumber;
 
             $psd->no_sampel = $sampleNumber;
             $psd->id_persiapan_sampel_header = $psh->id;
@@ -693,8 +692,8 @@ class PersiapanSampleController extends Controller
         }
 
 
-        $psh->no_sampel = json_encode($allSamples, JSON_UNESCAPED_SLASHES);
-        $psh->save();
+        // $psh->no_sampel = json_encode($allSamples, JSON_UNESCAPED_SLASHES);
+        // $psh->save();
 
         return true;
     }
@@ -706,7 +705,6 @@ class PersiapanSampleController extends Controller
         try {
             $psh = $this->saveHeader($request);
             $this->saveDetail($request, $psh);
-
             $this->saveQrDocument($psh);
 
             JobTask::insert([
@@ -719,7 +717,6 @@ class PersiapanSampleController extends Controller
             $this->dispatch(new RenderPdfPersiapanSample($psh->id));
 
             DB::commit();
-
             return response()->json(['message' => 'Saved successfully'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
