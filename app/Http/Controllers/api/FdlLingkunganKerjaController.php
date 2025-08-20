@@ -23,6 +23,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use Illuminate\Support\Str;
 
 // SERVICE
 use App\Services\AnalystFormula;
