@@ -293,7 +293,7 @@ class EmailJadwal
             $idBcc = $atasan_sales->pluck('id')->toArray();
             $replyTo = ['admsales01@intilab.com'];
             $subject = "Jadwal Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
-            $email = SendEmail::where('to', $dataEmail['client']->email_pic_order)
+            $email = SendEmail::where('to', trim($dataEmail['client']->email_pic_order))
                 // $email = SendEmail::where('to', 'dedi@intilab.com')
                 ->where('subject', $subject)
                 ->where('body', $body_text)

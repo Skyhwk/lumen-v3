@@ -58,10 +58,10 @@ class WsFinalAirController extends Controller
 	{
 		$data = WsValueAir::with([
 			'dataLapanganAir',
-			'gravimetri',
-			'titrimetri',
-			'colorimetri',
 			'subkontrak.createdByKaryawan',
+			'titrimetri.createdByKaryawan',
+			'gravimetri.createdByKaryawan',
+			'colorimetri.createdByKaryawan',
 			'colorimetri.baku_mutu' => function ($q) use ($request) {
 				$q->where('id_regulasi', $request->regulasi);
 			},
@@ -92,7 +92,8 @@ class WsFinalAirController extends Controller
 					});
 			});
 
-		return Datatables::of($data)->make(true);
+		return Datatables::of($data)
+			->make(true);
 	}
 
 	public function rejectAnalys(Request $request)
@@ -172,120 +173,135 @@ class WsFinalAirController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
-		if ($request->template_stp == 4) {
-			if ($request->id) {
-				$data = Titrimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
-				if ($data) {
-					$cek = Titrimetri::where('id', $data->id)->first();
-					$cek->lhps = 0;
-					$cek->save();
-
-					return response()->json([
-						'message' => 'Data has ben Rejected',
-						'success' => true,
-
-					], 201);
+		DB::beginTransaction();
+		try {
+			if ($request->template_stp == 4) {
+				if ($request->id) {
+					$data = Titrimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
+					if ($data) {
+						$cek = Titrimetri::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+	
+						], 201);
+					} else {
+						$dat = Titrimetri::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'id' => $dat->no_sampel,
+						], 200);
+					}
 				} else {
-					$dat = Titrimetri::where('id', $request->id)->first();
-					$dat->lhps = 1;
-					$dat->save();
 					return response()->json([
-						'message' => 'Data has ben Approved',
-						'success' => true,
-						'id' => $dat->no_sampel,
-					], 200);
+						'message' => 'Gagal Approve'
+					], 401);
+				}
+			} else if ($request->template_stp == 3) {
+				if ($request->id) {
+					$data = Gravimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
+					if ($data) {
+						$cek = Gravimetri::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+	
+						], 201);
+					} else {
+						$dat = Gravimetri::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'id' => $dat->no_sampel,
+						], 200);
+					}
+				} else {
+					return response()->json([
+						'message' => 'Gagal Approve'
+					], 401);
+				}
+			} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 || $request->template_stp == 34) {
+				if ($request->id) {
+					$data = Colorimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('template_stp', empty($request->template_stp) ? null : $request->template_stp)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
+					if ($data) {
+						$cek = Colorimetri::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201
+						], 201);
+					} else {
+						$dat = Colorimetri::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200
+						], 200);
+					}
+				} else {
+					return response()->json([
+						'message' => 'Gagal Approve',
+						'success' => false,
+						'status' => 401
+					], 401);
 				}
 			} else {
-				return response()->json([
-					'message' => 'Gagal Approve'
-				], 401);
-			}
-		} else if ($request->template_stp == 3) {
-			if ($request->id) {
-				$data = Gravimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
-				if ($data) {
-					$cek = Gravimetri::where('id', $data->id)->first();
-					$cek->lhps = 0;
-					$cek->save();
-
-					return response()->json([
-						'message' => 'Data has ben Rejected',
-						'success' => true,
-
-					], 201);
+				if ($request->id) {
+					$data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
+					if ($data != null) {
+						$cek = Subkontrak::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'status' => 201,
+							'success' => true
+						], 201);
+					} else {
+						$dat = Subkontrak::where('id', $request->id)->where('is_active', 1)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'status' => 200,
+							'success' => true
+						], 200);
+					}
 				} else {
-					$dat = Gravimetri::where('id', $request->id)->first();
-					$dat->lhps = 1;
-					$dat->save();
 					return response()->json([
-						'message' => 'Data has ben Approved',
-						'success' => true,
-						'id' => $dat->no_sampel,
-					], 200);
+						'message' => 'Gagal Approve',
+						'success' => false
+					], 401);
 				}
-			} else {
-				return response()->json([
-					'message' => 'Gagal Approve'
-				], 401);
 			}
-		} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 ) {
-			if ($request->id) {
-				$data = Colorimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('template_stp', empty($request->template_stp) ? null : $request->template_stp)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
-				if ($data) {
-					$cek = Colorimetri::where('id', $data->id)->first();
-					$cek->lhps = 0;
-					$cek->save();
-					return response()->json([
-						'message' => 'Data has ben Rejected',
-						'success' => true,
-						'status' => 201
-					], 201);
-				} else {
-					$dat = Colorimetri::where('id', $request->id)->first();
-					$dat->lhps = 1;
-					$dat->save();
-					return response()->json([
-						'message' => 'Data has ben Approved',
-						'success' => true,
-						'status' => 200
-					], 200);
-				}
-			} else {
-				return response()->json([
-					'message' => 'Gagal Approve',
-					'success' => false,
-					'status' => 401
-				], 401);
-			}
-		} else {
-			// dd('subkontrak');
-			if ($request->id) {
-				$data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
-				if ($data != null) {
-					$cek = Subkontrak::where('id', $data->id)->first();
-					$cek->lhps = 0;
-					$cek->save();
-					return response()->json([
-						'message' => 'Data has ben Rejected',
-						'status' => 201,
-						'success' => true
-					], 201);
-				} else {
-					$dat = Subkontrak::where('id', $request->id)->where('is_active', 1)->first();
-					$dat->lhps = 1;
-					$dat->save();
-					return response()->json([
-						'message' => 'Data has ben Approved',
-						'status' => 200,
-						'success' => true
-					], 200);
-				}
-			} else {
-				return response()->json([
-					'message' => 'Gagal Approve',
-					'success' => false
-				], 401);
-			}
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal Approve because ' . $th->getMessage(),
+				'success' => false,
+				'status' => 401
+			], 401);
 		}
 	}
 
