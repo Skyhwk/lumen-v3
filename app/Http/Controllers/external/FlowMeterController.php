@@ -94,11 +94,11 @@ class FlowMeterController extends BaseController
                 
                 if ($affected > 0) {
                     DB::commit();
-                    Log::info("Device mesin_absen berhasil diperbarui", [
-                        'kode' => $kode,
-                        'status' => $status,
-                        'ip' => $ip
-                    ]);
+                    // Log::info("Device mesin_absen berhasil diperbarui", [
+                    //     'kode' => $kode,
+                    //     'status' => $status,
+                    //     'ip' => $ip
+                    // ]);
                     
                     return response()->json([
                         'success' => true,
@@ -123,11 +123,11 @@ class FlowMeterController extends BaseController
                 
                 if ($affected > 0) {
                     DB::commit();
-                    Log::info("Device berhasil diperbarui", [
-                        'kode' => $kode,
-                        'status' => $status,
-                        'ip' => $ip
-                    ]);
+                    // Log::info("Device berhasil diperbarui", [
+                    //     'kode' => $kode,
+                    //     'status' => $status,
+                    //     'ip' => $ip
+                    // ]);
                     
                     return response()->json([
                         'success' => true,
@@ -168,13 +168,13 @@ class FlowMeterController extends BaseController
                     }
 
                     DB::commit();
-                    Log::info("DeviceIntilab berhasil diperbarui", [
-                        'kode' => $kode,
-                        'old_status' => $oldStatus,
-                        'new_status' => $status,
-                        'old_ip' => $oldIp,
-                        'new_ip' => $ip
-                    ]);
+                    // Log::info("DeviceIntilab berhasil diperbarui", [
+                    //     'kode' => $kode,
+                    //     'old_status' => $oldStatus,
+                    //     'new_status' => $status,
+                    //     'old_ip' => $oldIp,
+                    //     'new_ip' => $ip
+                    // ]);
                     
                     return response()->json([
                         'success' => true,

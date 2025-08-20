@@ -75,7 +75,8 @@ $app->configure('queue');
 */
 
 $app->middleware([
-    App\Http\Middleware\CorsMiddleware::class
+    App\Http\Middleware\CorsMiddleware::class,
+    App\Http\Middleware\Utf8Sanitizer::class
 ]);
 
 $app->routeMiddleware([
@@ -84,7 +85,6 @@ $app->routeMiddleware([
     'decrypt.slice' => \App\Http\Middleware\DecryptSliceMiddleware::class,
     'cors' => \App\Http\Middleware\CorsMiddleware::class,
     'auth.customer.token' => App\Http\Middleware\CheckCustomerToken::class,
-
     'director.auth.token' => App\Http\Middleware\directorApp\ApiTokenAuth::class,
 ]);
 
