@@ -6,34 +6,16 @@ use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\WsValueLingkungan;
 use App\Models\WsValueUdara;
-use App\Models\DetailLingkunganHidup;
-use App\Models\MicrobioHeader;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DetailLingkunganKerja;
 use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganCahaya;
-use App\Models\DataLapanganErgonomi;
-use App\Models\DataLapanganSinarUV;
-use App\Models\DataLapanganMedanLM;
+
 use App\Models\DataLapanganKebisinganPersonal;
-use App\Models\DataLapanganDebuPersonal;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 
-use App\Models\IklimHeader;
-use App\Models\GetaranHeader;
+
 use App\Models\KebisinganHeader;
-use App\Models\PencahayaanHeader;
 use App\Models\LingkunganHeader;
-use App\Models\DirectLainHeader;
-use App\Models\ErgonomiHeader;
-use App\Models\SinarUvHeader;
-use App\Models\MedanLmHeader;
-// use App\Models\PsikologiHeader;
-use App\Models\DebuPersonalHeader;
+
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -99,7 +81,6 @@ class WsFinalUdaraKebisinganController extends Controller
 		try {
 			$parameters = json_decode(html_entity_decode($request->parameter), true);
 			$parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
-			if (in_array($request->kategori, $this->categoryKebisingan)) {
 				$data = KebisinganHeader::with(['ws_udara', 'data_lapangan', 'data_lapangan_personal', 'orderDetail'])
 					->where('no_sampel', $request->no_sampel)
 					->where('is_approved', 1)
@@ -117,7 +98,6 @@ class WsFinalUdaraKebisinganController extends Controller
 					
 						$totalMenit = $jam !== null ? $jamToMenit : null;
 					}
-
 					$item->nab = isset($totalMenit) ? $this->getNabKebisingan($totalMenit) : null;
 					$regulasi = json_decode($item->orderDetail->regulasi);
 					$item->method = explode('-', $regulasi[0])[1] ?? null;
@@ -125,17 +105,9 @@ class WsFinalUdaraKebisinganController extends Controller
 					$ws->nab = $item->nab;
 					$ws->save();
 				}
-				
-			
-
 				return Datatables::of($data)->make(true);
 
-			} else {
-				return response()->json([
-					'message' => 'Kategori tidak sesuai',
-					'status' => 404,
-				], 404);
-			}
+			
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
@@ -145,7 +117,6 @@ class WsFinalUdaraKebisinganController extends Controller
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
-
 		if (is_array($request->parameter)) {
 			foreach ($request->parameter as $param) {
 				$paramParts = explode(";", $param);
@@ -154,7 +125,6 @@ class WsFinalUdaraKebisinganController extends Controller
 				}
 			}
 		}
-		if (in_array($request->kategori, $this->categoryKebisingan)) {
 			$noOrder = explode('/', $request->no_sampel)[0] ?? null;
 
 			$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
@@ -165,8 +135,6 @@ class WsFinalUdaraKebisinganController extends Controller
 				return (int) explode('/', $item)[1];
 			})->values();
 
-			$totLapangan = $lapangan2->count();
-
 			try {
 				$data = [];
 				$model = in_array("Kebisingan (P8J)", $parameterNames)
@@ -174,17 +142,8 @@ class WsFinalUdaraKebisinganController extends Controller
 					: DataLapanganKebisingan::class;
 
 				$data = $model::where('no_sampel', $request->no_sampel)->first();
-
-				$urutan = $lapangan2->search($data->no_sampel);
-				$urutanDisplay = $urutan + 1;
-				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
 				$data['parameter'] = $parameterNames[0];
-				// dd([
-				// 	'no_order' => $noOrder,
-				// 	'total_lapangan' => $totLapangan,
-				// 	'lapangan' => $lapangan2,
-				// 	'data' => $data,
-				// ]);
+				
 
 				if ($data) {
 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
@@ -192,9 +151,7 @@ class WsFinalUdaraKebisinganController extends Controller
 			} catch (\Exception $ex) {
 				dd($ex);
 			}
-		} else {
-			$data = [];
-		}
+		
 	}
 	public function rejectAnalys(Request $request)
 	{
