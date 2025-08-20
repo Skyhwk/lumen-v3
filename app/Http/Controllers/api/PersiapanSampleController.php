@@ -1009,7 +1009,7 @@ class PersiapanSampleController extends Controller
         return response()->json(MasterKaryawan::whereIn('id_jabatan', [60, 61, 62, 63])->orderBy('nama_lengkap')->get(), 200);
     }
 
-    private function compareSampleNumber($psHeader, $request)
+    /* private function compareSampleNumber($psHeader, $request)
     {
         $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
         $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
@@ -1045,21 +1045,71 @@ class PersiapanSampleController extends Controller
             return true;
 
         return false;
+    } */
+
+    private function compareSampleNumber($psHeader, $request)
+    {
+        $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
+        if($sampelNumbers == []){
+            $sampelNumbers = json_decode($psHeader->no_sampel, true) ?? [];
+            return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
+        }else{
+            return count(array_intersect($sampelNumbers, $request->no_sampel)) === count($sampelNumbers);
+            $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);
+            $extraSampleNumbers = array_diff($sampelNumbers, $request->no_sampel);
+            if ($missingSampleNumbers || $extraSampleNumbers)
+                return true;
+        }
+        /* 
+            $noSampelDb = json_decode($item->no_sampel, true) ?? [];
+            return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
+        */
+       
+        
+
+        // return false;
+    }
+
+    private function compareByPersiapan($orderDetail, $psDetail)
+    {
+        $preparedBottles = isset($psDetail->parameters['air']) ? array_keys($psDetail->parameters['air']) : [];
+        $requiredBottles = collect(json_decode($orderDetail->persiapan))->pluck('type_botol')->toArray();
+
+        $missingBottles = array_diff($requiredBottles, $preparedBottles);
+        $extraBottles = array_diff($preparedBottles, $requiredBottles);
+        if ($missingBottles || $extraBottles)
+            return true;
+
+        return false;
+    }
+
+    private function compareByParameter($orderDetail, $psDetail)
+    {
+        $kategoriKey = strtolower($orderDetail->kategori_2);
+        $preparedParams = isset($psDetail->parameters[$kategoriKey]) ? array_keys($psDetail->parameters[$kategoriKey]) : [];
+        $requiredParams = array_map(fn($param) => explode(';', $param)[1], $orderDetail->parameter);
+
+        $missingParams = array_diff($requiredParams, $preparedParams);
+        $extraParams = array_diff($preparedParams, $requiredParams);
+        if ($missingParams || $extraParams)
+            return true;
+
+        return false;
     }
 
     public function getUpdated(Request $request)
     {
 
         $psHeader = PersiapanSampelHeader::with([
-            'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
+            // 'psDetail' => fn($q) => $q->whereIn('no_sampel', $request->no_sampel),
             'orderHeader.orderDetail'
         ])
             ->where('no_quotation', $request->no_quotation)
             ->where('no_order', $request->no_order)
             ->where('is_active', 1)
-            ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
+            // ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel]))
             ->first();
-
+        // dd($psHeader);
         if (!$psHeader || !$psHeader->psDetail)
             return response()->json(['message' => 'Sampel belum disiapkan update'], 404);
 

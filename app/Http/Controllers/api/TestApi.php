@@ -4,11 +4,15 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Services\GetAtasan;
-use App\Services\Notification;
-use App\Services\Printing;
-use App\Services\TemplateLhpErgonomi;
-use App\Models\DataLapanganErgonomi;
+use App\Services\{
+    GetAtasan,
+    Notification,
+    Printing,
+    TemplateLhpErgonomi
+};
+use App\Models\{
+    DataLapanganErgonomi,
+    DraftErgonomiFile};
 use \Mpdf\Mpdf as PDF;
 class TestApi extends Controller
 {
@@ -27,7 +31,7 @@ class TestApi extends Controller
     {
         try {
             $render = new TemplateLhpErgonomi();
-            $noSampel = $request->no_sampel; // Ambil no_sampel dari request frontend
+            $noSampel = 'THAU012501/001'; // Ambil no_sampel dari request frontend $request->no_sampel
 
             // Definisikan metode yang ingin digabungkan dan ID methodnya
             $methodsToCombine = [
@@ -37,7 +41,7 @@ class TestApi extends Controller
                 //'rosa' => 4,
                 //'brief' => 6,
                 'sni_gotrak' => 7,
-                // 'sni_bahaya_ergonomi' =>8,
+                'sni_bahaya_ergonomi' =>8,
                 // 'antropometri' =>9,
                 // 'desain_stasiun_kerja' =>10
             ];
@@ -566,13 +570,27 @@ class TestApi extends Controller
             }
 
             // Kembalikan PDF gabungan
-            return response($pdf->Output('laporan.pdf', 'S'), 200, [
+            $dir = public_path("draft_ergonomi");
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $namaFile = str_replace('/', '_', $dataMethod->no_sampel);
+            $pathFile = $dir.'/ERGONOMI_'.$namaFile.'.pdf';
+            $pdf->Output($pathFile, 'F');
+
+            $saveFilePDF = new DraftErgonomiFile;
+            $saveFilePDF::where('no_sampel',$dataMethod->no_sampel)->first();
+            if($saveFilePDF != NULL){
+                
+            }
+            return response()->json('data berhasil di render',200);
+            /* return response($pdf->Output('laporan.pdf', 'S'), 200, [
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'attachment; filename="laporan_ergonomi_gabungan.pdf"',
-            ]);
+            ]); */
 
         } catch (\Throwable $th) {
             return response()->json(["message" => $th->getMessage(),
