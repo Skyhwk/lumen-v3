@@ -21,7 +21,7 @@ class TemplateLhpErgonomi
             ];
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonomirula')->render();
-
+            return $html;
             $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
             $pdf->setAutoBottomMargin = 'stretch';
             // Add mPDF watermark
@@ -97,9 +97,9 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 15,
             ];
-    
+            
             // olah data:
-            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', 'T2PE012516/028')
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
                 ->first();
     
@@ -167,6 +167,7 @@ class TemplateLhpErgonomi
     
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonominbm', compact('pengukuran', 'personal'))->render();
+            return $html;
             // --- TAMBAHKAN NOMOR HALAMAN DI SINI ---
             // Format: Teks biasa 'Halaman {PAGENO} dari {nb}'
             // {PAGENO} = nomor halaman saat ini
@@ -214,7 +215,7 @@ class TemplateLhpErgonomi
         ];
 
         $dataReba = DataLapanganErgonomi::with(['detail'])
-            ->where('no_sampel', 'TAML012401/395')
+            ->where('no_sampel', $data->no_sampel)
             ->where('method', 2)
             ->first();
 
@@ -276,7 +277,7 @@ class TemplateLhpErgonomi
 
         $pdf = new PDF($mpdfConfig);
         $html = View::make('ergonomireba', compact('pengukuran', 'personal'))->render();
-
+        return $html;
         $footer = '<table width="100%">
                         <tr>
                             <td width="13%"></td>
@@ -314,7 +315,7 @@ class TemplateLhpErgonomi
         ];
 
         $dataRosa = DataLapanganErgonomi::with(['detail'])
-            ->where('no_sampel', 'TAML012401/395')
+            ->where('no_sampel', $data->no_sampel)
             ->where('method', 4)
             ->first();
 
@@ -357,10 +358,10 @@ class TemplateLhpErgonomi
             "nama_pekerja" => $dataRosa->nama_pekerja,
             "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
         ];
-        // dd($pengukuran);
+        
         $pdf = new PDF($mpdfConfig);
         $html = View::make('ergonomirosa', compact('pengukuran', 'personal'))->render();
-
+        return $html;
         // --- TAMBAHKAN NOMOR HALAMAN DI SINI ---
         // Format: Teks biasa 'Halaman {PAGENO} dari {nb}'
         // {PAGENO} = nomor halaman saat ini
@@ -415,6 +416,8 @@ class TemplateLhpErgonomi
 
     public function ergonomiPotensiBahaya ($data = null) 
     {
+
+       
         $mpdfConfig = [
             'mode' => 'utf-8',
             'format' => 'A4-L',
@@ -425,7 +428,7 @@ class TemplateLhpErgonomi
         ];
 
         $pdf = new PDF($mpdfConfig);
-        $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', 'TAML012401/395')
+        $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
             ->where('method', 8)
             ->first();
         $personal = (object) [
@@ -447,6 +450,7 @@ class TemplateLhpErgonomi
         $pengukuran = json_decode($dataRwl->pengukuran);
         // dd($pengukuran);
         $html = View::make('ergonompotensibahaya')->render();
+        return $html;
         // --- TAMBAHKAN NOMOR HALAMAN DI SINI ---
         // Format: Teks biasa 'Halaman {PAGENO} dari {nb}'
         // {PAGENO} = nomor halaman saat ini
@@ -462,75 +466,69 @@ class TemplateLhpErgonomi
     }
 
     public function ergonomiGontrak ($data = null ) 
-    {
-        $mpdfConfig = [
-            'mode' => 'utf-8',
-            'format' => 'A4-L',
-            'margin_left' => 10,
-            'margin_right' => 10,
-            'margin_top' => 5,
-            'margin_bottom' => 15,
-        ];
-
-        $pdf = new PDF($mpdfConfig);
-        $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', 'TAML012401/004')
-            ->where('method', 7)
-            ->first();
-
-        $pengukuran = json_decode($dataRwl->pengukuran);
-        $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
-        $setelahKerja = json_decode($dataRwl->setelah_kerja);
-        $personal = (object) [
-            "no_sampel" => $dataRwl->no_sampel,
-            "nama_pekerja" => $dataRwl->nama_pekerja,
-            "usia" => $dataRwl->usia,
-            "lama_kerja" => $dataRwl->lama_kerja,
-            "jenis_kelamin" => $dataRwl->jenis_kelamin,
-            "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
-            "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-            "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-            "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
-            "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-            "periode_analis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
-            'jabatan' =>$dataRwl->divisi,
-            'aktifitas_k3' =>json_decode($dataRwl->input_k3)
-        ];
-        
-        $masa_kerja = $pengukuran->Identitas_Umum->{'Masa Kerja'};
-        $fisik = $pengukuran->Identitas_Umum->{'Lelah Fisik'};
-        $mental = $pengukuran->Identitas_Umum->{'Lelah Mental'};
-        $masa_kerja_map = [
-            '0' => 'Kurang dari 3 Bulan',
-            '1' => '3 Bulan - 1 Tahun',
-            '2' => '1 - 5 Tahun',
-            '3' => '5 - 10 Tahun',
-            '4' => 'Lebih dari 10 Tahun',
-        ];
-        $fisikMentalMap =[
-            "0" => "Tidak pernah",
-            "1" => "Kadang - kadang",
-            "2" => "Sering",
-            "3" => "Selalu",
-            "4" => "Unknown"
-        ];
-
-        $pengukuran->Identitas_Umum->{'Masa Kerja'} =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
-        $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
-        $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
-        dd($pengukuran);
-        $html = View::make('ergonomgontrak',compact('pengukuran','personal'))->render();
-        // --- TAMBAHKAN NOMOR HALAMAN DI SINI ---
-        // Format: Teks biasa 'Halaman {PAGENO} dari {nb}'
-        // {PAGENO} = nomor halaman saat ini
-        // {nb} = total jumlah halaman
-        $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
-        $pdf->setAutoBottomMargin = 'stretch';
-        // Add mPDF watermark
-        $pdf->SetWatermarkText('DRAFT');
-        $pdf->showWatermarkText = true;
-        $pdf->watermarkTextAlpha = 0.1;
-        $pdf->WriteHTML($html);
-        return $pdf->Output('laporan.pdf', 'I');
+    {   
+        try {
+            //code...
+            $mpdfConfig = [
+                'mode' => 'utf-8',
+                'format' => 'A4-L',
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'margin_top' => 5,
+                'margin_bottom' => 15,
+            ];
+    
+            $pdf = new PDF($mpdfConfig);
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+                ->where('method', 7)
+                ->first();
+    
+            $pengukuran = json_decode($dataRwl->pengukuran);
+            $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
+            $setelahKerja = json_decode($dataRwl->setelah_kerja);
+            $personal = (object) [
+                "no_sampel" => $dataRwl->no_sampel,
+                "nama_pekerja" => $dataRwl->nama_pekerja,
+                "usia" => $dataRwl->usia,
+                "lama_kerja" => $dataRwl->lama_kerja,
+                "jenis_kelamin" => $dataRwl->jenis_kelamin,
+                "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
+                "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
+                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
+                "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
+                "periode_analis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
+                'jabatan' =>$dataRwl->divisi,
+                'aktifitas_k3' =>json_decode($dataRwl->input_k3)
+            ];
+            
+            $masa_kerja = $pengukuran->Identitas_Umum->{'Masa Kerja'};
+            $fisik = $pengukuran->Identitas_Umum->{'Lelah Fisik'};
+            $mental = $pengukuran->Identitas_Umum->{'Lelah Mental'};
+            $masa_kerja_map = [
+                '0' => 'Kurang dari 3 Bulan',
+                '1' => '3 Bulan - 1 Tahun',
+                '2' => '1 - 5 Tahun',
+                '3' => '5 - 10 Tahun',
+                '4' => 'Lebih dari 10 Tahun',
+            ];
+            $fisikMentalMap =[
+                "0" => "Tidak pernah",
+                "1" => "Kadang - kadang",
+                "2" => "Sering",
+                "3" => "Selalu",
+                "4" => "Unknown"
+            ];
+    
+            $pengukuran->Identitas_Umum->{'Masa Kerja'} =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
+            $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
+            $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
+            
+            $html = View::make('ergonomgontrak',compact('pengukuran','personal'))->render();
+            return $html;
+        } catch (\Throwable $th) {
+            throw $th;
+        }
     }
 
     private function hitungResiko($skor, $case = null)
