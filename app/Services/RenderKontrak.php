@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Mpdf\Mpdf;
 use App\Services\TranslatorService as Translator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class RenderKontrak
 {
@@ -25,8 +26,9 @@ class RenderKontrak
     {
         DB::beginTransaction();
         try {
-            app()->setLocale($lang);
-            Carbon::setLocale($lang);
+            // app()->setLocale($lang);
+            // Carbon::setLocale($lang);
+            $lang = 'id';
             $update = QuotationKontrakH::where('id', $id)->first();
             $filename = self::renderHeader($id, $lang);
             if ($update && $filename) {
@@ -50,6 +52,8 @@ class RenderKontrak
                 'no_document' => $update->no_document,
                 'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
+
+            Log::error(['RenderKontra: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine()]);
             return response()->json([
                 'message' => $e->getMessage(),
                 'line' => $e->getLine()
@@ -262,7 +266,8 @@ class RenderKontrak
 
             return $getBody;
         } catch (\Throwable $e) {
-            dd($e);
+            Log::error(['RenderKontrakHeader: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine()]);
+            return false;
         }
     }
 
@@ -2604,6 +2609,7 @@ class RenderKontrak
             chmod($filePath, 0777);
             return $fileName;
         } catch (\Exception $e) {
+            Log::error(['RenderKontrakBody: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine()]);
             return response()->json(
                 [
                     "message" => $e->getMessage(),
