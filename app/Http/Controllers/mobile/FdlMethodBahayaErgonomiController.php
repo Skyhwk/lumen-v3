@@ -44,6 +44,9 @@ class FdlMethodBahayaErgonomiController extends Controller
     public function checkHasVideo(Request $request)
     {
         $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 8)->first();
+        
+        if(!$fdl) return response()->json(['message' => 'Tidak ada data berdasarkan No. Sample tersebut.'], 401);
+        
         if($fdl && $fdl->video_dokumentasi != null){ 
             return response()->json(['message' => 'Video sudah di upload.', 'isset_video' => true], 200);
         } else {
