@@ -40,4 +40,9 @@ class Gravimetri extends Sector
     {
         return $this->belongsTo('App\Models\MasterBakumutu', 'parameter', 'parameter');
     }
+
+    public function createdByKaryawan()
+    {
+        return $this->belongsTo('App\Models\MasterKaryawan', 'created_by', 'nama_lengkap');
+    }
 }

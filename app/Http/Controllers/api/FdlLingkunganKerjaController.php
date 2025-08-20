@@ -11,7 +11,6 @@ use App\Models\Parameter;
 
 use App\Models\LingkunganHeader;
 use App\Models\WsValueLingkungan;
-use App\Models\WsValueUdara;
 
 use App\Services\NotificationFdlService;
 
