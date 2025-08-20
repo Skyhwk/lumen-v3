@@ -32,17 +32,15 @@ class DustFall {
 		$w2 = $data->w2;
 		$w1 = $data->w1;
 		$vl = $data->vl;
-		$a = $data->a ?? 1;
-		$t = $data->t ?? 1;
-
-		// (((W2 - W1)*0,000001) x 30  x V ) / ((A*0,000001) x T x 0,250)
-		$rumus = number_format((((($w2 - $w1) * 0.000001) * 30 * $vl) / (($a * 0.000001) * $t * 0.250)), 4);
+		$a = $data->a;
+		$t = $data->t;
+		$rumus = number_format(((($w2-$w1) * 30 * $vl) / ($a * $t * 0.250)), 4);
 		$data = [
             'tanggal_terima' => $data->tgl_terima,
-            'flow' => null,
-            'durasi' => null,
-            'tekanan_u' => null,
-            'suhu' => null,
+            'flow' => $data->flow,
+            'durasi' => $data->waktu,
+            'tekanan_u' => $data->tekanan_udara,
+            'suhu' => $data->suhu,
             'k_sample' => $ks,
             'k_blanko' => $kb,
             'Qs' => $Qs,
@@ -64,7 +62,7 @@ class DustFall {
             'a' => $a,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
-        
+
         return $data;
     }
 }

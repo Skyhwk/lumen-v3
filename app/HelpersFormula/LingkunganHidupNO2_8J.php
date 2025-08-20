@@ -6,7 +6,7 @@ use Carbon\Carbon;
 class LingkunganHidupNO2_8J
 {
     public function index($data, $id_parameter, $mdl) {
-        
+
         $ks = null;
         // dd(count($data->ks));
         if (is_array($data->ks)) {
@@ -38,30 +38,22 @@ class LingkunganHidupNO2_8J
         $st = null;
         $satuan = null;
 
-        $hasil = [];
-
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         // dd($Vu);
-        foreach ($data->ks as $key => $value_ks) {
-            if($Vu != 0.0) {
-                $result = \str_replace(",", "", number_format(($value_ks / floatval($Vu)) * (10 / 25) * 1000, 4));
-            }else {
-                $result = 0;
-            }
-            array_push($hasil, $result);
+        if($Vu != 0.0) {
+            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * (10 / 25) * 1000, 4));
+        }else {
+            $C = 0;
         }
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
+        if (floatval($C) < 0.4623)
+            $C = '<0.4623';
+        if (floatval($C1) < 0.00046)
+            $C1 = '<0.00046';
+        if (floatval($C2) < 0.00025)
+            $C2 = '<0.00025';
 
-        $hasil1 = $hasil[0];
-        $hasil2 = $hasil[1];
-        $hasil3 = $hasil[2];
-        $avg_hasil = number_format(array_sum($hasil) / count($hasil), 4);
-
-        if(!is_null($mdl) && $avg_hasil < $mdl){
-            $avg_hasil = '<'.$mdl;
-        }
-
-        $satuan = 'µg/Nm³';
-        
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
@@ -76,10 +68,9 @@ class LingkunganHidupNO2_8J
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $avg_hasil,
-            'hasil2' => $hasil1,
-            'hasil3' => $hasil2,
-            'hasil4' => $hasil3,
+            'C' => $C,
+            'C1' => $C1,
+            'C2' => $C2,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

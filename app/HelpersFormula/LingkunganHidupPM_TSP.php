@@ -7,7 +7,6 @@ use Carbon\Carbon;
 class LingkunganHidupPM_TSP
 {
     public function index($data, $id_parameter, $mdl) {
-        // dd($data);
         $ks = null;
         // dd(count($data->ks));
         $kb = null;
@@ -27,7 +26,7 @@ class LingkunganHidupPM_TSP
         $Vs = null;
         $vl = null;
         $st = null;
-        $satuan = "µg/Nm³";
+        $satuan = null;
 
         if ($data->kateg_tsp == '11') { // Udara Ambient / Udara Lingkungan Hidup
             $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
@@ -40,7 +39,7 @@ class LingkunganHidupPM_TSP
                 $Qs = $data->nilQs;
                 $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
             }
-            
+
             if ($id_parameter == 342) {
                 if (floatval($C) < 1.5151)
                     $C = '<1.5151';
@@ -58,7 +57,7 @@ class LingkunganHidupPM_TSP
             }
             $w1 = $data->w1;
             $w2 = $data->w2;
-            
+
         } else if ($data->kateg_tsp == '27') { // Udara Lingkungan Kerja
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));
@@ -107,9 +106,10 @@ class LingkunganHidupPM_TSP
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $C,
-            'hasil2' => $C1,
-            'hasil3' => $C2,
+            'satuan' => $satuan,
+            'C' => $C,
+            'C1' => $C1,
+            'C2' => $C2,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,
@@ -117,7 +117,6 @@ class LingkunganHidupPM_TSP
             'Vu' => $Vu,
             'Vs' => $Vs,
             'Ta' => $Ta,
-            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
 

@@ -26,7 +26,7 @@ class LingkunganHidupPM
         $Vs = null;
         $vl = null;
         $st = null;
-        $satuan = 'µg/Nm³';
+        $satuan = null;
 
         $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
         // dd($Vstd,$nilQs,$dur);
@@ -69,9 +69,13 @@ class LingkunganHidupPM
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $C,
-            'hasil2' => $C1,
-            'hasil3' => $C2,
+            // 'hasil1' => $C,
+            // 'hasil2' => $C1,
+            // 'hasil3' => $C2,
+            'C' => $C,
+            'C1' => $C1,
+            'C2' => $C2,
+            'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,
@@ -79,7 +83,6 @@ class LingkunganHidupPM
             'Vu' => $Vu,
             'Vs' => $Vs,
             'Ta' => $Ta,
-            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
 
