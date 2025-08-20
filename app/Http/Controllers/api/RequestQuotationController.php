@@ -3241,11 +3241,11 @@ class RequestQuotationController extends Controller
                     $cek = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataH->id)->where('periode_kontrak', $per)->first();
                     if (!is_null($cek)) {
                         $dataD = $cek;
-                        $oldData = json_decode($cek->data_pendukung_sampling, true);
+                        $oldDatas = json_decode($cek->data_pendukung_sampling, true);
                     } else {
                         $dataD = new QuotationKontrakD;
                         $dataD->id_request_quotation_kontrak_h = $dataH->id;
-                        $oldData = null;
+                        $oldDatas = null;
                     }
                     $tempUsedOldData = [];
                     $checkOldQtRemaining = [];
@@ -3383,7 +3383,7 @@ class RequestQuotationController extends Controller
                             // dump($dataH->data_lama);
                             // $dataLama = json_decode($dataH->data_lama);
 
-                            if($oldData != null && $checkOldQtRemaining->count() > 0){
+                            if(!$oldDatas != null && $checkOldQtRemaining->count() > 0){
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
 
@@ -3443,8 +3443,8 @@ class RequestQuotationController extends Controller
                             } else {
                                 // kalau ada data lama yang sama periodenya
                                 $foundOldPenamaanTitik = null;
-                                if($oldData){
-                                    foreach (reset($oldData)['data_sampling'] as $oldSampling) {
+                                if($oldDatas){
+                                    foreach (reset($oldDatas)['data_sampling'] as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                         $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
