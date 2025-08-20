@@ -9544,7 +9544,7 @@ class AppsFdlController extends Controller
                     ], 200);
                 }
             } else {
-                return response()->json(['message' => 'Tidak ada data berdasarkan No. Sample tersebut.'], 401);
+                return response()->json(['message' => 'Tidak ada parameter ergonomi di No. Sample tersebut.'], 401);
             }
         } catch (Exception $e) {
             dd($e);
