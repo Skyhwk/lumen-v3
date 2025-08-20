@@ -448,13 +448,13 @@ class DraftUdaraGetaranController extends Controller
     public function handleApprove(Request $request)
     {
         $category = explode('-', $request->kategori_3)[0];
-        $data_order = OrderDetail::where('no_sampel', $request->no_lhp)
+        $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
             ->where('id', $request->id)
             ->where('is_active', true)
             ->firstOrFail();
 
         try {
-            $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
+            $data = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)
                 ->where('id_kategori_3', $category)
                 ->where('is_active', true)
                 ->first();

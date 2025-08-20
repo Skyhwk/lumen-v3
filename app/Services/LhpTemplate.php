@@ -131,7 +131,7 @@ class LhpTemplate
         self::$instance->mode = $value;
         $view = $this->directory . '.' . $this->view;
         
-        self::$instance->showKan = $this->cekAkreditasi($this->header->parameter_uji, $this->header->no_sampel);
+        self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
             
         $modes = [
             'downloadWSDraft',
@@ -236,8 +236,10 @@ class LhpTemplate
                 $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
             }
         }
-
+        
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);
+        
+        // dd($filename);
         return $filename;
     }
 
@@ -257,20 +259,21 @@ class LhpTemplate
         return $paths[$mode];
     }
 
-    private function cekAkreditasi($data, $no_sampel)
+    private function cekAkreditasi( $no_lhp)
     {
-        $dataDecode = json_decode($data);
+        // $dataDecode = json_decode($data);
 
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
-        $total = count($dataDecode);
         
-        $orderDetail = OrderDetail::where('no_sampel', $no_sampel)->first();
+        $orderDetail = OrderDetail::where('cfr', $no_lhp)->get();
 
-        $kategori = explode('-', $orderDetail->kategori_2)[0];
-        foreach ($dataDecode as $key => $value) {
-            $parameter = Parameter::where('nama_lab', $value)->where('id_kategori', $kategori)->first();
-            if($parameter->status = 'AKREDITASI') {
+        foreach ($orderDetail as  $value) {
+            $kategori = explode('-', $value->kategori_2)[0];
+            $dataDecode = json_decode($value->parameter);
+        foreach ($dataDecode as $key => $val) {
+            $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
+            if ($parameter->status == 'AKREDITASI') {
                 $parameterAkreditasi++;
             } else {
                 $parameterNonAkreditasi++;
@@ -278,11 +281,13 @@ class LhpTemplate
 
         }
 
+            
+        }
         if ($parameterAkreditasi == 0) {
             return false;
         }
 
-        if($total / $parameterAkreditasi >= 0.6) {
+        if(($parameterAkreditasi + $parameterNonAkreditasi) / $parameterAkreditasi >= 0.6) {
             return true;
         } else {
             return false;

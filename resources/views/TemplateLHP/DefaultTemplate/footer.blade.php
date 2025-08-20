@@ -1,16 +1,16 @@
 @php
-    $qr = '';
+    $pangging = '';
     $file_qr = '';
     $tanggal_qr = '';
     $pading = '';
     if ($mode == 'downloadWSDraft') {
         $pading = 'margin-bottom: 40px;';
-        $qr = 'Halaman {PAGENO} - {nbpg}';
+        $pangging = 'Halaman {PAGENO} - {nbpg}';
     } else if($mode == 'downloadLHP' || $mode == 'downloadLHPFinal'){
         if (!is_null($header->file_qr)) {
-            $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            $pangging = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
         } else {
-            $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
+            $pangging = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
         }
     }
 
@@ -52,7 +52,7 @@
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
-                        <tr><td><img src="{{$file_qr}}" width="70px" height="70px"></td></tr>
+                        <tr><td style="height: 70px;"><img src="{{$file_qr}}" width="50px" height="50px"></td></tr>
                         <tr><td style="height: 70px;"></td></tr>
                         <tr><td style="height: 10px;"></td></tr>
                     </table>
@@ -62,7 +62,7 @@
             <table 
                 style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
             >
-                <tr><td>{{$qr}}</td></tr>  
+                <tr><td>{{$pangging}}</td></tr>  
             </table>
         </td>
     </tr>
