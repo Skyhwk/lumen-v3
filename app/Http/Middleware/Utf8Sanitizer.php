@@ -15,20 +15,32 @@ class Utf8Sanitizer
         if (method_exists($response, 'getData')) {
             $data = $response->getData(true);
 
-            // <<< PENTING: tambahin "use ($request)" biar variabel kebawa ke dalam closure
-            array_walk_recursive($data, function (&$item, $key) use ($request) {
-                if (is_string($item) && !mb_check_encoding($item, 'UTF-8')) {
-                    // Log string bermasalah
+            // Pastikan $data adalah array sebelum diproses dengan array_walk_recursive
+            if (is_array($data)) {
+                // <<< PENTING: tambahin "use ($request)" biar variabel kebawa ke dalam closure
+                array_walk_recursive($data, function (&$item, $key) use ($request) {
+                    if (is_string($item) && !mb_check_encoding($item, 'UTF-8')) {
+                        // Log string bermasalah
+                        Log::warning('UTF-8 Malformed detected', [
+                            'route' => $request->path(),   // sekarang dijamin ada
+                            'field' => $key,
+                            'value_sample' => substr($item, 0, 100),
+                        ]);
+
+                        // Convert biar tetep aman
+                        $item = mb_convert_encoding($item, 'UTF-8', 'UTF-8');
+                    }
+                });
+            } else {
+                if(is_string($data) && !mb_check_encoding($data, 'UTF-8')) {
                     Log::warning('UTF-8 Malformed detected', [
                         'route' => $request->path(),   // sekarang dijamin ada
                         'field' => $key,
                         'value_sample' => substr($item, 0, 100),
                     ]);
-
-                    // Convert biar tetep aman
-                    $item = mb_convert_encoding($item, 'UTF-8', 'UTF-8');
+                    $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
                 }
-            });
+            }
 
             return response()->json(
                 $data,
