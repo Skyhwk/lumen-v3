@@ -634,7 +634,8 @@ class PersiapanSampleController extends Controller
 
     private function saveDetail(Request $request, $psh)
     {
-        if (!$request->detail) return false;
+        if (!$request->detail)
+            return false;
 
         $noSampels = array_keys($request->detail);
         $orderDetail = OrderDetail::whereIn('no_sampel', $noSampels)->get();
@@ -657,10 +658,12 @@ class PersiapanSampleController extends Controller
 
             foreach ($categories as $category => &$params) {
                 $od = $orderDetail->firstWhere('no_sampel', $sampleNumber);
-                if (!$od) continue;
+                if (!$od)
+                    continue;
 
                 $kategori = strtolower(explode('-', $od->kategori_2)[1] ?? '');
-                if ($kategori !== $category) continue;
+                if ($kategori !== $category)
+                    continue;
 
                 foreach ($params as $param => &$info) {
                     $decoded = collect(json_decode($od->persiapan));
@@ -850,20 +853,20 @@ class PersiapanSampleController extends Controller
         // return false;
 
         $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
-        
+
         // Pengecekan apakah semua no_sampel dari request ada di sampelNumbers
         $requestSamples = is_array($request->no_sampel) ? $request->no_sampel : [$request->no_sampel];
         $allSamplesExist = true;
-        
+
         foreach ($requestSamples as $sample) {
             if (in_array($sample, $sampelNumbers)) {
                 $allSamplesExist = false;
                 break;
             }
         }
-        
+
         return $allSamplesExist;
-        
+
     }
 
     private function compareByPersiapan($orderDetail, $psDetail)
@@ -894,12 +897,12 @@ class PersiapanSampleController extends Controller
         //     return true;
 
         // return false;
-        
+
         $kategoriKey = explode('-', strtolower($orderDetail->kategori_2))[1];
         $toArray = json_decode($psDetail->parameters, true);
         $preparedParams = isset($toArray[$kategoriKey]) ? array_keys($toArray[$kategoriKey]) : [];
         $requiredParams = array_map(fn($param) => explode(';', $param)[1], json_decode($orderDetail->parameter, true));
-        
+
         foreach ($requiredParams as $param) {
             if (in_array($param, $preparedParams)) {
                 return false;
@@ -924,20 +927,20 @@ class PersiapanSampleController extends Controller
             // dd($request->all());
             if (!$psHeader || !$psHeader->psDetail)
                 return response()->json(['message' => 'Sampel belum disiapkan update'], 404);
-    
+
             $diffSampleNumbers = $this->compareSampleNumber($psHeader, $request);
             if ($diffSampleNumbers)
                 return response()->json(['message' => 'No Sampel tidak sesuai'], 500);
-    
+
             foreach ($psHeader->psDetail as $psd) {
                 $orderDetail = $psHeader->orderHeader->orderDetail->where('no_sampel', $psd->no_sampel)->first();
-    
+
                 $diffParams = $orderDetail->kategori_2 == '1-Air' ? $this->compareByPersiapan($orderDetail, $psd) : $this->compareByParameter($orderDetail, $psd);
-                
+
                 if ($diffParams)
                     return response()->json(['message' => "Parameter tidak sesuai"], 500);
             }
-    
+
             return response()->json($psHeader, 200);
         } catch (\Throwable $th) {
             dd($th);
