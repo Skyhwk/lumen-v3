@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class TranslatorService
 {
@@ -24,16 +25,17 @@ class TranslatorService
     public function translate(string $text, string $source, string $target): ?string
     {
         try {
-            $response = Http::post($this->apiUrl, [
-                'text' => $text,
-                'source' => $source,
-                'target' => $target,
-            ]);
+            Log::warning("module translate cannot use now!!!!!!");
+            // $response = Http::post($this->apiUrl, [
+            //     'text' => $text,
+            //     'source' => $source,
+            //     'target' => $target,
+            // ]);
 
-            if ($response->successful()) {
-                $response = json_decode($response->body());
-                return $response;
-            }
+            // if ($response->successful()) {
+            //     $response = json_decode($response->body());
+            //     return $response;
+            // }
         } catch (\Exception $e) {
             \Log::error('Translation API error: ' . $e->getMessage());
         }

@@ -41,6 +41,19 @@ class FdlMethodBahayaErgonomiController extends Controller
         return response()->json(['message' => 'Method not found.'], 400);
     }
 
+    public function checkHasVideo(Request $request)
+    {
+        $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 8)->first();
+        
+        if(!$fdl) return response()->json(['message' => 'Tidak ada data berdasarkan No. Sample tersebut.'], 401);
+        
+        if($fdl && $fdl->video_dokumentasi != null){ 
+            return response()->json(['message' => 'Video sudah di upload.', 'isset_video' => true], 200);
+        } else {
+            return response()->json(['message' => 'Video belum di upload.', 'isset_video' => false], 200);
+        }
+    }
+
     // public function storeVideo(Request $request)
     // {
     //     // Simpan file
