@@ -44,10 +44,14 @@ class LingkunganHidupSO2
         }else {
             $C = 0;
         }
-        // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        // $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
-
-        $satuan = 'µg/Nm³';
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
+        if (floatval($C) < 2.1531)
+            $C = '<2.1531';
+        if (floatval($C1) < 0.0022)
+            $C1 = '<0.0022';
+        if (floatval($C2) < 0.00082)
+            $C2 = '<0.00082';
 
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -63,10 +67,9 @@ class LingkunganHidupSO2
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $C,
-            'hasil2' => null,
-            'hasil3' => null,
-            'hasil4' => null,
+            'C' => $C,
+            'C1' => $C1,
+            'C2' => $C2,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
