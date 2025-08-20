@@ -609,8 +609,7 @@ class FdlMethodNbmController extends Controller
         try {
             // Check for the existence of the sample with the appropriate category and parameter
             $check = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
+                ->whereIn('kategori_3', ['27-Udara Lingkungan Kerja', '11-Udara Ambient', '53-Ergonomi'])
                 ->where('parameter', 'LIKE', '%Ergonomi%')
                 ->where('is_active', true)
                 ->first();
@@ -632,7 +631,7 @@ class FdlMethodNbmController extends Controller
                     ], 200);
                 }
             } else {
-                return response()->json(['message' => 'Tidak ada data berdasarkan No. Sample tersebut.'], 401);
+                return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }
         } catch (Exception $e) {
             dd($e);
