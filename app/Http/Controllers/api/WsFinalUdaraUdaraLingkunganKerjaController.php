@@ -150,7 +150,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 				return Datatables::of($data)->make(true);
 			} else if ($parameterArray[1] == 'Medan Magnit Statis' || $parameterArray[1] == 'Medan Listrik' || $parameterArray[1] == 'Power Density') {
-				$data = MedanLmHeader::with('datalapangan', 'ws_udara', 'orderDetail')
+				$data = MedanLmHeader::with('datalapangan', 'ws_udara')
 					->where('no_sampel', $request->no_sampel)
 					->where('is_approve', true)
 					->where('is_active', true)
@@ -173,7 +173,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
 
-			$lingkunganData = LingkunganHeader::with('ws_udara')
+			$lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approved', 1)
 				->where('status', 0)
@@ -225,6 +225,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$item->satuan = $bakuMutu->satuan ?? null;
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
 				$item->method = $bakuMutu->method ?? null;
+			
 			}
 
 

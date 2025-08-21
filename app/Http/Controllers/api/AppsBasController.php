@@ -554,7 +554,7 @@ class AppsBasController extends Controller
 
                 return array_merge($carry, $results);
             }, []);
-
+            // dd($formattedData);
             $groupedData = [];
 
             // dd(json_decode($formattedData[0]['parameters'], true));
@@ -628,9 +628,14 @@ class AppsBasController extends Controller
                     ]);
                 }
             }
+            $filteredResult = array_filter($finalResult, function ($item) use ($request) {
+                return strpos($item['kategori'], $request->kategori) !== false;
+            });
 
-            $finalResult = array_values($finalResult);
-
+            // Reset index biar mulai dari 0
+            $finalResult = array_values($filteredResult);
+            // $finalResult = array_values($finalResult);
+            // dd($filteredResult);
             // Ambil semua no_order dari hasil akhir
             $orderNos = array_column($finalResult, 'no_order');
             $kategoriList = is_array($request['kategori'])
@@ -864,7 +869,7 @@ class AppsBasController extends Controller
                 }
 
             }
-
+            // dd($filteredResult);
             return DataTables::of($filteredResult)->make(true);
         } catch (\Exception $ex) {
             return response()->json([
@@ -1354,6 +1359,7 @@ class AppsBasController extends Controller
 
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
     {
+        
         $psh = $dataPersiapan;
         if (!$psh) {
             return response()->json([
@@ -1587,6 +1593,7 @@ class AppsBasController extends Controller
             $jam = $menit = $hariSelesai = $tanggal = '';
         }
         $samplerKategoriMap = [];
+        // dd($samplerJadwal);
         foreach ($samplerJadwal as $jadwal) {
             $samplerName = $jadwal->sampler;
             $kategoriArray = json_decode($jadwal->kategori, true);

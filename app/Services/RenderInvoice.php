@@ -521,7 +521,7 @@ class RenderInvoice
                                         <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span><br>
                                         ');  
                                     } else {
-                                        $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik * count($dataSampling->periode)));
+                                        $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
                                         $pdf->writeHTML('
                                             <tr>
                                                 <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
@@ -547,7 +547,7 @@ class RenderInvoice
 
                                     $pdf->writeHTML('
                                             </td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $dataSampling->jumlah_titik * count($dataSampling->periode) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $dataSampling->jumlah_titik . '</td>
                                             <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
                                             <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $total_harga_qtc . '</td>
                                         </tr>
