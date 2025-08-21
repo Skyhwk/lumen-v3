@@ -22,7 +22,7 @@ use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
-use App\Jobs\RenderLhp;
+use App\Services\LhpTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -123,7 +123,7 @@ class DraftUdaraKebisinganController extends Controller
             }
             $parameter = \explode(', ', $request->parameter);
             $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
-            $header->no_sampel = ($request->noSampel != '') ? $request->noSampel : NULL;
+            // $header->no_sampel = ($request->noSampel != '') ? $request->noSampel : NULL;
 
             $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL;
             $header->id_kategori_2 = ($request->kategori_2 != '') ? explode('-', $request->kategori_2)[0] : NULL;
@@ -141,16 +141,11 @@ class DraftUdaraKebisinganController extends Controller
             $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
             $header->nama_karyawan = 'Abidah Walfathiyyah';
             $header->jabatan_karyawan = 'Technical Control Supervisor';
-            // $header->nama_karyawan = 'Kharina Waty';
-            // $header->jabatan_karyawan = 'Technical Control Manager';
             $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
             $header->tanggal_lhp = ($request->tanggal_lhp != '') ? $request->tanggal_lhp : NULL;
             $header->save();
 
-            // Kode Lama
-            // $detail = LhpsKebisinganDetail::where('id_header', $header->id)->first();
-            // if ($detail != null)
-            //     $detail = LhpsKebisinganDetail::where('id_header', $header->id)->delete();
+      
 
             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->first();
             if ($detail != null) {
@@ -162,7 +157,6 @@ class DraftUdaraKebisinganController extends Controller
                 $detail = LhpsKebisinganDetail::where('id_header', $header->id)->delete();
             }
 
-            // dd($request->parameter);
             if ($request->parameter == "Kebisingan (P8J)") {
                 $cleaned_key_nama_pekerja = array_map(fn($k) => trim($k, " '\""), array_keys($request->nama_pekerja));
                 $cleaned_nama_pekerja = array_combine($cleaned_key_nama_pekerja, array_values($request->nama_pekerja));
@@ -172,11 +166,7 @@ class DraftUdaraKebisinganController extends Controller
             if ($request->hasil_uji) {
                 $cleaned_key_hasil_uji = array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil_uji));
                 $cleaned_hasil_uji = array_combine($cleaned_key_hasil_uji, array_values($request->hasil_uji));
-                // $cleaned_key_min = array_map(fn($k) => trim($k, " '\""), array_keys($request->min ?? []));
-                // $cleaned_min = array_combine($cleaned_key_min, array_values($request->min ?? []));
-                // $cleaned_key_max = array_map(fn($k) => trim($k, " '\""), array_keys($request->max ?? []));
-                // $cleaned_max = array_combine($cleaned_key_max, array_values($request->max ?? []));
-                // dd($request->all());
+          
             }
             if ($request->ls) {
                 $cleaned_key_ls = array_map(fn($k) => trim($k, " '\""), array_keys($request->ls));
@@ -194,8 +184,8 @@ class DraftUdaraKebisinganController extends Controller
             $cleaned_key_noSampel = array_map(fn($k) => trim($k, " '\""), array_keys($request->no_sampel));
             $cleaned_noSampel = array_combine($cleaned_key_noSampel, array_values($request->no_sampel));
 
-            foreach ($request->param as $key => $val) {
-                // dd($cleaned_ls[$val]);
+            foreach ($request->no_sampel as $key => $val) {
+                // dd(array_key_exists($val, $cleaned_noSampel), $cleaned_noSampel, $val);
                 if (array_key_exists($val, $cleaned_noSampel)) {
                     $detail = new LhpsKebisinganDetail;
                     $detail->id_header = $header->id;
@@ -226,7 +216,6 @@ class DraftUdaraKebisinganController extends Controller
                     $header->file_qr = $file_qr;
                     $header->save();
                 }
-
                 $groupedByPage = [];
                 if (!empty($custom)) {
                     foreach ($custom as $item) {
@@ -237,17 +226,20 @@ class DraftUdaraKebisinganController extends Controller
                         $groupedByPage[$page][] = $item;
                     }
                 }
+   
 
-                $job = new RenderLhp($header, $details, 'downloadWSDraft', $groupedByPage);
-                $this->dispatch($job);
+                if($parameter[0] == 'Kebisingan' || $parameter[0] == 'Kebisingan (8 Jam)'){
+                $fileName = LhpTemplate::setDataDetail($details)
+                            ->setDataHeader($header)
+                            ->whereView('DraftKebisingan')
+                            ->render();
 
-                $job = new RenderLhp($header, $details, 'downloadLHP', $groupedByPage);
-                $this->dispatch($job);
-
-                $job = new RenderLhp($header, $details, 'downloadLHPFinal', $groupedByPage);
-                $this->dispatch($job);
-
-                $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
+                } else {
+                     $fileName = LhpTemplate::setDataDetail($details)
+                                    ->setDataHeader($header)
+                                    ->whereView('DraftKebisinganPersonal')
+                                    ->render();
+                }
 
                 $header->file_lhp = $fileName;
                 $header->save();
@@ -301,8 +293,8 @@ class DraftUdaraKebisinganController extends Controller
                     //     $data1[$i]['paparan'] = $val->data_lapangan_personal->waktu_paparan;
                     // } else {  // }
                     $data1[$i]['lokasi'] = $val->data_lapangan->lokasi_titik_sampling ?? $val->data_lapangan->keterangan ?? $val->data_lapangan_personal->keterangan ?? null;
-                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran;
-                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat;
+                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran ?? null;
+                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat ?? null;
                     $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
                     $data1[$i]['id'] = $val->id;
                     $data1[$i]['no_sampel'] = $val->no_sampel;
