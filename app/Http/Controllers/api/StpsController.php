@@ -570,21 +570,29 @@ class StpsController extends Controller
                                 ->where('kategori_2', $data_sampling['kategori_1'])
                                 ->where('kategori_3', $data_sampling['kategori_2'])
                                 ->whereJsonContains('regulasi', $data_sampling['regulasi'])
-                                ->whereJsonContains('parameter', $data_sampling['parameter'])
+                                // ->whereJsonContains('parameter', $data_sampling['parameter']) // dipindah ke bawah pengecekane
                                 ->where('periode', $item['periode_kontrak'])
                                 ->whereIn('no_sampel', $pra_no_sample)
                                 ->where('is_active', 1)
-                                ->pluck('no_sampel')
-                                ->toArray();
+                                ->get();
 
                             $penawaran_keys = array_merge(...array_map('array_keys', $data_sampling['penamaan_titik']));
 
                             $sampleNumbers = [];
-                            foreach ($sampleNumbersFromOrder as $sampleNumber) {
-                                $number = explode('/', $sampleNumber)[1];
+                            foreach ($sampleNumbersFromOrder as $orderDetail) {
+                                $number = explode('/', $orderDetail->no_sampel)[1];
 
-                                if (in_array($number, $penawaran_keys)) {
-                                    $sampleNumbers[] = $sampleNumber;
+                                $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
+                                $inputParameter = $data_sampling['parameter'];
+
+                                // cek isi dulu
+                                $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+
+                                // jika isi ga cocok, cek total
+                                $totalSame = count($orderParameter) === count($inputParameter);
+
+                                if (in_array($number, $penawaran_keys) && ($parameterMatch || $totalSame)) {
+                                    $sampleNumbers[] = $orderDetail->no_sampel;
                                 }
                             }
 
