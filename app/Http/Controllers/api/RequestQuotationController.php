@@ -3421,14 +3421,14 @@ class RequestQuotationController extends Controller
                                         if($alreadyOrdered){
                                             // dump('sudah Ordered');
                                             if($i < count($mutationKey)){
-                                                $penamaan_titik_fixed[] = (object) [$mutationKey[$i] => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($mutationKey[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             } else {
-                                                $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         } else {
                                             // dump('Belum Ordered');
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     }
@@ -3436,7 +3436,7 @@ class RequestQuotationController extends Controller
                                 } else {
                                     foreach ($xyz->penamaan_titik as $i => $pt) {
                                         $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 } 
@@ -3478,14 +3478,14 @@ class RequestQuotationController extends Controller
                                         // dump('sudah Ordered');
                                         // dump($i, $countOld, $oldKeys);
                                         if($i < count($keysOldFoundPenamaanTitik)){
-                                            $penamaan_titik_fixed[] = (object) [$keysOldFoundPenamaanTitik[$i] => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         } else {
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     } else {
                                         // dump('Belum Ordered');
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }
@@ -5220,7 +5220,7 @@ class RequestQuotationController extends Controller
                 $diffPeriod = array_diff($period, $oldPeriod);
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 foreach ($period as $k => $per) {
-                    dump($per);
+                    // dump($per);
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -5477,14 +5477,14 @@ class RequestQuotationController extends Controller
                                         if($alreadyOrdered){
                                             // dump('sudah Ordered');
                                             if($i < count($mutationKey)){
-                                                $penamaan_titik_fixed[] = (object) [$mutationKey[$i] => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($mutationKey[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             } else {
-                                                $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         } else {
                                             // dump('Belum Ordered');
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     }
@@ -5492,7 +5492,7 @@ class RequestQuotationController extends Controller
                                 } else {
                                     foreach ($xyz->penamaan_titik as $i => $pt) {
                                         $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }
@@ -5536,14 +5536,14 @@ class RequestQuotationController extends Controller
                                         // dump('sudah Ordered');
                                         // dump($i, $countOld, $oldKeys);
                                         if($i < count($keysOldFoundPenamaanTitik)){
-                                            $penamaan_titik_fixed[] = (object) [$keysOldFoundPenamaanTitik[$i] => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         } else {
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     } else {
                                         // dump('Belum Ordered');
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }
