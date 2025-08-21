@@ -473,7 +473,7 @@ class WsFinalUdaraErgonomiController extends Controller
 
 			if ($request->id) {
 				$data = OrderDetail::where('id', $request->id)->first();
-				$data->status = 1;
+				$data->status = 2;
 				$data->keterangan_1 = $request->keterangan_1;
 				$data->save();
 

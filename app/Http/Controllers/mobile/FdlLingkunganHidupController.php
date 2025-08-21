@@ -451,21 +451,18 @@ class FdlLingkunganHidupController extends Controller
                             ];
                         }
                     } else if (str_contains($a, 'Dustfall')) {
-                        
                         if ($request->keterangan_alat[$a] != '') {
                             if($request->keterangan_alat[$a] == 'pemasangan_alat'){
-                                
                                 $pengukuran = [
                                     'keterangan' => $request->keterangan_alat[$a] ?? null,
                                     'tanggal_pemasangan' => $request->tanggal_pemasangan[$a] ?? null,
-                                    'luas_botol' => $request->luas_botol[$a] . ' m2'?? null ,
+                                    'luas_botol' => ($request->luas_botol[$a] ?? null) ? $request->luas_botol[$a] . ' m2' : null,
                                 ];
                             }else{
-                                
                                 $pengukuran = [
                                     'keterangan' => $request->keterangan_alat[$a] ?? null,
                                     'tanggal_selesai' => $request->tanggal_selesai[$a] ?? null,
-                                    'volume_filtrat' => $request->volume_filtrat[$a]. ' liter' ?? null ,
+                                    'volume_filtrat' => ($request->volume_filtrat[$a] ?? null) ? $request->volume_filtrat[$a] . ' liter' : null,
                                 ];
                             }
                         }
