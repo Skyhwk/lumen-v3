@@ -143,16 +143,6 @@ class RenderPersiapanSample
                             <tr>
         ');
 
-            // if (strpos($dataHeader->tanggal_sampling, ',') !== false) {
-            //     $tanggal = explode(',', $dataHeader->tanggal_sampling);
-            //     usort($tanggal, function ($a, $b) {
-            //         $dateA = DateTime::createFromFormat('Y-m-d', trim($a));
-            //         $dateB = DateTime::createFromFormat('Y-m-d', trim($b));
-            //         return $dateA <=> $dateB;
-            //     });
-            //     $pdf->WriteHTML('<td colspan="8" class="custom1" style="text-align: right; padding-right: 3px; font-size: 11px;">' . $this->IndoDate(trim($tanggal[0])) . ' s/d ' . $this->IndoDate(trim(end($tanggal))));
-            // } else {
-            // }
             $pdf->WriteHTML('<td colspan="8" class="custom1" style="text-align: right; padding-right: 10px; font-size: 12px;">' . Carbon::parse($dataHeader->tanggal_sampling)->locale('id')->translatedFormat('d F Y') . '</td>');
 
             $pdf->WriteHTML('       </td>
@@ -343,6 +333,7 @@ class RenderPersiapanSample
 
             return $fileName;
         } catch (\Exception $ex) {
+            Log::info(["Error message" => $ex->getMessage(), "Error line" => $ex->getLine(), "Error file" => $ex->getFile()]);
             return response()->json([
                 'message' => $ex->getMessage(),
                 'line' => $ex->getLine(),
