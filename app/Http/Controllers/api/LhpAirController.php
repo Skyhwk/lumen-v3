@@ -116,7 +116,7 @@ class LhpAirController extends Controller
     public function rePrint(Request $request) 
     {
         DB::beginTransaction();
-        $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->firstOrFail();
+        $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1; 
 
         $detail = LhpsAirDetail::where('id_header', $header->id)->get();
@@ -150,14 +150,6 @@ class LhpAirController extends Controller
                 ->render('downloadLHP');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi = $header->count_revisi + 1;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request);
-                }
-            }
             $header->save();
             // dd($header);
         }
@@ -173,7 +165,7 @@ class LhpAirController extends Controller
         DB::commit();
 
         return response()->json([
-            'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!'
+            'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
         ], 200);
     }
 }
