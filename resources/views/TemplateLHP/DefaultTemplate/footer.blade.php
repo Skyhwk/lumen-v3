@@ -42,7 +42,7 @@
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
-                        <tr><td style="height: 70px;"><img src="{{$file_qr}}" width="50px" height="50px"></td></tr>
+                        <tr><td style="height: 70px;"></td></tr>
                         <tr><td><strong>(<u>{{$header->nama_karyawan}}</u>)</strong></td></tr>
                         <tr><td>{{$header->jabatan_karyawan}}</td></tr>
                     </table>
@@ -61,8 +61,13 @@
 
             <table 
                 style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
-            >
-                <tr><td>{{$pangging}}</td></tr>  
+            >   
+            @if($mode == 'downloadLHP')
+            <tr>
+                <td><img src="{{$file_qr}}" width="50px" height="50px"></td>
+            </tr>
+            @endif   
+            <tr><td>{{$pangging}}</td></tr>  
             </table>
         </td>
     </tr>
