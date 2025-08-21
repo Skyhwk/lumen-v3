@@ -15,6 +15,8 @@ use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
+use App\Services\LhpTemplate;
+use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -109,5 +111,69 @@ class LhpAirController extends Controller
             ], 401);
         }
         
+    }
+
+    public function rePrint(Request $request) 
+    {
+        DB::beginTransaction();
+        $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->firstOrFail();
+        $header->count_print = $header->count_print + 1; 
+
+        $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+        $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+
+        if ($header != null) {
+            if ($header->file_qr == null) {
+                $file_qr = new GenerateQrDocumentLhp();
+                $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
+                if ($file_qr_path) {
+                    $header->file_qr = $file_qr_path;
+                    $header->save();
+                }
+            }
+
+            $groupedByPage = [];
+            if (!empty($custom)) {
+                foreach ($custom->toArray() as $item) {
+                    $page = $item['page'];
+                    if (!isset($groupedByPage[$page])) {
+                        $groupedByPage[$page] = [];
+                    }
+                    $groupedByPage[$page][] = $item;
+                }
+            }
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftAir')
+                ->render('downloadLHP');
+
+            $header->file_lhp = $fileName;
+            if ($header->is_revisi == 1) {
+                $header->is_revisi = 0;
+                $header->is_generated = 0;
+                $header->count_revisi = $header->count_revisi + 1;
+                if ($header->count_revisi > 2) {
+                    $this->handleApprove($request);
+                }
+            }
+            $header->save();
+            // dd($header);
+        }
+
+        $servicePrint = new PrintLhp();
+        $servicePrint->print($request->no_sampel);
+        
+        if (!$servicePrint) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+        }
+        
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!'
+        ], 200);
     }
 }
