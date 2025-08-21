@@ -26,6 +26,7 @@ use App\Models\MasterBakumutu;
 
 use App\Models\LingkunganHeader;
 use App\Models\DirectLainHeader;
+use App\Models\PartikulatHeader;
 use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
@@ -86,13 +87,20 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
 				->addSelect(DB::raw("'subKontrak' as data_type"))
 				->get();
+			$partikulat = PartikulatHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approve', 1)
+				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+				->addSelect(DB::raw("'partikulat' as data_type"))
+				->get();
 
 
 
 			$combinedData = collect()
 				->merge($lingkunganData)
 				->merge($subkontrak)
-				->merge($directData);
+				->merge($directData)
+				->merge($partikulat);
 
 
 			$processedData = $combinedData->map(function ($item) {
@@ -105,6 +113,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						break;
 					case 'direct':
 						$item->source = 'Direct Lain';
+						break;
+					case 'partikulat':
+						$item->source = 'Partikulat';
 						break;
 				}
 				return $item;
