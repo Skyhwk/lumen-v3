@@ -3241,11 +3241,11 @@ class RequestQuotationController extends Controller
                     $cek = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataH->id)->where('periode_kontrak', $per)->first();
                     if (!is_null($cek)) {
                         $dataD = $cek;
-                        $oldData = json_decode($cek->data_pendukung_sampling, true);
+                        $oldDatas = json_decode($cek->data_pendukung_sampling, true);
                     } else {
                         $dataD = new QuotationKontrakD;
                         $dataD->id_request_quotation_kontrak_h = $dataH->id;
-                        $oldData = null;
+                        $oldDatas = null;
                     }
                     $tempUsedOldData = [];
                     $checkOldQtRemaining = [];
@@ -3383,7 +3383,7 @@ class RequestQuotationController extends Controller
                             // dump($dataH->data_lama);
                             // $dataLama = json_decode($dataH->data_lama);
 
-                            if($oldData != null && $checkOldQtRemaining->count() > 0){
+                            if(!$oldDatas != null && $checkOldQtRemaining->count() > 0){
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
 
@@ -3421,14 +3421,14 @@ class RequestQuotationController extends Controller
                                         if($alreadyOrdered){
                                             // dump('sudah Ordered');
                                             if($i < count($mutationKey)){
-                                                $penamaan_titik_fixed[] = (object) [$mutationKey[$i] => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($mutationKey[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             } else {
-                                                $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         } else {
                                             // dump('Belum Ordered');
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     }
@@ -3436,15 +3436,15 @@ class RequestQuotationController extends Controller
                                 } else {
                                     foreach ($xyz->penamaan_titik as $i => $pt) {
                                         $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 } 
                             } else {
                                 // kalau ada data lama yang sama periodenya
                                 $foundOldPenamaanTitik = null;
-                                if($oldData){
-                                    foreach (reset($oldData)['data_sampling'] as $oldSampling) {
+                                if($oldDatas){
+                                    foreach (reset($oldDatas)['data_sampling'] as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                         $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
@@ -3478,14 +3478,14 @@ class RequestQuotationController extends Controller
                                         // dump('sudah Ordered');
                                         // dump($i, $countOld, $oldKeys);
                                         if($i < count($keysOldFoundPenamaanTitik)){
-                                            $penamaan_titik_fixed[] = (object) [$keysOldFoundPenamaanTitik[$i] => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         } else {
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     } else {
                                         // dump('Belum Ordered');
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }
@@ -5220,7 +5220,7 @@ class RequestQuotationController extends Controller
                 $diffPeriod = array_diff($period, $oldPeriod);
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 foreach ($period as $k => $per) {
-                    dump($per);
+                    // dump($per);
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -5477,14 +5477,14 @@ class RequestQuotationController extends Controller
                                         if($alreadyOrdered){
                                             // dump('sudah Ordered');
                                             if($i < count($mutationKey)){
-                                                $penamaan_titik_fixed[] = (object) [$mutationKey[$i] => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($mutationKey[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             } else {
-                                                $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         } else {
                                             // dump('Belum Ordered');
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     }
@@ -5492,7 +5492,7 @@ class RequestQuotationController extends Controller
                                 } else {
                                     foreach ($xyz->penamaan_titik as $i => $pt) {
                                         $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }
@@ -5536,14 +5536,14 @@ class RequestQuotationController extends Controller
                                         // dump('sudah Ordered');
                                         // dump($i, $countOld, $oldKeys);
                                         if($i < count($keysOldFoundPenamaanTitik)){
-                                            $penamaan_titik_fixed[] = (object) [$keysOldFoundPenamaanTitik[$i] => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         } else {
-                                            $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                            $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                             $biggestNumberOfSampel++;
                                         }
                                     } else {
                                         // dump('Belum Ordered');
-                                        $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
+                                        $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                         $biggestNumberOfSampel++;
                                     }
                                 }

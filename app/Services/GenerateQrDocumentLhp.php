@@ -11,6 +11,7 @@ class GenerateQrDocumentLhp
 {
     public function insert($type_doc, $data, $generated_by)
     {
+
         $cek = QrDocument::where('id_document', $data->id)
             ->whereJsonContains('data->no_document', $data->no_lhp)
             ->first();
@@ -19,12 +20,20 @@ class GenerateQrDocumentLhp
             return $cek->file;
         DB::beginTransaction();
         try {
+
             $filename = 'LHP-' . \str_replace("/", "_", $data->no_lhp);
+            $dir = public_path() . "/qr_documents/";
+
+            if (!file_exists($dir)) {
+                mkdir($dir, 0777, true);
+            }
+
             $path = public_path() . "/qr_documents/" . $filename . '.svg';
             $link = 'https://www.intilab.com/validation/';
             $unique = 'isldc' . (int) floor(microtime(true) * 1000);
 
             QrCode::size(200)->generate($link . $unique, $path);
+            // dd($path);
 
             $dataQr = [
                 'id_document' => $data->id,
@@ -49,7 +58,9 @@ class GenerateQrDocumentLhp
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
-                'message' => $th->getMessage()
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
             ], 500);
         }
     }
