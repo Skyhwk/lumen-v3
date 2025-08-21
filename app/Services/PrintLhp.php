@@ -47,13 +47,13 @@ class PrintLhp
                     // ->where('pages', $request->pages)
                     ->print();
             }
-            if (!$print) {
-                // return false; // If printing fails, return false
-            } else {
-                $header->is_printed = 1; // Update status print to 1
-                $header->count_print = $header->count_print + 1; // Increment print count
-                $header->save();
-            }
+            // if (!$print) {
+            //     // return false; // If printing fails, return false
+            // } else {
+            //     $header->is_printed = 1; // Update status print to 1
+            //     $header->count_print = $header->count_print + 1; // Increment print count
+            //     $header->save();
+            // }
             DB::commit();
             // Return a success response
             return true;
