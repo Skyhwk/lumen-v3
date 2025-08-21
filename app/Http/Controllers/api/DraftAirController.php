@@ -891,6 +891,10 @@ class DraftAirController extends Controller
                 $header->approved_by = $this->karyawan;
                 $header->nama_karyawan = $this->karyawan;
                 $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                if($header->count_print < 1) {
+                    $header->is_printed = 1; 
+                    $header->count_print = $header->count_print + 1; 
+                }
                 $header->save();
 
                 HistoryAppReject::insert([
@@ -922,6 +926,8 @@ class DraftAirController extends Controller
                     DB::rollBack();
                     return response()->json(['message' => 'Gagal Melakukan Approve Data', 'status' => '401'], 401);
                 }
+
+                
 
                 DB::commit();
                 return response()->json([
