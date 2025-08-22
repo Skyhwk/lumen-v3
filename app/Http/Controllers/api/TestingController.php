@@ -667,16 +667,18 @@ class TestingController extends Controller
             $custom = LhpsAirCustom::where('id_header', $header->id)->get();
 
             if ($header != null) {
-                $file_qr = new GenerateQrDocumentLhp();
-                $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
-                if ($file_qr_path) {
-                    $header->file_qr = $file_qr_path;
-                    $header->save();
+                if ($header->file_qr == null) {
+                    $file_qr = new GenerateQrDocumentLhp();
+                    $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
+                    if ($file_qr_path) {
+                        $header->file_qr = $file_qr_path;
+                        $header->save();
+                    }
                 }
 
                 $groupedByPage = [];
                 if (!empty($custom)) {
-                    foreach ($custom as $item) {
+                    foreach ($custom->toArray() as $item) {
                         $page = $item['page'];
                         if (!isset($groupedByPage[$page])) {
                             $groupedByPage[$page] = [];
@@ -689,8 +691,7 @@ class TestingController extends Controller
                     ->setDataHeader($header)
                     ->setDataCustom($groupedByPage)
                     ->whereView('DraftAir')
-                    ->render();
-                // dd($fileName);
+                    ->render('downloadLHP');
 
                 $header->file_lhp = $fileName;
                 $header->save();
@@ -2529,59 +2530,6 @@ class TestingController extends Controller
                 'message' => 'error',
                 'error' => $e->getMessage()
             ], 500);
-        }
-    }
-
-    public function renderLHPAir(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-            $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-            $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-
-            if ($header != null) {
-                // if ($header->file_qr == null) {
-                //     $file_qr = new GenerateQrDocumentLhp();
-                //     $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
-                //     if ($file_qr_path) {
-                //         $header->file_qr = $file_qr_path;
-                //         $header->save();
-                //     }
-                // }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom->toArray() as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($header)
-                    ->setDataCustom($groupedByPage)
-                    ->whereView('DraftAir')
-                    ->render('downloadLHP');
-
-                $header->file_lhp = $fileName;
-                $header->save();
-            }
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
-            ], 200);
-        } catch (Throwable $e) {
-            DB::rollback();
-            return response()->json([
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ], 400);
         }
     }
 }
