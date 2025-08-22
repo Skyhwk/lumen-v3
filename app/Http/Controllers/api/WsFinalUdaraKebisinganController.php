@@ -6,18 +6,37 @@ use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\WsValueLingkungan;
 use App\Models\WsValueUdara;
+use App\Models\DetailLingkunganHidup;
+use App\Models\MicrobioHeader;
+use App\Models\DataLapanganIklimPanas;
+use App\Models\DataLapanganIklimDingin;
+use App\Models\DetailLingkunganKerja;
 use App\Models\DataLapanganKebisingan;
-
+use App\Models\DataLapanganGetaran;
+use App\Models\DataLapanganGetaranPersonal;
+use App\Models\DataLapanganCahaya;
+use App\Models\DataLapanganErgonomi;
+use App\Models\DataLapanganSinarUV;
+use App\Models\DataLapanganMedanLM;
 use App\Models\DataLapanganKebisinganPersonal;
+use App\Models\DataLapanganDebuPersonal;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 
-
+use App\Models\IklimHeader;
+use App\Models\GetaranHeader;
 use App\Models\KebisinganHeader;
+use App\Models\PencahayaanHeader;
 use App\Models\LingkunganHeader;
-
+use App\Models\DirectLainHeader;
+use App\Models\ErgonomiHeader;
+use App\Models\SinarUvHeader;
+use App\Models\MedanLmHeader;
+// use App\Models\PsikologiHeader;
+use App\Models\DebuPersonalHeader;
 
 use App\Http\Controllers\Controller;
+use App\Models\Parameter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
@@ -29,7 +48,17 @@ class WsFinalUdaraKebisinganController extends Controller
 
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "26-Kualitas Udara Dalam Ruang"])
 			->where('status', 0)
@@ -37,11 +66,27 @@ class WsFinalUdaraKebisinganController extends Controller
 			->whereJsonDoesntContain('parameter', [
 				"318;Psikologi"
 			])
-			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			// ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+			// ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
 
 		return Datatables::of($data)->make(true);
+	}
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::where('cfr', $request->cfr)
+			->orderByDesc('id')
+			->get()
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			});
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
 	}
 	public function convertHourToMinute($hour)
 	{
@@ -78,37 +123,58 @@ class WsFinalUdaraKebisinganController extends Controller
 
 	public function detail(Request $request)
 	{
+		DB::beginTransaction();
 		try {
 			$parameters = json_decode(html_entity_decode($request->parameter), true);
 			$parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
+			if (in_array($request->kategori, $this->categoryKebisingan)) {
 				$data = KebisinganHeader::with(['ws_udara', 'data_lapangan', 'data_lapangan_personal', 'orderDetail'])
 					->where('no_sampel', $request->no_sampel)
 					->where('is_approved', 1)
 					->where('status', 0)
-					->get();
-					$ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-				foreach ($data as $item) {
+					->first();
+
+				if ($data) {
+
 					if ($parameterArray[1] == 'Kebisingan (P8J)') {
-						$jam = $item->data_lapangan_personal->waktu_pengukuran ?? null;
-						
+						$jam = $data->data_lapangan_personal->waktu_pengukuran ?? null;
 					} else {
-						$jam = $item->data_lapangan->jam_pemaparan ?? null;
-				
+						$jam = $data->data_lapangan->jam_pemaparan ?? null;
+
 						$jamToMenit = $this->convertHourToMinute($jam);
-					
+
 						$totalMenit = $jam !== null ? $jamToMenit : null;
 					}
-					$item->nab = isset($totalMenit) ? $this->getNabKebisingan($totalMenit) : null;
-					$regulasi = json_decode($item->orderDetail->regulasi);
-					$item->method = explode('-', $regulasi[0])[1] ?? null;
-					
-					$ws->nab = $item->nab;
-					$ws->save();
-				}
-				return Datatables::of($data)->make(true);
 
-			
+					$data->ws_udara->nab = isset($totalMenit) ? $this->getNabKebisingan($totalMenit) : null;
+					$idParameter = explode(';', $parameters[0])[0];
+					$method = Parameter::where('id', $idParameter)->first()->method ?? '-';
+
+					$data->save();
+
+					DB::commit();
+
+					$data->method = $method;
+				} else {
+					$data = collect();
+				}
+
+				return response()->json([
+					'data' => [$data],
+					'message' => 'Berhasil mendapatkan data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+			} else {
+				DB::rollBack();
+				return response()->json([
+					'message' => 'Kategori tidak sesuai',
+					'status' => 404,
+				], 404);
+			}
 		} catch (\Throwable $th) {
+			DB::rollBack();
+			dd($th);
 			return response()->json([
 				'message' => $th->getMessage(),
 			], 401);
@@ -117,6 +183,7 @@ class WsFinalUdaraKebisinganController extends Controller
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
+
 		if (is_array($request->parameter)) {
 			foreach ($request->parameter as $param) {
 				$paramParts = explode(";", $param);
@@ -125,6 +192,7 @@ class WsFinalUdaraKebisinganController extends Controller
 				}
 			}
 		}
+		if (in_array($request->kategori, $this->categoryKebisingan)) {
 			$noOrder = explode('/', $request->no_sampel)[0] ?? null;
 
 			$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
@@ -135,6 +203,8 @@ class WsFinalUdaraKebisinganController extends Controller
 				return (int) explode('/', $item)[1];
 			})->values();
 
+			$totLapangan = $lapangan2->count();
+
 			try {
 				$data = [];
 				$model = in_array("Kebisingan (P8J)", $parameterNames)
@@ -142,8 +212,19 @@ class WsFinalUdaraKebisinganController extends Controller
 					: DataLapanganKebisingan::class;
 
 				$data = $model::where('no_sampel', $request->no_sampel)->first();
+
+				if (!$data) return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);
+
+				$urutan = $lapangan2->search($data->no_sampel);
+				$urutanDisplay = $urutan + 1;
+				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
 				$data['parameter'] = $parameterNames[0];
-				
+				// dd([
+				// 	'no_order' => $noOrder,
+				// 	'total_lapangan' => $totLapangan,
+				// 	'lapangan' => $lapangan2,
+				// 	'data' => $data,
+				// ]);
 
 				if ($data) {
 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
@@ -151,7 +232,9 @@ class WsFinalUdaraKebisinganController extends Controller
 			} catch (\Exception $ex) {
 				dd($ex);
 			}
-		
+		} else {
+			$data = [];
+		}
 	}
 	public function rejectAnalys(Request $request)
 	{
@@ -174,7 +257,6 @@ class WsFinalUdaraKebisinganController extends Controller
 			} else {
 				$data = [];
 			}
-
 		} catch (\Exception $ex) {
 			dd($ex);
 		}
@@ -206,7 +288,6 @@ class WsFinalUdaraKebisinganController extends Controller
 					'success' => true,
 					'status' => 200,
 				]);
-
 			} else {
 				$data = [];
 			}
@@ -216,7 +297,6 @@ class WsFinalUdaraKebisinganController extends Controller
 				'status' => 401,
 			], 401);
 		}
-
 	}
 
 	public function AddSubKontrak(Request $request)
@@ -502,7 +582,6 @@ class WsFinalUdaraKebisinganController extends Controller
 						}
 
 						$hasil['hasilc2'] = null;
-
 					} else if ($parameter == 'TSP (8 Jam)') {
 						if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
 							return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
@@ -557,7 +636,6 @@ class WsFinalUdaraKebisinganController extends Controller
 						if ($hasil['hasilc2'] == 0.0) {
 							$hasil['hasilc2'] = '';
 						}
-
 					}
 				}
 
@@ -586,10 +664,7 @@ class WsFinalUdaraKebisinganController extends Controller
 					if ($hasil['hasilc2'] == 0.0) {
 						$hasil['hasilc2'] = '';
 					}
-
 				}
-
-
 			}
 			return $hasil; // Mengembalikan array hasil
 		} catch (\Exception $e) {
@@ -699,7 +774,6 @@ class WsFinalUdaraKebisinganController extends Controller
 			DB::rollBack();
 			return response()->json(['message' => 'Terjadi kesalahan: ' . $ex->getMessage()], 500);
 		}
-
 	}
 
 	public function getKaryawan(Request $request)
@@ -726,9 +800,7 @@ class WsFinalUdaraKebisinganController extends Controller
 					'message' => 'Data berhasil diupdate.',
 					'status' => 200
 				]);
-
 			}
-
 		} catch (Exception $e) {
 			DB::rollBack();
 			return response()->json([
@@ -754,7 +826,6 @@ class WsFinalUdaraKebisinganController extends Controller
 					'message' => 'Data berhasil diupdate.',
 					'status' => 200
 				]);
-
 			}
 		} catch (Exception $e) {
 			DB::rollBack();
@@ -765,47 +836,73 @@ class WsFinalUdaraKebisinganController extends Controller
 		}
 	}
 
-	// 	public function AddSubKontrak(Request $request)
-// 	{
-// 		DB::beginTransaction();
-// 		try {
-// 			$data = new Subkontrak();
-// 			$data->no_sampel = $request->no_sampel;
-// 			$data->category_id = $request->category;
-// 			$data->parameter = $request->parameter;
-// 			$data->jenis_pengujian = $request->jenis_pengujian;
-// 			$data->is_active = true;
-// 			$data->is_approve = 1;
-// 			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->approved_by = $this->karyawan;
-// 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->created_by = $this->karyawan;
-// 			$data->save();
-// 			// dd($data);
-// 			if ($request->category == 1) {
-// 				$ws = new WsValueAir();
-// 				$ws->no_sampel = $request->no_sampel;
-// 				$ws->id_subkontrak = $data->id;
-// 				$ws->hasil = $request->hasil;
-// 				$ws->is_active = true;
-// 				$ws->status = 0;
-// 				$ws->save();
-// 			}
 
-	// 			DB::commit();
-// 			return response()->json([
-// 				'message' => 'Data Berhasil Disimpan',
-// 				'status' => 200,
-// 				'success' => true
-// 			], 200);
-// 		} catch (exception $e) {
-// 			DB::rollback();
-// 			return response()->json([
-// 				'message' => $e->getMessage(),
-// 				'status' => 500,
-// 				'line' => $e->getLine()
-// 			], 500);
-// 		}
-// 	}
-// }
+
+
+
+
+
+
+
+
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$dataLapangan = DataLapanganKebisinganPersonal::where('no_sampel', $request->no_sampel)->update([
+				'is_approve' => 0,
+			]);
+
+			if (!$dataLapangan) {
+				$dataLapangan = DataLapanganKebisingan::where('no_sampel', $request->no_sampel)->update([
+					'is_approve' => 0,
+				]);
+			}
+
+			$kebisinganHeader = KebisinganHeader::where('no_sampel', $request->no_sampel)
+				->update([
+					'is_approved' => 0
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveAll(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'status' => 1,
+				]);
+
+			DB::commit();
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
 }

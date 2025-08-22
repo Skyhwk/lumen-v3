@@ -28,6 +28,11 @@
             <div>021-5089-8988/89 contact@intilab.com</div>
         </td>
         <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
+            @if($mode == 'downloadLHP')
+                @if($header->count_print > 1)
+                    <strong>Cetakan ke-{{$header->count_print}}</strong><br/>
+                @endif
+            @endif
             Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
             @if ($mode != 'downloadWSDraft')
             <br>Halaman {PAGENO} - {nbpg}
@@ -42,7 +47,7 @@
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
-                        <tr><td style="height: 70px;"><img src="{{$file_qr}}" width="50px" height="50px"></td></tr>
+                        <tr><td style="height: 70px;"></td></tr>
                         <tr><td><strong>(<u>{{$header->nama_karyawan}}</u>)</strong></td></tr>
                         <tr><td>{{$header->jabatan_karyawan}}</td></tr>
                     </table>
@@ -61,8 +66,13 @@
 
             <table 
                 style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
-            >
-                <tr><td>{{$pangging}}</td></tr>  
+            >   
+            @if($mode == 'downloadLHP')
+            <tr>
+                <td><img src="{{$file_qr}}" width="50px" height="50px"></td>
+            </tr>
+            @endif   
+            <tr><td>{{$pangging}}</td></tr>  
             </table>
         </td>
     </tr>
