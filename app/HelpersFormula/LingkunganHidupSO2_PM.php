@@ -4,12 +4,22 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupPM
+class LingkunganHidupSO2
 {
     public function index($data, $id_parameter, $mdl) {
         $ks = null;
         // dd(count($data->ks));
+        if (is_array($data->ks)) {
+            $ks = number_format(array_sum($data->ks) / count($data->ks), 4);
+        }else {
+            $ks = $data->ks;
+        }
         $kb = null;
+        if (is_array($data->kb)) {
+            $kb = number_format(array_sum($data->kb) / count($data->kb), 4);
+        }else {
+            $kb = $data->kb;
+        }
 
         $Ta = floatval($data->suhu) + 273;
         $Qs = null;
@@ -26,34 +36,17 @@ class LingkunganHidupPM
         $Vs = null;
         $vl = null;
         $st = null;
-        $satuan = null;
 
-        $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
-        // dd($Vstd,$nilQs,$dur);
-        if((int)$Vstd <= 0) {
-                $C = 0;
-                $Qs = 0;
-                $C1 = 0;
-            }else {
-                $C = \str_replace(",", "", number_format((($data->w2 - $data->w1) * 10 ** 6) / $Vstd, 4));
-                $Qs = $data->nilQs;
-                $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
-            }
-        if ($id_parameter == 310 || $id_parameter == 311 || $id_parameter == 312) {
-            // dd($C,$C1);
-            if (floatval($C) < 0.56)
-                $C = '<0.56';
-            if (floatval($C1) < 0.00056)
-                $C1 = '<0.00056';
-        } else if ($id_parameter == 313 || $id_parameter == 314 || $id_parameter == 315) {
-            if (floatval($C) < 0.58)
-                $C = '<0.58';
-            if (floatval($C1) < 0.00058)
-                $C1 = '<0.00058';
+        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+        if($Vu != 0.0) {
+            $C = \str_replace(",", "", number_format((floatval($ks) / floatval($Vu)) * 1000, 4));
+        }else {
+            $C = 0;
         }
-        // dd($data);
-        $w1 = $data->w1;
-        $w2 = $data->w2;
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
+
+        $satuan = 'ppm';
 
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -69,12 +62,10 @@ class LingkunganHidupPM
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            // 'hasil1' => $C,
-            // 'hasil2' => $C1,
-            // 'hasil3' => $C2,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
+            'hasil1' => $C,
+            'hasil2' => null,
+            'hasil3' => null,
+            'hasil4' => null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
