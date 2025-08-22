@@ -1034,7 +1034,6 @@ class InputParameterController extends Controller
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
 					$result = self::HelperColorimetriPadatan($request, $stp);
-                    $result = self::HelperColorimetri($request, $stp);
 					if($result->status == 200){
 						return response()->json([
 							'message'=> $result->message,
