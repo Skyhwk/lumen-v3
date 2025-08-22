@@ -237,7 +237,7 @@
 
 <body>
     <div class="header">
-        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN NBM (DRAFT)</h1>
     </div>
 
     <div class="content-container clearfix">
