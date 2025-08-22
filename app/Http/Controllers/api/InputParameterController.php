@@ -1034,6 +1034,17 @@ class InputParameterController extends Controller
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
 					$result = self::HelperColorimetriPadatan($request, $stp);
+					if($result->status == 200){
+						return response()->json([
+							'message'=> $result->message,
+							'status' => $result->status
+						], $result->status);
+					} else {
+						return response()->json([
+							'message'=> $result->message,
+							'status' => $result->status
+						], $result->status);
+					}
 				} else {
 					return response()->json([
 						'message'=> 'No Sample tidak ditemukan'
@@ -3314,29 +3325,30 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperColorimetriPadatan($request, $stp) {
+	public function HelperColorimetriPadatan($request, $stp)
+	{
 		$hp = $request->hp;
 		$fp = $request->fp;
 
-		$cek = Colorimetri::where('no_sampel',$request->no_sample)
+		$cek = Colorimetri::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
-			->where('is_active',true)
+			->where('is_active', true)
 			->first();
 
-		if(isset($cek->id)){
+		if (isset($cek->id)) {
 			return (object)[
-				'message'=> 'No Sample Sudah ada.!!',
+				'message' => 'No Sample Sudah ada.!!',
 				'status' => 401
 			];
-		}else{
+		} else {
 			$parame = $request->parameter;
 
-			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-			$check = OrderDetail::where('no_sampel',$request->no_sample)->where('is_active',true)->first();
+			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
+			$check = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
 
-			if(is_null($check)){
+			if (is_null($check)) {
 				return (object)[
-					'message'=> 'No Sample tidak ada.!!',
+					'message' => 'No Sample tidak ada.!!',
 					'status' => 401
 				];
 			}
@@ -3356,9 +3368,9 @@ class InputParameterController extends Controller
 				->process();
 
 
-			if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
 				return (object)[
-					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
@@ -3371,28 +3383,38 @@ class InputParameterController extends Controller
 				$data->template_stp       = $request->id_stp;
 				$data->jenis_pengujian     = $request->jenis_pengujian;
 				$data->hp                  = $request->hp;  //volume sample
-				if($request->parameter=='Persistent Foam'){$data->fp = $request->waktu;}else{$data->fp = $request->fp;}  //faktor pengenceran
+				if ($request->parameter == 'Persistent Foam') {
+					$data->fp = $request->waktu;
+				} else {
+					$data->fp = $request->fp;
+				}  //faktor pengenceran
 				$data->note               = $request->note;
 				$data->tanggal_terima     = $tgl_terima;
 				$data->created_by         = $this->karyawan;
 				$data->created_at         = Carbon::now()->format('Y-m-d H:i:s');
 				$data->save();
 
-				$datas = new FunctionValue();
-				$result = $datas->Colorimetri($par->id, $request, '', '');
+				// $datas = new FunctionValue();
+				// $result = $datas->Colorimetri($par->id, $request, '', '');
 
-				WsValueAir::create($result);
+				// WsValueAir::create($result);
+                $data_kalkulasi['id_colorimetri'] = $data->id;
+				$data_kalkulasi['no_sampel'] = $request->no_sample;
+				if (isset($data_kalkulasi['hasil_mpn'])) unset($data_kalkulasi['hasil_mpn']);
+				$kalkulasi1 = WsValueAir::create($data_kalkulasi);
+
+				// $this->insertActivity("Sample", "Colorimetri", $stp->name, $request->no_sample, $request->parameter);
 
 				DB::commit();
 				return (object)[
-					'message'=> 'Value Parameter berhasil disimpan.!',
+					'message' => 'Value Parameter berhasil disimpan.!',
 					'par' => $request->parameter,
 					'status' => 200
 				];
 			} catch (\Exception $e) {
 				DB::rollBack();
 				return (object)[
-					'message'=> 'Error : ' . $e->getMessage(),
+					'message' => 'Error : ' . $e->getMessage(),
 					'status' => 500
 				];
 			}
