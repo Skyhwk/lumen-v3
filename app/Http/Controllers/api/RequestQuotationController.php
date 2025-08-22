@@ -3435,11 +3435,39 @@ class RequestQuotationController extends Controller
                                 // kalau ada data lama yang sama periodenya
                                 $foundOldPenamaanTitik = null;
                                 if($oldDatas){
-                                    foreach (json_decode(reset($oldDatas)['data_sampling'], true) as $oldSampling) {
-                                        // dd($oldSampling, $xyz);
+                                    // dump(json_decode(reset($oldDatas)['data_sampling'], true));
+                                    // foreach (json_decode(reset($oldDatas)['data_sampling'], true) as $oldSampling) {
+                                    //     // dd($oldSampling, $xyz);
+                                    //     $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
+                                    //     $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
+                                    //     $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
+
+                                    //     if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                    //         if (in_array($oldSampling, $tempUsedOldData, true)) {
+                                    //             continue;
+                                    //         }
+
+                                    //         $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
+                                    //         $tempUsedOldData[] = $oldSampling;
+                                    //         break;
+                                    //     } 
+                                    // }
+                                    $firstDataSampling = reset($oldDatas)['data_sampling'] ?? null;
+
+                                    if (is_string($firstDataSampling)) {
+                                        // kalau masih string JSON → decode
+                                        $decodedSampling = json_decode($firstDataSampling, true);
+                                    } elseif (is_array($firstDataSampling)) {
+                                        // kalau sudah array → langsung pakai
+                                        $decodedSampling = $firstDataSampling;
+                                    } else {
+                                        $decodedSampling = [];
+                                    }
+
+                                    foreach ($decodedSampling as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
+                                        $regulasiSame  = $oldSampling['regulasi'] === $xyz->regulasi;
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
@@ -3449,7 +3477,7 @@ class RequestQuotationController extends Controller
                                             $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
                                             $tempUsedOldData[] = $oldSampling;
                                             break;
-                                        } 
+                                        }
                                     }
                                 }
 
