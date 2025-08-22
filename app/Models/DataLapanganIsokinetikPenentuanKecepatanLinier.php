@@ -12,6 +12,11 @@ class DataLapanganIsokinetikPenentuanKecepatanLinier extends Sector
 
     protected $guarded = [];
 
+    protected $casts = [
+        'dataDp' => 'array',
+        'uji_aliran' => 'array'
+    ];
+
     public function detail(){
         return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
         ->where('is_active', true);

@@ -3,21 +3,22 @@
 namespace App\HelpersFormula;
 
 use Carbon\Carbon;
-class LingkunganHidupNO2
-{
-    public function index($data, $id_parameter, $mdl) {
 
+class LingkunganHidupLogam_8J
+{
+    public function index($data, $id_parameter, $mdl)
+    {
+        // dd($data);
         $ks = null;
-        // dd(count($data->ks));
         if (is_array($data->ks)) {
             $ks = number_format(array_sum($data->ks) / count($data->ks), 4);
-        }else {
+        } else {
             $ks = $data->ks;
         }
         $kb = null;
         if (is_array($data->kb)) {
             $kb = number_format(array_sum($data->kb) / count($data->kb), 4);
-        }else {
+        } else {
             $kb = $data->kb;
         }
 
@@ -36,26 +37,37 @@ class LingkunganHidupNO2
         $Vs = null;
         $vl = null;
         $st = null;
-        $satuan = null;
+        $satuan = '';
 
-        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-        // dd($Vu);
-        if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * (10 / 25) * 1000, 4));
-        }else {
+        $arr_hasil = [];
+
+        $Vstd = number_format(($data->average_flow * $data->durasi) / 1000, 1);
+        if ((float) $Vstd <= 0) {
             $C = 0;
+            $Qs = 0;
+            $C1 = 0;
+        } else {
+            foreach($data->ks as $key => $value) {
+                $rawC = (($value - $data->kb[$key]) * ($data->vl / 1000) * 1) / $Vstd;
+
+                $result = \str_replace(",", "", number_format($rawC, 4));
+
+                array_push($arr_hasil, $result);
+            }
         }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
-        if (floatval($C) < 0.4623)
-            $C = '<0.4623';
-        if (floatval($C1) < 0.00046)
-            $C1 = '<0.00046';
-        if (floatval($C2) < 0.00025)
-            $C2 = '<0.00025';
+        $satuan = 'mg/m³';
+        $vl = $data->vl;
+
+        $C = count($arr_hasil) > 0 ? number_format(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+
+        if(!is_null($mdl) && $C < $mdl) {
+            $C = '<'.$mdl;
+        }
+
+        // dd($C, $C1, $C2);
 
         $processed = [
-            'tanggal_terima' => $data->tanggal_terima,
+            // 'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
             'durasi' => $data->durasi,
             // 'durasi' => $waktu,
@@ -68,10 +80,13 @@ class LingkunganHidupNO2
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
+            'hasil1' => $C,
+            'hasil2' => $C1,
+            'hasil3' => $C2,
+            'satuan' => $satuan,
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
-            'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,
@@ -84,5 +99,4 @@ class LingkunganHidupNO2
 
         return $processed;
     }
-
 }
