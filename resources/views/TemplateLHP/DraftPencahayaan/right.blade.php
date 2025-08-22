@@ -63,11 +63,11 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $methode_sampling }}</td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $period1 }} - {{ $period2 }}</td>
-                    </tr>
+                    </tr> -->
                 </table>
 
                 {{-- Regulasi --}}

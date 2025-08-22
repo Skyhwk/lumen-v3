@@ -63,7 +63,7 @@
                     </table>
                 @endif
             @else
-                @elseif($mode == 'downloadLHPFinal')
+                @if($mode == 'downloadLHPFinal')
                     <table
                         style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
