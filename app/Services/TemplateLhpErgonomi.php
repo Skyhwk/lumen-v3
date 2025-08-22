@@ -8,7 +8,6 @@ use Carbon\Carbon;
 
 class TemplateLhpErgonomi
 {
-    
     public function ergonomiRula($data = null)
     {
         try {
@@ -20,8 +19,56 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 5,
             ];
+            $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            ->where('method', 3)
+            ->first();
+            $pengukuran = json_decode($dataRula->pengukuran);
+            
+            $skor = 7;
+            $tingkatResiko = '';
+            $kategoriResiko = '';
+            $tindakan = '';
+            $result = '';
+            if ($skor >= 1 && $skor <= 2) {
+                $tingkatResiko = 0;
+                $kategoriResiko = 'Rendah';
+                $tindakan = 'Tidak ada tindakan yang diperlukan';
+            } elseif ($skor >= 3 && $skor <= 4) {
+                $tingkatResiko = 1;
+                $kategoriResiko = 'Sedang';
+                $tindakan = 'Mungkin diperlukan tindakan';
+            } elseif ($skor >= 5 && $skor <= 6) {
+                $tingkatResiko = 2;
+                $kategoriResiko = 'Tinggi';
+                $tindakan = 'Diperlukan tindakan';
+            } elseif ($skor >= 7) {
+                $tingkatResiko = 3;
+                $kategoriResiko = 'Sangat Tinggi';
+                $tindakan = 'Diperlukan tindakan sekarang';
+            } else {
+                $result = 'Belum ada Penilaian';
+            }
+            if ($skor !== null && $skor !== '') {
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor},Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko{$kategoriResiko}, sehingga kemungkinan {$tindakan} untuk mencegah terjadinya kecelakaan kerja dan penyakit akibat kerja.";
+            }
+
+            $pengukuran->result = $result;
+            $personal = (object) [
+                "no_sampel" => $dataRula->no_sampel,
+                "nama_pekerja" => $dataRula->nama_pekerja,
+                "usia" => $dataRula->usia,
+                "lama_kerja" => $dataRula->lama_kerja,
+                "jenis_kelamin" => $dataRula->jenis_kelamin,
+                "aktivitas_ukur" => $dataRula->aktivitas_ukur,
+                "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
+                "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
+                "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
+                "periode_analis" => null,
+            ];
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomirula')->render();
+            $html = View::make('ergonomirula',compact('pengukuran', 'personal'))->render();
+            
             return $html;
             $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
             $pdf->setAutoBottomMargin = 'stretch';
@@ -48,18 +95,7 @@ class TemplateLhpErgonomi
         ];
         $pdf = new PDF($mpdfConfig);
         $html = View::make('ergonomirwl')->render();
-        // --- TAMBAHKAN NOMOR HALAMAN DI SINI ---
-        // Format: Teks biasa 'Halaman {PAGENO} dari {nb}'
-        // {PAGENO} = nomor halaman saat ini
-        // {nb} = total jumlah halaman
-        $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
-        $pdf->setAutoBottomMargin = 'stretch';
-        // Add mPDF watermark
-        $pdf->SetWatermarkText('DRAFT');
-        $pdf->showWatermarkText = true;
-        $pdf->watermarkTextAlpha = 0.1;
-        $pdf->WriteHTML($html);
-        return $pdf->Output('laporan.pdf', 'I');
+        return $html;
     }
 
     public function ergonomiNbm($data = null)
@@ -326,7 +362,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiPotensiBahaya ($data = null) 
+    public function ergonomiPotensiBahaya ($data = null)
     {
         try {
             $mpdfConfig = [
@@ -369,7 +405,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiGontrak ($data = null ) 
+    public function ergonomiGontrak ($data = null )
     {   
         try {
             //code...
@@ -453,5 +489,4 @@ class TemplateLhpErgonomi
             }
         }
     }
-
 }

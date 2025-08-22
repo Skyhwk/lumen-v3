@@ -243,9 +243,9 @@ class PersiapanSampleController extends Controller
             ], 500);
         }
     }
-
-    public function preview(Request $request)
-    {
+   public function preview(Request $request)
+    {   
+        
         try {
             $tipe = explode("/", $request->no_document)[1] ?? null;
             $jadwal = [];
@@ -366,7 +366,7 @@ class PersiapanSampleController extends Controller
                 'no_sampel' => $item->no_sampel,
                 'parameters' => json_decode($item->parameters, true)
             ])->toArray() : [];
-
+           
             // Gabungkan dengan data baru yang belum ada
             $existing = array_column($psDetail, 'no_sampel');
             $noSampelNew = collect(array_merge(...array_values($grouped)))->pluck('no_sampel')->toArray();
@@ -776,7 +776,7 @@ class PersiapanSampleController extends Controller
         return response()->json(MasterKaryawan::whereIn('id_jabatan', [60, 61, 62, 63])->orderBy('nama_lengkap')->get(), 200);
     }
 
-    /* private function compareSampleNumber($psHeader, $request)
+    private function compareSampleNumber($psHeader, $request)
     {
         // $sampelNumbers = $psHeader->psDetail->pluck('no_sampel')->toArray();
         // $missingSampleNumbers = array_diff($request->no_sampel, $sampelNumbers);

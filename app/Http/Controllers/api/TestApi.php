@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 use App\Services\{
     GetAtasan,
     Notification,
@@ -30,34 +31,24 @@ class TestApi extends Controller
     public function index(Request $request)
     {
         try {
+            Carbon::setLocale('id');
+            
             $render = new TemplateLhpErgonomi();
-            $noSampel = 'THAU012501/001'; // Ambil no_sampel dari request frontend $request->no_sampel
+            $noSampel = $request->no_sampel; // Ambil no_sampel dari request frontend $request->no_sampel
 
             // Definisikan metode yang ingin digabungkan dan ID methodnya
             $methodsToCombine = [
-                //'nbm' => 1,
-                //'reba' => 2,
-                //'rula' => 3,
-                //'rosa' => 4,
-                //'brief' => 6,
+                'nbm' => 1,
+                'reba' => 2,
+                'rula' => 3,
+                'rosa' => 4,
+                'rwl' => 5,
+                'brief' => 6,
                 'sni_gotrak' => 7,
                 'sni_bahaya_ergonomi' =>8,
-                // 'antropometri' =>9,
-                // 'desain_stasiun_kerja' =>10
+                'antropometri' =>9,
+                'desain_stasiun_kerja' =>10
             ];
-
-            // Konfigurasi mPDF umum untuk semua halaman
-            /* $mpdfConfig = [
-                'mode' => 'utf-8',
-                'format' => 'A4-L',
-                'margin_header' => 8,
-                'margin_bottom' => 12,
-                'margin_footer' => 5,
-                'margin_top' => 15,
-                'margin_left' => 10,
-                'margin_right' => 10,
-                'orientation' => 'L',
-            ]; */
             $mpdfConfig = [
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -516,18 +507,21 @@ class TestApi extends Controller
             $pdf->setAutoBottomMargin = 'stretch';
 
             $firstPageAdded = false;
-
+            $dataMethod =null;
             foreach ($methodsToCombine as $methodName => $methodId) {
                 // Ambil data untuk setiap metode dan no_sampel yang diminta
                 $dataMethod = DataLapanganErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)
                     ->where('method', $methodId)
                     ->first();
-
+               
                 if ($dataMethod) {
                     $htmlContent = '';
                     // Panggil metode yang sesuai di TemplateLhpsErgonomi dan dapatkan HTMLnya
                     switch ($methodName) {
+                        case 'rwl':
+                            $htmlContent = $render->ergonomiRwl($dataMethod);
+                            break;
                         case 'nbm':
                             $htmlContent = $render->ergonomiNbm($dataMethod); // Teruskan data
                             break;
@@ -552,7 +546,7 @@ class TestApi extends Controller
                         // Tambahkan case lain untuk method lain yang ingin digabungkan
                     }
 
-                    if ($htmlContent) {
+                    if ($htmlContent != '') {
                         // Tambahkan halaman baru jika ini bukan halaman pertama
                         if ($firstPageAdded) {
                             $pdf->AddPage();
@@ -566,7 +560,8 @@ class TestApi extends Controller
 
             if (!$firstPageAdded) {
                 // Jika tidak ada data yang ditemukan untuk metode apa pun
-                throw new \Exception("Tidak ada data laporan yang ditemukan untuk sampel ini.");
+                // throw new \Exception("Tidak ada data laporan yang ditemukan untuk sampel ini.");
+                return response()->json(["message"=>"Tidak ada data laporan yang ditemukan untuk sampel ini."],404);
             }
 
             // Kembalikan PDF gabungan
@@ -574,23 +569,29 @@ class TestApi extends Controller
             if (!file_exists($dir)) {
                 mkdir($dir, 0755, true);
             }
-            $namaFile = str_replace('/', '_', $dataMethod->no_sampel);
+           
+            $namaFile = str_replace('/', '_', $noSampel);
             $pathFile = $dir.'/ERGONOMI_'.$namaFile.'.pdf';
             $pdf->Output($pathFile, 'F');
 
-            $saveFilePDF = new DraftErgonomiFile;
+            /* save file */
+            /* $saveFilePDF = new DraftErgonomiFile;
             $saveFilePDF::where('no_sampel',$dataMethod->no_sampel)->first();
             if($saveFilePDF != NULL){
-                
+                $saveFilePDF->no_sampel = $dataMethod->no_sampel;
+                $saveFilePDF->name_file = $namaFile;
+                $saveFilePDF->create_at = Carbon::now('Asia/Jakarta');
+                $saveFilePDF->create_by =$this->karyawan;
+                $saveFilePDF->save();
             }
-            return response()->json('data berhasil di render',200);
-            /* return response($pdf->Output('laporan.pdf', 'S'), 200, [
+            return response()->json('data berhasil di render',200); */
+            return response($pdf->Output('laporan.pdf', 'S'), 200, [
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'attachment; filename="laporan_ergonomi_gabungan.pdf"',
-            ]); */
+            ]);
 
         } catch (\Throwable $th) {
             return response()->json(["message" => $th->getMessage(),

@@ -11,15 +11,16 @@
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 7pt;
+            font-size: 9pt; /* sebelumnya 7pt */
             margin: 0;
             padding: 0;
-            line-height: 1.1;
+            line-height: 1.2;
         }
+
         
         table {
             border-collapse: collapse;
-            font-size: 7pt;
+            font-size: 8pt; /* naik dari 7pt */
         }
         
         .main-table {
@@ -28,13 +29,13 @@
         }
         
         .header-company {
-            font-size: 6pt;
+             font-size: 8pt;
             text-align: left;
             font-family: Arial, sans-serif;
         }
         
         .header-title {
-            font-size: 10pt;
+            font-size: 12pt;
             text-align: center;
             font-weight: bold;
             font-family: Arial, sans-serif;
@@ -47,10 +48,8 @@
         }
         
         .skor-table td, .skor-table th {
-            padding: 1px 2px;
-            border: 1px solid #000;
-            font-size: 6pt;
-            line-height: 1;
+           font-size: 8pt;
+           padding: 2px 3px;
         }
         
         .info-table {
@@ -60,9 +59,8 @@
         }
         
         .info-table td, .info-table th {
-            padding: 1px 2px;
-            font-size: 6pt;
-            line-height: 1;
+            font-size: 8pt;
+           padding: 2px 3px;
         }
         
         .bordered {
@@ -113,7 +111,7 @@
         </tr>
         <tr>
             <td colspan="4" class="header-title">
-                <u>LAPORAN HASIL PENGUJIAN (DRAFT)</u>
+                <u>LAPORAN HASIL PENGUJIAN ROSA (DRAFT)</u>
             </td>
         </tr>
     </table>
