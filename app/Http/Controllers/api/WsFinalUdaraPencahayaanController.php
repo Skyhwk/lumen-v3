@@ -44,15 +44,12 @@ class WsFinalUdaraPencahayaanController extends Controller
 		// Filter by date (YYYY-MM or YYYY-MM-DD)
 		if ($request->filled('date')) {
 			$date = $request->date;
-			// Jika format YYYY-MM (bulan)
 			if (preg_match('/^\d{4}-\d{2}$/', $date)) {
 				$data->where(function ($q) use ($date) {
 					$q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
 						->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
 				});
-			}
-			// Jika format YYYY-MM-DD (tanggal)
-			elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+			} elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
 				$data->where(function ($q) use ($date) {
 					$q->whereDate('tanggal_sampling', $date)
 						->orWhereDate('tanggal_terima', $date);
@@ -788,16 +785,12 @@ class WsFinalUdaraPencahayaanController extends Controller
 		try {
 			$dataLapangan = DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
 				'is_approve' => 0,
-				'rejected_by' => $this->karyawan,
-				'rejected_at' => Carbon::now(),
 			]);
 
 			$cahayaHeader = PencahayaanHeader::where('no_sampel', $request->no_sampel)
 				->update([
-					'is_approved' => 0,
-					'rejected_by' => $this->karyawan,
-					'rejected_at' => Carbon::now(),
-				]);
+				'is_approved' => 0,
+			]);
 
 			DB::commit();
 
@@ -822,10 +815,8 @@ class WsFinalUdaraPencahayaanController extends Controller
 		try {
 			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
 				->update([
-					'status' => 1,
-					'updated_by' => $this->karyawan,
-					'updated_at' => Carbon::now(),
-				]);
+				'status' => 1,
+			]);
 
 			DB::commit();
 			return response()->json([
