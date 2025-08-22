@@ -140,6 +140,10 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
+                DB::table('order_detail')
+                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+
                 InsertActivityFdl::by($this->user_id)->action('input')->target("Kadar Air pada nomor sampel $request->no_sample")->save();
 
 

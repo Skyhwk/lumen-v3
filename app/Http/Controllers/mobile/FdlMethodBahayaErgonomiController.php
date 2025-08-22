@@ -248,7 +248,7 @@ class FdlMethodBahayaErgonomiController extends Controller
             $data->save();
 
             // UPDATE ORDER DETAIL
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where('kategori_3', 'LIKE', '%27-%')
                 ->orWhere('kategori_3', 'LIKE', '%53-%')

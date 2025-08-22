@@ -248,9 +248,9 @@ class FdlEmisiKendaraanController extends Controller
                             $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
                             $data_order->save();
 
-                            $update_order = OrderDetail::where('no_sampel', strtoupper($request->no_sampel))->where('is_active', 1)->update([
-                                'tanggal_terima' => Carbon::now()->format('Y-m-d'),
-                            ]);
+                            DB::table('order_detail')
+                                ->where('no_sampel', strtoupper(trim($request->no_sampel)))
+                                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                             DB::commit();
                             return response()->json([
