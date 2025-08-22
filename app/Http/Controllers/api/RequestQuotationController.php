@@ -3383,7 +3383,7 @@ class RequestQuotationController extends Controller
                             // dump($dataH->data_lama);
                             // $dataLama = json_decode($dataH->data_lama);
 
-                            if(!$oldDatas != null && $checkOldQtRemaining->count() > 0){
+                            if(!$oldDatas && $checkOldQtRemaining->count() > 0){
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
 
