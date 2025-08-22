@@ -1,109 +1,109 @@
 <table class="body" width="100%" style="vertical-align: top;">
     <tr>
-        <th colspan="4" style="text-align:left; font-family:Arial, sans-serif; font-size:x-small;">
+        <th colspan="4" style="text-align:left; font-family:Arial, sans-serif; font-size:16px;">
             PT INTI SURYA LABORATORIUM
         </th>
     </tr>
     <tr class="mt-2 mb-4">
         <th colspan="4" style="text-align:center; font-family:Arial, sans-serif; font-size:large;">
             <u>
-                DRAFT - LAPORAN HASIL PENGUJIAN
+                LAPORAN HASIL PENGUJIAN REBA (DRAFT)
             </u>
         </th>
     </tr>
     <tr>
         <td width="25%" style="padding-right: 5px;">
-            <table class="skor-a" border="1" style="border-collapse: collapse; text-align: center;">
+            <table class="skor-a" border="1" style="border-collapse: collapse;">
                 <tr>
-                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">No.</th>
-                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">No.</th>
+                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Jenis Skor A
                     </th>
-                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Nilai
                     </th>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">1</td>
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">1</td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_leher.jpg') }}" alt="Posisi Leher"
                             style="object-fit: contain;">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_leher }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Leher</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">2</td>
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">2</td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_badan.jpg') }}" alt="Posisi Badan"
                             style="object-fit: contain;">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_badan }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Badan</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">3</td>
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">3</td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_kaki.jpg') }}" alt="Posisi Kaki"
                             style="object-fit: contain;">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_kaki }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Kaki</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">4</td>
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">4</td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_skor_beban.jpg') }}" alt="Skor Beban"
                             style="object-fit: contain;" width="17%" height="45px">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_beban }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Skor Beban</u>
                     </td>
                 </tr>
                 <tr>
                     <td colspan="3"
-                        style="text-align: left; font-family:Arial, sans-serif; font-size:x-small; border-left:0; border-right: 0; border-bottom:0;">
+                        style="text-align: left; font-family:Arial, sans-serif; font-size:16px; border-left:0; border-right: 0; border-bottom:0;">
                         &nbsp;
                     </td>
                 </tr>
                 <tr>
                     <th height="50px" colspan="3"
-                        style="padding: 2px; text-align: left; font-family:Arial, sans-serif; font-size:x-small; border-left:0; border-right: 0; border-bottom:0; border-top: 0; vertical-align: bottom;">
+                        style="padding: 2px; text-align: left; font-family:Arial, sans-serif; font-size:16px; border-left:0; border-right: 0; border-bottom:0; border-top: 0; vertical-align: bottom;">
                         <u>Korelasi Nilai dengan Tabel Acuan</u>
                     </th>
                 </tr>
@@ -112,106 +112,106 @@
         <td width="25%" style="padding-right: 5px;">
             <table class="skor-b" border="1" style="border-collapse: collapse; text-align: center;">
                 <tr>
-                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">No.</th>
-                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">No.</th>
+                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Jenis Skor B
                     </th>
-                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Nilai
                     </th>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">5
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">5
                     </td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_atas.jpg') }}"
                             alt="Posisi Lengan Atas" style="object-fit: contain;">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_lengan_atas }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Lengan Atas</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">6
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">6
                     </td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_bawah.jpg') }}"
                             alt="Posisi Lengan Bawah" style="object-fit: contain;" width="15%" height="45px">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_lengan_bawah }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Lengan Bawah</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">7
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">7
                     </td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_pergelangan_tangan.jpg') }}"
                             alt="Posisi Pergelangan Tangan" style="object-fit: contain;" width="15%"
                             height="45px">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_pergelangan_tangan }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Pergelangan Tangan</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">8
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">8
                     </td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_kondisi_pegangan.jpg') }}"
                             alt="Kondisi Pegangan" style="object-fit: contain;" width="15%" height="45px">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_pegangan }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Kondisi Pegangan</u>
                     </td>
                 </tr>
                 <tr>
                     <td rowspan="2" width="10%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">9</td>
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">9</td>
                     <td height="50px" width="70%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <img src="{{ public_path('dokumen/img_ergo/reba/reba_aktivitas_otot.jpg') }}"
                             alt="Aktivitas Otot" style="object-fit: contain;" width="15%" height="45px">
                     </td>
                     <td rowspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->skor_aktivitas_otot }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         <u>Aktivitas Otot</u>
                     </td>
                 </tr>
@@ -222,29 +222,29 @@
                 style="border-collapse: collapse; text-align: center;">
                 <tr>
                     <th width="30%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         No. LHP
                     </th>
                     <th width="30%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         No. Sampel
                     </th>
                     <th width="40%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         Jenis Sampel
                     </th>
                 </tr>
                 <tr>
                     <td width="30%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         {{ $personal->no_lhp }}
                     </td>
                     <td width="30%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         {{ $personal->no_sampel }}
                     </td>
                     <td width="40%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         {{ $personal->jenis_sampel }}
                     </td>
                 </tr>
@@ -252,26 +252,26 @@
             <table class="informasi-pelanggan" width="100%" border="0"
                 style="border-collapse: collapse; text-align: left; margin-top: 10px;">
                 <tr>
-                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         <u>Informasi Pelanggan</u>
                     </th>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Nama
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Nama
                         Pelanggan
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ strtoupper($personal->nama_pelanggan) }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small; vertical-align: top;">
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px; vertical-align: top;">
                         Alamat / Lokasi Sampling
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small; vertical-align: top;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px; vertical-align: top;">
                         :</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small; vertical-align: top;">
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px; vertical-align: top;">
                         {{ $personal->alamat_pelanggan }}
                     </td>
                 </tr>
@@ -279,74 +279,74 @@
             <table class="informasi-sampling" width="100%" border="0"
                 style="border-collapse: collapse; text-align: left; margin-top: 10px;">
                 <tr>
-                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         <u>Informasi sampling</u>
                     </th>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Tanggal Sampling
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Tanggal Sampling
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ $personal->tanggal_sampling }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Periode Analisis
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Periode Analisis
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ $personal->periode_analisis }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Jenis Analisis
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Jenis Analisis
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">Rapid Asessment (Form
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">Rapid Asessment (Form
                         Penilaian Cepat)</td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Metode Analisis<sup
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Metode Analisis<sup
                             style="font-size: 11px; vertical-align: middle;">*</sup>
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">Pengamatan Langsung -
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">Pengamatan Langsung -
                         Rapid Entire Body Asessment</td>
                 </tr>
             </table>
             <table class="informasi-individu" width="100%" border="0"
                 style="border-collapse: collapse; text-align: left; margin-top: 10px;">
                 <tr>
-                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                    <th colspan="3" style="font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         <u>Data Individu/Pekerja yang Diukur</u>
                     </th>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Nama
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Nama
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ $personal->nama_pekerja }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Usia
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Usia
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ $personal->usia }} Tahun</td>
                 </tr>
                 <tr>
-                    <td width="20%" style="font-family:Arial, sans-serif; font-size:x-small;">Lama Bekerja
+                    <td width="20%" style="font-family:Arial, sans-serif; font-size:16px;">Lama Bekerja
                     </td>
-                    <td width="5%" style="font-family:Arial, sans-serif; font-size:x-small;">:</td>
-                    <td width="75%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="5%" style="font-family:Arial, sans-serif; font-size:16px;">:</td>
+                    <td width="75%" style="font-family:Arial, sans-serif; font-size:16px;">
                         {{ $personal->lama_kerja }}</td>
                 </tr>
                 <tr>
                     <th height="90px" colspan="3"
-                        style="font-family:Arial, sans-serif; font-size:x-small; text-align: left; vertical-align: bottom;">
+                        style="font-family:Arial, sans-serif; font-size:16px; text-align: left; vertical-align: bottom;">
                         <u>Tabel Acuan Skor Resiko dan Tindakan Perbaikan<sup
                                 style="font-size: 11px; vertical-align: middle;">**</sup></u>
                     </th>
@@ -359,76 +359,76 @@
             <table class="korelasi-a" width="100%" border="1"
                 style="border-collapse: collapse; text-align: center;">
                 <tr>
-                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">No.
+                    <th width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">No.
                     </th>
-                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="70%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Jenis Nilai
                     </th>
-                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <th width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         Hasil
                     </th>
                 </tr>
                 <tr>
-                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">1
+                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">1
                     </td>
                     <td width="70%"
-                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Tabel A
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->nilai_tabel_a}}
                     </td>
                 </tr>
                 <tr>
-                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">2
+                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">2
                     </td>
                     <td width="70%"
-                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Skor A
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->total_skor_a }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">3
+                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">3
                     </td>
                     <td width="70%"
-                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Tabel B
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->nilai_tabel_b }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">4
+                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">4
                     </td>
                     <td width="70%"
-                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Skor B
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->total_skor_b }}
                     </td>
                 </tr>
                 <tr>
-                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">5
+                    <td width="10%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">5
                     </td>
                     <td width="70%"
-                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                        style="padding-left: 5px; font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Tabel C
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->nilai_tabel_c }}
                     </td>
                 </tr>
                 <tr>
                     <td colspan="2" width="20%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; background-color: lightgrey;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; background-color: lightgrey;">
                         <b>Final Skor REBA</b>
                     </td>
-                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="20%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->final_skor_reba }}
                     </td>
                 </tr>
@@ -439,56 +439,56 @@
                 style="border-collapse: collapse; text-align: center; vertical-align: bottom;" height="350px">
                 {{-- <tr>
                     <td colspan="2" width="55%"
-                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         <b>&nbsp; </b>
                     </td>
                     <td width="55%" style="border:0;"></td>
                 </tr>
                 <tr>
                     <td colspan="2" width="55%"
-                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         <b>&nbsp; </b>
                     </td>
                     <td width="55%" style="border:0;"></td>
                 </tr>
                 <tr>
                     <td colspan="2" width="55%"
-                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         <b>&nbsp; </b>
                     </td>
                     <td width="55%" style="border:0;"></td>
                 </tr>
                 <tr>
                     <td colspan="2" width="55%"
-                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center;">
+                        style="border:0;padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center;">
                         <b>&nbsp; </b>
                     </td>
                     <td width="55%" style="border:0;"></td>
                 </tr> --}}
                 <tr>
                     <td colspan="2" width="55%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; background-color: lightgrey;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; background-color: lightgrey;">
                         <b>Tingkat Risiko</b>
                     </td>
-                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->tingkat_resiko }}
                     </td>
                 </tr>
                 <tr>
                     <td colspan="2" width="55%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; background-color: lightgrey;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; background-color: lightgrey;">
                         <b>Kategori Risiko</b>
                     </td>
-                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->kategori_resiko }}
                     </td>
                 </tr>
                 <tr>
                     <td colspan="2" width="55%"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; background-color: lightgrey; vertical-align: middle;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; background-color: lightgrey; vertical-align: middle;">
                         <b>Tindakan</b>
                     </td>
-                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="55%" style="padding: 2px; font-family:Arial, sans-serif; font-size:16px;">
                         {{ $pengukuran->tindakan }}
                     </td>
                 </tr>
@@ -498,86 +498,86 @@
             <table class="acuan" width="100%" border="1"
                 style="border-collapse: collapse; text-align: center;">
                 <tr>
-                    <td height="45px" width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td height="45px" width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         <b>SKOR REBA</b>
                     </td>
-                    <td height="45px" width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td height="45px" width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         <b>TINGKAT RISIKO</b>
                     </td>
-                    <td height="45px" width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td height="45px" width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         <b>KATEGORI RISIKO</b>
                     </td>
-                    <td height="45px" width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td height="45px" width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         <b>TINDAKAN</b>
                     </td>
                 </tr>
                 <tr>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         1
                     </td>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         0
                     </td>
-                    <td width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Sangat Rendah
                     </td>
-                    <td width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Tidak ada tindakan yang diperlukan
                     </td>
                 </tr>
                 <tr>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         2-3
                     </td>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         1
                     </td>
-                    <td width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Rendah
                     </td>
-                    <td width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Mungkin diperlukan tindakan
                     </td>
                 </tr>
                 <tr>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         4-7
                     </td>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         2
                     </td>
-                    <td width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Sedang
                     </td>
-                    <td width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Diperlukan tindakan
                     </td>
                 </tr>
                 <tr>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         8-10
                     </td>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         3
                     </td>
-                    <td width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Tinggi
                     </td>
-                    <td width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Diperlukan tindakan segera
                     </td>
                 </tr>
                 <tr>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         11-15
                     </td>
-                    <td width="15%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="15%" style="font-family:Arial, sans-serif; font-size:16px;">
                         4
                     </td>
-                    <td width="25%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="25%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Sangat Tinggi
                     </td>
-                    <td width="45%" style="font-family:Arial, sans-serif; font-size:x-small;">
+                    <td width="45%" style="font-family:Arial, sans-serif; font-size:16px;">
                         Diperlukan tindakan sesegera mungkin
                     </td>
                 </tr>
@@ -590,11 +590,11 @@
                 style="border-collapse: collapse; text-align: center; margin-top: 10px">
                 <tr>
                     <td width="35%" height="75px"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; text-wrap: break-word;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; text-wrap: break-word;">
                         <b>KESIMPULAN AKHIR KONDISI ERGONOMI BERDASARKAN HASIL PENILAIAN CEPAT SELURUH TUBUH (REBA)</b>
                     </td>
                     <td width="65%" height="75px"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: justify; text-wrap: break-word;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: justify; text-wrap: break-word;">
                         {{ $pengukuran->result }}
                     </td>
                 </tr>
@@ -603,11 +603,11 @@
                 style="border-collapse: collapse; text-align: center; margin-top: 10px">
                 <tr>
                     <td width="35%" height="60px"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; text-wrap: break-word;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; text-wrap: break-word;">
                         <b>DESKRIPSI SINGKAT PEKERJAAN PEKERJA</b>
                     </td>
                     <td width="65%" height="60px"
-                        style="padding: 2px; font-family:Arial, sans-serif; font-size:x-small; text-align: center; text-wrap: break-word;">
+                        style="padding: 2px; font-family:Arial, sans-serif; font-size:16px; text-align: center; text-wrap: break-word;">
                         {{ $personal->deskripsi_pekerjaan }}
                     </td>
                 </tr>
@@ -618,20 +618,20 @@
                 style="border-collapse: collapse; text-align: center;">
                 <tr>
                     <td width="5%"
-                        style="font-family:Arial, sans-serif; font-size:x-small; text-align: right; vertical-align: top;">
+                        style="font-family:Arial, sans-serif; font-size:16px; text-align: right; vertical-align: top;">
                         <sup style="font-size: 11px; vertical-align: middle;">*</sup>
                     </td>
-                    <td width="95%" style="font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                    <td width="95%" style="font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis<br>
                         Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
                     </td>
                 </tr>
                 <tr>
                     <td width="5%"
-                        style="font-family:Arial, sans-serif; font-size:x-small; text-align: right; vertical-align: top;">
+                        style="font-family:Arial, sans-serif; font-size:16px; text-align: right; vertical-align: top;">
                         <sup style="font-size: 11px; vertical-align: middle;">**</sup>
                     </td>
-                    <td width="95%" style="font-family:Arial, sans-serif; font-size:x-small; text-align: left;">
+                    <td width="95%" style="font-family:Arial, sans-serif; font-size:16px; text-align: left;">
                         Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and <br>
                         by Neville Stanton et al, 2005.
                     </td>

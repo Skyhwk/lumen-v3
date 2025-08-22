@@ -186,7 +186,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN RULA (DRAFT)</h1>
         <!-- Main layout with table and information -->
         <div class="table-layout">
             <!-- Left side - Tables -->
