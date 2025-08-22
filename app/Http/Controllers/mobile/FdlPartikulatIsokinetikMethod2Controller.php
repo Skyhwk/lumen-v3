@@ -214,9 +214,9 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
         $page = $request->input('page', 1);
         $search = $request->input('search');
 
-        $query = DataLapanganIsokinetikPenentuanKecepatanLinier::with('detail')
+        $query = DataLapanganIsokinetikPenentuanKecepatanLinier::with('detail', 'survei')
             ->where('created_by', $this->karyawan)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
