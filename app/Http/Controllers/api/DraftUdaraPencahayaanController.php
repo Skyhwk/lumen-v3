@@ -48,8 +48,6 @@ use Yajra\Datatables\Datatables;
 
 class DraftUdaraPencahayaanController extends Controller
 {
-    // done if status = 2
-    // AmanghandleDatadetail
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
@@ -263,11 +261,9 @@ class DraftUdaraPencahayaanController extends Controller
                 ->where('is_active', true)
                 ->where('kategori_2', '4-Udara')
                 ->where('kategori_3', $request->kategori_3)
-                // ->where('is_approve', true)
                 ->where('status', 2)
                 ->pluck('no_sampel');
             $data = PencahayaanHeader::with('ws_udara', 'data_lapangan')->whereIn('no_sampel', $orders)->where('is_approved', 1)->where('is_active', true)->where('lhps', 1)->get();
-            // dd( $data);
             $i = 0;
             $method_regulasi = [];
             if ($data->isNotEmpty()) {
@@ -330,73 +326,9 @@ class DraftUdaraPencahayaanController extends Controller
 
     public function handleDetailEdit(Request $request)
     {
-        $categoryKebisingan = [23, 24, 25];
-        $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
-        $categoryPencahayaan = [28];
+     
         $category = explode('-', $request->kategori_3)[0];
-        $sub_category = explode('-', $request->kategori_3)[1];
-        $parameters = json_decode(html_entity_decode($request->parameter), true);
-        $parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
 
-        if (in_array($category, $categoryKebisingan)) {
-            try {
-                $data = LhpsKebisinganHeader::where('no_lhp', $request->no_lhp)
-                    ->where('id_kategori_3', $category)
-                    ->where('is_active', true)
-                    ->first();
-                $details = LhpsKebisinganDetail::where('id_header', $data->id)->get();
-                $spesifikasiMethode = KebisinganHeader::with('ws_udara', 'data_lapangan', 'master_parameter')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', 1)
-                    ->where('is_active', 0)
-                    ->where('lhps', 1)->get();
-
-                return response()->json([
-                    'data' => $data,
-                    'details' => $details,
-                ], 201);
-            } catch (\Exception $th) {
-                DB::rollBack();
-                dd($th);
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'status' => false
-                ], 500);
-            }
-        } else if (in_array($category, $categoryGetaran)) {
-            try {
-                // Getaran
-                $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
-                    ->where('id_kategori_3', $category)
-                    ->where('is_active', true)
-                    ->first();
-                // dd($data);
-                $details = LhpsGetaranDetail::where('id_header', $data->id)->get();
-                // dd($data, $details);
-                $spesifikasiMethode = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->where('is_active', 1)
-                    ->get();
-
-                // dd('Getaran', $request->all());
-                // dd($data, $details, $spesifikasiMethode);
-
-                return response()->json([
-                    'data' => $data,
-                    'details' => $details,
-                ], 201);
-
-            } catch (\Exception $th) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'status' => false
-                ], 500);
-            }
-
-        } else if (in_array($category, $categoryPencahayaan)) {
             try {
                 // Pencahayaan
                 $data = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
@@ -424,92 +356,6 @@ class DraftUdaraPencahayaanController extends Controller
                 ], 500);
             }
 
-        } else if (in_array($category, $categoryLingkunganKerja)) {
-            try {
-                if ($parameterArray[1] == 'Medan Magnit Statis' || $parameterArray[1] == 'Medan Listrik' || $parameterArray[1] == 'Power Density') {
-                    $data = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)
-                        ->where('is_approve', 0)
-                        ->where('is_active', true)->first();
-                    $details = LhpsMedanLMDetail::where('id_header', $data->id)->get();
-
-                    $spesifikasiMethode = MedanLMHeader::with('ws_udara')
-                        ->where('no_sampel', $request->no_sampel)
-                        ->where('is_approve', 1)
-                        ->where('is_active', true)
-                        ->where('lhps', 1)->get();
-                    // dd($request->all());
-                    $i = 0;
-                    $method_regulasi = [];
-                    if ($spesifikasiMethode->isNotEmpty()) {
-                        foreach ($spesifikasiMethode as $key => $val) {
-                            $bakumutu = MasterBakumutu::where('id_parameter', $val->id_parameter)
-                                ->where('parameter', $val->parameter)
-                                ->first();
-
-                            if ($bakumutu != null && $bakumutu->method != '') {
-                                $data1[$i]['satuan'] = $bakumutu->satuan;
-                                $data1[$i]['methode'] = $bakumutu->method;
-                                $data1[$i]['baku_mutu'][0] = $bakumutu->baku_mutu;
-                                array_push($method_regulasi, $bakumutu->method);
-                            }
-                        }
-                    }
-                    $method_regulasi = array_values(array_unique($method_regulasi));
-                    // dd($method_regulasi);
-                    // $method = Parameter::where('is_active', true)->where('id_kategori', 4)->whereNotNull('method')->select('method')->groupBy('method')->get()->toArray();
-                    // $result_method = array_unique(array_values(array_merge($method_regulasi, array_column($method, 'method'))));
-                    return response()->json([
-                        'data' => $data,
-                        'details' => $details,
-                        'spesifikasi_method' => $method_regulasi
-                    ], 201);
-                } else {
-                    $data = LhpsLingHeader::where('no_sampel', $request->no_sampel)
-                        ->where('id_kategori_3', $category)
-                        ->where('is_active', true)
-                        ->first();
-                    $details = LhpsLingDetail::where('id_header', $data->id)->get();
-                    $spesifikasiMethode = LhpsLingHeader::with('ws_udara', 'data_lapangan', 'master_parameter')
-                        ->where('no_sampel', $request->no_sampel)
-                        ->where('is_approved', 1)
-                        ->where('is_active', true)
-                        ->where('lhps', 1)->get();
-                    $i = 0;
-                    $method_regulasi = [];
-                    if ($spesifikasiMethode->isNotEmpty()) {
-                        foreach ($spesifikasiMethode as $key => $val) {
-                            $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
-                                ->where('parameter', $val->parameter)
-                                ->first();
-
-                            if ($bakumutu != null && $bakumutu->method != '') {
-                                $data1[$i]['satuan'] = $bakumutu->satuan;
-                                $data1[$i]['methode'] = $bakumutu->method;
-                                $data1[$i]['baku_mutu'][0] = $bakumutu->baku_mutu;
-                                array_push($method_regulasi, $bakumutu->method);
-                            }
-                        }
-                    }
-                    $method_regulasi = array_values(array_unique($method_regulasi));
-                    $method = Parameter::where('is_active', true)->where('id_kategori', 1)->whereNotNull('method')->select('method')->groupBy('method')->get()->toArray();
-                    $result_method = array_unique(array_values(array_merge($method_regulasi, array_column($method, 'method'))));
-                    return response()->json([
-                        'data' => $data,
-                        'details' => $details,
-                        'spesifikasi_method' => $result_method,
-                    ], 200);
-                }
-
-
-
-            } catch (\Exception $th) {
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'status' => false
-                ], 500);
-            }
-        }
     }
     public function handleApprove(Request $request)
     {

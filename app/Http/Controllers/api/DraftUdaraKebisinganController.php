@@ -104,7 +104,6 @@ class DraftUdaraKebisinganController extends Controller
         DB::beginTransaction();
         try {
             $header = LhpsKebisinganHeader::where('no_lhp', $request->no_lhp)->where('no_order', $request->no_order)->where('id_kategori_3', $category)->where('is_active', true)->first();
-            // dd($request->no_lhp, $request->no_order, $category, $header);
             if ($header == null) {
                 $header = new LhpsKebisinganHeader;
                 $header->created_by = $this->karyawan;
@@ -122,8 +121,7 @@ class DraftUdaraKebisinganController extends Controller
             }
             $parameter = \explode(', ', $request->parameter);
             $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
-            // $header->no_sampel = ($request->noSampel != '') ? $request->noSampel : NULL;
-
+            $header->no_sampel = ($request->no_sampel != '') ? $request->noSampel : NULL;
             $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL;
             $header->id_kategori_2 = ($request->kategori_2 != '') ? explode('-', $request->kategori_2)[0] : NULL;
             $header->id_kategori_3 = ($category != '') ? $category : NULL;
@@ -246,7 +244,7 @@ class DraftUdaraKebisinganController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Data draft LHP udara no sampel ' . $request->noSampel . ' berhasil disimpan',
+                'message' => 'Data draft LHP udara no sampel ' . $request->no_lhp . ' berhasil disimpan',
                 'status' => true
             ], 201);
         } catch (\Exception $th) {
@@ -263,13 +261,21 @@ class DraftUdaraKebisinganController extends Controller
     //Amang
     public function handleDatadetail(Request $request)
     {
+         $id_category = explode('-', $request->kategori_3)[0];
         try {
+             $cekLhp = LhpsKebisinganHeader::where('no_lhp', $request->cfr)
+                ->where('id_kategori_3', $id_category)
+                ->where('is_active', true)
+                ->first();
+            if($cekLhp) {
+              $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
 
-            $data_lapangan = array();
-            $id_category = explode('-', $request->kategori_3)[0];
-            $data = array();
-            $data1 = array();
+            $existingSamples = $detail->pluck('no_sampel')->toArray();
+
+            $data = [];
+            $data1 = [];
             $hasil = [];
+
             $orders = OrderDetail::where('cfr', $request->cfr)
                 ->where('is_approve', 0)
                 ->where('is_active', true)
@@ -277,65 +283,119 @@ class DraftUdaraKebisinganController extends Controller
                 ->where('kategori_3', $request->kategori_3)
                 ->where('status', 2)
                 ->pluck('no_sampel');
-            $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')->whereIn('no_sampel', $orders)->where('is_approved', 1)->where('is_active', 1)->where('lhps', 1)->get();
+
+            $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
+                ->whereIn('no_sampel', $orders)
+                ->where('is_approved', 1)
+                ->where('is_active', 1)
+                ->where('lhps', 1)
+                ->get();
+
             $i = 0;
             if ($data->isNotEmpty()) {
-                foreach ($data as $key => $val) {
-        
-                    $data1[$i]['lokasi'] = $val->data_lapangan->lokasi_titik_sampling ?? $val->data_lapangan->keterangan ?? $val->data_lapangan_personal->keterangan ?? null;
-                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran ?? null;
-                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat ?? null;
+                foreach ($data as $val) {
+                    $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling 
+                        ?? $val->data_lapangan->keterangan 
+                        ?? $val->data_lapangan_personal->keterangan 
+                        ?? null;
+                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan 
+                        ?? $val->data_lapangan_personal->waktu_pengukuran 
+                        ?? null;
+                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat 
+                        ?? $val->data_lapangan_personal->titik_koordinat 
+                        ?? null;
                     $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
                     $data1[$i]['id'] = $val->id;
                     $data1[$i]['no_sampel'] = $val->no_sampel;
-                    $data1[$i]['parameter'] = $val->parameter;
+                    $data1[$i]['param'] = $val->parameter;
                     $data1[$i]['min'] = $val->min;
                     $data1[$i]['max'] = $val->max;
                     $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
                     $data1[$i]['nab'] = $val->ws_udara->nab;
-                    $data_lapangan[$i]['suhu'] = $val->data_lapangan->suhu_udara ?? null;
-                    $data_lapangan[$i]['kelembapan'] = $val->data_lapangan->kelembapan_udara ?? null;
                     $i++;
                 }
                 $hasil[] = $data1;
             }
 
-            $data_all = array();
+            $data_all = [];
             $a = 0;
             foreach ($hasil as $key => $value) {
                 foreach ($value as $row => $col) {
-                    $data_all[$a] = $col;
-                    $a++;
+                    if (!in_array($col['no_sampel'], $existingSamples)) {
+                        $col['status'] = 'belom_diadjust';
+                        $data_all[$a] = $col;
+                        $a++;
+                    }
                 }
             }
 
-            if ($id_category == 11 || $id_category == 27) {
-                $keterangan = [
-                    '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-                    '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                    'ẍ Parameter belum terakreditasi.'
-                ];
-            } else {
-                $keterangan = [];
-            }
-            if (count($data_lapangan) > 0) {
-                $data_lapangan_send = (object) $data_lapangan[0];
-            } else {
-                $data_lapangan_send = (object) $data_lapangan;
+            // gabungkan dengan detail
+            foreach ($data_all as $key => $value) {
+                $detail[] = $value;
             }
 
-            return response()->json([
-                'status' => true,
-                'data' => $data_all,
-                'data_lapangan' => $data_lapangan_send,
-                'keterangan' => $keterangan
-            ], 201);
+                return response()->json([
+                    'data' => $cekLhp,
+                    'detail' => $detail,
+                    'success' => true,
+                    'status' => 200,
+                    'message' => 'Data berhasil diambil'
+                ], 201);  
+            } else {
+                $data = array();
+                $data1 = array();
+                $hasil = [];
+                $orders = OrderDetail::where('cfr', $request->cfr)
+                    ->where('is_approve', 0)
+                    ->where('is_active', true)
+                    ->where('kategori_2', '4-Udara')
+                    ->where('kategori_3', $request->kategori_3)
+                    ->where('status', 2)
+                    ->pluck('no_sampel');
+                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')->whereIn('no_sampel', $orders)->where('is_approved', 1)->where('is_active', 1)->where('lhps', 1)->get();
+                $i = 0;
+                if ($data->isNotEmpty()) {
+                    foreach ($data as  $val) {
+                        $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling ?? $val->data_lapangan->keterangan ?? $val->data_lapangan_personal->keterangan ?? null;
+                        $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran ?? null;
+                        $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat ?? null;
+                        $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
+                        $data1[$i]['id'] = $val->id;
+                        $data1[$i]['no_sampel'] = $val->no_sampel;
+                        $data1[$i]['param'] = $val->parameter;
+                        $data1[$i]['min'] = $val->min;
+                        $data1[$i]['max'] = $val->max;
+                        $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
+                        $data1[$i]['nab'] = $val->ws_udara->nab;
+                        $i++;
+                    }
+                    $hasil[] = $data1;
+                }
+
+                $data_all = array();
+                $a = 0;
+                foreach ($hasil as $key => $value) {
+                    foreach ($value as $row => $col) {
+                        $data_all[$a] = $col;
+                        $a++;
+                    }
+                }
+                return response()->json([
+                    'data' => [],
+                    'detail' => $data_all,
+                    'status' => 200,
+                    'success' => true,
+                    'message' => 'Data berhasil diambil'
+                ], 201);
+            }
         } catch (\Exception $e) {
             DB::rollBack();
             dd($e);
             return response()->json([
                 'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $e->getMessage()
+                'message' => 'Terjadi kesalahan ' . $e->getMessage(),
+                'getLine' => $e->getLine(),
+                'getFile' => $e->getFile()
             ]);
         }
     }
@@ -343,11 +403,11 @@ class DraftUdaraKebisinganController extends Controller
     public function handleDetailEdit(Request $request)
     {
 
-        $category = explode('-', $request->kategori_3)[0];
+        $id_category = explode('-', $request->kategori_3)[0];
 
         try {
             $data = LhpsKebisinganHeader::where('no_lhp', $request->no_lhp)
-                ->where('id_kategori_3', $category)
+                ->where('id_kategori_3', $id_category)
                 ->where('is_active', true)
                 ->first();
             $details = LhpsKebisinganDetail::where('id_header', $data->id)->get();
