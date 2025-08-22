@@ -8,6 +8,9 @@ use App\Models\MasterSubKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 
+use App\Models\WsValueUdara;
+use App\Models\PartikulatHeader;
+
 use App\Services\NotificationFdlService;
 
 use App\Http\Controllers\Controller;
@@ -126,6 +129,61 @@ class FdlPartikulatMeterController extends Controller
             $data->rejected_by = null;
             $data->save();
 
+            // $activeFdl = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
+            //     ->where('parameter', $data->parameter)
+            //     ->get();
+
+            // if (count($activeFdl) == count($activeFdl->where('is_approve', true))) {
+            //     $pengukuran = $activeFdl->pluck('pengukuran', 'shift_pengambilan')->toArray();
+
+            //     $rerata = [];
+            //     foreach ($pengukuran as $shift => $json) {
+            //         $decoded = json_decode($json, true);
+            //         $values = array_map('intval', $decoded);
+
+            //         $total = array_sum($values);
+            //         $count = count($values);
+            //         $rerata[$shift] = $count > 0 ? round($total / $count, 2) : null;
+            //     }
+
+            //     $globalTotal = array_sum($rerata);
+            //     $globalCount = count($rerata);
+            //     $rerata_total = $globalCount > 0 ? round($globalTotal / $globalCount, 4) : null;
+
+            //     $existingHeader = PartikulatHeader::where('no_sampel', $no_sample)
+            //         ->where('parameter', $data->parameter)
+            //         ->first();
+
+            //     $header = PartikulatHeader::updateOrCreate(
+            //         [
+            //             'no_sampel' => $no_sample,
+            //             'parameter' => $data->parameter,
+            //         ],
+            //         [
+            //             'pengukuran' => json_encode($rerata),
+            //             'rerata' => $rerata_total,
+            //             'created_by' => $existingHeader ? $existingHeader->created_by : $this->karyawan,
+            //             'created_at' => $existingHeader ? $existingHeader->created_at : Carbon::now(),
+            //             'is_active' => true,
+            //             'is_approve' => true,
+            //             'approved_by' => $this->karyawan,
+            //             'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
+            //         ]
+            //     );
+
+            //     $wsUdara = WsValueUdara::updateOrCreate(
+            //         [
+            //             'id_partikulat_header' => $header->id,
+            //             'no_sampel' => $no_sample,
+            //             'id_po' => $data->detail->id,
+            //         ],
+            //         [
+            //             'hasil1' => $rerata_total,
+            //             'is_active' => true
+            //         ]
+            //     );
+            // }
+
             app(NotificationFdlService::class)->sendApproveNotification("Partikulat Meter pada Shift($data->shift_pengambilan)", "$data->no_sampel($data->parameter)", $this->karyawan, $data->created_by);
 
             return response()->json([
@@ -151,15 +209,6 @@ class FdlPartikulatMeterController extends Controller
             $data->approved_by = null;
             $data->approved_at = null;
             $data->save();
-            // dd($data);
-
-            // if($cek_sampler->pin_user!=null){
-            //     $nama = $this->name;
-            //     $txt = "FDL AIR dengan No sample $no_sample Telah di Reject oleh $nama";
-
-            //     $telegram = new Telegram();
-            //     $telegram->send($cek_sampler->pin_user, $txt);
-            // }
 
             return response()->json([
                 'message' => "Data Dengan No Sampel $no_sample Telah di reject oleh $this->karyawan",
@@ -187,14 +236,6 @@ class FdlPartikulatMeterController extends Controller
                 unlink($foto_lain);
             }
             $data->delete();
-
-            // if($this->pin!=null){
-            //     $nama = $this->name;
-            //     $txt = "FDL AIR dengan No sample $no_sample Telah di Hapus oleh $nama";
-
-            //     $telegram = new Telegram();
-            //     $telegram->send($this->pin, $txt);
-            // }
 
             return response()->json([
                 'message' => "Data Dengan No Sampel $no_sample Telah di hapus oleh $this->karyawan",
