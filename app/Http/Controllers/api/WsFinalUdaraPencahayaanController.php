@@ -26,17 +26,45 @@ class WsFinalUdaraPencahayaanController extends Controller
 
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->where('kategori_3', '28-Pencahayaan')
 			->where('status', 0)
-			->whereNotNull('tanggal_terima')
-			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->whereNotNull('tanggal_terima');
+		// Filter by date (YYYY-MM or YYYY-MM-DD)
+		if ($request->filled('date')) {
+			$date = $request->date;
+			// Jika format YYYY-MM (bulan)
+			if (preg_match('/^\d{4}-\d{2}$/', $date)) {
+				$data->where(function ($q) use ($date) {
+					$q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
+						->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
+				});
+			}
+			// Jika format YYYY-MM-DD (tanggal)
+			elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+				$data->where(function ($q) use ($date) {
+					$q->whereDate('tanggal_sampling', $date)
+						->orWhereDate('tanggal_terima', $date);
+				});
+			}
+		}
 
-		return Datatables::of($data)->make(true);
+		$data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
+
+		return Datatables::of($data)
+			->make(true);
 	}
 
 	public function convertHourToMinute($hour)
@@ -104,6 +132,24 @@ class WsFinalUdaraPencahayaanController extends Controller
 		}
 	}
 
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::where('cfr', $request->cfr)
+			->orderByDesc('id')
+			->get()
+			->where('status', 0)
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			})->values();
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
+	}
+
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
@@ -134,7 +180,10 @@ class WsFinalUdaraPencahayaanController extends Controller
 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
 				}
 			} catch (\Exception $ex) {
-				dd($ex);
+				return response()->json([
+					'status' => false,
+					'message' => 'error ' . $ex->getMessage(),
+				], 500);
 			}
 		} else {
 			$data = [];
@@ -173,7 +222,6 @@ class WsFinalUdaraPencahayaanController extends Controller
 
 			if (in_array($request->kategori, $this->categoryPencahayaan)) {
 				$data = PencahayaanHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
-				// dd($data);
 				if ($data) {
 					$cek = PencahayaanHeader::where('id', $data->id)->first();
 					$cek->lhps = 0;
@@ -253,6 +301,7 @@ class WsFinalUdaraPencahayaanController extends Controller
 
 	public function validasiApproveWSApi(Request $request)
 	{
+		// dd($request->all());
 		DB::beginTransaction();
 		try {
 
@@ -274,7 +323,7 @@ class WsFinalUdaraPencahayaanController extends Controller
 				]);
 
 				DB::commit();
-				$this->resultx = 'Data hasbeen Approved.!';
+				$this->resultx = 'Data hasbeen Approved!';
 				return response()->json([
 					'message' => $this->resultx,
 					'status' => 200,
@@ -730,6 +779,67 @@ class WsFinalUdaraPencahayaanController extends Controller
 				'message' => $e->getMessage(),
 				'status' => 401
 			], 401);
+		}
+	}
+
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$dataLapangan = DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
+				'is_approve' => 0,
+				'rejected_by' => $this->karyawan,
+				'rejected_at' => Carbon::now(),
+			]);
+
+			$cahayaHeader = PencahayaanHeader::where('no_sampel', $request->no_sampel)
+				->update([
+					'is_approved' => 0,
+					'rejected_by' => $this->karyawan,
+					'rejected_at' => Carbon::now(),
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveAll(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'status' => 1,
+					'updated_by' => $this->karyawan,
+					'updated_at' => Carbon::now(),
+				]);
+
+			DB::commit();
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
 		}
 	}
 }
