@@ -187,7 +187,7 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
