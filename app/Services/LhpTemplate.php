@@ -4,6 +4,7 @@ namespace App\Services;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
+use Carbon\Carbon;
 
 class LhpTemplate
 {
@@ -140,6 +141,7 @@ class LhpTemplate
             'downloadLHPFinal',
         ];
 
+        $now = carbon::now();
         $AllPengesahanLhp = PengesahanLhp::all();
 
         // cari tanggal mulai paling besar yg <= now
