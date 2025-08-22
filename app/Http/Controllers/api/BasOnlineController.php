@@ -890,10 +890,20 @@ class BasOnlineController extends Controller
             $infoSampling = json_decode($jsonDecode, true);
 
             $tipe = explode("/", $request->no_document);
-            $request->kategori = explode(",", $request->kategori);
+            $requestSamples = explode(",", $request->kategori);
+            $requestSamples = array_map(function ($item) {
+                preg_match('/(\d+)$/', trim($item), $matches);
+                return $matches[1] ?? null;
+            }, $requestSamples);
+            $requestSamples = array_filter($requestSamples);
+            // dd($requestSamples);
 
-            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)->where('no_quotation', $request->no_document)->where('tanggal_sampling', $request->tanggal_sampling)->where('is_active', true)->first();
-
+            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)->where('no_quotation', $request->no_document)->where('tanggal_sampling', $request->tanggal_sampling)->where('is_active', true)->where(function ($q) use ($requestSamples) {
+                foreach ($requestSamples as $sample) {
+                    $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
+                }
+            })->first();
+            // dd($persiapanHeaderKategori);
             $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
 
             // Get No Sample

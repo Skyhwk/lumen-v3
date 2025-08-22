@@ -71,6 +71,7 @@ class ReorderNotifierService
     private function notify($orders, $bcc)
     {
         array_push($bcc, "afryan@intilab.com");
+        array_push($bcc, "dedi@intilab.com");
         SendEmail::where('to', "technicalcontrolsampel@intilab.com")
             // SendEmail::where('to', "afryan@intilab.com")
             ->where('subject', "Informasi Perubahan Sampel")

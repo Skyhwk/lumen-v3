@@ -1057,7 +1057,6 @@ class AppsFdlController extends Controller
 
             $update = DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                // ->orwhere('koding_sampling', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
             $nama = $this->karyawan;
@@ -1489,7 +1488,8 @@ class AppsFdlController extends Controller
                 $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                $update = DB::table('order_detail')
+                // Update Order Detail
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -1752,9 +1752,10 @@ class AppsFdlController extends Controller
                 // $data->is_rejected = false;
                 $data->save();
 
-                $update = DB::table('order_detail')
+                // Update Order Detail
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]); 
 
                 $nama = $this->karyawan;
                 $this->resultx = "Data Sampling PENCAHAYAAN Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";
@@ -1772,9 +1773,9 @@ class AppsFdlController extends Controller
         }catch(\Exception $e){
             DB::rollback();
             return response()->json([
-               'message' => $e.getMessage(),
-               'line' => $e->getLine(),
-               'code' => $e->getCode()
+                'message' => $e.getMessage(),
+                'line' => $e->getLine(),
+                'code' => $e->getCode()
             ]);
         }
     }
@@ -2013,9 +2014,9 @@ class AppsFdlController extends Controller
                     dd($e);
                 }
 
-                $update = DB::table('order_detail')
+                // Update Order Detail
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    // ->orwhere('koding_sampling', strtoupper(trim($request->no_sample)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
 
@@ -2370,9 +2371,10 @@ class AppsFdlController extends Controller
                 $data->created_at                                               = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                $update = DB::table('order_detail')
-                    ->where('no_sampel', $request->no_sample)
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d')]);
+                // Update Order Detail
+                DB::table('order_detail')
+                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                 $nama = $this->karyawan;
 
@@ -2623,7 +2625,8 @@ class AppsFdlController extends Controller
                 $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                $update = DB::table('order_detail')
+                // Update Order Detail
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -3088,7 +3091,8 @@ class AppsFdlController extends Controller
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $update = DB::table('order_detail')
+            // Update Order Detail
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -3839,9 +3843,9 @@ class AppsFdlController extends Controller
                     $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->save();
 
-                    $update = DB::table('order_detail')
+                    // Update Order Detail
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                        // ->orwhere('koding_sampling', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                     $nama = $this->karyawan;
@@ -3990,10 +3994,10 @@ class AppsFdlController extends Controller
                     // $data->is_rejected = false;
                     $data->save();
                     
-                    $update = DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    // ->orwhere('koding_sampling', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    // Update Order Detail
+                    DB::table('order_detail')
+                        ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                        ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                     DB::commit();
                     $this->resultx = "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
@@ -4106,9 +4110,9 @@ class AppsFdlController extends Controller
                     // $data->is_rejected = false;
                     $data->save();
 
-                    $update = DB::table('order_detail')
+                    // Update Order Detail
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                        // ->orwhere('koding_sampling', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                     $this->resultx = "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
@@ -4456,7 +4460,8 @@ class AppsFdlController extends Controller
                 // $data->is_rejected = false;
                 $data->save();
 
-                $update = DB::table('order_detail')
+                // Update Order Detail
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -4705,7 +4710,7 @@ class AppsFdlController extends Controller
 
             $this->resultx = "Data Sampling FDL MICROBIOLOGI Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -5143,7 +5148,7 @@ class AppsFdlController extends Controller
                 $data->save();
             }
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -5869,7 +5874,7 @@ class AppsFdlController extends Controller
             }
 
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -6198,7 +6203,7 @@ class AppsFdlController extends Controller
             // $data->is_rejected = false;
             $data->save();
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -6546,9 +6551,9 @@ class AppsFdlController extends Controller
                     };
                 }
 
-                $update = DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                DB::table('order_detail')
+                ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                 $nama = $this->karyawan;
                 $this->resultx = "Data Sampling LISTRIK MAGNET Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";
@@ -6785,7 +6790,6 @@ class AppsFdlController extends Controller
                     $data->foto_lain = $request->foto_lain ? self::convertImg($request->foto_lain, 3, $this->user_id) : null;
                     $data->created_by = $this->karyawan;
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                    // dd($data);
                     $data->save();
                 }
             }
@@ -7100,7 +7104,7 @@ class AppsFdlController extends Controller
                 
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -7108,10 +7112,6 @@ class AppsFdlController extends Controller
                     ->update([
                         'tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
-
-                    // return response()->json([
-                    //     'message' => 'masuk'
-                    // ], 400);
 
                 DB::commit();
                 return response()->json([
@@ -7321,7 +7321,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -7573,7 +7573,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -7803,7 +7803,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8057,7 +8057,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8161,7 +8161,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // Update Order Detail
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8309,11 +8309,10 @@ class AppsFdlController extends Controller
                 $data->permission = $request->permis;
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                // dd($data);
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8479,7 +8478,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8564,7 +8563,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -8647,7 +8646,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->where('kategori_3', 'LIKE', '%27-%')
                     ->orWhere('kategori_3', 'LIKE', '%53-%')
@@ -9650,7 +9649,7 @@ class AppsFdlController extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETEAIL
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sample)))
                     ->update([
                         'tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -9769,7 +9768,7 @@ class AppsFdlController extends Controller
                     $data->save();
 
                     // UPDATE ORDER DETAIL
-                    $update = DB::table('order_detail')
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -10042,6 +10041,11 @@ class AppsFdlController extends Controller
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                // Update Order Detail
+                DB::table('order_detail')
+                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                 return response()->json([
                     'message' => 'Data berhasil disimpan.'
@@ -10373,8 +10377,7 @@ class AppsFdlController extends Controller
                     $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->save();
 
-                    // UPDATE ORDER DETAIL
-                    $update = DB::table('order_detail')
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
                     
@@ -10455,9 +10458,9 @@ class AppsFdlController extends Controller
                     $data->save();
 
                     // UPDATE ORDER DETAIL
-                    $update = DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    DB::table('order_detail')
+                        ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                        ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                     DB::commit();
                     return response()->json([

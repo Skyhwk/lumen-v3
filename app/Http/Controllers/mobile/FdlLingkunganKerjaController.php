@@ -963,7 +963,6 @@ class FdlLingkunganKerjaController extends Controller
                     $fdlvalue->save();
                 }
             }else{
-                // dd($request->all());
                 $order_detail = OrderDetail::select('parameter')->where('no_sampel', strtoupper(trim($request->no_sample)))->first();
                 $parameter = [
                     "Kelembaban",
@@ -1048,7 +1047,7 @@ class FdlLingkunganKerjaController extends Controller
                 $data->save();
             }
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
