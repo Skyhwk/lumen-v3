@@ -669,7 +669,7 @@ class TestingController extends Controller
             if ($header != null) {
                 if ($header->file_qr == null) {
                     $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr_path = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
+                    $file_qr_path = $file_qr->insert('LHP_AIR', $header, 'Abidah Walfathiyyah');
                     if ($file_qr_path) {
                         $header->file_qr = $file_qr_path;
                         $header->save();
