@@ -48,8 +48,8 @@
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
                         <tr><td style="height: 70px;"></td></tr>
-                        <tr><td><strong>(<u>{{$pengesahan->nama_karyawan}}</u>)</strong></td></tr>
-                        <tr><td>{{$pengesahan->jabatan_karyawan}}</td></tr>
+                        <tr><td><strong>(<u>{{$header->nama_karyawan}}</u>)</strong></td></tr>
+                        <tr><td>{{$header->jabatan_karyawan}}</td></tr>
                     </table>
                 @elseif($mode == 'downloadLHPFinal')
                     <table

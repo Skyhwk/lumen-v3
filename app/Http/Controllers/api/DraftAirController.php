@@ -21,6 +21,7 @@ use App\Models\MasterKaryawan;
 use App\Models\DataLapanganAir;
 use App\Models\LhpsAirHeaderHistory;
 use App\Models\LhpsAirDetailHistory;
+use App\Models\PengesahanLhp;
 
 use App\Jobs\JobPrintLhp;
 
@@ -116,6 +117,21 @@ class DraftAirController extends Controller
                 }
             }
 
+            if($request->tanggal_lhp != null){
+                $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                    ->sortByDesc('berlaku_mulai')
+                    ->first();
+
+                $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+                $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+                    'status' => false
+                ], 400);
+            }
+
             try {
 
                 $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
@@ -133,10 +149,8 @@ class DraftAirController extends Controller
                 $header->titik_koordinat = ($request->titik_koordinat != '') ? $request->titik_koordinat : NULL;
                 $header->tanggal_sampling = ($request->tanggal_terima != '') ? $request->tanggal_terima : NULL;
                 $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
-                $header->nama_karyawan = 'Abidah Walfathiyyah';
-                $header->jabatan_karyawan = 'Technical Control Supervisor';
-                // $header->nama_karyawan = 'Kharina Waty';
-                // $header->jabatan_karyawan = 'Technical Control Manager';
+                $header->nama_karyawan = $nama_perilis;
+                $header->jabatan_karyawan = $jabatan_perilis;
                 $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
                 $header->regulasi_custom = isset($regulasi_custom) && !empty($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
                 $header->keterangan = ($keterangan != null) ? json_encode($keterangan) : NULL;
