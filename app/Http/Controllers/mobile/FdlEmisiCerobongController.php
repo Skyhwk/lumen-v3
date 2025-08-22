@@ -254,10 +254,9 @@ class FdlEmisiCerobongController extends Controller
                     if ($request->foto_lain != '') $data->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
                     $data->created_by                                                   = $this->karyawan;
                     $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
-                    // dd($data);
                     $data->save();
 
-                    $update = DB::table('order_detail')
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -387,9 +386,9 @@ class FdlEmisiCerobongController extends Controller
                     $data->is_rejected                                      = 0;
                     $data->save();
                     
-                    $update = DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    DB::table('order_detail')
+                        ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                        ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
                     DB::commit();
                     $this->resultx = "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
@@ -500,7 +499,7 @@ class FdlEmisiCerobongController extends Controller
                     $data->is_rejected                                      = 0;
                     $data->save();
 
-                    $update = DB::table('order_detail')
+                    DB::table('order_detail')
                         ->where('no_sampel', strtoupper(trim($request->no_sample)))
                         ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 

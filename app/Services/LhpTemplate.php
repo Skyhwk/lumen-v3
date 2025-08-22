@@ -3,6 +3,8 @@
 namespace App\Services;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
+use App\Models\PengesahanLhp;
+use Carbon\Carbon;
 
 class LhpTemplate
 {
@@ -139,23 +141,32 @@ class LhpTemplate
             'downloadLHPFinal',
         ];
 
+        $now = carbon::now();
+        $AllPengesahanLhp = PengesahanLhp::all();
+
+        // cari tanggal mulai paling besar yg <= now
+        $PengesahanLhp = $AllPengesahanLhp
+            ->where('berlaku_mulai', '<=', $now)
+            ->sortByDesc('berlaku_mulai')
+            ->first();
+
         if (!$value) {
             $resultName = '';
             foreach ($modes as $mode) { 
-                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode);
+                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $PengesahanLhp);
             }
 
             self::$instance = null;
             return $resultName;
         }
         
-        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value);
+        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $PengesahanLhp);
 
         self::$instance = null;
         return $resultName;
     }
 
-    private function execute($header, $detail, $prefix, $view, $customs, $mode)
+    private function execute($header, $detail, $prefix, $view, $customs, $mode, $pengesahan)
     {   
         $namaFile = '';
         if ($this->filename) {
@@ -182,16 +193,16 @@ class LhpTemplate
         
         $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
-        $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
-        $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
+        $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false, 'pengesahan' => $pengesahan])->render();
+        $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last', 'pengesahan'))->render();
 
         if(!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
                 $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
                 $htmlCustomHeader[$page] = view($this->directoryDefault . '.customHeader', compact('header', 'detail', 'mode', 'view', 'showKan', 'page'))->render();
-                $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
-                $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
+                $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false, 'pengesahan' => $pengesahan])->render();
+                $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last', 'pengesahan'))->render();
             }
             
         }

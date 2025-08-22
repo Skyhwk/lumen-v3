@@ -148,7 +148,7 @@ class FdlCahayaController extends Controller
                 $data->created_at                = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                $update = DB::table('order_detail')
+                DB::table('order_detail')
                     ->where('no_sampel', strtoupper(trim($request->no_sampel)))
                     ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 
@@ -195,7 +195,7 @@ class FdlCahayaController extends Controller
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            InsertActivityFdl::by($this->user_id)->action('approve')->target("$data->kategori dengan nomor sampel $no_sample")->save();
+            InsertActivityFdl::by($this->user_id)->action('approve')->target("$data->kategori dengan nomor sampel $no_sampel")->save();
 
 
             return response()->json([
