@@ -19,6 +19,7 @@ class DraftUlkErgonomiController extends Controller
     public function index()
     {
         DB::statement("SET SESSION sql_mode = ''");
+        $generatedFiles = DraftErgonomiFile::pluck('name_file', 'no_sampel');
         $data = OrderDetail::with([
             'orderHeader'
             => function ($query) {
@@ -30,8 +31,10 @@ class DraftUlkErgonomiController extends Controller
             ->whereJsonContains('parameter','230;Ergonomi')
             ->groupBy('no_sampel')
             ->get() // ambil data dulu
-            ->map(function ($item) {
-                $item->isGenerate = DraftErgonomiFile::where('no_sampel', $item->no_sampel)->exists();
+            ->map(function ($item) use($generatedFiles) {
+                //$item->isGenerate = DraftErgonomiFile::where('no_sampel', $item->no_sampel)->exists();
+                 $item->isGenerate = isset($generatedFiles[$item->no_sampel]);
+                 $item->filePdf = $item->isGenerate ? $generatedFiles[$item->no_sampel] : null;
                 return $item;
             });
         return Datatables::of($data)->make(true);
