@@ -119,7 +119,7 @@ class DraftAirController extends Controller
 
             if($request->tanggal_lhp != null){
                 $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
-                    ->sortByDesc('berlaku_mulai')
+                    ->orderBy('berlaku_mulai', 'desc')
                     ->first();
 
                 $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
