@@ -183,18 +183,17 @@ class GenerateFeeSampling
                 }
 
                 // Hitung tempat dari PT campur/non-air
-                $nonAirTempat = count($ptCampurAtauNonAir) >= 1 ? 1 : 0;
-
+                $nonAirTempat = count($ptCampurAtauNonAir) > 0 ? 1 : 0;
+                // dd($airTempat, $nonAirTempat);
 
                 // Total tempat
-                if (isset($airTempat) && isset($nonAirTempat)) {
+                if ($airTempat > 0 && $nonAirTempat > 0) {
                     $tempat = $airTempat;
-                } else if (isset($airTempat)) {
+                } else if ($airTempat > 0) {
                     $tempat = $airTempat;
                 } else {
                     $tempat = $nonAirTempat;
                 }
-                // $tempat = $airTempat + $nonAirTempat;
                 // dd($titikAirGabungan, $nonAirTempat, $tempat);
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
@@ -219,7 +218,7 @@ class GenerateFeeSampling
 
                 // ✅ Total harian = fee pokok + fee tambahan
                 $totalHarian = $feePokok + $feeTambahan;
-
+                // dd($tempat);
                 // ✅ Push ke rekap
                 $rekap[] = [
                     'tanggal' => $tgl,

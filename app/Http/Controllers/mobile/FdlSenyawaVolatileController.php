@@ -532,7 +532,7 @@ class FdlSenyawaVolatileController extends Controller
             
             
 
-            $update = DB::table('order_detail')
+            DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
 

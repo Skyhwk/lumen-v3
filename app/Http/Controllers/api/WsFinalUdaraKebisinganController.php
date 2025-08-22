@@ -76,6 +76,7 @@ class WsFinalUdaraKebisinganController extends Controller
 	public function getDetailCfr(Request $request)
 	{
 		$data = OrderDetail::where('cfr', $request->cfr)
+			->where('status', 0)
 			->orderByDesc('id')
 			->get()
 			->map(function ($item) {
@@ -859,7 +860,7 @@ class WsFinalUdaraKebisinganController extends Controller
 				]);
 			}
 
-			$kebisinganHeader = KebisinganHeader::where('no_sampel', $request->no_sampel)
+			KebisinganHeader::where('no_sampel', $request->no_sampel)
 				->update([
 					'is_approved' => 0
 				]);
@@ -881,11 +882,11 @@ class WsFinalUdaraKebisinganController extends Controller
 		}
 	}
 
-	public function handleApproveAll(Request $request)
+	public function handleApproveSelected(Request $request)
 	{
 		DB::beginTransaction();
 		try {
-			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
 				->update([
 					'status' => 1,
 				]);
