@@ -488,156 +488,186 @@ class PersiapanSampleController extends Controller
     }
 
     private function saveHeader(Request $request)
-    {
-        $arrayNoSampel = array_values(array_keys($request->detail));
-        $noSampel = !empty($request->all_category) ? $request->all_category : $arrayNoSampel;
-        $existingPsd = PersiapanSampelDetail::with('psHeader')->whereIn('no_sampel', $noSampel)
-            ->where('is_active', 1)
-            ->whereHas('psHeader', function ($query) {
-                $query->where('is_active', 1);
-            })
-            ->pluck('id_persiapan_sampel_header')
-            ->unique()
-            ->toArray();
+    {   
+        try {
+            
+            
+            //$noSampel = !empty($request->all_category) ? $request->all_category : $arrayNoSampel;
+            $psh = null;
+            if(!empty($request->all_category)){
+                $noSampel = $request->all_category;
+                $psh = PersiapanSampelHeader::where('is_active', 1)
+                ->where(function($query) use ($noSampel) {
+                    foreach ($noSampel as $sampel) {
+                        // Gunakan LIKE untuk cari dalam JSON string
+                        $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                    }
+                })
+                ->first();
+                if(!$psh){
+                    $psh = new PersiapanSampelHeader();
+                    $psh->no_document = $this->getDocumentNumber();
+                    $psh->created_by = $this->karyawan;
+                    $psh->created_at = Carbon::now();
+                }
 
-        $psh = null;
-        
-        if (count($existingPsd) === 1) {
-            PersiapanSampelDetail::whereNotIn('no_sampel', $noSampel)
-                ->whereIn('id_persiapan_sampel_header', $existingPsd)
-                ->update([
-                    'is_active' => 0,
-                    'deleted_by' => $this->karyawan,
-                    'deleted_at' => Carbon::now(),
-                ]);
+            }else{
+                $arrayNoSampel = array_values(array_keys($request->detail));
+                $noSampel = $arrayNoSampel;
+                $existingPsd = PersiapanSampelDetail::with('psHeader')->whereIn('no_sampel', $noSampel)
+                    ->where('is_active', 1)
+                    ->whereHas('psHeader', function ($query) {
+                        $query->where('is_active', 1);
+                    })
+                    ->pluck('id_persiapan_sampel_header')
+                    ->unique()
+                    ->toArray();
+                    if (count($existingPsd) === 1) {
+                        PersiapanSampelDetail::whereNotIn('no_sampel', $noSampel)
+                            ->whereIn('id_persiapan_sampel_header', $existingPsd)
+                            ->update([
+                                'is_active' => 0,
+                                'deleted_by' => $this->karyawan,
+                                'deleted_at' => Carbon::now(),
+                            ]);
+            
+                        $psh = PersiapanSampelHeader::find($existingPsd[0]);
+                    } else if (count($existingPsd) > 1) {
+                        $jumlah_array = count($existingPsd);
+                        $id_header = array_values($existingPsd)[$jumlah_array - 1];
+                        $array_to_remove = array_slice($existingPsd, 0, -1);
+            
+                        // matikan header lain 
+                        PersiapanSampelHeader::whereIn('id', $array_to_remove)->update(['is_active' => 0]);
+                        //matikan deatil lain
+                        PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $array_to_remove)->update(['is_active' => 0]);
+                        $psh = PersiapanSampelHeader::find($id_header);
+                    }
+            }
 
-            $psh = PersiapanSampelHeader::find($existingPsd[0]);
-        } else if (count($existingPsd) > 1) {
-            $jumlah_array = count($existingPsd);
-            $id_header = array_values($existingPsd)[$jumlah_array - 1];
-            $array_to_remove = array_slice($existingPsd, 0, -1);
-
-            // matikan header lain 
-            PersiapanSampelHeader::whereIn('id', $array_to_remove)->update(['is_active' => 0]);
-            //matikan deatil lain
-            PersiapanSampelDetail::whereIn('id_persiapan_sampel_header', $array_to_remove)->update(['is_active' => 0]);
-            $psh = PersiapanSampelHeader::find($id_header);
+            if ($psh == null) {
+                $psh = new PersiapanSampelHeader();
+                $psh->no_document = $this->getDocumentNumber();
+                $psh->created_by = $this->karyawan;
+                $psh->created_at = Carbon::now();
+            }
+    
+            $psh->fill($request->only([
+                'no_order',
+                'no_quotation',
+                'tanggal_sampling',
+                'nama_perusahaan',
+                'analis_berangkat',
+                'sampler_berangkat',
+                'analis_pulang',
+                'sampler_pulang',
+                'plastik_benthos',
+                'media_petri_dish',
+                'media_tabung',
+                'masker',
+                'sarung_tangan_karet',
+                'sarung_tangan_bintik',
+                'tambahan'
+            ]));
+    
+            $psh->no_sampel = json_encode($noSampel, JSON_UNESCAPED_SLASHES);
+            $psh->periode = $request->periode ?? $psh->periode;
+    
+            $psh->plastik_benthos = json_encode($request->plastik_benthos ?? []);
+            $psh->media_petri_dish = json_encode($request->media_petri_dish ?? []);
+            $psh->media_tabung = json_encode($request->media_tabung ?? []);
+            $psh->masker = json_encode($request->masker ?? []);
+            $psh->sarung_tangan_karet = json_encode($request->sarung_tangan_karet ?? []);
+            $psh->sarung_tangan_bintik = json_encode($request->sarung_tangan_bintik ?? []);
+            $psh->tambahan = json_encode($request->tambahan ?? []);
+            $psh->is_active = 1;
+            $psh->updated_by = $this->karyawan;
+            $psh->updated_at = Carbon::now();
+            $psh->save();
+    
+            return $psh;
+        } catch (\Throwable $th) {
+            throw $th;
         }
-
-        if ($psh == null) {
-            $psh = new PersiapanSampelHeader();
-            $psh->no_document = $this->getDocumentNumber();
-            $psh->created_by = $this->karyawan;
-            $psh->created_at = Carbon::now();
-        }
-
-        $psh->fill($request->only([
-            'no_order',
-            'no_quotation',
-            'tanggal_sampling',
-            'nama_perusahaan',
-            'analis_berangkat',
-            'sampler_berangkat',
-            'analis_pulang',
-            'sampler_pulang',
-            'plastik_benthos',
-            'media_petri_dish',
-            'media_tabung',
-            'masker',
-            'sarung_tangan_karet',
-            'sarung_tangan_bintik',
-            'tambahan'
-        ]));
-
-        $psh->no_sampel = json_encode($noSampel, JSON_UNESCAPED_SLASHES);
-        $psh->periode = $request->periode ?? $psh->periode;
-
-        $psh->plastik_benthos = json_encode($request->plastik_benthos ?? []);
-        $psh->media_petri_dish = json_encode($request->media_petri_dish ?? []);
-        $psh->media_tabung = json_encode($request->media_tabung ?? []);
-        $psh->masker = json_encode($request->masker ?? []);
-        $psh->sarung_tangan_karet = json_encode($request->sarung_tangan_karet ?? []);
-        $psh->sarung_tangan_bintik = json_encode($request->sarung_tangan_bintik ?? []);
-        $psh->tambahan = json_encode($request->tambahan ?? []);
-        $psh->is_active = 1;
-        $psh->updated_by = $this->karyawan;
-        $psh->updated_at = Carbon::now();
-        $psh->save();
-
-        return $psh;
     }
 
     private function saveDetail(Request $request, $psh)
     {
-        if (!$request->detail)
-            return false;
-
-        $noSampels = array_keys($request->detail);
-        $orderDetail = OrderDetail::whereIn('no_sampel', $noSampels)->get();
-        // $allSamples = [];
-
-        PersiapanSampelDetail::whereNotIn('no_sampel', $noSampels)
-            ->where('id_persiapan_sampel_header', $psh->id)
-            ->update([
-                'is_active' => 0,
-                'deleted_by' => $this->karyawan,
-                'deleted_at' => Carbon::now()
-            ]);
-
-        foreach ($request->detail as $sampleNumber => $categories) {
-
-            $existingPsd = PersiapanSampelDetail::where([
-                'id_persiapan_sampel_header' => $psh->id,
-                'no_sampel' => $sampleNumber
-            ])->first();
-
-            foreach ($categories as $category => &$params) {
-                $od = $orderDetail->firstWhere('no_sampel', $sampleNumber);
-                if (!$od)
-                    continue;
-
-                $kategori = strtolower(explode('-', $od->kategori_2)[1] ?? '');
-                if ($kategori !== $category)
-                    continue;
-
-                foreach ($params as $param => &$info) {
-                    $decoded = collect(json_decode($od->persiapan));
-                    $target = $kategori === 'air'
-                        ? $decoded->firstWhere('type_botol', $param)
-                        : $decoded->firstWhere('parameter', $param);
-
-                    $info['file'] = $target->file ?? null;
+        try {
+            
+            if (!$request->detail)
+                return false;
+    
+            $noSampels = array_keys($request->detail);
+            $orderDetail = OrderDetail::whereIn('no_sampel', $noSampels)->get();
+            // $allSamples = [];
+    
+            PersiapanSampelDetail::whereNotIn('no_sampel', $noSampels)
+                ->where('id_persiapan_sampel_header', $psh->id)
+                ->update([
+                    'is_active' => 0,
+                    'deleted_by' => $this->karyawan,
+                    'deleted_at' => Carbon::now()
+                ]);
+    
+            foreach ($request->detail as $sampleNumber => $categories) {
+    
+                $existingPsd = PersiapanSampelDetail::where([
+                    'id_persiapan_sampel_header' => $psh->id,
+                    'no_sampel' => $sampleNumber
+                ])->first();
+    
+                foreach ($categories as $category => &$params) {
+                    $od = $orderDetail->firstWhere('no_sampel', $sampleNumber);
+                    if (!$od)
+                        continue;
+    
+                    $kategori = strtolower(explode('-', $od->kategori_2)[1] ?? '');
+                    if ($kategori !== $category)
+                        continue;
+    
+                    foreach ($params as $param => &$info) {
+                        $decoded = collect(json_decode($od->persiapan));
+                        $target = $kategori === 'air'
+                            ? $decoded->firstWhere('type_botol', $param)
+                            : $decoded->firstWhere('parameter', $param);
+    
+                        $info['file'] = $target->file ?? null;
+                    }
                 }
+    
+                $psd = $existingPsd ?? new PersiapanSampelDetail();
+                // $allSamples[] = $sampleNumber;
+    
+                $psd->no_sampel = $sampleNumber;
+                $psd->id_persiapan_sampel_header = $psh->id;
+                $psd->parameters = json_encode($categories);
+    
+                if ($existingPsd) {
+                    $psd->updated_by = $this->karyawan;
+                    $psd->updated_at = Carbon::now();
+                    $psd->is_active = 1;
+                } else {
+                    $psd->created_by = $this->karyawan;
+                    $psd->created_at = Carbon::now();
+                }
+    
+                $psd->save();
             }
-
-            $psd = $existingPsd ?? new PersiapanSampelDetail();
-            // $allSamples[] = $sampleNumber;
-
-            $psd->no_sampel = $sampleNumber;
-            $psd->id_persiapan_sampel_header = $psh->id;
-            $psd->parameters = json_encode($categories);
-
-            if ($existingPsd) {
-                $psd->updated_by = $this->karyawan;
-                $psd->updated_at = Carbon::now();
-                $psd->is_active = 1;
-            } else {
-                $psd->created_by = $this->karyawan;
-                $psd->created_at = Carbon::now();
-            }
-
-            $psd->save();
+    
+    
+            // $psh->no_sampel = json_encode($allSamples, JSON_UNESCAPED_SLASHES);
+            // $psh->save();
+            
+            return true;
+        } catch (\Throwable $th) {
+            throw $th;
         }
-
-
-        // $psh->no_sampel = json_encode($allSamples, JSON_UNESCAPED_SLASHES);
-        // $psh->save();
-
-        return true;
     }
 
     public function save(Request $request)
     {
+        
         DB::beginTransaction();
 
         try {
@@ -660,7 +690,9 @@ class PersiapanSampleController extends Controller
             DB::rollBack();
             return response()->json([
                 'message' => 'Failed to save data',
-                'error' => $th->getMessage()
+                'error' => $th->getMessage(),
+                'line' =>$th->getLine(),
+                'file' =>$th->getFIle()
             ], 500);
         }
     }
