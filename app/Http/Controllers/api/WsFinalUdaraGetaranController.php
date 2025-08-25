@@ -44,22 +44,66 @@ use Carbon\Carbon;
 class WsFinalUdaraGetaranController extends Controller
 {
 
+	private $categoryGetaran = [13, 14, 15, 16, 18, 19];
+
+
+	// public function index(Request $request)
+	// {
+	// 	$data = OrderDetail::where('is_active', $request->is_active)
+	// 		->where('kategori_2', '4-Udara')
+	// 		->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
+	// 		->where('status', 0)
+	// 		->whereNotNull('tanggal_terima')
+	// 		->whereJsonDoesntContain('parameter', [
+	// 			"318;Psikologi"
+	// 		])
+	// 		->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+	// 		->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+	// 		->orderBy('id', "desc");
+
+	// 	return Datatables::of($data)->make(true);
+	// }
+
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
+			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
 			->where('status', 0)
-			->whereNotNull('tanggal_terima')
-			->whereJsonDoesntContain('parameter', [
-				"318;Psikologi"
-			])
-			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->whereNotNull('tanggal_terima');
+		// Filter by date (YYYY-MM or YYYY-MM-DD)
+		if ($request->filled('date')) {
+			$date = $request->date;
+			if (preg_match('/^\d{4}-\d{2}$/', $date)) {
+				$data->where(function ($q) use ($date) {
+					$q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
+						->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
+				});
+			} elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+				$data->where(function ($q) use ($date) {
+					$q->whereDate('tanggal_sampling', $date)
+						->orWhereDate('tanggal_terima', $date);
+				});
+			}
+		}
 
-		return Datatables::of($data)->make(true);
+		$data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
+
+		return Datatables::of($data)
+			->make(true);
 	}
+
 	public function convertHourToMinute($hour)
 	{
 		$minutes = $hour * 60;
@@ -168,55 +212,133 @@ class WsFinalUdaraGetaranController extends Controller
 			], 401);
 		}
 	}
+
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::where('cfr', $request->cfr)
+			->orderByDesc('id')
+			->get()
+			->where('status', 0)
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			})->values();
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
+	}
+
+	// public function detailLapangan(Request $request)
+	// {
+	// 	$parameterNames = [];
+
+
+	// 	$noOrder = explode('/', $request->no_sampel)[0] ?? null;
+	// 	$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
+	// 	$lapangan2 = $Lapangan->map(function ($item) {
+	// 		return $item->no_sampel;
+	// 	})->unique()->sortBy(function ($item) {
+	// 		return (int) explode('/', $item)[1];
+	// 	})->values();
+	// 	$totLapangan = $lapangan2->count();
+	// 	if ($request->no_sampel) {
+	// 		$detailOrder = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
+	// 		if (str_contains($detailOrder->parameter, 'Getaran (LK) TL') || (str_contains($detailOrder->parameter, "Getaran (LK) ST"))) {
+	// 			try {
+	// 				$data = DataLapanganGetaranPersonal::where('no_sampel', $request->no_sampel)->first();
+
+
+	// 				$urutan = $lapangan2->search($data->no_sampel);
+	// 				$urutanDisplay = $urutan + 1;
+	// 				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
+	// 				if ($data) {
+	// 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+	// 				}
+	// 			} catch (\Exception $ex) {
+	// 				dd($ex);
+	// 			}
+	// 		} else {
+	// 			try {
+
+	// 				$data = DataLapanganGetaran::where('no_sampel', $request->no_sampel)->first();
+	// 				$urutan = $lapangan2->search($data->no_sampel); // cari posisi index di lapangan2
+	// 				$urutanDisplay = $urutan + 1;
+	// 				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
+	// 				if ($data) {
+	// 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+	// 				}
+	// 			} catch (\Exception $ex) {
+	// 				dd($ex);
+	// 			}
+	// 		}
+	// 	} else {
+	// 		return response()->json(['message' => 'Data tidak ditemukan', 'success' => false, 'status' => 401]);
+	// 	}
+
+
+
+	// }
+
+
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
 
-
-		$noOrder = explode('/', $request->no_sampel)[0] ?? null;
-		$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
-		$lapangan2 = $Lapangan->map(function ($item) {
-			return $item->no_sampel;
-		})->unique()->sortBy(function ($item) {
-			return (int) explode('/', $item)[1];
-		})->values();
-		$totLapangan = $lapangan2->count();
-		if ($request->no_sampel) {
-			$detailOrder = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
-			if (str_contains($detailOrder->parameter, 'Getaran (LK) TL') || (str_contains($detailOrder->parameter, "Getaran (LK) ST"))) {
-				try {
-					$data = DataLapanganGetaranPersonal::where('no_sampel', $request->no_sampel)->first();
-
-
-					$urutan = $lapangan2->search($data->no_sampel);
-					$urutanDisplay = $urutan + 1;
-					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-					if ($data) {
-						return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-					}
-				} catch (\Exception $ex) {
-					dd($ex);
-				}
-			} else {
-				try {
-
-					$data = DataLapanganGetaran::where('no_sampel', $request->no_sampel)->first();
-					$urutan = $lapangan2->search($data->no_sampel); // cari posisi index di lapangan2
-					$urutanDisplay = $urutan + 1;
-					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-					if ($data) {
-						return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-					}
-				} catch (\Exception $ex) {
-					dd($ex);
+		if (is_array($request->parameter)) {
+			foreach ($request->parameter as $param) {
+				$paramParts = explode(";", $param);
+				if (isset($paramParts[1])) {
+					$parameterNames[] = trim($paramParts[1]);
 				}
 			}
-		} else {
-			return response()->json(['message' => 'Data tidak ditemukan', 'success' => false, 'status' => 401]);
 		}
+		if (in_array($request->kategori, $this->categoryGetaran)) {
+			$noOrder = explode('/', $request->no_sampel)[0] ?? null;
 
+			$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
 
+			$lapangan2 = $Lapangan->map(function ($item) {
+				return $item->no_sampel;
+			})->unique()->sortBy(function ($item) {
+				return (int) explode('/', $item)[1];
+			})->values();
 
+			$totLapangan = $lapangan2->count();
+
+			try {
+				$data = [];
+				$model = (in_array("Getaran (LK) ST" , $parameterNames)||in_array("Getaran (LK) TL" , $parameterNames))
+					? DataLapanganGetaranPersonal::class
+					: DataLapanganGetaran::class;
+
+				$data = $model::where('no_sampel', $request->no_sampel)->first();
+
+				if (!$data)
+					return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);
+
+				$urutan = $lapangan2->search($data->no_sampel);
+				$urutanDisplay = $urutan + 1;
+				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
+				$data['parameter'] = $parameterNames[0];
+				// dd([
+				// 	'no_order' => $noOrder,
+				// 	'total_lapangan' => $totLapangan,
+				// 	'lapangan' => $lapangan2,
+				// 	'data' => $data,
+				// ]);
+
+				if ($data) {
+					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+				}
+			} catch (\Exception $ex) {
+				dd($ex);
+			}
+		} else {
+			$data = [];
+		}
 	}
 	public function rejectAnalys(Request $request)
 	{
@@ -809,6 +931,66 @@ class WsFinalUdaraGetaranController extends Controller
 				'message' => $e->getMessage(),
 				'status' => 401
 			], 401);
+		}
+	}
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$dataLapangan = DataLapanganGetaranPersonal::where('no_sampel', $request->no_sampel)->update([
+				'is_approve' => 0,
+			]);
+
+			if (!$dataLapangan) {
+				$dataLapangan = DataLapanganGetaran::where('no_sampel', $request->no_sampel)->update([
+					'is_approve' => 0,
+				]);
+			}
+
+			GetaranHeader::where('no_sampel', $request->no_sampel)
+				->update([
+					'is_approve' => 0
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveAll(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'status' => 1,
+				]);
+
+			DB::commit();
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
 		}
 	}
 }
