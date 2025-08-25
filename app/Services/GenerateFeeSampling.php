@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\DataLapanganAir;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
 use Carbon\Carbon;
 use App\Models\MasterFeeSampling;
 use App\Models\Jadwal;
@@ -34,7 +37,7 @@ class GenerateFeeSampling
                 ->whereHas('persiapanHeader')
                 ->get()
                 ->groupBy('tanggal');
-
+             
             // 4. Ambil semua data wilayah dalam kota (cache di awal)
             $dalamKotaMap = MasterWilayahSampling::where('is_active', 1)
                 ->where('status_wilayah', 'Dalam Kota')
@@ -65,8 +68,16 @@ class GenerateFeeSampling
                 $titik = 0;
                 $feeTambahan = 0;
                 $durasi_tertinggi = 0;
+                $quotationTotal = 0;
                 $perusahaanUnik = collect($items)->pluck('nama_perusahaan')->unique();
-
+                $noQuote = collect($items)->pluck('no_quotation')->unique();
+                foreach($noQuote as $quote){
+                    $quotation = QuotationKontrakH::where('no_document', $quote)->first();
+                    if(!$quotation) $quotation = QuotationNonKontrak::where('no_document', $quote)->first();
+                        if(isset($quotation->harga_perdiem_personil_total)) {
+                        $quotationTotal += 1;
+                    }
+                }
                 $feeTambahanRincian = [
                     'sampling_24jam' => 0,
                     'isokinetik' => 0,
@@ -79,8 +90,10 @@ class GenerateFeeSampling
 
                 $titikAirGabungan = 0;
                 $ptCampurAtauNonAir = [];  // PT yang mengandung non-air (campur atau non-air only)
-                $ptAirOnly = [];           // PT yang hanya air
+                $ptAirOnly = []; 
+                     // PT yang hanya air
                 foreach ($items as $item) {
+                    $noOrder = $item->persiapanHeader->no_order;
                     $durasiValue = (int) $item->durasi;
                     $durasi_tertinggi = max($durasi_tertinggi, $durasiValue);
                     $nama = trim(strtolower($item->nama_perusahaan)); // bisa ganti pakai titik sampling
@@ -94,12 +107,14 @@ class GenerateFeeSampling
                     foreach ($kategori as $k) {
                         if (stripos($k, 'air') !== false) {
                             $punyaAir = true;
-                            $titikAirPTIni++;
+                            $noSampelIni = $noOrder ."/".explode(' - ', $k)[1];
+                            $datalapangan = DataLapanganAir::where('no_sampel', $noSampelIni)->first();
+                            if($datalapangan) $titikAirPTIni++;
+                        
                         } else {
                             $punyaNonAir = true;
                         }
                     }
-
                     if ($punyaAir && !$punyaNonAir) {
                         // PT ini hanya air, simpan titiknya
                         if (!isset($ptAirOnly[$nama])) {
@@ -129,20 +144,13 @@ class GenerateFeeSampling
                             $feeTambahanRincian['luar_kota'] += $fee->sampling_luar_kota;
                         }
                     }
-                    // dd($ptAirOnly, $ptCampurAtauNonAir);
-
-                    // Hari libur & sampling 24 jam
-                    // $hasilLibur24 = $this->hitungFeeHariLiburDanSampling24Jam($item->tanggal, $durasiValue, $fee, $liburKantor);
-                    // $feeTambahan += $hasilLibur24['total_fee'];
-                    // $feeTambahanRincian['hari_libur'] += $hasilLibur24['rincian']['hari_libur'];
-                    // $feeTambahanRincian['sampling_24jam'] += $hasilLibur24['rincian']['sampling_24jam'];
+            
                 }
                 // ⬇️ DISINI tempatnya cek apakah dia driver
                 $isDriver = collect($items)->contains(function ($item) {
                     return isset($item->driver, $item->sampler) &&
                         trim(strtolower($item->driver)) === trim(strtolower($item->sampler));
                 });
-
                 if ($isDriver) {
                     $feeTambahan += 20000;
                     $feeTambahanRincian['driver'] = 20000;
@@ -169,17 +177,23 @@ class GenerateFeeSampling
                 foreach ($ptAirOnly as $jumlahTitik) {
                     $titikAirGabungan += $jumlahTitik;
                 }
-
+       
                 // Hitung tempat dari titik air gabungan
                 $airTempat = 0;
                 if ($titikAirGabungan > 0) {
                     if ($titikAirGabungan <= 10) {
-                        $airTempat = 1;
+                        $airTempat = 0;
                     } elseif ($titikAirGabungan <= 20) {
-                        $airTempat = 2;
+                        $airTempat = 1;
                     } else {
-                        $airTempat = 3;
+                        $airTempat = 2;
                     }
+                }
+
+                if(count($noQuote) > 1){
+                    $airTempat = $airTempat + $quotationTotal;
+                } else {
+                    $airTempat = $quotationTotal;
                 }
 
                 // Hitung tempat dari PT campur/non-air
@@ -194,14 +208,13 @@ class GenerateFeeSampling
                 } else {
                     $tempat = $nonAirTempat;
                 }
-                // dd($titikAirGabungan, $nonAirTempat, $tempat);
 
                 $feeTambahanRincian['durasi_sampling'] = $durasi_map[$durasi_tertinggi] ?? 'Tidak Diketahui';
 
                 // Fee Pokok
                 $feePokokDasar = $fee->titik_1;
                 $feePokokTambahan = 0;
-
+                
                 if ($tempat >= 2) {
                     $feePokokTambahan += 10000; // tempat ke-2
                 }
