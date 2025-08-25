@@ -3374,7 +3374,7 @@ class RequestQuotationController extends Controller
                             // PENENTUAN NOMOR PENAMAAN TITIK
                             $penamaan_titik_fixed = [];
 
-                            if(!$oldDatas && $checkOldQtRemaining->count() > 0){
+                            if(!$oldDatas && count($checkOldQtRemaining) > 0){
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
 
@@ -5208,7 +5208,7 @@ class RequestQuotationController extends Controller
                             $oldKeys = array_keys($oldNumberMappingForGroup);
                             // dump($per, $isSameCount, $oldNumberMappingForGroup, $xyz->penamaan_titik);
 
-                            if(!$checkOldQt && $checkOldQtRemaining->count() > 0){
+                            if(!$checkOldQt && count($checkOldQtRemaining) > 0){
                                 $foundFromOldRemaining = false;
                                 $matchedOldPenamaan = null;
                                 // dump("parameter old");
@@ -5424,7 +5424,7 @@ class RequestQuotationController extends Controller
                     //                 ->get();
                     //             // dump('masuk else periode', $per);
 
-                    //             if ($checkOldQtRemaining->count() > 0) {
+                    //             if (count($checkOldQtRemaining) > 0) {
                     //                 // dump('ada data diff periode', $per);
 
                     //                 $foundFromOldRemaining = false;
@@ -7409,7 +7409,7 @@ class RequestQuotationController extends Controller
     //                                 ->get();
     //                             // dump('masuk else periode', $per);
 
-    //                             if ($checkOldQtRemaining->count() > 0) {
+    //                             if (count($checkOldQtRemaining) > 0) {
     //                                 // dump('ada data diff periode', $per);
 
     //                                 $foundFromOldRemaining = false;
