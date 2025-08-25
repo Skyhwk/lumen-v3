@@ -12,6 +12,13 @@ class DataLapanganIsokinetikKadarAir extends Sector
 
     protected $guarded = [];
 
+    protected $casts = [
+        'data_impinger' => 'array',
+        'data_dgmterbaca' => 'array',
+        'data_dgm_test' => 'array',
+        'data_kalkulasi_dgm' => 'array',
+    ];
+
     public function detail(){
         return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
         ->where('is_active', true);

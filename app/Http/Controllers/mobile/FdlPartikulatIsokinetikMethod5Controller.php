@@ -391,7 +391,7 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
         $page = $request->input('page', 1);
         $search = $request->input('search');
 
-        $query = DataLapanganIsokinetikPenentuanPartikulat::with('detail')
+        $query = DataLapanganIsokinetikPenentuanPartikulat::with(['detail', 'method2'])
             ->where('created_by', $this->karyawan)
             ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
 
