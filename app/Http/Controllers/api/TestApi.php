@@ -465,13 +465,6 @@ class TestApi extends Controller
                 .brief-result-table .content-cell { width: 65%; text-align: justify; vertical-align: top; }
                 .brief-result-table .result-height { height: 75px; }
                 .brief-result-table .description-height { height: 60px; }
-
-
-
-
-
-
-
                 .potensi-bahaya-table-potensi-bahaya th, .potensi-bahaya-table-potensi-bahaya td { font-size: 8.5pt; padding: 3px 5px; }
                 .potensi-bahaya-table-potensi-bahaya td .text-input-space { min-height: 1.8em; }
                 .potensi-bahaya-table-potensi-bahaya td { height: 1.8em; vertical-align: middle; }

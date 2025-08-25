@@ -2594,15 +2594,17 @@ class DraftUlkErgonomiController extends Controller
 
                 .potensi-bahaya-multi-line-input { min-height: 80px; }';
             // Atur watermark dan footer umum untuk semua halaman
-            $pdf->SetWatermarkText('DRAFT');
-            $pdf->showWatermarkText = true;
-            $pdf->watermarkTextAlpha = 0.1;
+            // $pdf->SetWatermarkText('DRAFT');
+            // $pdf->showWatermarkText = true;
+            // $pdf->watermarkTextAlpha = 0.1;
+            $pdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0, 0), 200);
+            $pdf->showWatermarkImage = true;
 
-            $footerHtml = '<table width="100%" border="0">
+            $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
                                 <tr>
-                                    <td width="13%"></td>
-                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
-                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right"><i>Page {PAGENO} of {nb}</i></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
+                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right; border:none;"><i>Page {PAGENO} of {nb}</i></td>
                                 </tr>
                             </table>';
             $pdf->SetFooter($footerHtml);
@@ -2913,5 +2915,42 @@ class DraftUlkErgonomiController extends Controller
         $data = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
         $extand = explode("|", $data);
         return $extand;
+    }
+
+    public function handleGenerateLink(Request $request){
+        DB::beginTransaction();
+        try {
+            $header =DraftErgonomiFile::where('no_sampel',$request->no_sampel)->first();
+            if($header == null){
+                return response()->json(["message" =>"dokumen belum  di bentuk"],401);
+            }
+            $key = $header->no_sampel . str_replace('.', '', microtime(true));
+            $gen = MD5($key);
+            $gen_tahun = self::encrypt(DATE('Y-m-d'));
+            $token = self::encrypt($gen . '|' . $gen_tahun);
+            $insertData = [
+                'token' => $token,
+                'key' => $gen,
+                'id_quotation' => $header->id,
+                'quotation_status' => "draft_ergonomi",
+                'type' => 'draft',
+                'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                'fileName_pdf' => $header->name_file,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $this->karyawan
+            ];
+            $insert = GenerateLink::insertGetId($insertData);
+            $header->is_generate_link = true;
+            $header->save();
+            DB::commit();
+            return response()->json([
+                'message' => 'Generate link success!',
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 401);
+        }
     }
 }
