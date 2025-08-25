@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\MasterWilayahSampling;
 use App\Models\MasterCabang;
 use App\Http\Controllers\Controller;
+use App\Models\HargaTransportasi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -75,6 +76,13 @@ class MasterWilayahSamplingController extends Controller
     public function getCabang()
     {
         $data = MasterCabang::where('is_active', true)->get();
+
+        return response()->json(['data' => $data, 'status' => 200, 'success' => true], 200);
+    }
+
+    public function getWilayah()
+    {
+        $data = HargaTransportasi::distinct('wilayah')->where('is_active', true)->pluck('wilayah')->toArray();
 
         return response()->json(['data' => $data, 'status' => 200, 'success' => true], 200);
     }
