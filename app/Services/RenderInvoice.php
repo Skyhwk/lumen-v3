@@ -321,7 +321,7 @@ class RenderInvoice
                 }
 
                 $allPeriode = false;
-                if($periode = "Semua Periode"){
+                if($periode === "Semua Periode"){
                     $allPeriode = true;
                 }
                 if ($cekArray == []) {
