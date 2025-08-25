@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+
 use Datatables;
 use App\Models\MasterCabang;
 use App\Models\HargaTransportasi;
@@ -22,6 +23,19 @@ class MasterWilayahSamplingController extends Controller
 
     public function store(Request $request)
     {
+        $exists = MasterWilayahSampling::where('id_cabang', $request->id_cabang)
+            ->where('is_active', true)
+            ->where('wilayah', $request->wilayah)
+            ->when($request->id, fn($q) => $q->where('id', '!=', $request->id)) // skip sendiri kalau update
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Wilayah sudah terdaftar pada cabang yang sama.'
+            ], 401);
+        }
+
         $data = MasterWilayahSampling::updateOrCreate(
             ['id' => $request->id],
             [
