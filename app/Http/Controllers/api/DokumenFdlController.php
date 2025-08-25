@@ -44,7 +44,9 @@ use App\Models\DetailMicrobiologi;
 use App\Models\DataLapanganErgonomi;
 use App\Models\DataLapanganPsikologi;
 use App\Models\MasterKaryawan;
+use App\Models\QuotationKontrakD;
 use Illuminate\Support\Str; // Pastikan sudah di-import
+
 class DokumenFdlController extends Controller
 {
     public function index(Request $request) {

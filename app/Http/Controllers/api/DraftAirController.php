@@ -903,8 +903,17 @@ class DraftAirController extends Controller
                 $header->is_approve = 1;
                 $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->approved_by = $this->karyawan;
-                // $header->nama_karyawan = $this->karyawan;
-                // $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+
+                // $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $header->tanggal_lhp)
+                //     ->orderBy('berlaku_mulai', 'desc')
+                //     ->first();
+
+                // $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+                // $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+                // $header->nama_karyawan = $nama_perilis ?? 'Abidah Walfathiyyah';
+                // $header->jabatan_karyawan = $jabatan_perilis ?? 'Technical Control Supervisor';
+
                 if($header->count_print < 1) {
                     $header->is_printed = 1; 
                     $header->count_print = $header->count_print + 1; 
