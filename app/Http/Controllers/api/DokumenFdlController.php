@@ -8,6 +8,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\OrderDetail;
+use App\Models\QuotationKontrakD;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Models\QuotationKontrakH;
@@ -379,6 +380,7 @@ class DokumenFdlController extends Controller
 
     public function updateData(Request $request)
     {
+        // dd($request->all());
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
@@ -394,99 +396,100 @@ class DokumenFdlController extends Controller
                         ->where('is_active', 1)
                         ->first();
 
-                    // if ($po) {
-                    //     $isContract = str_contains($po->no_quotation, 'QTC');
-                    //     if (!$isContract) {
-                    //         $qt = QuotationNonKontrak::where('no_document', $po->no_quotation)->first();
-                    //         if ($qt) {
-                    //             $data_pendukung_sampling = json_decode($qt->data_pendukung_sampling);
-                    //             foreach ($data_pendukung_sampling as &$dps) {
-                    //                 foreach ($dps->penamaan_titik as &$pt) {
-                    //                     $nomor = key((array) $pt);
-                    //                     if ($nomor == explode('/', $request->no_sampel)[1]) {
-                    //                         $pt->$nomor = $request->keterangan_1;
-                    //                     }
-                    //                 }
-                    //             }
+                    if ($po) {
+                        $isContract = str_contains($item['nomor_quotation'], 'QTC');
+                        if (!$isContract) {
+                            $qt = QuotationNonKontrak::where('no_document', $item['nomor_quotation'])->first();
+                            if ($qt) {
+                                $data_pendukung_sampling = json_decode($qt->data_pendukung_sampling);
+                                foreach ($data_pendukung_sampling as &$dps) {
+                                    foreach ($dps->penamaan_titik as &$pt) {
+                                        $nomor = key((array) $pt);
+                                        if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                            $pt->$nomor = $item['deskripsi'];
+                                        }
+                                    }
+                                }
 
-                    //             $qt->data_pendukung_sampling = json_encode($data_pendukung_sampling);
-                    //             $qt->save();
-                    //         }
-                    //     } else {
-                    //         $groupedNamedPoints = [];
+                                $qt->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                $qt->save();
+                            }
+                        } else {
+                            // dd('masuk ke kontrak');
+                            $groupedNamedPoints = [];
 
-                    //         $qtcHeader = QuotationKontrakH::where('no_document', $po->no_quotation)->first();
-                    //         $qtcDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $qtcHeader->id)->get();
+                            $qtcHeader = QuotationKontrakH::where('no_document', $item['nomor_quotation'])->first();
+                            $qtcDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $qtcHeader->id)->get();
 
-                    //         // UPDATE QTCD
-                    //         if ($qtcDetail) {
-                    //             foreach ($qtcDetail as $qtD) {
-                    //                 $data_pendukung_sampling = json_decode($qtD->data_pendukung_sampling);
-                    //                 foreach ($data_pendukung_sampling as &$dps) {
-                    //                     foreach ($dps->data_sampling as &$ds) {
-                    //                         foreach ($ds->penamaan_titik as &$pt) {
-                    //                             $nomor = key((array) $pt);
-                    //                             if ($nomor == explode('/', $request->no_sampel)[1]) {
-                    //                                 $pt->$nomor = $request->keterangan_1;
-                    //                             }
-                    //                             $props = get_object_vars($pt);
-                    //                             $nomor = key($props);
-                    //                             $titik = $props[$nomor];
-                    //                             $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                            // UPDATE QTCD
+                            if ($qtcDetail) {
+                                foreach ($qtcDetail as $qtD) {
+                                    $data_pendukung_sampling = json_decode($qtD->data_pendukung_sampling);
+                                    foreach ($data_pendukung_sampling as &$dps) {
+                                        foreach ($dps->data_sampling as &$ds) {
+                                            foreach ($ds->penamaan_titik as &$pt) {
+                                                $nomor = key((array) $pt);
+                                                if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                                    $pt->$nomor = $item['deskripsi'];
+                                                }
+                                                $props = get_object_vars($pt);
+                                                $nomor = key($props);
+                                                $titik = $props[$nomor];
+                                                $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                                                // dd($fullGroupKey);
+                                                $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
+                                                    $nomor => $titik
+                                                ];
+                                            }
+                                        }
+                                    }
+                                    // dd($data_pendukung_sampling);
+                                    $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                    $qtD->save();
+                                }
+                            }
 
-                    //                             $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
-                    //                                 $nomor => $titik
-                    //                             ];
-                    //                         }
-                    //                     }
-                    //                 }
 
-                    //                 $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
-                    //                 $qtD->save();
-                    //             }
-                    //         }
+                            // UPDATE QTCH
+                            // dd(array_keys($groupedNamedPoints));
+                            if ($qtcHeader) {
+                                $data_pendukung_sampling = json_decode($qtcHeader->data_pendukung_sampling);
+                                foreach ($data_pendukung_sampling as &$dps) {
 
+                                    $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
 
-                    //         // UPDATE QTCH
-                    //         // dd(array_keys($groupedNamedPoints));
-                    //         if ($qtcHeader) {
-                    //             $data_pendukung_sampling = json_decode($qtcHeader->data_pendukung_sampling);
-                    //             foreach ($data_pendukung_sampling as &$dps) {
+                                    // Filter penamaan titik
+                                    $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
+                                        if (!is_array($group))
+                                            return false;
+                                        foreach ($group as $item) {
+                                            if (is_array($item) || is_object($item)) {
+                                                foreach ($item as $value) {
+                                                    if (!empty($value))
+                                                        return true;
+                                                }
+                                            }
+                                        }
+                                        return false;
+                                    });
 
-                    //                 $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
+                                    // Proses penamaan titik Header
+                                    if ($penamaan_sampling_all) {
+                                        $penamaan_sampling = array_map(function ($item) {
+                                            return array_values($item)[0] ?? "";
+                                        }, reset($penamaan_sampling_all));
+                                    } else {
+                                        $penamaan_sampling = array_fill(0, $dps->jumlah_titik, "");
+                                    }
 
-                    //                 // Filter penamaan titik
-                    //                 $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
-                    //                     if (!is_array($group))
-                    //                         return false;
-                    //                     foreach ($group as $item) {
-                    //                         if (is_array($item) || is_object($item)) {
-                    //                             foreach ($item as $value) {
-                    //                                 if (!empty($value))
-                    //                                     return true;
-                    //                             }
-                    //                         }
-                    //                     }
-                    //                     return false;
-                    //                 });
+                                    $dps->penamaan_titik = $penamaan_sampling;
+                                }
 
-                    //                 // Proses penamaan titik Header
-                    //                 if ($penamaan_sampling_all) {
-                    //                     $penamaan_sampling = array_map(function ($item) {
-                    //                         return array_values($item)[0] ?? "";
-                    //                     }, reset($penamaan_sampling_all));
-                    //                 } else {
-                    //                     $penamaan_sampling = array_fill(0, $dps->jumlah_titik, "");
-                    //                 }
-
-                    //                 $dps->penamaan_titik = $penamaan_sampling;
-                    //             }
-
-                    //             $qtcHeader->data_pendukung_sampling = json_encode($data_pendukung_sampling);
-                    //             $qtcHeader->save();
-                    //         }
-                    //     }
-                    // }
+                                $qtcHeader->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                $qtcHeader->save();
+                            }
+                        }
+                    }
 
                     $po->keterangan_1 = $item['deskripsi'];
                     $po->save();
