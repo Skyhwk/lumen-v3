@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\LhpsAirHeader;
 use App\Models\LhpsAirDetail;
 use App\Models\OrderDetail;
+use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use Illuminate\Support\Facades\DB;
 use Mpdf\Mpdf as PDF;
@@ -18,6 +19,10 @@ class TemplateLhpp
 
     public function lhpp_psikologi($data, $data_detail, $mode_download, $cfr)
     {
+        $data->tanggal_rilis_lhp = Carbon::parse($data->tanggal_rilis_lhp)->format('Y-m-d');
+        $pengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $data->tanggal_rilis_lhp)
+        ->orderByDesc('berlaku_mulai')
+        ->first();  
 
         $qr_img = '';
         $qr_img_k3 = '';
@@ -25,10 +30,10 @@ class TemplateLhpp
         if (!is_null($data->file_qr) && !is_null($data->file_qr_k3)) {
             $qr_img = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr) . '" width="40px" height="40px" style="margin: 20px 0;">';
             $qr_img_k3 = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr_k3) . '" width="60px" height="60px" style="margin: 20px 0;">';
-            $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia(Carbon::now()->format('Y-m-d'));
+            $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia($data->tanggal_rilis_lhp);
         } else {
             $qr_img = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr) . '" width="40px" height="40px" style="margin: 20px 0;">';
-            $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia(Carbon::now()->format('Y-m-d'));
+            $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia($data->tanggal_rilis_lhp);
         }
 
         $html = '<div style="padding:20px">';
@@ -389,8 +394,8 @@ class TemplateLhpp
                         <tr><td style="height: 30px;"></td></tr>
                         <tr><td>' . $tanggal_qr . '</td></tr>
                         <tr><td style="height: 70px;"></td></tr>
-                        <tr><td style="font-size: 10px; font-weight: bold;">Abidah Walfathiyyah</td></tr>
-                        <tr><td style="font-size: 10px; font-weight: bold;">Technical Control Supervisor</td></tr>
+                        <tr><td style="font-size: 10px; font-weight: bold;">'. $pengesahanLhp->nama_karyawan  .'</td></tr>
+                        <tr><td style="font-size: 10px; font-weight: bold;">'. $pengesahanLhp->jabatan_karyawan  .'</td></tr>
                     </table>
                 </td>';
 
@@ -415,8 +420,8 @@ class TemplateLhpp
                     <table>
                         <tr><td>' . $tanggal_qr . '</td></tr>
                         <tr><td style="height: 70px;"></td></tr>
-                        <tr><td><strong>( <u>Abidah Walfathiyyah</u> )</strong></td></tr>
-                        <tr><td>Technical Control Supervisor</td></tr>
+                        <tr><td><strong>( <u>'. $pengesahanLhp->nama_karyawan  .'</u> )</strong></td></tr>
+                        <tr><td>'. $pengesahanLhp->jabatan_karyawan  .'</td></tr>
                     </table>
                 </td>
             </tr>
