@@ -8,6 +8,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\OrderDetail;
+use App\Models\QuotationKontrakD;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Models\QuotationKontrakH;
@@ -377,6 +378,7 @@ class DokumenFdlController extends Controller
 
     public function updateData(Request $request)
     {
+        // dd($request->all());
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
@@ -393,16 +395,16 @@ class DokumenFdlController extends Controller
                         ->first();
 
                     if ($po) {
-                        $isContract = str_contains($po->no_quotation, 'QTC');
+                        $isContract = str_contains($item['nomor_quotation'], 'QTC');
                         if (!$isContract) {
-                            $qt = QuotationNonKontrak::where('no_document', $po->no_quotation)->first();
+                            $qt = QuotationNonKontrak::where('no_document', $item['nomor_quotation'])->first();
                             if ($qt) {
                                 $data_pendukung_sampling = json_decode($qt->data_pendukung_sampling);
                                 foreach ($data_pendukung_sampling as &$dps) {
                                     foreach ($dps->penamaan_titik as &$pt) {
                                         $nomor = key((array) $pt);
-                                        if ($nomor == explode('/', $request->no_sampel)[1]) {
-                                            $pt->$nomor = $request->keterangan_1;
+                                        if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                            $pt->$nomor = $item['deskripsi'];
                                         }
                                     }
                                 }
@@ -411,9 +413,10 @@ class DokumenFdlController extends Controller
                                 $qt->save();
                             }
                         } else {
+                            // dd('masuk ke kontrak');
                             $groupedNamedPoints = [];
 
-                            $qtcHeader = QuotationKontrakH::where('no_document', $po->no_quotation)->first();
+                            $qtcHeader = QuotationKontrakH::where('no_document', $item['nomor_quotation'])->first();
                             $qtcDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $qtcHeader->id)->get();
 
                             // UPDATE QTCD
@@ -424,21 +427,21 @@ class DokumenFdlController extends Controller
                                         foreach ($dps->data_sampling as &$ds) {
                                             foreach ($ds->penamaan_titik as &$pt) {
                                                 $nomor = key((array) $pt);
-                                                if ($nomor == explode('/', $request->no_sampel)[1]) {
-                                                    $pt->$nomor = $request->keterangan_1;
+                                                if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                                    $pt->$nomor = $item['deskripsi'];
                                                 }
                                                 $props = get_object_vars($pt);
                                                 $nomor = key($props);
                                                 $titik = $props[$nomor];
                                                 $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
-
+                                                // dd($fullGroupKey);
                                                 $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
                                                     $nomor => $titik
                                                 ];
                                             }
                                         }
                                     }
-
+                                    // dd($data_pendukung_sampling);
                                     $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
                                     $qtD->save();
                                 }
