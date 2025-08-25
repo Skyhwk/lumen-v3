@@ -2,74 +2,41 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\MasterWilayahSampling;
-use App\Models\MasterCabang;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Datatables;
-use Carbon\Carbon;
 
+use Illuminate\Http\Request;
+
+use Datatables;
+
+use App\Models\MasterCabang;
+use App\Models\HargaTransportasi;
+use App\Models\MasterWilayahSampling;
 
 class MasterWilayahSamplingController extends Controller
 {
     public function index(Request $request)
     {
-        try {
-            $data = MasterWilayahSampling::with('cabang')->where('is_active', 1);
+        $data = MasterWilayahSampling::with('cabang')
+            ->where('id_cabang', $request->id_cabang)
+            ->where('is_active', true);
 
-            if ($request->has('id_cabang') && $request->id_cabang) {
-                $data->where('id_cabang', $request->id_cabang);
-            }
-
-            if ($request->has('search') && $request->search['value']) {
-                $searchValue = $request->search['value'];
-                $data->where(function ($query) use ($searchValue) {
-                    $query->where('wilayah', 'like', "%{$searchValue}%")
-                        ->orWhere('status_wilayah', 'like', "%{$searchValue}%");
-                });
-            }
-
-            return Datatables::of($data)->make(true);
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => 'Gagal memuat data',
-                'error' => $th->getMessage()
-            ], 500);
-        }
+        return Datatables::of($data)->make(true);
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'id_cabang' => 'required|exists:master_cabangs,id',
-            'wilayah' => 'required|string|max:255',
-            'status_wilayah' => 'required|string|max:255',
-        ]);
+        $data = MasterWilayahSampling::updateOrCreate(
+            ['id' => $request->id],
+            [
+                'id_cabang' => $request->id_cabang,
+                'wilayah' => $request->wilayah,
+                'status_wilayah' => $request->status_wilayah,
+                'created_by' => $this->karyawan,
+                'updated_by' => $this->karyawan,
+            ]
+        );
 
-        DB::beginTransaction();
-        try {
-            $data = MasterWilayahSampling::updateOrCreate(
-                ['id' => $request->id],
-                [
-                    'id_cabang' => $request->id_cabang,
-                    'wilayah' => $request->wilayah,
-                    'status_wilayah' => $request->status_wilayah,
-                    'created_by' => $this->karyawan,
-                    'updated_by' => $this->karyawan,
-                ]
-            );
-
-            DB::commit();
-            $message = $request->id ? 'Data Berhasil Diperbarui' : 'Data Berhasil Disimpan';
-            return response()->json(['data' => $data, 'message' => $message, 'success' => true], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json(['data' => $data, 'message' => 'Saved successfully', 'success' => true], 200);
     }
 
     public function getCabang()
@@ -79,21 +46,19 @@ class MasterWilayahSamplingController extends Controller
         return response()->json(['data' => $data, 'status' => 200, 'success' => true], 200);
     }
 
+    public function getWilayah()
+    {
+        $data = HargaTransportasi::distinct('wilayah')->where('is_active', true)->pluck('wilayah')->toArray();
+
+        return response()->json(['data' => $data, 'status' => 200, 'success' => true], 200);
+    }
+
     public function destroy(Request $request)
     {
-        DB::beginTransaction();
-        try {
-            $data = MasterWilayahSampling::where('id', $request->id)->first();
-            $data->is_active = false;
-            $data->save();
+        $data = MasterWilayahSampling::where('id', $request->id)->first();
+        $data->is_active = false;
+        $data->save();
 
-            DB::commit();
-            return response()->json(['message' => 'Data Berhasil Dihapus', 'status' => 200, 'success' => true], 200);
-        } catch (Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json(['message' => 'Deleted successfully', 'success' => true], 200);
     }
 }
