@@ -433,6 +433,10 @@ class OrderDetail extends Sector
         if ($this->data_lapangan_ergonomi()->exists()) {
             return $this->data_lapangan_ergonomi;
         }
+
+        if ($this->dataLapanganSinarUV()->exists()) {
+            return $this->dataLapanganSinarUV;
+        }
         return null;
     }
 
