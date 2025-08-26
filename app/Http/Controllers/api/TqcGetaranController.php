@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
+use App\Models\LhpsGetaranDetail;
+use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsPencahayaanDetail;
 use App\Models\LhpsPencahayaanHeader;
 use App\Models\OrderDetail;
@@ -34,7 +36,7 @@ use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class TqcPencahayaanController extends Controller
+class TqcGetaranController extends Controller
 {
     public function index(Request $request)
     {
@@ -54,7 +56,7 @@ class TqcPencahayaanController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', '28-Pencahayaan')
+            ->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 
@@ -128,7 +130,7 @@ class TqcPencahayaanController extends Controller
                 'status' => 'success',
                 'message' => 'Data tqc no lhp ' . $request->cfr . ' berhasil direject'
             ]);
-            
+
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -322,23 +324,43 @@ class TqcPencahayaanController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->first();
+        $lhpsGetaranHeader = LhpsGetaranHeader::where('no_lhp', $request->cfr)->first();
         $data = [];
         foreach ($orderDetails as $orderDetail) {
-
-            $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
-            $lhpsPencahayaanDetail = LhpsPencahayaanDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
-                ->pluck('hasil_uji')
+            $lhpsGetaranHeader = LhpsGetaranHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
+            $lhpsGetaranDetail = LhpsGetaranDetail::where('keterangan', $orderDetail->keterangan_1)
+                ->pluck('hasil')
                 ->toArray();
 
-            $data[] = [
-                'no_sampel' => $orderDetail->no_sampel,
-                'titik' => $orderDetail->keterangan_1,
-                'history' => $lhpsPencahayaanDetail,
-                'hasil' => WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1 ?? '-',
-                'analyst' => optional($lhpsPencahayaanHeader)->created_by,
-                'approved_by' => optional($lhpsPencahayaanHeader)->approved_by
-            ];
+
+            $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)
+                ->orderByDesc('id')
+                ->first()
+                ->hasil1 ?? null;
+
+            $hasilDecoded = json_decode($hasil, true);
+
+
+            if (is_array($hasilDecoded)) {
+                $data[] = [
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'titik' => $orderDetail->keterangan_1,
+                    'history' => $lhpsGetaranDetail,
+                    'hasil' => json_decode($hasil),
+                    'analyst' => optional($lhpsGetaranHeader)->created_by,
+                    'approved_by' => optional($lhpsGetaranHeader)->approved_by
+                ];
+
+            } else {
+                $data[] = [
+                    'no_sampel' => $orderDetail->no_sampel,
+                    'titik' => $orderDetail->keterangan_1,
+                    'history' => $lhpsGetaranDetail,
+                    'hasil' => $hasil,
+                    'analyst' => optional($lhpsGetaranHeader)->created_by,
+                    'approved_by' => optional($lhpsGetaranHeader)->approved_by
+                ];
+            }
         }
 
         return response()->json([
