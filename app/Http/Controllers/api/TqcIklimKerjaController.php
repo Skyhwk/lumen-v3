@@ -10,12 +10,12 @@ use Illuminate\Support\Facades\DB;
 use Datatables;
 
 use App\Models\OrderDetail;
+use App\Models\IklimHeader;
 use App\Models\WsValueUdara;
-use App\Models\KebisinganHeader;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
+use App\Models\LhpsIklimHeader;
+use App\Models\LhpsIklimDetail;
 
-class TqcKebisinganController extends Controller
+class TqcIklimKerjaController extends Controller
 {
     public function index()
     {
@@ -35,7 +35,7 @@ class TqcKebisinganController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "26-Kualitas Udara Dalam Ruang"])
+			->whereIn('kategori_3', ["21-Iklim Kerja"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 
@@ -69,26 +69,26 @@ class TqcKebisinganController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsKebisinganHeader = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->first();
+        $lhpsIklimKerjaHeader = LhpsIklimHeader::where('no_lhp', $request->cfr)->first();
 
         $data = [];
         foreach ($orderDetails as $orderDetail) {
-            $kebisinganHeader = KebisinganHeader::where('no_sampel', $orderDetail->no_sampel)->first();
+            // $iklimkerjaHeader = IklimHeader::where('no_sampel', $orderDetail->no_sampel)->first();
 
-            $lhpsKebisinganHeader = LhpsKebisinganHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
-            $lhpsKebisinganDetail = LhpsKebisinganDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
-                ->pluck('hasil_uji')
+            $lhpsIklimKerjaHeader = LhpsIklimHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
+            $lhpsIklimKerjaDetail = LhpsIklimDetail::where('keterangan', $orderDetail->keterangan_1)
+                ->pluck('hasil')
                 ->toArray();
 
             $data[] = [
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
-                'history' => $lhpsKebisinganDetail,
+                'history' => $lhpsIklimKerjaDetail,
                 'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil1,
-                'min' => optional($kebisinganHeader)->min,
-                'max' => optional($kebisinganHeader)->max,
-                'analyst' => optional($lhpsKebisinganHeader)->created_by,
-                'approved_by' => optional($lhpsKebisinganHeader)->approved_by
+                // 'min' => optional($iklimkerjaHeader)->min,
+                // 'max' => optional($iklimkerjaHeader)->max,
+                'analyst' => optional($lhpsIklimKerjaHeader)->created_by,
+                'approved_by' => optional($lhpsIklimKerjaHeader)->approved_by
             ];
         }
 
