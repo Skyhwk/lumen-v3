@@ -1026,28 +1026,21 @@ class InputParameterController extends Controller
 					'message'=> 'Pilih jenis pengujian'
 				], 403);
 			}
-		}else if(
-			($stp->name == 'ICP' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
+		} else if (
+			($stp->name == 'ICP' || $stp->name == 'COLORIMETER' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
 			&&
 			$stp->sample->nama_kategori == 'Padatan'
 		) {
-			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
-				if(isset($request->no_sample) && $request->no_sample!=null){
+			if (isset($request->jenis_pengujian) && $request->jenis_pengujian == 'sample') {
+				if (isset($request->no_sample) && $request->no_sample != null) {
 					$result = self::HelperColorimetriPadatan($request, $stp);
-					if($result->status == 200){
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status
-						], $result->status);
-					} else {
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status
-						], $result->status);
-					}
+                    return response()->json([
+                        'message' => $result->message,
+                        'status' => $result->status
+                    ], $result->status);
 				} else {
 					return response()->json([
-						'message'=> 'No Sample tidak ditemukan'
+						'message' => 'No Sample tidak ditemukan'
 					], 403);
 				}
 			} else if (isset($request->jenis_pengujian) && $request->jenis_pengujian=='duplo') {
@@ -2766,7 +2759,9 @@ class InputParameterController extends Controller
 					$dat = json_decode($data_lapangan->NH3);
 				} else if ($request->parameter == 'HCl') {
 					$dat = json_decode($data_lapangan->HCI);
-				}else if($request->parameter == 'Debu' || $request->parameter == 'Partikulat' || $request->parameter == 'Cd' || $request->parameter == 'Cr' || $request->parameter == 'Pb' || $request->parameter == 'Zn') {
+				} else if ($request->parameter == 'H2S') {
+                    $dat = json_decode($data_lapangan->H2S);
+                } else if($request->parameter == 'Debu' || $request->parameter == 'Partikulat' || $request->parameter == 'Cd' || $request->parameter == 'Cr' || $request->parameter == 'Pb' || $request->parameter == 'Zn') {
 					// dd($data_lapangan);
 					$dat = json_decode($data_lapangan->partikulat);
 					$status_par = 'Partikulat';

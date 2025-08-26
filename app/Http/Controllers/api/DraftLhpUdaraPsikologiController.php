@@ -6,6 +6,8 @@ use App\Models\OrderDetail;
 use App\Models\PsikologiHeader;
 use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\LhpUdaraPsikologiDetail;
+use App\Models\LhpUdaraPsikologiDetailHistory;
+use App\Models\LhpUdaraPsikologiHeaderHistory;
 use App\Services\GenerateQrDocumentLhpp;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -145,6 +147,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
 				$data->no_quotation = $request->no_quotation;
 				$data->no_cfr = $request->cfr;
+				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
 				// $data->no_dokumen = $request->no_dokumen;
 				$data->no_skp_pjk3 = $request->no_skp_pjk3;
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
@@ -162,6 +165,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->alamat_perusahaan = $alamat;
 				$data->penanggung_jawab = $request->penanggung_jawab;
 				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
+				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
 				// $data->no_dokumen = $request->no_dokumen;
 				$data->no_quotation = $request->no_quotation;
 				$data->no_skp_pjk3 = $request->no_skp_pjk3;
@@ -317,6 +321,12 @@ class DraftLhpUdaraPsikologiController extends Controller
 					'status' => 404
 				], 200);
 			}
+
+			$header = LhpUdaraPsikologiHeader::where('no_order', $request->no_order)->where('is_active', true)->first();
+			$header->approve_at = Carbon::now();
+			$header->approve_by = $this->karyawan;
+			$header->save();
+			
 			try {
 				$this->dispatch(new JobPrintLhp($request->cfr, 'draftPsikologi'));
 			} catch (\Exception $e) {
@@ -493,12 +503,35 @@ class DraftLhpUdaraPsikologiController extends Controller
 		}
 	}
 
-	public function reject(Request $request)
+	public function handleReject(Request $request)
 	{
 		DB::beginTransaction();
 		try {
-			$data = LhpUdaraPsikologiHeader::where('id', $request->id)->first();
+			$data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)->first();
+			// dd($data);
 			if ($data) {
+
+				$lhpsHistory = $data->replicate();
+                $lhpsHistory->setTable((new LhpUdaraPsikologiHeaderHistory())->getTable());
+                $lhpsHistory->id = $data->id;
+                $lhpsHistory->created_at = $data->created_at;
+                $lhpsHistory->updated_at = $data->updated_at;
+                $lhpsHistory->deleted_at = Carbon::now();
+                $lhpsHistory->deleted_by = $this->karyawan;
+                $lhpsHistory->save();
+
+				$oldDetails = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
+                if ($oldDetails->isNotEmpty()) {
+                    foreach ($oldDetails as $detail) {
+                        $detailHistory = $detail->replicate();
+                        $detailHistory->setTable((new LhpUdaraPsikologiDetailHistory())->getTable());
+                        $detailHistory->id = $detail->id;
+                        $detailHistory->created_by = $this->karyawan;
+                        $detailHistory->created_at = Carbon::now();
+                        $detailHistory->save();
+                    }
+                    LhpUdaraPsikologiDetail::where('id_header', $data->id)->delete();
+                }
 
 				$order = OrderDetail::where('no_order', $data->no_order)
 					->where('cfr', $data->no_cfr)
@@ -510,10 +543,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 						'status' => 0,
 					]);
 
-				$data->is_approve = false;
-				$data->is_generated = false;
-				$data->is_emailed = false;
-				$data->save();
+				$data->delete();
 			}
 
 			DB::commit();
