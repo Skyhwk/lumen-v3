@@ -529,8 +529,6 @@ class FdlSenyawaVolatileController extends Controller
                 $fdlvalue->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
                 $fdlvalue->save();
             }
-            
-            
 
             DB::table('order_detail')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))
@@ -544,7 +542,6 @@ class FdlSenyawaVolatileController extends Controller
             $this->resultx = "Data Sampling Senyawa Volatile Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";
 
             InsertActivityFdl::by($this->user_id)->action('input')->target("Senyawa Volatile pada nomor sampel $request->no_sample")->save();
-
 
             DB::commit();
             return response()->json([
