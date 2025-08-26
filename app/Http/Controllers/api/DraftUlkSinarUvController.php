@@ -87,7 +87,7 @@ class DraftUlkSinarUvController extends Controller
     }
 
     // Tidak digunakan sekarang, gatau nanti
-    public function handleMetodeSampling(Request $request)
+   public function handleMetodeSampling(Request $request)
     {
         try {
             $subKategori = explode('-', $request->kategori_3);
@@ -291,18 +291,12 @@ class DraftUlkSinarUvController extends Controller
             $data = array();
             $data1 = array();
             $hasil = [];
-
-            if ($parameterArray[1] == 'Sinar UV') {
                 $data = SinarUvHeader::with(['ws_udara', 'master_parameter', 'datalapangan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', true)
                     ->where('is_active', true)
                     ->select('*')
-                    ->addSelect(DB::raw("'sinar_uv' as data_type"))
                     ->get();
-                // foreach ($data as $item) {
-                //     $data->ws_udara->hasil1 = json_decode($data->ws_udara->hasil1);
-                // }
                 $i = 0;
                 $method_regulasi = [];
                 if ($data->isNotEmpty()) {
@@ -347,110 +341,7 @@ class DraftUlkSinarUvController extends Controller
                     $hasil[] = $data1;
                 }
 
-            } else if ($parameterArray[1] == 'Medan Magnit Statis' || $parameterArray[1] == 'Medan Listrik' || $parameterArray[1] == 'Power Density') {
-                $data = MedanLmHeader::with('ws_udara', 'master_parameter')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', true)
-                    ->where('is_active', true)->get();
-                $i = 0;
-                $method_regulasi = [];
-                if ($data->isNotEmpty()) {
-                    foreach ($data as $key => $val) {
-                        // dd($val);
-                        $hasil2 = json_decode($val->ws_udara->hasil1) ?? null;
-                        $data1[$i]['id'] = $val->id;
-                        $data1[$i]['no_sampel'] = $val->no_sampel;
-                        $data1[$i]['name'] = $val->parameter;
-                        $data1[$i]['keterangan'] = $val->master_parameter->nama_regulasi ?? null;
-                        $data1[$i]['satuan'] = $val->master_parameter->satuan ?? null;
-                        $data1[$i]['hasil'] = $hasil2->medan_magnet ?? null;
-
-                        $data1[$i]['methode'] = $val->master_parameter->method ?? null;
-                        $data1[$i]['baku_mutu'] = is_object($val->master_parameter) && $val->master_parameter->nilai_minimum ? \explode('#', $val->master_parameter->nilai_minimum) : null;
-                        $data1[$i]['status'] = $val->master_parameter->status ?? null;
-                        $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
-                            ->where('parameter', $val->parameter)
-                            ->first();
-                        if ($bakumutu != null && $bakumutu->method != '') {
-                            $data1[$i]['satuan'] = $bakumutu->satuan;
-                            $data1[$i]['methode'] = $bakumutu->method;
-                            $data1[$i]['baku_mutu'][0] = $bakumutu->baku_mutu;
-                            array_push($method_regulasi, $bakumutu->method);
-                        }
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
-
-            } else {
-                $data2 = Subkontrak::with('ws_value_linkungan', 'master_parameter')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->where('is_active', true)
-                    ->get();
-
-                $data3 = DirectLainHeader::with('ws_udara', 'master_parameter')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->where('is_active', true)
-                    ->get();
-
-                $data = LingkunganHeader::with('ws_value_linkungan', 'master_parameter')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', 1)
-                    ->where('is_active', true)
-                    ->where('lhps', 1)
-                    ->get();
-
-                if ($data2->isNotEmpty()) {
-                    $data = $data->merge($data2);
-                }
-
-                if ($data3->isNotEmpty()) {
-                    $data = $data->merge($data3);
-                }
-
-                $i = 0;
-                $method_regulasi = [];
-                if ($data->isNotEmpty()) {
-                    foreach ($data as $key => $val) {
-                        $data1[$i]['id'] = $val->id;
-                        $data1[$i]['name'] = $val->parameter;
-                        $data1[$i]['keterangan'] = $val->master_parameter->nama_regulasi ?? null;
-                        $data1[$i]['satuan'] = $val->master_parameter->satuan ?? null;
-                        $data1[$i]['durasi'] = $val->ws_value_linkungan->durasi ?? null;
-                        $data1[$i]['C'] = $val->ws_value_linkungan->f_koreksi_c ?? $val->ws_value_linkungan->C ?? null;
-                        $data1[$i]['C1'] = $val->ws_value_linkungan->f_koreksi_c1 ?? $val->ws_value_linkungan->C1 ?? null;
-                        $data1[$i]['C2'] = $val->ws_value_linkungan->f_koreksi_c2 ?? $val->ws_value_linkungan->C2 ?? null;
-                        $data1[$i]['methode'] = $val->master_parameter->method ?? null;
-                        $data1[$i]['baku_mutu'] = is_object($val->master_parameter) && $val->master_parameter->nilai_minimum ? \explode('#', $val->master_parameter->nilai_minimum) : null;
-                        $data1[$i]['status'] = $val->master_parameter->status ?? null;
-                        // dd($id_category);
-                        if ($id_category == 11) {
-                            $data_lapangan[$i]['suhu'] = $val->ws_value_linkungan->detailLingkunganHidup->suhu;
-                            $data_lapangan[$i]['kelembapan'] = $val->ws_value_linkungan->detailLingkunganHidup->kelembapan;
-                            $data_lapangan[$i]['keterangan'] = $val->ws_value_linkungan->detailLingkunganHidup->keterangan;
-                            $data_lapangan[$i]['cuaca'] = $val->ws_value_linkungan->detailLingkunganHidup->cuaca;
-                            $data_lapangan[$i]['kecepatan_angin'] = $val->ws_value_linkungan->detailLingkunganHidup->kecepatan_angin;
-                            $data_lapangan[$i]['arah_angin'] = $val->ws_value_linkungan->detailLingkunganHidup->arah_angin;
-                            $data_lapangan[$i]['titik_koordinat'] = $val->ws_value_linkungan->detailLingkunganHidup->titik_koordinat;
-                        }
-
-                        $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
-                            ->where('parameter', $val->parameter)
-                            ->first();
-
-                        if ($bakumutu != null && $bakumutu->method != '') {
-                            $data1[$i]['satuan'] = $bakumutu->satuan;
-                            $data1[$i]['methode'] = $bakumutu->method;
-                            $data1[$i]['baku_mutu'][0] = $bakumutu->baku_mutu;
-                            array_push($method_regulasi, $bakumutu->method);
-                        }
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
-            }
+          
 
             $data_all = array();
             $a = 0;

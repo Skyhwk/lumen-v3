@@ -266,7 +266,7 @@ class OrderDetail extends Sector
 
     public function lhps_iklim()
     {
-        return $this->belongsTo(LhpsIklimHeader::class, 'no_sampel', 'no_sampel')->with('lhpsIklimDetail')->where('is_active', true);
+        return $this->belongsTo(LhpsIklimHeader::class, 'cfr', 'no_lhp')->with('lhpsIklimDetail')->where('is_active', true);
     }
 
     public function t_fct()
