@@ -151,7 +151,8 @@ class ReportOrderController extends Controller
                                         $props = get_object_vars($pt);
                                         $nomor = key($props);
                                         $titik = $props[$nomor];
-                                        $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                                        $reg = !empty($ds->regulasi) ? $ds->regulasi : [];
+                                        $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($reg) . ';' . json_encode($ds->parameter);
 
                                         $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
                                             $nomor => $titik
@@ -165,7 +166,6 @@ class ReportOrderController extends Controller
                         }
                     }
 
-
                     // UPDATE QTCH
                     // dd(array_keys($groupedNamedPoints));
                     if ($qtcHeader) {
@@ -174,6 +174,8 @@ class ReportOrderController extends Controller
 
                             $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
 
+                            if (!isset($groupedNamedPoints[$fullGroupKey]))
+                                continue;
                             // Filter penamaan titik
                             $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
                                 if (!is_array($group))
