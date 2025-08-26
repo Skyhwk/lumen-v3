@@ -24,7 +24,8 @@
                             <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                           {{ $yy['keterangan'] }}
                         </td>
-                        <td class="pd-5-solid-center">{{ $yy['indeks_suhu_basah'] }}</td>
+                        <!-- <td class="pd-5-solid-center">{{ $yy['indeks_suhu_basah'] }}</td> -->
+                        <td class="pd-5-solid-center">{{ $yy['hasil'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['aktivitas_pekerjaan'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['durasi_paparan'] }} Jam</td>
                       
