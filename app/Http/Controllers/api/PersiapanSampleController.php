@@ -466,6 +466,8 @@ class PersiapanSampleController extends Controller
 
         $psh = $dataList->first(function ($item) use ($request) {
             $noSampelDb = json_decode($item->no_sampel, true) ?? [];
+            if (!$noSampelDb) return false;
+
             return count(array_intersect($noSampelDb, $request->no_sampel)) === count($noSampelDb);
         });
 
