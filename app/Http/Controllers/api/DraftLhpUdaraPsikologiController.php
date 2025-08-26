@@ -147,6 +147,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
 				$data->no_quotation = $request->no_quotation;
 				$data->no_cfr = $request->cfr;
+				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
 				// $data->no_dokumen = $request->no_dokumen;
 				$data->no_skp_pjk3 = $request->no_skp_pjk3;
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
@@ -164,6 +165,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->alamat_perusahaan = $alamat;
 				$data->penanggung_jawab = $request->penanggung_jawab;
 				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
+				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
 				// $data->no_dokumen = $request->no_dokumen;
 				$data->no_quotation = $request->no_quotation;
 				$data->no_skp_pjk3 = $request->no_skp_pjk3;
@@ -319,6 +321,12 @@ class DraftLhpUdaraPsikologiController extends Controller
 					'status' => 404
 				], 200);
 			}
+
+			$header = LhpUdaraPsikologiHeader::where('no_order', $request->no_order)->where('is_active', true)->first();
+			$header->approve_at = Carbon::now();
+			$header->approve_by = $this->karyawan;
+			$header->save();
+			
 			try {
 				$this->dispatch(new JobPrintLhp($request->cfr, 'draftPsikologi'));
 			} catch (\Exception $e) {
