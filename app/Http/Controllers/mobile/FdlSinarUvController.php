@@ -129,7 +129,6 @@ class FdlSinarUvController extends Controller
 
             InsertActivityFdl::by($this->user_id)->action('input')->target("Sinar UV pada nomor sampel $request->no_sample")->save();
 
-
             DB::commit();
             return response()->json([
                 'message' => "Data Sampling SINAR UV Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"

@@ -9753,8 +9753,8 @@ class AppsFdlController extends Controller
                         $data->status_test = $request->status_test;
                     if ($request->jaminan_mutu != '')
                         $data->jaminan_mutu = json_encode($request->jaminan_mutu);
-                    $data->dataDp = json_encode($pengDb);
-                    $data->uji_aliran = json_encode($ujialiran);
+                    $data->dataDp = $pengDb;
+                    $data->uji_aliran = $ujialiran;
                     if ($request->foto_lok != '')
                         $data->foto_lokasi_sampel = self::convertImg($request->foto_lok, 1, $this->user_id);
                     if ($request->foto_sampl != '')
@@ -10011,14 +10011,14 @@ class AppsFdlController extends Controller
                 if ($request->metode_uji != '') $data->metode_uji = $request->metode_uji;
                 if ($request->kadar_air != '') $data->kadar_air = $request->kadar_air;
                 if ($request->laju_aliran != '') $data->laju_aliran = $request->laju_aliran;
-                if ($request->impil) $data->data_impinger = json_encode($data_impi);
+                if ($request->impil) $data->data_impinger = $data_impi;
                 if ($request->nily != '') $data->nilai_y = $request->nily;
                 if ($request->nilpm != '') $data->Pm = $request->nilpm;
                 if ($request->nilsuhu != '') $data->suhu_cerobong = $request->nilsuhu;
-                if ($request->nildgmbaca != '') $data->data_dgmterbaca = json_encode($request->nildgmbaca);
+                if ($request->nildgmbaca != '') $data->data_dgmterbaca = $request->nildgmbaca;
                 if ($request->nilaikaldgm != '') $data->data_kalkulasi_dgm = $request->nilaikaldgm;
                 if ($request->jaminan_mutu != '') $data->jaminan_mutu = $request->jaminan_mutu;
-                if ($request->nil_t_dgmawal != '') $data->data_dgm_test = json_encode(['dgm_awal' => $request->nil_t_dgmawal, 'dgm_akhir' => $request->nil_t_dgmakhir]);
+                if ($request->nil_t_dgmawal != '') $data->data_dgm_test = ['dgm_awal' => $request->nil_t_dgmawal, 'dgm_akhir' => $request->nil_t_dgmakhir];
                 if ($request->nil_t_kalkulasidgm != '') $data->dgm_test = $request->nil_t_kalkulasidgm;
                 if ($request->nil_t_waktu != '') $data->waktu_test = $request->nil_t_waktu;
                 if ($request->nil_t_laju != '') $data->laju_alir_test = $request->nil_t_laju;
@@ -10340,21 +10340,21 @@ class AppsFdlController extends Controller
                     if ($request->rataRataSelisihDGM != '')
                         $data->rataselisihdgm = $request->rataRataSelisihDGM;
                     $data->temperatur_stack = $TemperaturStackFormatted;
-                    $data->data_total_vs = json_encode($arraydP1);
-                    $data->delta_vm = json_encode($pengukuranDGMVM);
-                    $data->DGM = json_encode($pengukuranDGM);
-                    $data->dP = json_encode($pengukurandP);
-                    $data->PaPs = json_encode($pengukuranPaPs);
-                    $data->dH = json_encode($pengukurandH);
-                    $data->Stack = json_encode($pengukuranStack);
-                    $data->Meter = json_encode($pengukuranMeter);
-                    $data->Vp = json_encode($pengukuranVp);
-                    $data->Filter = json_encode($pengukuranFilter);
-                    $data->Oven = json_encode($pengukuranOven);
-                    $data->exit_impinger = json_encode($pengukuranexit_impinger);
-                    $data->Probe = json_encode($pengukuranProbe);
-                    $data->sebelumpengujian = json_encode($arrsebelumpengujian);
-                    $data->sesudahpengujian = json_encode($arrsesudahpengujian);
+                    $data->data_total_vs = $arraydP1;
+                    $data->delta_vm = $pengukuranDGMVM;
+                    $data->DGM = $pengukuranDGM;
+                    $data->dP = $pengukurandP;
+                    $data->PaPs = $pengukuranPaPs;
+                    $data->dH = $pengukurandH;
+                    $data->Stack = $pengukuranStack;
+                    $data->Meter = $pengukuranMeter;
+                    $data->Vp = $pengukuranVp;
+                    $data->Filter = $pengukuranFilter;
+                    $data->Oven = $pengukuranOven;
+                    $data->exit_impinger = $pengukuranexit_impinger;
+                    $data->Probe = $pengukuranProbe;
+                    $data->sebelumpengujian = $arrsebelumpengujian;
+                    $data->sesudahpengujian = $arrsesudahpengujian;
                     if ($request->CO2 != '')
                         $data->CO2 = $request->CO2;
                     if ($request->CO != '')

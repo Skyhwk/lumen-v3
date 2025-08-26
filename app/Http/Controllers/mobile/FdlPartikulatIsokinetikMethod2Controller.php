@@ -70,7 +70,6 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
 
     public function store(Request $request)
     {
-        // dd($request->all());
         DB::beginTransaction();
         try {
             if ($request->waktu == '') {
@@ -95,7 +94,6 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
 
                 $pengDb = array();
                 $tot = count($request->dp);
-                // dd($tot);
                 for ($p = 0; $p < $tot; $p++) {
                     $pengu = [];
                     foreach ($request->dp[$p] as $key => $val) {
@@ -114,7 +112,6 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                 }
                 $ujialiran = [];
                 $pengalir = [];
-                // dd($pengDb);
                 if ($request->delta) {
                     foreach ($request->delta as $k => $v) {
                         array_push($pengalir, (object)[
@@ -130,8 +127,6 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                 }
 
                 $survei = DataLapanganIsokinetikSurveiLapangan::where('no_survei', $request->no_survei)->first();
-
-                // dd($pengDb, $ujialiran);
 
                 $data = new DataLapanganIsokinetikPenentuanKecepatanLinier();
                 if ($request->no_survei != '')
@@ -171,8 +166,8 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                     $data->status_test = $request->status_test;
                 if ($request->jaminan_mutu != '')
                     $data->jaminan_mutu = json_encode($request->jaminan_mutu);
-                $data->dataDp = json_encode($pengDb);
-                $data->uji_aliran = json_encode($ujialiran);
+                $data->dataDp = $pengDb;
+                $data->uji_aliran = $ujialiran;
                 if ($request->foto_lok != '')
                     $data->foto_lokasi_sampel = self::convertImg($request->foto_lok, 1, $this->user_id);
                 if ($request->foto_sampl != '')
@@ -183,7 +178,6 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
                     $data->permission = $request->permission;
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                // dd($data);
                 $data->save();
 
                 // UPDATE ORDER DETAIL
