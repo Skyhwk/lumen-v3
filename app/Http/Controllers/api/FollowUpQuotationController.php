@@ -105,7 +105,7 @@ class FollowUpQuotationController extends Controller
                             ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data_lama, '$.no_order')) != 'null'");
                     }
                 })
-                ->filterColumn('created_at', function ($query, $keyword) {
+                ->filterColumn('created_at', function ($query, $keyword) use ($request) {
                     if ($request->mode == 'non_kontrak') {
                         $query->where('request_quotation.created_at', 'like', '%' . $keyword . '%');
                     } else if ($request->mode == 'kontrak') {
