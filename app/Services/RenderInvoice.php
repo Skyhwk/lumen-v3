@@ -319,6 +319,11 @@ class RenderInvoice
                         $periode = self::tanggal_indonesia($values->periode, 'period');
                     }
                 }
+
+                $allPeriode = false;
+                if($periode === "Semua Periode"){
+                    $allPeriode = true;
+                }
                 if ($cekArray == []) {
                     // dd('atas');
                     $tambah = 0;
@@ -521,7 +526,7 @@ class RenderInvoice
                                         <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span><br>
                                         ');  
                                     } else {
-                                        $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
+                                        $total_harga_qtc = self::rupiah($allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
                                         $pdf->writeHTML('
                                             <tr>
                                                 <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
@@ -547,7 +552,7 @@ class RenderInvoice
 
                                     $pdf->writeHTML('
                                             </td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $dataSampling->jumlah_titik . '</td>
+                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . ($allPeriode ? $dataSampling->jumlah_titik * count($dataSampling->periode) : $dataSampling->jumlah_titik) . '</td>
                                             <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
                                             <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $total_harga_qtc . '</td>
                                         </tr>
@@ -609,7 +614,6 @@ class RenderInvoice
                             $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
 
                             if ($isLastElement) {
-
                                 if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
                                     if (isset($values->keterangan_transportasi)) {
@@ -622,7 +626,7 @@ class RenderInvoice
                                         <tr>
                                             <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
                                             <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
                                             <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
                                         </tr>
                                     ');
@@ -636,7 +640,7 @@ class RenderInvoice
                                 }
 
                                 if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
-
+                                    // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
                                     if (isset($values->keterangan_perdiem)) {
                                         $ket_perdiem = $values->keterangan_perdiem;
                                         $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
@@ -644,16 +648,15 @@ class RenderInvoice
                                         if (isset($values->satuan_perdiem)) {
                                             $satuan_perdiem = self::rupiah($values->satuan_perdiem);
                                         } else {
-                                            $sdiem = $harga_perdiem / $jml_perdiem;
+                                            $sdiem = $harga_perdiem_personil_total / $jml_perdiem;
                                             $satuan_perdiem = self::rupiah($sdiem);
                                         }
                                     } else {
                                         $ket_perdiem = "Perdiem " . $perdiem_24;
                                         $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
                                         $jml_perdiem = '';
-                                        $satuan_perdiem = '';
+                                        $satuan_perdiem = $haga_perdiem_non;
                                     }
-
                                     $pdf->writeHTML('
                                         <tr>
                                             <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
