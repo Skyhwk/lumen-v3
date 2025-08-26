@@ -43,7 +43,7 @@ class QtApproveController extends Controller
                 ->where('is_active', true)
                 ->where('flag_status', $request->flag)
                 ->where('is_emailed', false)
-                ->whereYear('tanggal_penawaran', $request->periode);
+                ->whereYear('tanggal_penawaran', $request->periode)->get();
         } else if ($request->mode == 'kontrak') {
             $data = QuotationKontrakH::with(['sales', 'addby', 'updateby'])->where('is_active', $request->is_active)
                 ->where('id_cabang', $request->id_cabang)
@@ -51,7 +51,7 @@ class QtApproveController extends Controller
                 ->where('is_active', true)
                 ->where('flag_status', $request->flag)
                 ->where('is_emailed', false)
-                ->whereYear('tanggal_penawaran', $request->periode);
+                ->whereYear('tanggal_penawaran', $request->periode)->get();
         }
 
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -67,9 +67,12 @@ class QtApproveController extends Controller
                 $data->whereIn('sales_id', $bawahan);
                 break;
         }
-
+         foreach ($data as $key => $value) {
+            $value->email_cc = json_decode($value->email_cc);
+        };
         return Datatables::of($data)->make(true);
     }
+ 
 
     public function approve(Request $request)
     {

@@ -649,7 +649,7 @@ class DraftUdaraIklimKerjaController extends Controller
         DB::beginTransaction();
         try {
             if ($request->id != '' || isset($request->id)) {
-                 LhpsGetaranHeader::where('id', $request->id)->update([
+                 LhpsIklimHeader::where('id', $request->id)->update([
                     'is_emailed' => true,
                     'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'emailed_by' => $this->karyawan
@@ -702,74 +702,6 @@ class DraftUdaraIklimKerjaController extends Controller
         }
     }
 
-    // public function setSignature(Request $request)
-    // {
-    //     $categoryKebisingan = [23, 24, 25];
-    //     $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-    //     $categoryLingkunganKerja = [11, 27, 53];
-    //     $categoryPencahayaan = [28];
-
-    //     try {
-    //         if (in_array($request->category, $categoryKebisingan)) {
-    //             $header = LhpsKebisinganHeader::where('id', $request->id)->first();
-    //             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryPencahayaan)) {
-    //             $header = LhpsPencahayaanHeader::where('id', $request->id)->first();
-    //             $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryLingkunganKerja)) {
-    //             if ($request->mode == "medanlm") {
-    //                 $header = LhpsMedanLMHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
-    //             } else if ($request->mode == "sinaruv") {
-    //                 $header = LhpsSinarUVHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-    //             } else {
-    //                 $header = LhpsLingHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-    //             }
-    //         }
-
-    //         if ($header != null) {
-    //             $header->nama_karyawan = $this->karyawan;
-    //             $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-    //             $header->save();
-
-    //             $file_qr = new GenerateQrDocumentLhp();
-    //             $file_qr = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
-    //             if ($file_qr) {
-    //                 $header->file_qr = $file_qr;
-    //                 $header->save();
-    //             }
-
-    //             $groupedByPage = [];
-    //             if (!empty($custom)) {
-    //                 foreach ($custom as $item) {
-    //                     $page = $item['page'];
-    //                     if (!isset($groupedByPage[$page])) {
-    //                         $groupedByPage[$page] = [];
-    //                     }
-    //                     $groupedByPage[$page][] = $item;
-    //                 }
-    //             }
-
-    //             $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-    //             $this->dispatch($job);
-
-    //             $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-    //             $this->dispatch($job);
-
-    //             return response()->json([
-    //                 'message' => 'Signature berhasil diubah'
-    //             ], 200);
-    //         }
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //             'line' => $e->getLine(),
-    //             'file' => $e->getFile()
-    //         ]);
-    //     }
-    // }
 
     // Amang
     public function encrypt($data)
