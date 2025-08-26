@@ -2,54 +2,44 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\HistoryAppReject;
-use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
-use App\Models\WsValueUdara;
-use App\Models\DetailLingkunganHidup;
-use App\Models\MicrobioHeader;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DetailLingkunganKerja;
-use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganCahaya;
-use App\Models\DataLapanganErgonomi;
-use App\Models\DataLapanganSinarUV;
-use App\Models\DataLapanganMedanLM;
-use App\Models\DataLapanganKebisinganPersonal;
-use App\Models\DataLapanganDebuPersonal;
-use App\Models\MasterKaryawan;
-use App\Models\Subkontrak;
-
-use App\Models\IklimHeader;
-use App\Models\GetaranHeader;
-use App\Models\KebisinganHeader;
-use App\Models\PencahayaanHeader;
-use App\Models\LingkunganHeader;
-use App\Models\DirectLainHeader;
-use App\Models\ErgonomiHeader;
-use App\Models\SinarUvHeader;
-use App\Models\MedanLmHeader;
-// use App\Models\PsikologiHeader;
-use App\Models\DebuPersonalHeader;
+namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Yajra\Datatables\Datatables;
+
+use Datatables;
 use Carbon\Carbon;
+
+use App\Models\Subkontrak;
+use App\Models\OrderDetail;
+use App\Models\IklimHeader;
+use App\Models\WsValueUdara;
+use App\Models\MasterKaryawan;
+use App\Models\LingkunganHeader;
+use App\Models\HistoryAppReject;
+use App\Models\WsValueLingkungan;
+use App\Models\DataLapanganIklimPanas;
+use App\Models\DataLapanganIklimDingin;
+use App\Models\Parameter;
 
 class WsFinalUdaraIklimKerjaController extends Controller
 {
-
-
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->where('kategori_3', "21-Iklim Kerja")
+			->whereIn('kategori_3', ["21-Iklim Kerja"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', [
@@ -57,10 +47,29 @@ class WsFinalUdaraIklimKerjaController extends Controller
 			])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
 
 		return Datatables::of($data)->make(true);
 	}
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::where('cfr', $request->cfr)
+			->where('status', 0)
+			->orderByDesc('id')
+			->get()
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			});
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
+	}
+
 	public function convertHourToMinute($hour)
 	{
 		$minutes = $hour * 60;
@@ -96,11 +105,14 @@ class WsFinalUdaraIklimKerjaController extends Controller
 					$item->iklim_dingin->avg_suhu_kering = $count > 0 ? round($suhuTotal / $count, 2) : null;
 					$item->iklim_dingin->avg_kecepatan_angin = $count > 0 ? round($anginTotal / $count, 2) : null;
 				}
-				$regulasi = json_decode($item->orderDetail->regulasi);
-				$item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
+				// $regulasi = json_decode($item->orderDetail->regulasi);
+				// $item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
+				$idParameter = explode(';', $parameters[0])[0];
+				$method = Parameter::where('id', $idParameter)->first()->method ?? '-';
+
+				$item->method = $method;
 			}
 			return Datatables::of($data)->make(true);
-
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
@@ -162,8 +174,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 			} else {
 				return response()->json(['message' => 'Gagal']);
 			}
-
-
 		} catch (\Exception $ex) {
 			dd($ex);
 		}
@@ -194,14 +204,12 @@ class WsFinalUdaraIklimKerjaController extends Controller
 					'status' => 200,
 				], 200);
 			}
-
 		} else {
 			return response()->json([
 				'message' => 'Gagal Approve',
 				'status' => 401,
 			], 401);
 		}
-
 	}
 
 	public function AddSubKontrak(Request $request)
@@ -487,7 +495,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 						}
 
 						$hasil['hasilc2'] = null;
-
 					} else if ($parameter == 'TSP (8 Jam)') {
 						if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
 							return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
@@ -542,7 +549,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 						if ($hasil['hasilc2'] == 0.0) {
 							$hasil['hasilc2'] = '';
 						}
-
 					}
 				}
 
@@ -571,10 +577,7 @@ class WsFinalUdaraIklimKerjaController extends Controller
 					if ($hasil['hasilc2'] == 0.0) {
 						$hasil['hasilc2'] = '';
 					}
-
 				}
-
-
 			}
 			return $hasil; // Mengembalikan array hasil
 		} catch (\Exception $e) {
@@ -684,7 +687,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 			DB::rollBack();
 			return response()->json(['message' => 'Terjadi kesalahan: ' . $ex->getMessage()], 500);
 		}
-
 	}
 
 	public function getKaryawan(Request $request)
@@ -706,8 +708,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 				'message' => 'Data berhasil diupdate.',
 				'status' => 200
 			]);
-
-
 		} catch (Exception $e) {
 			DB::rollBack();
 			return response()->json([
@@ -728,8 +728,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 				'message' => 'Data berhasil diupdate.',
 				'status' => 200
 			]);
-
-
 		} catch (Exception $e) {
 			DB::rollBack();
 			return response()->json([
@@ -753,7 +751,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 				'message' => 'Data berhasil diupdate.',
 				'status' => 200
 			]);
-
 		} catch (Exception $e) {
 			DB::rollBack();
 			return response()->json([
@@ -776,7 +773,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 				'message' => 'Data berhasil diupdate.',
 				'status' => 200
 			]);
-
 		} catch (Exception $e) {
 			DB::rollBack();
 			return response()->json([
@@ -787,46 +783,97 @@ class WsFinalUdaraIklimKerjaController extends Controller
 	}
 
 	// 	public function AddSubKontrak(Request $request)
-// 	{
-// 		DB::beginTransaction();
-// 		try {
-// 			$data = new Subkontrak();
-// 			$data->no_sampel = $request->no_sampel;
-// 			$data->category_id = $request->category;
-// 			$data->parameter = $request->parameter;
-// 			$data->jenis_pengujian = $request->jenis_pengujian;
-// 			$data->is_active = true;
-// 			$data->is_approve = 1;
-// 			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->approved_by = $this->karyawan;
-// 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-// 			$data->created_by = $this->karyawan;
-// 			$data->save();
-// 			// dd($data);
-// 			if ($request->category == 1) {
-// 				$ws = new WsValueAir();
-// 				$ws->no_sampel = $request->no_sampel;
-// 				$ws->id_subkontrak = $data->id;
-// 				$ws->hasil = $request->hasil;
-// 				$ws->is_active = true;
-// 				$ws->status = 0;
-// 				$ws->save();
-// 			}
+	// 	{
+	// 		DB::beginTransaction();
+	// 		try {
+	// 			$data = new Subkontrak();
+	// 			$data->no_sampel = $request->no_sampel;
+	// 			$data->category_id = $request->category;
+	// 			$data->parameter = $request->parameter;
+	// 			$data->jenis_pengujian = $request->jenis_pengujian;
+	// 			$data->is_active = true;
+	// 			$data->is_approve = 1;
+	// 			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+	// 			$data->approved_by = $this->karyawan;
+	// 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+	// 			$data->created_by = $this->karyawan;
+	// 			$data->save();
+	// 			// dd($data);
+	// 			if ($request->category == 1) {
+	// 				$ws = new WsValueAir();
+	// 				$ws->no_sampel = $request->no_sampel;
+	// 				$ws->id_subkontrak = $data->id;
+	// 				$ws->hasil = $request->hasil;
+	// 				$ws->is_active = true;
+	// 				$ws->status = 0;
+	// 				$ws->save();
+	// 			}
 
 	// 			DB::commit();
-// 			return response()->json([
-// 				'message' => 'Data Berhasil Disimpan',
-// 				'status' => 200,
-// 				'success' => true
-// 			], 200);
-// 		} catch (exception $e) {
-// 			DB::rollback();
-// 			return response()->json([
-// 				'message' => $e->getMessage(),
-// 				'status' => 500,
-// 				'line' => $e->getLine()
-// 			], 500);
-// 		}
-// 	}
-// }
+	// 			return response()->json([
+	// 				'message' => 'Data Berhasil Disimpan',
+	// 				'status' => 200,
+	// 				'success' => true
+	// 			], 200);
+	// 		} catch (exception $e) {
+	// 			DB::rollback();
+	// 			return response()->json([
+	// 				'message' => $e->getMessage(),
+	// 				'status' => 500,
+	// 				'line' => $e->getLine()
+	// 			], 500);
+	// 		}
+	// 	}
+	// }
+
+
+
+
+
+
+
+
+
+
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$dataLapangan = DataLapanganIklimPanas::where('no_sampel', $request->no_sampel)
+				->update(['is_approve' => 0]);
+
+			if (!$dataLapangan) {
+				$dataLapangan = DataLapanganIklimDingin::where('no_sampel', $request->no_sampel)
+					->update(['is_approve' => 0]);
+			}
+
+			IklimHeader::where('no_sampel', $request->no_sampel)
+				->update(['is_approved' => 0]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveSelected(Request $request)
+	{
+		OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+
+		return response()->json([
+			'message' => 'Data berhasil diapprove.',
+			'success' => true,
+		], 200);
+	}
 }

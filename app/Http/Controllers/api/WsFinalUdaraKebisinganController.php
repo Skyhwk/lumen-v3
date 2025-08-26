@@ -2,45 +2,26 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\HistoryAppReject;
-use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
-use App\Models\WsValueUdara;
-use App\Models\DetailLingkunganHidup;
-use App\Models\MicrobioHeader;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DetailLingkunganKerja;
-use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganCahaya;
-use App\Models\DataLapanganErgonomi;
-use App\Models\DataLapanganSinarUV;
-use App\Models\DataLapanganMedanLM;
-use App\Models\DataLapanganKebisinganPersonal;
-use App\Models\DataLapanganDebuPersonal;
-use App\Models\MasterKaryawan;
-use App\Models\Subkontrak;
-
-use App\Models\IklimHeader;
-use App\Models\GetaranHeader;
-use App\Models\KebisinganHeader;
-use App\Models\PencahayaanHeader;
-use App\Models\LingkunganHeader;
-use App\Models\DirectLainHeader;
-use App\Models\ErgonomiHeader;
-use App\Models\SinarUvHeader;
-use App\Models\MedanLmHeader;
-// use App\Models\PsikologiHeader;
-use App\Models\DebuPersonalHeader;
-
 use App\Http\Controllers\Controller;
-use App\Models\Parameter;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Yajra\Datatables\Datatables;
+
+use Datatables;
 use Carbon\Carbon;
+
+use App\Models\Parameter;
+use App\Models\Subkontrak;
+use App\Models\OrderDetail;
+use App\Models\WsValueUdara;
+use App\Models\MasterKaryawan;
+use App\Models\KebisinganHeader;
+use App\Models\LingkunganHeader;
+use App\Models\HistoryAppReject;
+use App\Models\WsValueLingkungan;
+use App\Models\DataLapanganKebisingan;
+use App\Models\DataLapanganKebisinganPersonal;
+
 
 class WsFinalUdaraKebisinganController extends Controller
 {
@@ -884,26 +865,11 @@ class WsFinalUdaraKebisinganController extends Controller
 
 	public function handleApproveSelected(Request $request)
 	{
-		DB::beginTransaction();
-		try {
-			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
-				->update([
-					'status' => 1,
-				]);
+		OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
 
-			DB::commit();
-			return response()->json([
-				'message' => 'Data berhasil diapprove.',
-				'success' => true,
-				'status' => 200,
-			], 200);
-		} catch (\Throwable $th) {
-			DB::rollBack();
-			return response()->json([
-				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
-				'success' => false,
-				'status' => 500,
-			], 500);
-		}
+		return response()->json([
+			'message' => 'Data berhasil diapprove.',
+			'success' => true,
+		], 200);
 	}
 }
