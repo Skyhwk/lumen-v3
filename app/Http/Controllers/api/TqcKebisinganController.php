@@ -35,6 +35,7 @@ class TqcKebisinganController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
+            ->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "26-Kualitas Udara Dalam Ruang"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 
@@ -83,9 +84,9 @@ class TqcKebisinganController extends Controller
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
                 'history' => $lhpsKebisinganDetail,
-                'hasil' => WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1,
-                'min' => $kebisinganHeader->min,
-                'max' => $kebisinganHeader->max,
+                'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil1,
+                'min' => optional($kebisinganHeader)->min,
+                'max' => optional($kebisinganHeader)->max,
                 'analyst' => optional($lhpsKebisinganHeader)->created_by,
                 'approved_by' => optional($lhpsKebisinganHeader)->approved_by
             ];
@@ -99,25 +100,21 @@ class TqcKebisinganController extends Controller
 
     public function handleApproveSelected(Request $request)
     {
-        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
-            ->update(['status' => 2]);
+        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 2]);
 
         return response()->json([
             'message' => 'Data berhasil diapprove.',
             'success' => true,
-            'status' => 200,
         ], 200);
     }
 
     public function handleRejectSelected(Request $request)
     {
-        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
-            ->update(['status' => 0]);
+        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 0]);
 
         return response()->json([
             'message' => 'Data berhasil direject.',
             'success' => true,
-            'status' => 200,
         ], 200);
     }
 }
