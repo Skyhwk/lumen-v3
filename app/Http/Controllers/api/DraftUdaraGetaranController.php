@@ -142,7 +142,6 @@ class DraftUdaraGetaranController extends Controller
             $header->nama_pelanggan = ($request->nama_perusahaan != '') ? $request->nama_perusahaan : NULL;
             $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL;
             $header->keterangan = ($request->keterangan != '') ? $request->keterangan : NULL;
-            // dd('masuk');
             $header->sub_kategori = ($request->jenis_sampel != '') ? $request->jenis_sampel : NULL;
             $header->metode_sampling = ($request->metode_sampling != '') ? $request->metode_sampling : NULL;
             $header->tanggal_sampling = ($request->tanggal_tugas != '') ? $request->tanggal_tugas : NULL;
@@ -477,41 +476,6 @@ class DraftUdaraGetaranController extends Controller
     }
 
 
-    // public function handleDetailEdit(Request $request)
-    // {
-
-    //     $category = explode('-', $request->kategori_3)[0];
-
-    //     try {
-    //         // Getaran
-    //         $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
-    //             ->where('id_kategori_3', $category)
-    //             ->where('is_active', true)
-    //             ->first();
-    //         // dd($data);
-    //         $details = LhpsGetaranDetail::where('id_header', $data->id)->get();
-    //         // dd($data, $details);
-    //         $spesifikasiMethode = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)
-    //             ->where('is_approve', 1)
-    //             ->where('is_active', 1)
-    //             ->get();
-
-    //         return response()->json([
-    //             'data' => $data,
-    //             'details' => $details,
-    //         ], 201);
-    //     } catch (\Exception $th) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-    //             'line' => $th->getLine(),
-    //             'status' => false
-    //         ], 500);
-    //     }
-
-
-    // }
-  
       public function handleApprove(Request $request)
     {
             try {
