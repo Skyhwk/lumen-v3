@@ -113,8 +113,6 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
-            
-
             // Handle images if provided
             if ($request->foto_struk) {
                 $data->foto_lokasi_sampel = self::convertImg($request->foto_struk, 1, $this->user_id);
@@ -128,7 +126,6 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
 
             $data->save();
             
-            // Update order_detail
             DB::table('order_detail')
                 ->where('no_sampel', $noSample)
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d')]);

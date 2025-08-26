@@ -180,7 +180,6 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
 
                 InsertActivityFdl::by($this->user_id)->action('input')->target("Hasil Isokinetik pada nomor sampel $request->no_sample")->save();
 
-
                 DB::commit();
                 return response()->json([
                     'message' => 'Data berhasil disimpan.'
