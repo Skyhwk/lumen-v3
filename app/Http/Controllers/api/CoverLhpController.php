@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\File;
 use Yajra\Datatables\Datatables;
 use Illuminate\Http\Request;
 use Mpdf\Mpdf;
-
+use App\Models\PengesahanLhp;
 use Carbon\Carbon;
 
 Carbon::setLocale('id');
@@ -82,6 +82,13 @@ class CoverLhpController extends Controller
             $formattedFirstDate = Carbon::parse($request->tgl_awal)->translatedFormat('d F Y');
             $formattedLastDate = Carbon::parse($request->tgl_akhir)->translatedFormat('d F Y');
             $formattedNowDate = Carbon::now()->translatedFormat('d F Y');
+
+            $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', Carbon::now())
+                    ->orderBy('berlaku_mulai', 'desc')
+                    ->first();
+
+            $nama_perilis   = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
 
             $arrayOfSamplingStatus = $groupedCFRs->map(fn($cfr) => $cfr['kategori_1'])->flatten()->filter(fn($v) => filled($v))->unique()->values()->toArray();
 
@@ -205,8 +212,8 @@ class CoverLhpController extends Controller
                         </td>
                         <td class="signature-cell" style="font-size: 10px;">
                             Tangerang, ' . $formattedNowDate . '<br /><br /><br /><br /><br /><br />
-                            <p class="sign-name">( Abidah Walfathiyyah )</p>
-                            <p class="sign-position">Supervisor Technical Control</p>
+                            <p class="sign-name">( ' . $nama_perilis . ' )</p>
+                            <p class="sign-position">' . $jabatan_perilis . '</p>
                         </td>
                     </tr>
                 </table>
