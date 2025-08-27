@@ -45,7 +45,9 @@ class WsFinalPsikologiController extends Controller
 				foreach ($orderKeys as [$no_order, $cfr]) {
 					$q->orWhere(fn($sub) => $sub->where('no_order', $no_order)->where('cfr', $cfr));
 				}
-			})->get();
+			})
+            ->where('is_active', $request->is_active)
+            ->get();
 
 		$groupedData2 = $data2->groupBy(fn($item) => $item->no_order . '|' . $item->cfr);
 
