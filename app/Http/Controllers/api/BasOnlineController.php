@@ -991,17 +991,36 @@ class BasOnlineController extends Controller
                 'tanggal_sampling' => $request->tanggal_sampling,
             ])->get();
             
-            $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
+            /* $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
+            }); */
+            $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
+                $no_sampel = json_decode($item->no_sampel, true) ?? [];
+
+                // Semua $noSample harus ada di $no_sampel
+                $diff = array_diff($noSample, $no_sampel);
+                $isFullContain = empty($diff);
+
+                // Deteksi apakah ada irisan
+                $intersection = array_intersect($noSample, $no_sampel);
+                dd($intersection,$diff,$noSample,$no_sampel);
+                $hasAnyMatch = count($intersection) > 0;
+
+                // Debug
+                // dd($no_sampel, $diff, $intersection);
+
+                // Return true jika full contain
+                return $isFullContain;
             });
+
             
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-
+            
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
