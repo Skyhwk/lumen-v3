@@ -862,7 +862,7 @@ class BasOnlineController extends Controller
             $pdf->Output(public_path() . '/bas/' . $filename, 'F');
             chmod(public_path() . '/bas/' . $filename, 0777);
             if ($bsDocument !== null) {
-                dd($bsDocument);
+                // dd($bsDocument);
                 return response()->json(['status' => true, 'data' => $bsDocument], 200);
             } else {
                 // dd([$filename]);
@@ -908,6 +908,12 @@ class BasOnlineController extends Controller
                     $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                 }
             })->first();
+
+            if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
+                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
+                // dd($dataBas);
+                return $dataBas[0]["filename"];
+            }
             
             $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
             
@@ -953,17 +959,6 @@ class BasOnlineController extends Controller
                 ], 401);
             }
 
-            // $samplerJadwal = Jadwal::where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get()->pluck('sampler');
-
-            // $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
-            //     ->where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get();
-
             $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
                 ->where([
                     ['id_sampling', '=', $sp->id],
@@ -995,7 +990,7 @@ class BasOnlineController extends Controller
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-            dd($persiapanHeader,$dataList);
+            // dd($persiapanHeader,$dataList);
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
