@@ -15,6 +15,7 @@ use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
+use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\KebisinganHeader;
 
@@ -225,16 +226,16 @@ class DraftUdaraKebisinganController extends Controller
                 }
    
 
-                if($parameter[0] == 'Kebisingan' || $parameter[0] == 'Kebisingan (8 Jam)'){
+                if($parameter[0] == 'Kebisingan (P8J)' ){
                 $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
-                            ->whereView('DraftKebisingan')
+                           ->whereView('DraftKebisinganPersonal')
                             ->render();
 
                 } else {
                      $fileName = LhpTemplate::setDataDetail($details)
-                                    ->setDataHeader($header)
-                                    ->whereView('DraftKebisinganPersonal')
+                                    ->setDataHeader($header)  
+                                    ->whereView('DraftKebisingan')
                                     ->render();
                 }
 
@@ -258,6 +259,72 @@ class DraftUdaraKebisinganController extends Controller
         }
     }
 
+         public function updateTanggalLhp(Request $request)
+            {
+                DB::beginTransaction();
+                try {
+                    $dataHeader = LhpsKebisinganHeader::find($request->id);
+
+                    if (!$dataHeader) {
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Data tidak ditemukan, harap adjust data terlebih dahulu'
+                        ], 404);
+                    }
+
+                    $dataHeader->tanggal_lhp = $request->value;
+
+                    $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                        ->orderByDesc('berlaku_mulai')
+                        ->first();
+
+                    $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+                    $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+                    // Update QR Document jika ada
+                    $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+                    if ($qr) {
+                        $dataQr = json_decode($qr->data, true);
+                        $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                        $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                        $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                        $qr->data = json_encode($dataQr);
+                        $qr->save();
+                    }
+
+                    // Render ulang file LHP
+                    $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
+                    if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
+                        $fileName = LhpTemplate::setDataDetail($detail)
+                            ->setDataHeader($dataHeader)
+                            ->whereView('DraftKebisinganPersonal')
+                            ->render();
+                    } else {
+                        $fileName = LhpTemplate::setDataDetail($detail)
+                            ->setDataHeader($dataHeader)
+                            ->whereView('DraftKebisingan')
+                            ->render();
+                    }
+
+                
+                    $dataHeader->file_lhp = $fileName;
+                    $dataHeader->save();
+
+                    DB::commit();
+                    return response()->json([
+                        'status' => true,
+                        'message' => 'Tanggal LHP berhasil diubah',
+                        'data' => $dataHeader
+                    ], 200);
+                } catch (\Throwable $th) {
+                    DB::rollBack();
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+                    ], 500);
+                }
+            }
+
     //Amang
     public function handleDatadetail(Request $request)
     {
@@ -271,70 +338,69 @@ class DraftUdaraKebisinganController extends Controller
             if($cekLhp) {
               $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
 
-            $existingSamples = $detail->pluck('no_sampel')->toArray();
+                $existingSamples = $detail->pluck('no_sampel')->toArray();
 
-            $data = [];
-            $data1 = [];
-            $hasil = [];
+                $data = [];
+                $data1 = [];
+                $hasil = [];
 
-            $orders = OrderDetail::where('cfr', $request->cfr)
-                ->where('is_approve', 0)
-                ->where('is_active', true)
-                ->where('kategori_2', '4-Udara')
-                ->where('kategori_3', $request->kategori_3)
-                ->where('status', 2)
-                ->pluck('no_sampel');
+                $orders = OrderDetail::where('cfr', $request->cfr)
+                    ->where('is_approve', 0)
+                    ->where('is_active', true)
+                    ->where('kategori_2', '4-Udara')
+                    ->where('kategori_3', $request->kategori_3)
+                    ->where('status', 2)
+                    ->pluck('no_sampel');
 
-            $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
-                ->whereIn('no_sampel', $orders)
-                ->where('is_approved', 1)
-                ->where('is_active', 1)
-                ->where('lhps', 1)
-                ->get();
+                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approved', 1)
+                    ->where('is_active', 1)
+                    ->where('lhps', 1)
+                    ->get();
 
-            $i = 0;
-            if ($data->isNotEmpty()) {
-                foreach ($data as $val) {
-                    $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling 
-                        ?? $val->data_lapangan->keterangan 
-                        ?? $val->data_lapangan_personal->keterangan 
-                        ?? null;
-                    $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan 
-                        ?? $val->data_lapangan_personal->waktu_pengukuran 
-                        ?? null;
-                    $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat 
-                        ?? $val->data_lapangan_personal->titik_koordinat 
-                        ?? null;
-                    $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
-                    $data1[$i]['id'] = $val->id;
-                    $data1[$i]['no_sampel'] = $val->no_sampel;
-                    $data1[$i]['param'] = $val->parameter;
-                    $data1[$i]['min'] = $val->min;
-                    $data1[$i]['max'] = $val->max;
-                    $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
-                    $data1[$i]['nab'] = $val->ws_udara->nab;
-                    $i++;
+                $i = 0;
+                if ($data->isNotEmpty()) {
+                    foreach ($data as $val) {
+                        $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling 
+                            ?? $val->data_lapangan->keterangan 
+                            ?? $val->data_lapangan_personal->keterangan 
+                            ?? null;
+                        $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan 
+                            ?? $val->data_lapangan_personal->waktu_pengukuran 
+                            ?? null;
+                        $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat 
+                            ?? $val->data_lapangan_personal->titik_koordinat 
+                            ?? null;
+                        $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
+                        $data1[$i]['id'] = $val->id;
+                        $data1[$i]['no_sampel'] = $val->no_sampel;
+                        $data1[$i]['param'] = $val->parameter;
+                        $data1[$i]['min'] = $val->min;
+                        $data1[$i]['max'] = $val->max;
+                        $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
+                        $data1[$i]['nab'] = $val->ws_udara->nab;
+                        $i++;
+                    }
+                    $hasil[] = $data1;
                 }
-                $hasil[] = $data1;
-            }
 
-            $data_all = [];
-            $a = 0;
-            foreach ($hasil as $key => $value) {
-                foreach ($value as $row => $col) {
-                    if (!in_array($col['no_sampel'], $existingSamples)) {
-                        $col['status'] = 'belom_diadjust';
-                        $data_all[$a] = $col;
-                        $a++;
+                $data_all = [];
+                $a = 0;
+                foreach ($hasil as $key => $value) {
+                    foreach ($value as $row => $col) {
+                        if (!in_array($col['no_sampel'], $existingSamples)) {
+                            $col['status'] = 'belom_diadjust';
+                            $data_all[$a] = $col;
+                            $a++;
+                        }
                     }
                 }
-            }
 
-            // gabungkan dengan detail
-            foreach ($data_all as $key => $value) {
-                $detail[] = $value;
-            }
-
+                // gabungkan dengan detail
+                foreach ($data_all as $key => $value) {
+                    $detail[] = $value;
+                }
                 return response()->json([
                     'data' => $cekLhp,
                     'detail' => $detail,
@@ -353,7 +419,12 @@ class DraftUdaraKebisinganController extends Controller
                     ->where('kategori_3', $request->kategori_3)
                     ->where('status', 2)
                     ->pluck('no_sampel');
-                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')->whereIn('no_sampel', $orders)->where('is_approved', 1)->where('is_active', 1)->where('lhps', 1)->get();
+                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approved', 1)
+                    ->where('is_active', 1)
+                    ->where('lhps', 1)
+                    ->get();
                 $i = 0;
                 if ($data->isNotEmpty()) {
                     foreach ($data as  $val) {

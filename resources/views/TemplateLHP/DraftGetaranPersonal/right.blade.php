@@ -60,14 +60,14 @@
                         $periode1 = $periode[0] ?? '';
                         $periode2 = $periode[1] ?? '';
                     @endphp
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
                         <td class="custom5">
                             {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - 
                             {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
                         </td>
-                    </tr>
+                    </tr> -->
                 </table>
 
                 {{-- Regulasi --}}
