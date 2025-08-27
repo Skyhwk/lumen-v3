@@ -43,13 +43,17 @@ class FdlMedanListrikDanMagnetController extends Controller
         $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'listrik_dan_magnet')->where('is_active', 1)->first();
         $parameterList = json_decode($parameter->parameters, true);
 
+        $inputListrik = json_decode(ParameterFdl::select('parameters')->where('nama_fdl', 'inputan_listrik')->where('is_active', 1)->first()->parameters, true);
+        $inputMagnet = json_decode(ParameterFdl::select('parameters')->where('nama_fdl', 'inputan_magnet')->where('is_active', 1)->first()->parameters, true);
+
+
         // Ambil data order yang aktif berdasarkan no_sampel
         $data = OrderDetail::where('no_sampel', $no_sampel)
             ->where('is_active', 1)
             ->where('kategori_3', '27-Udara lingkungan Kerja')
             ->where(function($q) use ($parameterList) {
                 foreach ($parameterList as $param) {
-                    $q->orWhere('parameter', 'like', "%;$param");
+                    $q->orWhere('parameter', 'like', "%;$param%");
                 }
             })
             ->first();
@@ -66,38 +70,51 @@ class FdlMedanListrikDanMagnetController extends Controller
         // Cek apakah sudah ada data lapangan Medan
         $medan = DataLapanganMedanLM::where('no_sampel', $no_sampel)->exists();
 
+        // Decode parameter yang seharusnya dicatat
+        $paramTarget = json_decode($data->parameter, true);
+
+        // Bersihkan paramTarget -> ambil setelah ";"
+        $paramTargetClean = array_map(function($item) {
+            $parts = explode(';', $item, 2);
+            return $parts[1] ?? $parts[0];
+        }, $paramTarget);
+
+        // Cek di fdl
         if ($medan) {
             \DB::statement("SET SQL_MODE=''");
 
-            // Ambil parameter yang sudah dicatat
+            // Ambil parameter yang sudah dicatat (langsung nama parameternya)
             $paramTerekam = DataLapanganMedanLM::where('no_sampel', $no_sampel)
                 ->groupBy('parameter')
                 ->pluck('parameter')
                 ->toArray();
 
-            // Decode parameter yang seharusnya dicatat
-            $paramTarget = json_decode($data->parameter, true);
-
             // Ambil parameter yang belum dicatat
-            $paramBelumDicatat = array_values(array_diff($paramTarget, $paramTerekam));
+            $paramBelumDicatat = array_values(array_diff($paramTargetClean, $paramTerekam));
 
             return response()->json([
-                'no_sample'  => $data->no_sampel,
-                'jenis'      => $cek->nama_sub_kategori ?? null,
-                'keterangan' => $data->keterangan_1,
-                'id_ket'     => $id_ket,
-                'param'      => json_encode($paramBelumDicatat)
+                'no_sample'    => $data->no_sampel,
+                'jenis'        => $cek->nama_sub_kategori ?? null,
+                'keterangan'   => $data->keterangan_1,
+                'id_ket'       => $id_ket,
+                'param'        => $paramBelumDicatat,
+                'parameterList' => $parameterList,
+                'paramListrik' => $inputListrik,
+                'paramMagnet'  => $inputMagnet,
             ], 200);
         }
 
-        // Jika belum ada data Medan, kembalikan parameter as-is
+        // Jika belum ada data Medan listrik dan magnet
         return response()->json([
             'no_sample'  => $data->no_sampel,
             'jenis'      => $cek->nama_sub_kategori ?? null,
             'keterangan' => $data->keterangan_1,
             'id_ket'     => $id_ket,
             'id_ket2'    => $id_ket2,
-            'param'      => $data->parameter
+            'parameterList' => $parameterList,
+            'param'      => $paramTargetClean,
+            'paramListrik' => $inputListrik,
+            'paramMagnet' => $inputMagnet
         ], 200);
     }
 
