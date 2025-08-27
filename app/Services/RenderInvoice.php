@@ -773,7 +773,6 @@ class RenderInvoice
                                     }
 
                                     $kategori2 = explode("-", $datasp->kategori_2);
-
                                     if (isset($datasp->keterangan_pengujian)) {
                                         $keterangan_pengujian = $datasp->keterangan_pengujian;
                                         $harga_total = self::rupiah($datasp->harga_total);
@@ -790,6 +789,15 @@ class RenderInvoice
                                             <tr>
                                                 <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
                                         ');
+
+                                        if (is_string($datasp->regulasi)) {
+                                            $decodedRegulasi = json_decode($datasp->regulasi, true);
+                                            $datasp->regulasi = $decodedRegulasi ?: [];
+                                        }
+
+                                        if (!is_array($datasp->regulasi)) {
+                                            $datasp->regulasi = [];
+                                        }
 
                                         foreach ($datasp->regulasi as $rg => $v) {
                                             $reg = '';
