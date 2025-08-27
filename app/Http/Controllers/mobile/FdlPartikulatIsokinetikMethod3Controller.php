@@ -48,7 +48,7 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
                 'message' => 'Tidak ada data di Method 2 berdasarkan No. Sample tersebut.'
             ], 401);
         }
-}
+    }
 
     public function store(Request $request)
     {
@@ -113,8 +113,6 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
-            
-
             // Handle images if provided
             if ($request->foto_struk) {
                 $data->foto_lokasi_sampel = self::convertImg($request->foto_struk, 1, $this->user_id);
@@ -128,7 +126,6 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
 
             $data->save();
             
-            // Update order_detail
             DB::table('order_detail')
                 ->where('no_sampel', $noSample)
                 ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d')]);
@@ -160,7 +157,7 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
         $page = $request->input('page', 1);
         $search = $request->input('search');
 
-        $query = DataLapanganIsokinetikBeratMolekul::with('detail')
+        $query = DataLapanganIsokinetikBeratMolekul::with('detail', 'survei')
             ->where('created_by', $this->karyawan)
             ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
 

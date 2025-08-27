@@ -6,7 +6,7 @@ use Carbon\Carbon;
 class LingkunganHidupNO2
 {
     public function index($data, $id_parameter, $mdl) {
-        
+
         $ks = null;
         // dd(count($data->ks));
         if (is_array($data->ks)) {

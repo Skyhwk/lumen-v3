@@ -3,8 +3,6 @@
 namespace App\Services;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
-use App\Models\PengesahanLhp;
-use Carbon\Carbon;
 
 class LhpTemplate
 {
@@ -133,7 +131,7 @@ class LhpTemplate
         self::$instance->mode = $value;
         $view = $this->directory . '.' . $this->view;
         
-        self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
+            self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
             
         $modes = [
             'downloadWSDraft',
@@ -141,32 +139,23 @@ class LhpTemplate
             'downloadLHPFinal',
         ];
 
-        $now = carbon::now();
-        $AllPengesahanLhp = PengesahanLhp::all();
-
-        // cari tanggal mulai paling besar yg <= now
-        $PengesahanLhp = $AllPengesahanLhp
-            ->where('berlaku_mulai', '<=', $now)
-            ->sortByDesc('berlaku_mulai')
-            ->first();
-
         if (!$value) {
             $resultName = '';
             foreach ($modes as $mode) { 
-                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $PengesahanLhp);
+                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode);
             }
 
             self::$instance = null;
             return $resultName;
         }
         
-        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $PengesahanLhp);
+        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value);
 
         self::$instance = null;
         return $resultName;
     }
 
-    private function execute($header, $detail, $prefix, $view, $customs, $mode, $pengesahan)
+    private function execute($header, $detail, $prefix, $view, $customs, $mode)
     {   
         $namaFile = '';
         if ($this->filename) {
@@ -182,10 +171,9 @@ class LhpTemplate
             mkdir($dir, 0777, true);
         }
         $this->generateStylesheet();
-        
         $last = true;
         if(!empty($customs)) {
-             $last = false;
+            $last = false;
         }
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
@@ -193,16 +181,16 @@ class LhpTemplate
         
         $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
-        $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false, 'pengesahan' => $pengesahan])->render();
-        $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last', 'pengesahan'))->render();
+        $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
+        $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
 
         if(!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
                 $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
                 $htmlCustomHeader[$page] = view($this->directoryDefault . '.customHeader', compact('header', 'detail', 'mode', 'view', 'showKan', 'page'))->render();
-                $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false, 'pengesahan' => $pengesahan])->render();
-                $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last', 'pengesahan'))->render();
+                $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
+                $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
             }
             
         }
@@ -247,10 +235,8 @@ class LhpTemplate
                 $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
             }
         }
-        
+
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-        
-        // dd($filename);
         return $filename;
     }
 
@@ -272,7 +258,6 @@ class LhpTemplate
 
     private function cekAkreditasi( $no_lhp)
     {
-        // $dataDecode = json_decode($data);
 
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;

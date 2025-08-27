@@ -21,6 +21,7 @@ use App\Models\MasterKaryawan;
 use App\Models\DataLapanganAir;
 use App\Models\LhpsAirHeaderHistory;
 use App\Models\LhpsAirDetailHistory;
+use App\Models\PengesahanLhp;
 
 use App\Jobs\JobPrintLhp;
 
@@ -74,6 +75,231 @@ class DraftAirController extends Controller
         ], 200);
     }
 
+    // public function handleSubmitDraft(Request $request)
+    // {
+    //     // Validasi tanggal lebih awal
+    //     if (empty($request->tanggal_lhp)) {
+    //         return response()->json([
+    //             'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+    //             'status'  => false,
+    //         ], 400);
+    //     }
+
+    //     // Retry mechanism maksimal 3x jika kena deadlock / lock timeout
+    //     $maxAttempts = 3;
+    //     $attempt = 0;
+
+    //     while ($attempt < $maxAttempts) {
+    //         try {
+    //             DB::beginTransaction();
+
+    //             /** =========================
+    //              * 1. Ambil/siapkan header
+    //              * ========================= */
+    //             $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
+    //                 ->where('is_active', true)
+    //                 ->first();
+
+    //             if ($header) {
+    //                 // simpan history
+    //                 $history = $header->replicate();
+    //                 $history->setTable((new LhpsAirHeaderHistory())->getTable());
+    //                 $history->id = $header->id;
+    //                 $history->created_at = Carbon::now();
+    //                 $history->save();
+    //             } else {
+    //                 $header = new LhpsAirHeader();
+    //             }
+
+    //             /** =========================
+    //              * 2. Data tambahan
+    //              * ========================= */
+    //             $parameter_uji = $request->filled('parameter') 
+    //                 ? explode(', ', $request->parameter) 
+    //                 : [];
+
+    //             $keterangan = collect($request->keterangan ?? [])
+    //                 ->filter(fn($v) => $v !== '')
+    //                 ->values()
+    //                 ->all();
+
+    //             $table_header = collect($request->name_header_bakumutu ?? [])
+    //                 ->take(4)
+    //                 ->filter()
+    //                 ->values()
+    //                 ->all();
+
+    //             $regulasi_custom = collect($request->regulasi_custom ?? [])
+    //                 ->map(fn($item, $page) => [
+    //                     'page'     => (int) $page,
+    //                     'regulasi' => $item,
+    //                 ])
+    //                 ->values()
+    //                 ->all();
+
+    //             // Ambil penanggung jawab pengesahan
+    //             $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+    //                 ->orderBy('berlaku_mulai', 'desc')
+    //                 ->first();
+
+    //             $nama_perilis   = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+    //             $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+    //             /** =========================
+    //              * 3. Isi data header
+    //              * ========================= */
+    //             $header->fill([
+    //                 'no_order'         => $request->no_order ?: null,
+    //                 'no_sampel'        => $request->no_sampel ?: null,
+    //                 'no_lhp'           => $request->no_lhp ?: null,
+    //                 'no_quotation'     => $request->no_penawaran ?: null,
+    //                 'status_sampling'  => $request->type_sampling ?: null,
+    //                 'tanggal_terima'   => $request->tanggal_terima ?: null,
+    //                 'parameter_uji'    => json_encode($parameter_uji),
+    //                 'nama_pelanggan'   => $request->nama_perusahaan ?: null,
+    //                 'alamat_sampling'  => $request->alamat_sampling ?: null,
+    //                 'sub_kategori'     => $request->jenis_sampel ?: null,
+    //                 'deskripsi_titik'  => $request->penamaan_titik ?: null,
+    //                 'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
+    //                 'titik_koordinat'  => $request->titik_koordinat ?: null,
+    //                 'tanggal_sampling' => $request->tanggal_terima ?: null,
+    //                 'periode_analisa'  => $request->periode_analisa ?: null,
+    //                 'nama_karyawan'    => $nama_perilis,
+    //                 'jabatan_karyawan' => $jabatan_perilis,
+    //                 'regulasi'         => $request->regulasi ? json_encode($request->regulasi) : null,
+    //                 'regulasi_custom'  => $regulasi_custom ? json_encode($regulasi_custom) : null,
+    //                 'keterangan'       => $keterangan ? json_encode($keterangan) : null,
+    //                 'header_table'     => $table_header ? json_encode($table_header) : null,
+    //                 'suhu_air'         => $request->suhu_air ?: null,
+    //                 'suhu_udara'       => $request->suhu_udara ?: null,
+    //                 'ph'               => $request->ph ?: null,
+    //                 'dhl'              => $request->dhl ?: null,
+    //                 'do'               => $request->do ?: null,
+    //                 'bau'              => $request->bau ?: null,
+    //                 'warna'            => $request->warna ?: null,
+    //                 'tanggal_lhp'      => $request->tanggal_lhp ?: null,
+    //                 'created_by'       => $this->karyawan,
+    //                 'created_at'       => Carbon::now(),
+    //             ]);
+    //             $header->save();
+
+    //             /** =========================
+    //              * 4. Handle Detail
+    //              * ========================= */
+    //             // Backup lama ke history
+    //             foreach (LhpsAirDetail::where('id_header', $header->id)->get() as $detail) {
+    //                 $detailHistory = $detail->replicate();
+    //                 $detailHistory->setTable((new LhpsAirDetailHistory())->getTable());
+    //                 $detailHistory->id = $detail->id;
+    //                 $detailHistory->created_by = $this->karyawan;
+    //                 $detailHistory->created_at = Carbon::now();
+    //                 $detailHistory->save();
+    //             }
+    //             // Hapus detail lama
+    //             LhpsAirDetail::where('id_header', $header->id)->delete();
+
+    //             // Insert detail baru
+    //             foreach (($request->nama_parameter ?? []) as $key => $val) {
+    //                 $baku_mutu = collect($request->baku_mutu[$key] ?? [])
+    //                     ->take(count($table_header))
+    //                     ->values()
+    //                     ->all();
+
+    //                 LhpsAirDetail::create([
+    //                     'id_header'      => $header->id,
+    //                     'akr'            => $request->akr[$key] ?? '',
+    //                     'parameter_lab'  => str_replace("'", '', $key),
+    //                     'parameter'      => $val,
+    //                     'hasil_uji'      => $request->hasil_uji[$key] ?? '',
+    //                     'attr'           => $request->attr[$key] ?? '',
+    //                     'satuan'         => $request->satuan[$key] ?? '',
+    //                     'methode'        => $request->methode[$key] ?? '',
+    //                     'baku_mutu'      => json_encode($baku_mutu),
+    //                 ]);
+    //             }
+
+    //             /** =========================
+    //              * 5. Handle Custom
+    //              * ========================= */
+    //             LhpsAirCustom::where('id_header', $header->id)->delete();
+
+    //             if (!empty($request->custom_parameter)) {
+    //                 foreach ($request->custom_hasil_uji as $page => $params) {
+    //                     foreach ($params as $param => $hasil_uji) {
+    //                         LhpsAirCustom::create([
+    //                             'id_header'      => $header->id,
+    //                             'page'           => $page,
+    //                             'parameter_lab'  => $request->custom_parameter[$page][$param] ?? '',
+    //                             'parameter'      => str_replace("'", '', htmlspecialchars_decode($param, ENT_QUOTES)),
+    //                             'akr'            => $request->custom_akr[$page][$param] ?? '',
+    //                             'hasil_uji'      => $hasil_uji,
+    //                             'attr'           => $request->custom_attr[$page][$param] ?? '',
+    //                             'satuan'         => $request->custom_satuan[$page][$param] ?? '',
+    //                             'methode'        => $request->custom_methode[$page][$param] ?? '',
+    //                             'baku_mutu'      => json_encode($request->custom_baku_mutu[$page][$param] ?? []),
+    //                         ]);
+    //                     }
+    //                 }
+    //             }
+
+    //             /** =========================
+    //              * 6. Generate Dokumen
+    //              * ========================= */
+    //             if (empty($header->file_qr)) {
+    //                 $file_qr_path = (new GenerateQrDocumentLhp())->insert('LHP_AIR', $header, $this->karyawan);
+    //                 if ($file_qr_path) {
+    //                     $header->file_qr = $file_qr_path;
+    //                     $header->save();
+    //                 }
+    //             }
+
+    //             $groupedByPage = LhpsAirCustom::where('id_header', $header->id)
+    //                 ->get()
+    //                 ->groupBy('page')
+    //                 ->toArray();
+
+    //             $fileName = LhpTemplate::setDataDetail(LhpsAirDetail::where('id_header', $header->id)->get())
+    //                 ->setDataHeader($header)
+    //                 ->setDataCustom($groupedByPage)
+    //                 ->whereView('DraftAir')
+    //                 ->render();
+
+    //             $header->file_lhp = $fileName;
+
+    //             if ($header->is_revisi == 1) {
+    //                 $header->is_revisi = 0;
+    //                 $header->is_generated = 0;
+    //                 $header->count_revisi++;
+    //                 if ($header->count_revisi > 2) {
+    //                     $this->handleApprove($request);
+    //                 }
+    //             }
+    //             $header->save();
+
+    //             DB::commit();
+    //             return response()->json([
+    //                 'message' => 'Data draft lhp air no sampel ' . $request->no_sampel . ' berhasil disimpan',
+    //                 'status'  => true,
+    //             ], 201);
+
+    //         } catch (\Throwable $e) {
+    //             DB::rollBack();
+
+    //             // Jika lock wait timeout / deadlock, retry
+    //             if (in_array($e->getCode(), [1205, 1213])) {
+    //                 $attempt++;
+    //                 sleep(1);
+    //                 continue;
+    //             }
+
+    //             return response()->json([
+    //                 'message' => 'Error: ' . $e->getMessage() . ' on line ' . $e->getLine() . ' on file ' . $e->getFile(),
+    //                 'status'  => false,
+    //             ], 401);
+    //         }
+    //     }
+    // }
+
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
@@ -116,6 +342,21 @@ class DraftAirController extends Controller
                 }
             }
 
+            if($request->tanggal_lhp != null){
+                $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                    ->orderBy('berlaku_mulai', 'desc')
+                    ->first();
+
+                $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+                $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+                    'status' => false
+                ], 400);
+            }
+
             try {
 
                 $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
@@ -133,10 +374,8 @@ class DraftAirController extends Controller
                 $header->titik_koordinat = ($request->titik_koordinat != '') ? $request->titik_koordinat : NULL;
                 $header->tanggal_sampling = ($request->tanggal_terima != '') ? $request->tanggal_terima : NULL;
                 $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
-                $header->nama_karyawan = 'Abidah Walfathiyyah';
-                $header->jabatan_karyawan = 'Technical Control Supervisor';
-                // $header->nama_karyawan = 'Kharina Waty';
-                // $header->jabatan_karyawan = 'Technical Control Manager';
+                $header->nama_karyawan = $nama_perilis;
+                $header->jabatan_karyawan = $jabatan_perilis;
                 $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
                 $header->regulasi_custom = isset($regulasi_custom) && !empty($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
                 $header->keterangan = ($keterangan != null) ? json_encode($keterangan) : NULL;
@@ -288,7 +527,6 @@ class DraftAirController extends Controller
                     }
                 }
                 $header->save();
-                // dd($header);
             }
 
             DB::commit();
@@ -792,74 +1030,6 @@ class DraftAirController extends Controller
         }
     }
 
-    // public function handleApprove(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
-    //             ->where('is_active', true)->firstOrFail();
-    //         // $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-    //         // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-    //         $qr = QrDocument::where('id_document', $header->id)
-    //             ->where('type_document', 'LHP_AIR')
-    //             ->where('is_active', 1)
-    //             ->where('file', $header->file_qr)
-    //             ->orderBy('id', 'desc')
-    //             ->first();
-    //         $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
-    //             ->where('id', $request->id)
-    //             ->where('is_active', true)
-    //             ->firstOrFail();
-
-    //         if ($header != null) {
-    //             $data_order->is_approve = 1;
-    //             $data_order->status = 3;
-    //             $data_order->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $data_order->approved_by = $this->karyawan;
-    //             $data_order->save();
-
-    //             $header->is_approve = 1;
-    //             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $header->approved_by = $this->karyawan;
-    //             $header->nama_karyawan = $this->karyawan;
-    //             $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-    //             $header->save();
-
-    //             HistoryAppReject::insert([
-    //                 'no_lhp' => $data_order->cfr,
-    //                 'no_sampel' => $data_order->no_sampel,
-    //                 'kategori_2' => $data_order->kategori_2,
-    //                 'kategori_3' => $data_order->kategori_3,
-    //                 'menu' => 'Draft Air',
-    //                 'status' => 'approve',
-    //                 'approved_at' => Carbon::now(),
-    //                 'approved_by' => $this->karyawan
-    //             ]);
-
-
-    //             if ($qr != null) {
-    //                 $dataQr = json_decode($qr->data);
-    //                 $dataQr->Tanggal_Pengesahan = Carbon::now()->locale('id')->isoFormat('YYYY MMMM DD');
-    //                 $dataQr->Disahkan_Oleh = $this->karyawan;
-    //                 $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-    //                 $qr->data = json_encode($dataQr);
-    //                 $qr->save();
-    //             }
-    //             DB::commit();
-    //             return response()->json([
-    //                 'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!',
-
-    //             ], 200);
-    //         }
-
-    //     } catch (Exception $e) {
-    //         DB::rollBack();
-    //         dd($e);
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //         ], 401);
-    //     }
-    // }
     public function handleApprove(Request $request)
     {
         DB::beginTransaction();
@@ -868,12 +1038,12 @@ class DraftAirController extends Controller
                 ->where('is_active', true)->firstOrFail();
             // $detail = LhpsAirDetail::where('id_header', $header->id)->get();
             // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-            $qr = QrDocument::where('id_document', $header->id)
-                ->where('type_document', 'LHP_AIR')
-                ->where('is_active', 1)
-                ->where('file', $header->file_qr)
-                ->orderBy('id', 'desc')
-                ->first();
+            // $qr = QrDocument::where('id_document', $header->id)
+            //     ->where('type_document', 'LHP_AIR')
+            //     ->where('is_active', 1)
+            //     ->where('file', $header->file_qr)
+            //     ->orderBy('id', 'desc')
+            //     ->first();
             $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
                 ->where('id', $request->id)
                 ->where('is_active', true)
@@ -889,8 +1059,17 @@ class DraftAirController extends Controller
                 $header->is_approve = 1;
                 $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->approved_by = $this->karyawan;
-                $header->nama_karyawan = $this->karyawan;
-                $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+
+                // $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $header->tanggal_lhp)
+                //     ->orderBy('berlaku_mulai', 'desc')
+                //     ->first();
+
+                // $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
+                // $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+                // $header->nama_karyawan = $nama_perilis ?? 'Abidah Walfathiyyah';
+                // $header->jabatan_karyawan = $jabatan_perilis ?? 'Technical Control Supervisor';
+
                 if($header->count_print < 1) {
                     $header->is_printed = 1; 
                     $header->count_print = $header->count_print + 1; 
@@ -909,11 +1088,11 @@ class DraftAirController extends Controller
                 ]);
 
 
-                if ($qr != null) {
+                if ($header->file_qr == null) {
                     $dataQr = json_decode($qr->data);
-                    $dataQr->Tanggal_Pengesahan = Carbon::now()->locale('id')->isoFormat('YYYY MMMM DD');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $dataQr->Tanggal_Pengesahan = Carbon::parse($header->tanggal_lhp)->locale('id')->isoFormat('YYYY MMMM DD');
+                    $dataQr->Disahkan_Oleh = $header->nama_karyawan;
+                    $dataQr->Jabatan = $header->jabatan_karyawan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }

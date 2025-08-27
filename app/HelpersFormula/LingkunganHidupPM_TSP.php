@@ -39,7 +39,7 @@ class LingkunganHidupPM_TSP
                 $Qs = $data->nilQs;
                 $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
             }
-            
+
             if ($id_parameter == 342) {
                 if (floatval($C) < 1.5151)
                     $C = '<1.5151';
@@ -57,7 +57,7 @@ class LingkunganHidupPM_TSP
             }
             $w1 = $data->w1;
             $w2 = $data->w2;
-            
+
         } else if ($data->kateg_tsp == '27') { // Udara Lingkungan Kerja
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));

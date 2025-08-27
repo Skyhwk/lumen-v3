@@ -151,7 +151,6 @@ class LhpAirController extends Controller
 
             $header->file_lhp = $fileName;
             $header->save();
-            // dd($header);
         }
 
         $servicePrint = new PrintLhp();

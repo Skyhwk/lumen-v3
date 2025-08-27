@@ -99,7 +99,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 				return Datatables::of($data)->make(true);
 			} else if ($parameterArray[1] == 'Sinar UV') {
-				$data = SinarUvHeader::with('datalapangan', 'ws_udara')
+				$data = SinarUvHeader::with('datalapangan', 'ws_udara', "order_detail")
 					->where('no_sampel', $request->no_sampel)
 					->where('is_approved', true)
 					->where('is_active', true)
@@ -135,7 +135,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					} else {
 						$item->nab = null;
 					}
-					$regulasi = json_decode($item->orderDetail->regulasi);
+					
+					$regulasi = json_decode($item->order_detail->regulasi);
 					$item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
 				}
 

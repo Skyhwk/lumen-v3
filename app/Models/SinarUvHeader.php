@@ -20,5 +20,13 @@ class SinarUvHeader extends Sector
     {
         return $this->belongsTo('App\Models\DataLapanganSinarUV', 'no_sampel', 'no_sampel');
     }
+    public function order_detail()
+    {
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
+    }
+    public function master_parameter()
+    {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab');
+    }
 
 }

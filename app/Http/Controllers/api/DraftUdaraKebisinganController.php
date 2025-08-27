@@ -267,6 +267,7 @@ class DraftUdaraKebisinganController extends Controller
                 ->where('id_kategori_3', $id_category)
                 ->where('is_active', true)
                 ->first();
+
             if($cekLhp) {
               $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
 
