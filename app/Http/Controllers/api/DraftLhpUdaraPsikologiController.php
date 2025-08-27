@@ -35,8 +35,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				"318;Psikologi"
 			])
 			->whereNotNull('tanggal_terima')
-			->select('no_order', 'no_quotation', 'cfr', "tanggal_sampling", "nama_perusahaan", DB::raw('COUNT(*) as total'))
-			->groupBy('no_order', 'no_quotation', 'cfr', "tanggal_sampling", "nama_perusahaan")
+			->select('no_order', 'no_quotation', 'cfr', "nama_perusahaan", DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling ORDER BY tanggal_sampling SEPARATOR ",") as tanggal_sampling'), DB::raw('COUNT(*) as total'))
+			->groupBy('no_order', 'no_quotation', 'cfr', "nama_perusahaan")
 			->get();
 
 		return Datatables::of($data)->make(true);
@@ -326,7 +326,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 			$header->approve_at = Carbon::now();
 			$header->approve_by = $this->karyawan;
 			$header->save();
-			
+
 			try {
 				$this->dispatch(new JobPrintLhp($request->cfr, 'draftPsikologi'));
 			} catch (\Exception $e) {
