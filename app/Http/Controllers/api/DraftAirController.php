@@ -247,7 +247,6 @@ class DraftAirController extends Controller
 
         } catch (\Throwable $th) {
             DB::rollBack();
-            report($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false
@@ -826,13 +825,15 @@ class DraftAirController extends Controller
             $bakumutu = MasterBakumutu::where('parameter', 'pH')
                 ->where('id_regulasi', $regulasiId)
                 ->first();
+            
+            $masterParameter = Parameter::where('nama_lab', 'pH')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
                 'name' => 'pH',
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
                 'satuan' => $bakumutu->satuan ?? '-',
-                'methode' => $bakumutu->method ?? 'SM APHA 24th Ed., 4500-H⁺ B, 2023',
+                'methode' => $bakumutu->method ?? $masterParameter->method,
                 'baku_mutu' => [$bakumutu->baku_mutu ?? '-'],
                 'hasil' => $lapanganAir->ph,
                 'status' => 'AKREDITASI',
@@ -883,13 +884,14 @@ class DraftAirController extends Controller
                 ->where('id_regulasi', $regulasiId)
                 ->first();
 
+                $masterParameterSuhu = Parameter::where('nama_lab', 'Suhu')->where('id_kategori', 1)->where('is_active', true)->first();
+
             $results[] = [
                 'name' => 'Suhu',
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
                 'satuan' => $bakumutu->satuan ?? '°C',
-                'methode' => $bakumutu->method ?? 'SNI 06-6989.23-2005',
-                // 'baku_mutu' => [$bakumutu->baku_mutu ?? 'Suhu Udara ± 3'],
+                'methode' => $bakumutu->method ?? $masterParameterSuhu->method,
                 'baku_mutu' => [$bakumutu->baku_mutu ?? '-'],
                 'hasil' => $lapanganAir->suhu_air,
                 'status' => 'AKREDITASI',
