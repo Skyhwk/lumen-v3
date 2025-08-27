@@ -12,24 +12,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-
-
 use App\Models\Jadwal;
 use App\Models\SamplingPlan;
-use App\Models\MasterPelanggan;
-use App\Models\QuotationKontrakD;
-use App\Models\OrderDetail;
-use App\Models\HargaParameter;
-use App\Models\Ftc;
-use App\Models\FtcT;
-use App\Models\ParameterAnalisa;
+
 use App\Models\MasterKaryawan;
 use App\Services\SamplingPlanServices;
-use App\Services\GetBawahan;
-use App\Models\SampelDiantar;
-use App\Services\{Notification, GetAtasan};
-use App\Helpers\WorkerOperation;
-use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
+
 use App\Jobs\RenderSamplingPlan;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -417,6 +405,7 @@ class KonfirmasiOrderController extends Controller
 		DB::beginTransaction();
 		try {
 			// Tentukan model berdasarkan type
+
 			$model = $request->type === 'kontrak' ? QuotationKontrakH::class : QuotationNonKontrak::class;
 
 			// Ambil data quotation
@@ -427,7 +416,6 @@ class KonfirmasiOrderController extends Controller
 			if (!$data) {
 				throw new \Exception('Data quotation tidak ditemukan.');
 			}
-
 			// Cari atau buat objek konfirmasi
 			$konfirmasi = null;
 
@@ -465,6 +453,7 @@ class KonfirmasiOrderController extends Controller
 			}
 
 			if (!empty($request->filename)) {
+
 				$base64Files = is_array($request->filename) ? $request->filename : [$request->filename];
 				foreach ($base64Files as $base64File) {
 					$result = $this->processAndSaveFile($base64File, $path, null);
@@ -476,6 +465,7 @@ class KonfirmasiOrderController extends Controller
 			}
 
 			if (!empty($request->lampiran_titik)) {
+
 				$base64Files = is_array($request->lampiran_titik) ? $request->lampiran_titik : [$request->lampiran_titik];
 				foreach ($base64Files as $base64File) {
 					$result = $this->processAndSaveFile($base64File, $path, 'lampiran_titik_');
@@ -487,7 +477,8 @@ class KonfirmasiOrderController extends Controller
 			}
 
 			$this->fillKonfirmasiData($konfirmasi, $request, $data, $fileNames, $lampiranTitikNames);
-			$konfirmasi->save();
+				// dd($konfirmasi);
+		
 
 			DB::commit();
 			return response()->json([
@@ -682,6 +673,7 @@ class KonfirmasiOrderController extends Controller
 		$konfirmasi->no_quotation = $data->no_document;
 		$konfirmasi->id_quotation = $data->id;
 		$konfirmasi->type = $request->type;
+		$konfirmasi->save();
 	}
 
 

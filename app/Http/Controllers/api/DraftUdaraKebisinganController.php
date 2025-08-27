@@ -576,31 +576,43 @@ class DraftUdaraKebisinganController extends Controller
                 ->where('is_active', true)
                 ->where('id', $request->id)
                 ->first();
-            if ($header != null) {
+              if ($header != null) {
                 $key = $header->no_lhp . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
                 $gen_tahun = self::encrypt(DATE('Y-m-d'));
                 $token = self::encrypt($gen . '|' . $gen_tahun);
 
-                $insertData = [
-                    'token' => $token,
-                    'key' => $gen,
-                    'id_quotation' => $header->id,
-                    'quotation_status' => 'draft_lhp_kebisingan',
-                    'type' => 'draft_kebisingan',
-                    'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                    'fileName_pdf' => $header->file_lhp,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s')
-                ];
+                $cek = GenerateLink::where('fileName_pdf', $header->file_lhp)->first();
+                if($cek) {
+                    $cek->id_quotation = $header->id;
+                    $cek->expired = Carbon::now()->addYear()->format('Y-m-d');
+                    $cek->created_by = $this->karyawan;
+                    $cek->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $cek->save();
 
-                $insert = GenerateLink::insertGetId($insertData);
+                    $header->id_token = $cek->id;
+                } else {
+                    $insertData = [
+                        'token' => $token,
+                        'key' => $gen,
+                        'id_quotation' => $header->id,
+                        'quotation_status' => 'draft_lhp_getaran',
+                        'type' => 'draft_getaran',
+                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                        'fileName_pdf' => $header->file_lhp,
+                        'created_by' => $this->karyawan,
+                        'created_at' => Carbon::now()->format('Y-m-d H:i:s')
+                    ];
 
-                $header->id_token = $insert;
+                    $insert = GenerateLink::insertGetId($insertData);
+
+                    $header->id_token = $insert;
+                }
+            
                 $header->is_generated = true;
                 $header->generated_by = $this->karyawan;
                 $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->expired = Carbon::now()->addYear()->format('Y-m-d');
-                // dd('masuk');
                 $header->save();
             }
             DB::commit();
