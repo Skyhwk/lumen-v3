@@ -357,7 +357,7 @@ class BasOnlineController extends Controller
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-             dd($psHeader);
+            //  dd($psHeader);
             if ($psHeader) {
                 $bsDocument = ($psHeader->detail_bas_documents != null) ? json_decode($psHeader->detail_bas_documents) : null;
                 if ($bsDocument != null) {
