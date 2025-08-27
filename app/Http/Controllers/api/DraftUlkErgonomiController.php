@@ -19,22 +19,34 @@ class DraftUlkErgonomiController extends Controller
     public function index()
     {
         DB::statement("SET SESSION sql_mode = ''");
-        $generatedFiles = DraftErgonomiFile::pluck('name_file', 'no_sampel');
+        $generatedFiles = DraftErgonomiFile::select('no_sampel', 'name_file', 'is_generate_link')
+        ->get()
+        ->keyBy('no_sampel');
+
+        $kategori = ["27-Udara Lingkungan Kerja", "53-Ergonomi"];
+
         $data = OrderDetail::with([
             'orderHeader'
             => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
         ])
-            ->where('is_approve', 0)
+            ->where('order_detail.status', 2)
             ->where('is_active', true)
-            ->whereJsonContains('parameter','230;Ergonomi')
+            ->whereIn('kategori_3', $kategori)
+            // ->whereJsonContains('parameter','230;Ergonomi')
             ->groupBy('no_sampel')
             ->get() // ambil data dulu
-            ->map(function ($item) use($generatedFiles) {
-                //$item->isGenerate = DraftErgonomiFile::where('no_sampel', $item->no_sampel)->exists();
-                 $item->isGenerate = isset($generatedFiles[$item->no_sampel]);
-                 $item->filePdf = $item->isGenerate ? $generatedFiles[$item->no_sampel] : null;
+            ->map(function ($item) use ($generatedFiles) {
+                if (isset($generatedFiles[$item->no_sampel])) {
+                    $item->isGenerate = true;
+                    $item->filePdf = $generatedFiles[$item->no_sampel]['name_file'];
+                    $item->isGenerateLink = (bool)$generatedFiles[$item->no_sampel]['is_generate_link'];
+                } else {
+                    $item->isGenerate = false;
+                    $item->filePdf = null;
+                    $item->isGenerateLink = false;
+                }
                 return $item;
             });
         return Datatables::of($data)->make(true);
@@ -2594,15 +2606,17 @@ class DraftUlkErgonomiController extends Controller
 
                 .potensi-bahaya-multi-line-input { min-height: 80px; }';
             // Atur watermark dan footer umum untuk semua halaman
-            $pdf->SetWatermarkText('DRAFT');
-            $pdf->showWatermarkText = true;
-            $pdf->watermarkTextAlpha = 0.1;
+            // $pdf->SetWatermarkText('DRAFT');
+            // $pdf->showWatermarkText = true;
+            // $pdf->watermarkTextAlpha = 0.1;
+            $pdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0, 0), 200);
+            $pdf->showWatermarkImage = true;
 
-            $footerHtml = '<table width="100%" border="0">
+            $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
                                 <tr>
-                                    <td width="13%"></td>
-                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
-                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right"><i>Page {PAGENO} of {nb}</i></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
+                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right; border:none;"><i>Page {PAGENO} of {nb}</i></td>
                                 </tr>
                             </table>';
             $pdf->SetFooter($footerHtml);
@@ -2822,74 +2836,74 @@ class DraftUlkErgonomiController extends Controller
         }
     }
 
-    // public function setSignature(Request $request)
-    // {
-    //     $categoryKebisingan = [23, 24, 25];
-    //     $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-    //     $categoryLingkunganKerja = [11, 27, 53];
-    //     $categoryPencahayaan = [28];
+    /* public function setSignature(Request $request)
+    {
+        $categoryKebisingan = [23, 24, 25];
+        $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
+        $categoryLingkunganKerja = [11, 27, 53];
+        $categoryPencahayaan = [28];
 
-    //     try {
-    //         if (in_array($request->category, $categoryKebisingan)) {
-    //             $header = LhpsKebisinganHeader::where('id', $request->id)->first();
-    //             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryPencahayaan)) {
-    //             $header = LhpsPencahayaanHeader::where('id', $request->id)->first();
-    //             $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryLingkunganKerja)) {
-    //             if ($request->mode == "medanlm") {
-    //                 $header = LhpsMedanLMHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
-    //             } else if ($request->mode == "sinaruv") {
-    //                 $header = LhpsSinarUVHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-    //             } else {
-    //                 $header = LhpsLingHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-    //             }
-    //         }
+        try {
+            if (in_array($request->category, $categoryKebisingan)) {
+                $header = LhpsKebisinganHeader::where('id', $request->id)->first();
+                $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+            } else if (in_array($request->category, $categoryPencahayaan)) {
+                $header = LhpsPencahayaanHeader::where('id', $request->id)->first();
+                $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
+            } else if (in_array($request->category, $categoryLingkunganKerja)) {
+                if ($request->mode == "medanlm") {
+                    $header = LhpsMedanLMHeader::where('id', $request->id)->first();
+                    $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
+                } else if ($request->mode == "sinaruv") {
+                    $header = LhpsSinarUVHeader::where('id', $request->id)->first();
+                    $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+                } else {
+                    $header = LhpsLingHeader::where('id', $request->id)->first();
+                    $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+                }
+            }
 
-    //         if ($header != null) {
-    //             $header->nama_karyawan = $this->karyawan;
-    //             $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-    //             $header->save();
+            if ($header != null) {
+                $header->nama_karyawan = $this->karyawan;
+                $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                $header->save();
 
-    //             $file_qr = new GenerateQrDocumentLhp();
-    //             $file_qr = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
-    //             if ($file_qr) {
-    //                 $header->file_qr = $file_qr;
-    //                 $header->save();
-    //             }
+                $file_qr = new GenerateQrDocumentLhp();
+                $file_qr = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
+                if ($file_qr) {
+                    $header->file_qr = $file_qr;
+                    $header->save();
+                }
 
-    //             $groupedByPage = [];
-    //             if (!empty($custom)) {
-    //                 foreach ($custom as $item) {
-    //                     $page = $item['page'];
-    //                     if (!isset($groupedByPage[$page])) {
-    //                         $groupedByPage[$page] = [];
-    //                     }
-    //                     $groupedByPage[$page][] = $item;
-    //                 }
-    //             }
+                $groupedByPage = [];
+                if (!empty($custom)) {
+                    foreach ($custom as $item) {
+                        $page = $item['page'];
+                        if (!isset($groupedByPage[$page])) {
+                            $groupedByPage[$page] = [];
+                        }
+                        $groupedByPage[$page][] = $item;
+                    }
+                }
 
-    //             $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-    //             $this->dispatch($job);
+                $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
+                $this->dispatch($job);
 
-    //             $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-    //             $this->dispatch($job);
+                $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
+                $this->dispatch($job);
 
-    //             return response()->json([
-    //                 'message' => 'Signature berhasil diubah'
-    //             ], 200);
-    //         }
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //             'line' => $e->getLine(),
-    //             'file' => $e->getFile()
-    //         ]);
-    //     }
-    // }
+                return response()->json([
+                    'message' => 'Signature berhasil diubah'
+                ], 200);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
+        }
+    } */
 
     // Amang
     public function encrypt($data)
@@ -2914,4 +2928,63 @@ class DraftUlkErgonomiController extends Controller
         $extand = explode("|", $data);
         return $extand;
     }
+
+    public function handleGenerateLink(Request $request){
+        DB::beginTransaction();
+        try {
+            $header =DraftErgonomiFile::where('no_sampel',$request->no_sampel)->first();
+            if($header == null){
+                return response()->json(["message" =>"dokumen belum  di bentuk"],401);
+            }
+            $key = $header->no_sampel . str_replace('.', '', microtime(true));
+            $gen = MD5($key);
+            $gen_tahun = self::encrypt(DATE('Y-m-d'));
+            $token = self::encrypt($gen . '|' . $gen_tahun);
+            $insertData = [
+                'token' => $token,
+                'key' => $gen,
+                'id_quotation' => $header->id,
+                'quotation_status' => "draft_ergonomi",
+                'type' => 'draft',
+                'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                'fileName_pdf' => $header->name_file,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $this->karyawan
+            ];
+            $insert = GenerateLink::insertGetId($insertData);
+            $header->is_generate_link = true;
+            $header->save();
+            DB::commit();
+            return response()->json([
+                'message' => 'Generate link success!',
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function copyLink(Request $request)
+    {
+        $generatedFiles = DraftErgonomiFile::with('link')
+            ->where('no_sampel', $request->no_sampel)
+            ->where('is_generate_link', 1)
+            ->first();
+
+        if ($generatedFiles && $generatedFiles->link) {
+            // $url = 'http://127.0.0.1:8000/public/auth/'; // Dev
+            $url = 'https://portal.intilab.com/public/auth/'; // Prod
+            $portal = $url . $generatedFiles->link->token;
+
+            return response()->json([
+                'message' => 'Link berhasil dibuat',
+                'link'    => $portal
+            ], 200);
+        }
+
+        return response()->json(['message' => 'Data belum tersedia'], 400);
+    }
+
 }

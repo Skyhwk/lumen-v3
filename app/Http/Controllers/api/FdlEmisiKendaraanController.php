@@ -414,7 +414,7 @@ class FdlEmisiKendaraanController extends Controller
             if(isset($request->kode_qr) && $request->kode_qr!=null){
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
                 if($cek_qr->id_kendaraan!=null){
-                    $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
+                    $kendaraan = MasterKendaraan::find($cek_qr->id_kendaraan);
                     $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'))->orderBy('id', 'DESC')->first();
                     $no_sequen = 'EMISI'.$cek_po->id;
                     $array1 = ["Co","HC"];
@@ -467,22 +467,23 @@ class FdlEmisiKendaraanController extends Controller
                             $data_fdl->created_at	= Carbon::now()->format('Y-m-d H:i:s');
                             $data_fdl->save();
 
-                            
-                            $kendaraan->merk_kendaraan 	= ucfirst($request->merk);
-                            $kendaraan->id_bbm		= $request->jenis_kendaraan;
-                            if($request->jenis_kendaraan == 31)$kendaraan->jenis_bbm 	= "Bensin";
-                            if($request->jenis_kendaraan == 32)$kendaraan->jenis_bbm 	= "Solar";
-                            $kendaraan->plat_nomor 		= $request->no_plat;
-                            $kendaraan->bobot_kendaraan	= $request->bobot_kendaraan;
-                            $kendaraan->tahun_pembuatan	= $request->tahun;
-                            $kendaraan->no_mesin			= $request->no_mesin;
-                            $kendaraan->transmisi			= $request->transmisi;
-                            $kendaraan->kategori_kendaraan	= $request->kategori_kendaraan;
-                            $kendaraan->km 				= $request->km;
-                            $kendaraan->cc 				= $request->cc;
-                            $kendaraan->created_by				= $this->karyawan;
-                            $kendaraan->created_at 			= Carbon::now()->format('Y-m-d H:i:s');
-                            $kendaraan->save();
+                            if ($kendaraan) {
+                                $kendaraan->merk_kendaraan    = ucfirst($request->merk);
+                                $kendaraan->id_bbm            = $request->jenis_kendaraan;
+                                if ($request->jenis_kendaraan == 31) $kendaraan->jenis_bbm = "Bensin";
+                                if ($request->jenis_kendaraan == 32) $kendaraan->jenis_bbm = "Solar";
+                                $kendaraan->plat_nomor        = $request->no_plat;
+                                $kendaraan->bobot_kendaraan   = $request->bobot_kendaraan;
+                                $kendaraan->tahun_pembuatan   = $request->tahun;
+                                $kendaraan->no_mesin          = $request->no_mesin;
+                                $kendaraan->transmisi         = $request->transmisi;
+                                $kendaraan->kategori_kendaraan= $request->kategori_kendaraan;
+                                $kendaraan->km                = $request->km;
+                                $kendaraan->cc                = $request->cc;
+                                $kendaraan->created_by        = $this->karyawan;
+                                $kendaraan->created_at        = Carbon::now()->format('Y-m-d H:i:s');
+                                $kendaraan->save();
+                            }
 
                             $data_order = new DataLapanganEmisiOrder;
                             // $data_order->id_po			= $cek_po->id;
