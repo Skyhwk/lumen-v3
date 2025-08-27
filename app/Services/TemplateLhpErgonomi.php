@@ -100,6 +100,7 @@ class TemplateLhpErgonomi
 
     public function ergonomiNbm($data = null)
     { 
+        
         try {
             $mpdfConfig = [
                 'mode' => 'utf-8',
@@ -176,7 +177,7 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analis" => null,
             ];
-    
+            
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonominbm', compact('pengukuran', 'personal'))->render();
             return $html;  
