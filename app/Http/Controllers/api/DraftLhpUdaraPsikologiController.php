@@ -35,7 +35,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				"318;Psikologi"
 			])
 			->whereNotNull('tanggal_terima')
-			->select('no_order', 'no_quotation', 'cfr', "nama_perusahaan", DB::raw('COUNT(*) as total'))
+			->select('no_order', 'no_quotation', 'cfr', "nama_perusahaan", DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling ORDER BY tanggal_sampling SEPARATOR ",") as tanggal_sampling'), DB::raw('COUNT(*) as total'))
 			->groupBy('no_order', 'no_quotation', 'cfr', "nama_perusahaan")
 			->get();
 
