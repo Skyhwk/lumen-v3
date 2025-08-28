@@ -978,6 +978,11 @@ class WsFinalUdaraGetaranController extends Controller
 					'status' => 1,
 				]);
 
+			GetaranHeader::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'lhps' => 1,
+				]);
+
 			DB::commit();
 			return response()->json([
 				'message' => 'Data berhasil diapprove.',
