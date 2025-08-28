@@ -357,7 +357,7 @@ class BasOnlineController extends Controller
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-             
+            //  dd($psHeader);
             if ($psHeader) {
                 $bsDocument = ($psHeader->detail_bas_documents != null) ? json_decode($psHeader->detail_bas_documents) : null;
                 if ($bsDocument != null) {
@@ -908,6 +908,12 @@ class BasOnlineController extends Controller
                     $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                 }
             })->first();
+
+            if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
+                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
+                // dd($dataBas);
+                return $dataBas[0]["filename"];
+            }
             
             $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
             
@@ -953,17 +959,6 @@ class BasOnlineController extends Controller
                 ], 401);
             }
 
-            // $samplerJadwal = Jadwal::where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get()->pluck('sampler');
-
-            // $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
-            //     ->where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get();
-
             $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
                 ->where([
                     ['id_sampling', '=', $sp->id],
@@ -994,27 +989,8 @@ class BasOnlineController extends Controller
             /* $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
-            }); */
-            $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
-                $no_sampel = json_decode($item->no_sampel, true) ?? [];
-
-                // Semua $noSample harus ada di $no_sampel
-                $diff = array_diff($noSample, $no_sampel);
-                $isFullContain = empty($diff);
-
-                // Deteksi apakah ada irisan
-                $intersection = array_intersect($noSample, $no_sampel);
-                dd($intersection,$diff,$noSample,$no_sampel);
-                $hasAnyMatch = count($intersection) > 0;
-
-                // Debug
-                // dd($no_sampel, $diff, $intersection);
-
-                // Return true jika full contain
-                return $isFullContain;
             });
-
-            
+            // dd($persiapanHeader,$dataList);
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {

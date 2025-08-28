@@ -32,7 +32,7 @@ class GenerateQrDocument
                 'file' => $filename,
                 'data' => json_encode([
                     'no_document' => $data->no_document,
-                    'nama_customer' => $data->nama_perusahaan,
+                    'nama_customer' => html_entity_decode($data->nama_perusahaan),
                     'type_document' => $type_doc
                 ]),
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),

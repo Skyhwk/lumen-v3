@@ -23,15 +23,18 @@ class DraftUlkErgonomiController extends Controller
         ->get()
         ->keyBy('no_sampel');
 
+        $kategori = ["27-Udara Lingkungan Kerja", "53-Ergonomi"];
+
         $data = OrderDetail::with([
             'orderHeader'
             => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
         ])
-            ->where('is_approve', 0)
+            ->where('order_detail.status', 2)
             ->where('is_active', true)
-            ->whereJsonContains('parameter','230;Ergonomi')
+            ->whereIn('kategori_3', $kategori)
+            // ->whereJsonContains('parameter','230;Ergonomi')
             ->groupBy('no_sampel')
             ->get() // ambil data dulu
             ->map(function ($item) use ($generatedFiles) {
