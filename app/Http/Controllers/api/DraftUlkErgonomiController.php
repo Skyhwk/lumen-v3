@@ -2606,10 +2606,21 @@ class DraftUlkErgonomiController extends Controller
 
                 .potensi-bahaya-multi-line-input { min-height: 80px; }';
             // Atur watermark dan footer umum untuk semua halaman
-            // $pdf->SetWatermarkText('DRAFT');
-            // $pdf->showWatermarkText = true;
-            // $pdf->watermarkTextAlpha = 0.1;
-            $pdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0, 0), 200);
+
+            $pageWidth = $pdf->w;   // Lebar halaman dalam mm
+            $pageHeight = $pdf->h;  // Tinggi halaman dalam mm
+            $watermarkPath = public_path('watermark-draft-A4.png');
+            $watermarkWidth = $pageWidth; // Lebar sama dengan halaman
+            $watermarkHeight = 0; // Auto-scale agar proporsional
+            // Set watermark image
+            $pdf->SetWatermarkImage(
+                $watermarkPath,
+                0.1,                 // Opacity 10%
+                '',                  // Default position (center)
+                [0, 0],              // Tidak pakai posisi manual
+                $watermarkWidth,     // Lebar full halaman
+                $watermarkHeight     // Tinggi otomatis (0 = auto)
+            );
             $pdf->showWatermarkImage = true;
 
             $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">

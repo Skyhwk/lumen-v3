@@ -5,12 +5,14 @@
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian (DRAFT)</title>
     <style>
-        /* CSS dipindahkan ke dalam HEAD */
+        /* CSS dengan font size yang konsisten - Layout Fixed */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            font-size: 11px;
+            font-size: 10px; /* Base font size yang konsisten */
+            width: 100%;
+            min-width: 800px; /* Minimum width untuk mempertahankan layout */
         }
 
         .header {
@@ -19,7 +21,7 @@
         }
 
         .header h1 {
-            font-size: 14px;
+            font-size: 12px; /* Dikurangi untuk konsistensi */
             font-weight: bold;
             margin: 10px 0;
             text-decoration: underline;
@@ -27,7 +29,7 @@
 
         .company-name {
             font-weight: bold;
-            font-size: 12px;
+            font-size: 10px; /* Konsisten dengan base */
             text-align: left;
             margin-bottom: 10px;
         }
@@ -35,28 +37,26 @@
         .section-title {
             font-weight: bold;
             margin: 10px 0 5px 0;
-            font-size: 11px;
-            /* Sesuaikan ukuran jika perlu */
+            font-size: 10px; /* Konsisten dengan base */
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 9px;
+            font-size: 9px; /* Sedikit lebih kecil untuk tabel */
             margin-bottom: 10px;
-            /* Tambah margin bawah tabel */
+            table-layout: fixed; /* Fixed table layout */
         }
 
-        /* Pastikan border didefinisikan */
         th,
         td {
             border: 1px solid black;
             padding: 3px 5px;
             text-align: center;
             vertical-align: middle;
+            font-size: 9px; /* Konsisten untuk semua sel tabel */
         }
 
-        /* CSS untuk header tabel berulang */
         thead {
             display: table-header-group;
         }
@@ -67,11 +67,8 @@
 
         .body-map {
             width: 80px;
-            /* Sesuaikan ukuran jika perlu */
             height: auto;
-            /* Biarkan auto agar rasio terjaga */
             margin: 5px auto;
-            /* Sedikit margin */
             display: block;
         }
 
@@ -81,36 +78,33 @@
 
         .info-section p {
             margin: 3px 0;
-            font-size: 9px;
-            /* Samakan font info */
+            font-size: 9px; /* Konsisten */
         }
 
         .info-label {
             font-weight: normal;
             width: 120px;
             float: left;
-            font-size: 10pt;
+            font-size: 9px; /* Konsisten, tidak lagi 10pt */
         }
 
         .info-value {
             display: inline-block;
+            font-size: 9px; /* Konsisten */
         }
 
         .customer-info,
         .sampling-info,
         .worker-info {
             margin-left: 0;
-            /* Hapus margin kiri jika tidak perlu */
             margin-bottom: 10px;
-            /* Jarak antar info box */
         }
 
         .customer-info h4,
         .sampling-info h4,
         .worker-info h4 {
             margin: 5px 0 2px 0;
-            /* Atur margin H4 */
-            font-size: 10px;
+            font-size: 10px; /* Konsisten */
             font-weight: bold;
         }
 
@@ -119,34 +113,32 @@
         }
 
         .left-section p {
-            /* Styling untuk judul tabel risiko */
             font-weight: bold;
             text-align: justify;
             margin-bottom: 5px;
-            font-size: 10px;
+            font-size: 9px; /* Konsisten */
         }
 
         .table-note {
-            font-size: 8px;
+            font-size: 8px; /* Tetap kecil untuk catatan */
             margin-top: 3px;
             font-style: italic;
-            /* Tambah italic untuk catatan */
         }
 
         .job-description {
             margin-top: 10px;
         }
 
-        /* Styling khusus tabel deskripsi pekerjaan */
         .job-description th {
             width: 30%;
-            /* Lebar kolom header */
             text-align: left;
             vertical-align: top;
+            font-size: 9px; /* Konsisten */
         }
 
         .job-description td {
             vertical-align: top;
+            font-size: 9px; /* Konsisten */
         }
 
         .conclusion-box {
@@ -155,40 +147,52 @@
             min-height: 30px;
             margin-top: 5px;
             margin-bottom: 10px;
-            /* Tambah margin bawah */
+            font-size: 9px; /* Konsisten */
         }
 
         .conclusion-box .section-title {
-            /* Title di dalam box */
             margin-top: 0;
             margin-bottom: 5px;
+            font-size: 10px; /* Konsisten */
         }
 
-        .watermark {
-            /* (Watermark CSS Anda) */
-        }
-
-        /* Float Layout */
+        /* Fixed Layout - Tidak Responsif */
         .left-section {
             width: 60%;
             float: left;
-            /* Sedikit padding agar tidak terlalu mepet */
             box-sizing: border-box;
+            min-width: 60%;
+            max-width: 60%;
         }
 
         .right-section {
             width: 39%;
-            /* Sesuaikan lebar */
             float: right;
-            /* Sedikit padding */
             box-sizing: border-box;
+            min-width: 39%;
+            max-width: 39%;
+        }
+
+        /* Pastikan layout tetap fixed untuk print */
+        @media print {
+            .left-section {
+                width: 60% !important;
+                min-width: 60% !important;
+                max-width: 60% !important;
+            }
+            
+            .right-section {
+                width: 39% !important;
+                min-width: 39% !important;
+                max-width: 39% !important;
+            }
         }
 
         .result-header {
             text-align: center;
             font-weight: bold;
             margin: 5px 0;
-            font-size: 10px;
+            font-size: 9px; /* Konsisten dengan tabel */
         }
 
         /* Styling untuk tabel nested SEBELUM/SESUDAH */
@@ -200,44 +204,62 @@
             width: 100%;
             margin: 0;
             border: none;
-            /* Hapus border tabel luar */
         }
 
         .nested-table td {
             border: 1px solid black;
-            /* Border untuk sel di dalam */
             width: 50%;
             text-align: center;
             font-weight: bold;
             padding: 3px;
+            font-size: 9px; /* Konsisten */
         }
 
         .total-score {
             font-weight: bold;
             text-align: center;
             margin-top: 5px;
-            font-size: 10px;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .content-container {
+            width: 100%;
+            min-width: 800px; /* Pastikan layout minimum */
         }
 
         .clearfix::after {
-            /* Clearfix untuk float */
             content: "";
             clear: both;
             display: table;
         }
+        
         .info-header {
             font-weight: bold;
             margin-top: 8px;
             margin-bottom: 3px;
-            font-size: 10pt;
+            font-size: 10px; /* Konsisten, tidak lagi 10pt */
             clear: both;
+        }
+
+        /* Styling khusus untuk informasi di sisi kanan */
+        .right-section div {
+            font-size: 9px; /* Base untuk right section */
+        }
+
+        .right-section span {
+            font-size: 9px; /* Konsisten untuk semua span */
+        }
+
+        /* Styling untuk div dengan margin-bottom di right section */
+        .right-section div[style*="margin-bottom: 3px"] {
+            margin-bottom: 3px;
+            font-size: 9px; /* Konsisten, tidak lagi 10pt */
         }
     </style>
 </head>
-
 <body>
     <div class="header">
-        <h1>LAPORAN HASIL PENGUJIAN NBM (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
     </div>
 
     <div class="content-container clearfix">
@@ -293,7 +315,7 @@
                         <td>{{$pengukuran->sebelum->skor_lengan_atas_kiri}}</td>
                         <td>{{$pengukuran->setelah->skor_lengan_atas_kiri}}</td>
                         <td>5.</td>
-                        <td style="text-align: left;">Punggung</td>//punggung
+                        <td style="text-align: left;">Punggung</td>
                         <td>{{$pengukuran->sebelum->skor_lengan_atas_kiri}}</td>
                         <td>{{$pengukuran->setelah->skor_lengan_atas_kiri}}</td>
                     </tr>
@@ -505,54 +527,54 @@
 
             <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama Pelanggan</span>
                         <span>: {{$personal->nama_pelanggan}} </span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Alamat / Lokasi Sampling</span>
                         <span>: {{$personal->alamat_pelanggan}} </span>
                     </div>
 
                     <div class="info-header">Informasi Sampling</div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Tanggal Sampling</span>
                         <span>: {{$personal->tanggal_sampling}} </span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Periode Analisa</span>
                         <span>: {{$personal->periode_analis}} </span>
                     </div>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama Pekerja</span>
                         <span>: {{$personal->nama_pekerja}} </span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Jenis Pekerjaan</span>
                         <span>: </span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Jenis Analisa</span>
                         <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
                     </div>
 
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Metode Analisa*</span>
                         <span>: Kuesioner Nordic Body Map</span>
                     </div>
 
                     <div class="info-header">Informasi Data Individu/Pekerja yang Diukur</div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama</span>
                         <span>: {{$personal->nama_pekerja}} </span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Usia</span>
                         <span>: {{$personal->usia}}</span>
                     </div>
-                    <div style="margin-bottom: 3px; font-size: 10pt;">
+                    <div style="margin-bottom: 3px;">
                         <span class="info-label">Lama Bekerja</span>
                         <span>: {{$personal->lama_kerja}}</span>
                     </div>
@@ -599,5 +621,4 @@
         </div>
     </div>
 </body>
-
 </html>
