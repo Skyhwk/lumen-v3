@@ -126,16 +126,15 @@
 
         .uraian-tugas-table td { height: 1.8em; }
 
-        /* Container gabungan antara gambar & daftar */
+        /* Container gabungan antara gambar & daftar - menggunakan float */
         .image-placeholder-container {
             width: 100%;
             margin-top: 10px;
-            display: flex;
-            align-items: flex-start;
-            gap: 20px;
+            overflow: hidden; /* Clearfix untuk float */
+            min-height: 350px; /* Minimum height untuk container */
         }
 
-        /* Placeholder Gambar Tubuh */
+        /* Placeholder Gambar Tubuh - float left */
         .image-placeholder {
             width: 180px;
             height: 330px;
@@ -144,41 +143,97 @@
             font-size: 10px;
             line-height: 1.4;
             padding: 5px;
-            flex-shrink: 0; /* Tambah jarak ke kanan */
+            float: left;
+            vertical-align: top; /* Alignment ke atas */
+            margin-right: 20px; /* Jarak ke kanan */
+            box-sizing: border-box;
+            overflow: hidden; /* Mencegah gambar keluar dari container */
+            position: relative; /* Untuk positioning gambar */
         }
 
-        /* Daftar bagian tubuh */
+        .body-map {
+           width: 180px;
+           height: 330px;
+        }
+
+        /* Daftar bagian tubuh - float right dengan width yang tersisa */
         .body-parts-list-container {
-            flex: 1; 
+            float: left;
+            width: calc(100% - 220px); /* Total width - (image width + margin) */
+            
         }
 
+        /* Styling untuk tabel daftar bagian tubuh */
         .body-parts-list {
-            list-style: none;
-            padding-left: 0;
-            margin: 0;
+            width: 100%;
+            border-collapse: collapse;
             font-size: 9px;
+            margin-bottom: 15px;
         }
 
-        .body-parts-list li {
-            margin-bottom: 5px;
-            line-height: 1.2;
-        }
-
-        .body-parts-list li span {
-            display: inline-block;
-            width: 110px;
-            white-space: nowrap;
-        }
-
-        .body-parts-list li .input-line {
-            display: inline-block;
-            border-bottom: 1px solid #000;
-            width: 60%;
-            height: 14px;
+        .body-parts-list td {
+            padding: 3px 5px;
+            border: 1px solid #000;
             vertical-align: middle;
         }
 
+        .body-parts-list td:first-child {
+            width: 70%;
+            text-align: left;
+        }
 
+        .body-parts-list td:last-child {
+            width: 30%;
+            text-align: center;
+        }
+
+        .input-line {
+            /* border-bottom: 1px solid #000;
+            min-height: 16px;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold; */
+        }
+
+        /* Styling untuk section dalam container */
+        .body-parts-list-container .section {
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+
+        .body-parts-list-container .section-title {
+            text-align: left;
+            font-size: 9px;
+            margin-bottom: 5px;
+        }
+
+        .body-parts-list-container .section div:not(.section-title) {
+            font-size: 9px;
+            line-height: 1.3;
+            text-align: justify;
+            padding: 5px;
+            border: 1px solid #000;
+        }
+
+        /* Clearfix untuk memastikan container tidak collapse */
+        .image-placeholder-container::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        /* Styling khusus untuk konten dalam box */
+        .analysis-content {
+            min-height: 80px;
+            padding: 5px;
+            border: 1px solid #000;
+        }
+
+        .conclusion-content {
+            min-height: 40px;
+            padding: 5px;
+            border: 1px solid #000;
+        }
     </style>
 </head>
 <body>
@@ -226,7 +281,7 @@
                     <div class="section-title">HASIL ANALISIS SURVEI LANJUTAN GANGGUAN OTOT DAN RANGKA</div>
                     <div class="image-placeholder-container">
                         <div class="image-placeholder">
-                            Ruang untuk<br>Gambar Diagram Tubuh<br>(~180x380px)
+                            <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}" alt="Body Map" class="body-map">
                         </div>
                         <div class="body-parts-list-container">
                             <table class="body-parts-list">
@@ -279,22 +334,19 @@
                                     <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_kaki->Poin : 0 }}</div></td>
                                 </tr>
                             </table>
+                            
                             <div class="section">
                                 <div class="section-title">ANALISIS POTENSI BAHAYA</div>
-                                <div style="min-height: 100px;">Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki keluhan sering pada bagian</div>
+                                <div class="analysis-content">Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki keluhan sering pada bagian</div>
                             </div>
+                            
                             <div class="section">
                                 <div class="section-title">KESIMPULAN SURVEI LANJUTAN</div>
-                                <div  style="min-height: 20px;">Pengukuran ergonomi pada pekerja atas nama
-                                    Jaja Harudin pada divisi/departemen shift powder memiliki tingkat risiko keluhan sebagai
-                                    berikut:</div>
+                                <div class="conclusion-content">Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki tingkat risiko keluhan sebagai berikut:</div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-
-
             </div>
 
             <!-- KANAN -->
