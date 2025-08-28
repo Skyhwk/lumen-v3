@@ -7,7 +7,7 @@
     <tr class="mt-2 mb-4">
         <th colspan="4" style="text-align:center; font-family:Arial, sans-serif; font-size:large;">
             <u>
-                LAPORAN HASIL PENGUJIAN REBA (DRAFT)
+                LAPORAN HASIL PENGUJIAN (DRAFT)
             </u>
         </th>
     </tr>
