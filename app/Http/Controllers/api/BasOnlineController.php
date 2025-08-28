@@ -986,7 +986,7 @@ class BasOnlineController extends Controller
                 'tanggal_sampling' => $request->tanggal_sampling,
             ])->get();
             
-            /* $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
+            $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
