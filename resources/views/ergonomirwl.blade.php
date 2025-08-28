@@ -192,7 +192,7 @@
 
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIAN RWL (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
 
         <div class="content-layout clearfix">
             <div class="column-left">
