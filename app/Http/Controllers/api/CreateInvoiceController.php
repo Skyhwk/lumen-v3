@@ -480,21 +480,18 @@ class CreateInvoiceController extends Controller
                 ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
                 ->get();
 
-                $detailHarga = OrderHeader::leftJoin('invoice', function ($join) use ($request) {
-                    $join->on('order_header.no_order', '=', 'invoice.no_order')
-                        ->where('invoice.is_active', true)
-                        ->where('invoice.no_invoice', '!=', $request->no_invoice);
-                })
+                $detailHarga = OrderHeader::leftJoin(DB::raw("
+                    (
+                        SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
+                        FROM invoice
+                        WHERE is_active = true
+                        AND no_invoice != '{$request->no_invoice}'
+                        GROUP BY no_order
+                    ) AS inv
+                "), 'order_header.no_order', '=', 'inv.no_order')
                 ->whereIn('order_header.no_order', $allOrders)
                 ->where('order_header.is_active', true)
-                ->select(DB::raw(
-                    'SUM(
-                        CASE 
-                            WHEN invoice.no_order IS NOT NULL THEN order_header.biaya_akhir - COALESCE(invoice.nilai_tagihan, 0) 
-                            ELSE order_header.biaya_akhir 
-                        END
-                    ) AS total_tertagih'
-                ))
+                ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
                 ->value('total_tertagih');
             } else {
                 $data = QuotationKontrakH::select(
@@ -520,20 +517,17 @@ class CreateInvoiceController extends Controller
                 ->groupBy('request_quotation_kontrak_H.no_document', 'request_quotation_kontrak_D.periode_kontrak', 'request_quotation_kontrak_D.biaya_akhir')
                 ->get();
 
-                $detailHarga = OrderHeader::leftJoin('invoice', function ($join) {
-                    $join->on('order_header.no_order', '=', 'invoice.no_order')
-                        ->where('invoice.is_active', true);
-                })
+                $detailHarga = OrderHeader::leftJoin(DB::raw("
+                    (
+                        SELECT no_order, SUM(nilai_tagihan) AS total_tagihan
+                        FROM invoice
+                        WHERE is_active = true
+                        GROUP BY no_order
+                    ) AS inv
+                "), 'order_header.no_order', '=', 'inv.no_order')
                 ->whereIn('order_header.no_order', $allOrders)
                 ->where('order_header.is_active', true)
-                ->select(DB::raw( 
-                    'SUM(
-                        CASE 
-                            WHEN invoice.no_order IS NOT NULL THEN order_header.biaya_akhir - COALESCE(invoice.nilai_tagihan, 0) 
-                            ELSE order_header.biaya_akhir 
-                        END
-                    ) AS total_tertagih'
-                ))
+                ->select(DB::raw('SUM(order_header.biaya_akhir - COALESCE(inv.total_tagihan, 0)) AS total_tertagih'))
                 ->value('total_tertagih');
             }
              
