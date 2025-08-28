@@ -485,15 +485,32 @@ class TestApi extends Controller
 
                 .potensi-bahaya-multi-line-input { min-height: 80px; }';
             // Atur watermark dan footer umum untuk semua halaman
-            $pdf->SetWatermarkText('DRAFT');
-            $pdf->showWatermarkText = true;
-            $pdf->watermarkTextAlpha = 0.1;
+            // $pdf->SetWatermarkText('DRAFT');
+            // $pdf->showWatermarkText = true;
+            // $pdf->watermarkTextAlpha = 0.1;
 
-            $footerHtml = '<table width="100%" border="0">
+            // $pdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0, 0), 200);
+            $pageWidth = $pdf->w;   // Lebar halaman dalam mm
+            $pageHeight = $pdf->h;  // Tinggi halaman dalam mm
+            $watermarkPath = public_path('watermark-draft-A4.png');
+            $watermarkWidth = $pageWidth; // Lebar sama dengan halaman
+            $watermarkHeight = 0; // Auto-scale agar proporsional
+            // Set watermark image
+            $pdf->SetWatermarkImage(
+                $watermarkPath,
+                0.1,                 // Opacity 10%
+                '',                  // Default position (center)
+                [0, 0],              // Tidak pakai posisi manual
+                $watermarkWidth,     // Lebar full halaman
+                $watermarkHeight     // Tinggi otomatis (0 = auto)
+            );
+            $pdf->showWatermarkImage = true;
+
+            $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
                                 <tr>
-                                    <td width="13%"></td>
-                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
-                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right"><i>Page {PAGENO} of {nb}</i></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"></td>
+                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
+                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right; border:none;"><i>Page {PAGENO} of {nb}</i></td>
                                 </tr>
                             </table>';
             $pdf->SetFooter($footerHtml);

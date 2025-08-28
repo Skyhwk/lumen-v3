@@ -111,7 +111,7 @@
         </tr>
         <tr>
             <td colspan="4" class="header-title">
-                <u>LAPORAN HASIL PENGUJIAN ROSA (DRAFT)</u>
+                <u>LAPORAN HASIL PENGUJIAN (DRAFT)</u>
             </td>
         </tr>
     </table>
