@@ -357,7 +357,7 @@ class BasOnlineController extends Controller
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-
+            //  dd($psHeader);
             if ($psHeader) {
                 $bsDocument = ($psHeader->detail_bas_documents != null) ? json_decode($psHeader->detail_bas_documents) : null;
                 if ($bsDocument != null) {
@@ -410,7 +410,7 @@ class BasOnlineController extends Controller
                     $dat_param[] = $vv->codingSampling;
                 }
             }
-
+           
             $dataPdf = self::cetakBASPDF($orderH, $data_sampling, $dat_param, $bsDocument, $psHeader);
             return $dataPdf;
             // return response()->json([
@@ -430,6 +430,7 @@ class BasOnlineController extends Controller
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $bsDocument, $psh)
     {
         try {
+          
             if (!$psh) {
                 return response()->json([
                     'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
@@ -861,7 +862,7 @@ class BasOnlineController extends Controller
             $pdf->Output(public_path() . '/bas/' . $filename, 'F');
             chmod(public_path() . '/bas/' . $filename, 0777);
             if ($bsDocument !== null) {
-                dd($bsDocument);
+                // dd($bsDocument);
                 return response()->json(['status' => true, 'data' => $bsDocument], 200);
             } else {
                 // dd([$filename]);
@@ -898,14 +899,24 @@ class BasOnlineController extends Controller
             $requestSamples = array_filter($requestSamples);
             // dd($requestSamples);
 
-            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)->where('no_quotation', $request->no_document)->where('tanggal_sampling', $request->tanggal_sampling)->where('is_active', true)->where(function ($q) use ($requestSamples) {
+            $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
+            ->where('no_quotation', $request->no_document)
+            ->where('tanggal_sampling', $request->tanggal_sampling)
+            ->where('is_active', true)
+            ->where(function ($q) use ($requestSamples) {
                 foreach ($requestSamples as $sample) {
                     $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                 }
             })->first();
-            // dd($persiapanHeaderKategori);
-            $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
 
+            if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
+                $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
+                // dd($dataBas);
+                return $dataBas[0]["filename"];
+            }
+            
+            $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+            
             // Get No Sample
             $noSample = [];
             foreach ($kategori_request as $item) {
@@ -948,17 +959,6 @@ class BasOnlineController extends Controller
                 ], 401);
             }
 
-            // $samplerJadwal = Jadwal::where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get()->pluck('sampler');
-
-            // $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
-            //     ->where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get();
-
             $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
                 ->where([
                     ['id_sampling', '=', $sp->id],
@@ -984,23 +984,19 @@ class BasOnlineController extends Controller
                 'no_order' => $request->no_order,
                 'no_quotation' => $request->no_document,
                 'tanggal_sampling' => $request->tanggal_sampling,
-            ])
-                ->get();
-
-            $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
+            ])->get();
+            
+            /* $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-
-
-            // dd($persiapanHeader);
-
+            // dd($persiapanHeader,$dataList);
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-
+            
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
@@ -1102,8 +1098,8 @@ class BasOnlineController extends Controller
             //     $orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal
             // ]);
 
+            
             // dd($persiapanHeader);
-
             $dataPdf = self::cetakBASPDF2($orderH, $data_sampling, $dat_param, $persiapanHeader, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal);
             return $dataPdf;
         } catch (\Exception $e) {
@@ -1116,7 +1112,7 @@ class BasOnlineController extends Controller
     }
     private function cetakBASPDF2($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
     {
-        // dd('cetakBASPDF2');
+      
         $psh = $dataPersiapan;
         if (!$psh) {
             return response()->json([

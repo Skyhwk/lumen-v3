@@ -11,17 +11,28 @@ class GenerateQrDocumentLhp
 {
     public function insert($type_doc, $data, $generated_by)
     {
-
-        $cek = QrDocument::where('id_document', $data->id)
-            ->whereJsonContains('data->no_document', $data->no_lhp)
+        $doc = 'LHP_' . explode('/',$data->no_lhp)[0] .'_' . explode('/',$data->no_lhp)[1];
+        $cek = QrDocument::where('file', $doc)
             ->first();
-
-        if ($cek)
+        if ($cek) {
+            $cek->id_document = $data->id;
+            $cek->data = json_encode([
+                'Nomor_LHP' => $data->no_lhp,
+                'Nama_Pelanggan' => $data->nama_pelanggan,
+                'Pelanggan_ID' => substr($data->no_order, 0, 6),
+                'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                'Disahkan_Oleh' => $data->nama_karyawan,
+                'Jabatan' => $data->jabatan_karyawan
+            ]);
+            $cek->created_at =Carbon::now()->format('Y-m-d H:i:s');
+            $cek->created_by = $generated_by;
+            $cek->save();
             return $cek->file;
+        }
         DB::beginTransaction();
         try {
 
-            $filename = 'LHP-' . \str_replace("/", "_", $data->no_lhp);
+            $filename = 'LHP_' . \str_replace("/", "_", $data->no_lhp);
             $dir = public_path() . "/qr_documents/";
 
             if (!file_exists($dir)) {
@@ -42,7 +53,7 @@ class GenerateQrDocumentLhp
                 'file' => $filename,
                 'data' => json_encode([
                     'Nomor_LHP' => $data->no_lhp,
-                    'Nama_Pelanggan' => $data->nama_pelanggan,
+                    'Nama_Pelanggan' => html_entity_decode($data->nama_pelanggan),
                     'Pelanggan_ID' => substr($data->no_order, 0, 6),
                     'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
                     'Disahkan_Oleh' => $data->nama_karyawan,
@@ -73,7 +84,7 @@ class GenerateQrDocumentLhp
             if ($qr) {
                 $qr->data = json_encode([
                     'Nomor_LHP' => $data->no_lhp,
-                    'Nama_Pelanggan' => $data->nama_pelanggan,
+                    'Nama_Pelanggan' => html_entity_decode($data->nama_pelanggan),
                     'Pelanggan_ID' => substr($data->no_order, 0, 6),
                     'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
                     'Disahkan_Oleh' => $data->nama_karyawan,
