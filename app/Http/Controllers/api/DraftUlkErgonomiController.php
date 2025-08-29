@@ -2609,7 +2609,7 @@ class DraftUlkErgonomiController extends Controller
 
             $pageWidth = $pdf->w;   // Lebar halaman dalam mm
             $pageHeight = $pdf->h;  // Tinggi halaman dalam mm
-            $watermarkPath = public_path('watermark-draft-A4.png');
+            $watermarkPath = public_path().'/watermark-draft-A4.png';
             $watermarkWidth = $pageWidth; // Lebar sama dengan halaman
             $watermarkHeight = 0; // Auto-scale agar proporsional
             // Set watermark image
