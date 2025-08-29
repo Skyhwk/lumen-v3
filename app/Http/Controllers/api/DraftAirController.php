@@ -779,7 +779,11 @@ class DraftAirController extends Controller
                 ], 201);
             }
         } catch (\Throwable $e) {
-            dd($e);
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine()
+            ], 500);
         }
     }
 
