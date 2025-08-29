@@ -33,7 +33,11 @@ class AksesMenuController extends Controller
 
         $aksesMenu = AksesMenu::updateOrCreate(
             ['user_id' => $request->input('user_id')],
-            ['akses' => $request->input('akses')]
+            [
+                'akses' => $request->input('akses'),
+                'copy_access' => $request->input('copy_access'),
+                'paste_access' => $request->input('paste_access'),
+            ]
         );
         
         if($aksesMenu){
