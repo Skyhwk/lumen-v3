@@ -923,11 +923,17 @@ class DraftAirController extends Controller
                 } else {
                     $history = LhpsAirHeaderHistory::where('no_sampel', $header->no_sampel)->whereNotNull('id_token')->orderBy('id', 'desc')->first();
                     if ($history != null) {
-                        // dd('masuk sini');
+                        
                         $header->id_token = $history->id_token;
                         $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $header->generated_by = $this->karyawan;
                         $header->is_generated = true;
+
+                        // update link agar id di berikan yang original
+                        $link = GenerateLink::where('id', $history->id_token)->update([
+                            'id_quotation' => $header->id,
+                        ]);
+
                     } else {
                         $key = $header->no_sampel . str_replace('.', '', microtime(true));
                         $gen = MD5($key);
