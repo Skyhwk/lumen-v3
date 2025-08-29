@@ -74,7 +74,7 @@ class QuotationNonKontrak extends Sector
     }
     public function konfirmasi()
     {
-        return $this->belongsTo(KelengkapanKonfirmasiQs::class, 'no_document', 'no_quotation')->where('is_active', 1);
+        return $this->belongsTo(KelengkapanKonfirmasiQs::class, 'no_document', 'no_quotation')->where('is_active', true);
     }
 
     public function orderD()
