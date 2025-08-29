@@ -79,7 +79,7 @@ class QuotationKontrakH extends Sector
     }
     public function konfirmasi()
     {
-        return $this->hasMany(KelengkapanKonfirmasiQs::class, 'no_quotation', 'no_document')->where('is_active', 1);
+        return $this->hasMany(KelengkapanKonfirmasiQs::class, 'no_quotation', 'no_document')->where('is_active', true);
     }
 
     public function orderD()
