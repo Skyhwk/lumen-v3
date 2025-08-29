@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Repository;
+use Illuminate\Support\Facades\Http;
 
 class CustomController
 {
@@ -45,7 +47,33 @@ class CustomController
     }
 
     public function total(Request $request){
-        $data = DB::table('lhps_air_header')->whereNotNull('file_qr')->where('created_at', '>', '2025-07-01')->get();
-        dd(count($data));
+        $data1 = DB::table('kontak_pelanggan')->where('email_perusahaan', 'like', '%@%')->where('is_active', 1)->pluck('email_perusahaan')->toArray();
+        $data2 = DB::table('pic_pelanggan')->where('email_pic', 'like', '%@%')->where('is_active', 1)->pluck('email_pic')->toArray();
+        $allArray = array_merge($data1, $data2);
+        // dd(count($data1), count($data2), count($allArray));
+        
+        $cleanArray = array_values(array_unique($allArray));
+
+        $response = Http::withHeaders([
+            'X-MLMMJADMIN-API-AUTH-TOKEN' => 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS'
+        ])->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
+
+        if (!$response->successful()) {
+            return response()->json([
+            'error' => 'API request failed',
+            'status' => $response->status(),
+            'message' => $response->body()
+            ], $response->status());
+        }
+
+        $return = $response->json();
+        $dataCollection = collect($return['_data'] ?? []);
+        $data = $dataCollection->pluck('mail')->toArray();
+        
+        $arraykedua = array_merge($cleanArray, $data);
+        $arraykedua = array_values(array_unique($arraykedua));
+        dd(count($arraykedua));
+        // Repository::dir('daftar_email')->key('daftar_email')->save(json_encode($arraykedua));
+        return response()->json(['message' => 'Data updated successfully', 'data' => $arraykedua], 200);
     }
 }

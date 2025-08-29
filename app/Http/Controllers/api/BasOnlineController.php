@@ -996,7 +996,7 @@ class BasOnlineController extends Controller
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-
+            
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
