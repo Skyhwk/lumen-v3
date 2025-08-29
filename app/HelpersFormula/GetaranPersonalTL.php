@@ -59,16 +59,20 @@ class GetaranPersonalTL
 					pow($val['z'], 2)
 				)
 			);
-			
+
 			// Hitung B/C
 			$B_C = $val['durasi_paparan'] / floatval($durasi_pengukuran);
-			
+
 			// Hitung (A^2 * B/C) dan tambahkan ke hp_sum
-			$hp_sum += pow($A, 2) * $B_C;
+			// ---------------- Baris ini dihold untuk parameter baru karena beda harga ---------------- //
+            // $hp_sum += pow($A, 2) * $B_C;
+            // ------------------- Diganti Sementara dengan Baris dibawah ------------------- //
+			$hp_sum += $A;
 		}
 
 		// Hitung HP
-		$hp = number_format(sqrt($hp_sum),5, ".", "");
+		// $hp = number_format(sqrt($hp_sum),5, ".", "");
+		$hp = number_format($hp_sum / count($data_pengukuran),5, ".", "");
 
 		$processed = [
 			'hasil' => $hp,
