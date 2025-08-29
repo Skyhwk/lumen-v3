@@ -47,7 +47,7 @@ class GetaranPersonalST
 			];
 		}
 
-		// Looping semua data pengukuran sehingga masing-masing diproses seperti rumus ini 
+		// Looping semua data pengukuran sehingga masing-masing diproses seperti rumus ini
 		// Akar dari ( ((KD)(D)^2)+((KE)(E)^2)+((KF)(F)^2) )
 		// Dimana D = X, E = Y, F = Z
 		$hp_sum = 0;
@@ -55,21 +55,25 @@ class GetaranPersonalST
 			// Hitung A = Akar dari (((KD)(D)^2)+((KE)(E)^2)+((KF)(F)^2))
 			$A = sqrt(
 				(
-					(floatval($bobot_frekuensi->kd) * pow($val['x'], 2)) +
-					(floatval($bobot_frekuensi->ke) * pow($val['y'], 2)) +
-					(floatval($bobot_frekuensi->kf) * pow($val['z'], 2))
+					pow((floatval($bobot_frekuensi->kd) * $val['x']), 2) +
+					pow((floatval($bobot_frekuensi->ke) * $val['y']), 2) +
+					pow((floatval($bobot_frekuensi->kf) * $val['z']), 2)
 				)
 			);
-			
+
 			// Hitung B/C
 			$B_C = $val['durasi_paparan'] / floatval($durasi_pengukuran);
-			
+
 			// Hitung (A^2 * B/C) dan tambahkan ke hp_sum
-			$hp_sum += pow($A, 2) * $B_C;
+			// ---------------- Baris ini dihold untuk parameter baru karena beda harga ---------------- //
+            // $hp_sum += pow($A, 2) * $B_C;
+            // ------------------- Diganti Sementara dengan Baris dibawah ------------------- //
+			$hp_sum += $A;
 		}
 
 		// Hitung HP
-		$hp = number_format(sqrt($hp_sum),5, ".", "");
+		// $hp = number_format(sqrt($hp_sum),5, ".", "");
+		$hp = number_format($hp_sum / count($data_pengukuran),5, ".", "");
 
 		$processed = [
 			'hasil' => $hp,
