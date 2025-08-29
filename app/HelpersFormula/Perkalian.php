@@ -10,7 +10,7 @@ class Perkalian
 		// $rumus = $hp * $fp;
 		$not_decimal = [13, 140, 163];
 		$is_5_decimal = [3, 4, 22, 23, 24, 36, 37, 42, 43, 49, 50, 77, 78, 100, 101, 112, 113, 155, 156, 157, 53, 54, 190, 189, 4, 3, 167, 166];
-		$is_4_decimal = [65, 66, 148, 149, 150, 15, 16, 17, 187, 105, 122, 121, 7, 6, 21, 20, 19, 171, 170, 147, 146, 116, 109, 104, 103];
+		$is_4_decimal = [65, 66, 148, 149, 150, 15, 16, 17, 187, 105, 122, 121, 7, 6, 21, 20, 19, 171, 170, 147, 146, 116, 109, 104, 103, 630];
 		$is_3_decimal = [31, 33, 34, 40, 96, 97, 520, 537, 546, 547, 132];
 		$is_2_decimal = [39, 102, 545, 130, 131];
 		$is_0_decimal = [158, 174, 60, 82, 175];
@@ -29,11 +29,11 @@ class Perkalian
 		}else if(in_array($id_parameter, $is_0_decimal)){
 			$decimal = 0;
 		}
-		
+
 		if ($id_parameter == 543 || $id_parameter == 179 || $id_parameter == 141) {
 			$decimal = 1;
 		}
-		
+
 		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false) {
 			// dd('masuk');
 			$rumus = $data->hp;

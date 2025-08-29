@@ -100,28 +100,42 @@ class CoverLhpController extends Controller
                     ->filter(fn($item) => in_array($category, $item['kategori_3']))
                     ->flatMap(fn($item) => $item['keterangan_1']) // gabung semua titik
                     ->count();
+                
+                $aliases = [
+                    // === Udara ===
+                    'Udara Lingkungan Kerja' => 'Lingkungan Kerja',
+                    'Debu' => 'Lingkungan Kerja',
+                    'Pencahayaan' => 'Lingkungan Kerja',
+                    'Kebisingan Personal' => 'Lingkungan Kerja',
+                    'Frekuensi Radio' => 'Lingkungan Kerja',
+                    'Medan Magnet' => 'Lingkungan Kerja',
+                    'Medan Listrik' => 'Lingkungan Kerja',
+                    'Power Density' => 'Lingkungan Kerja',
+                    'Iklim Kerja' => 'Lingkungan Kerja',
+                    'Suhu' => 'Lingkungan Kerja',
+                    'Kelembapan' => 'Lingkungan Kerja',
+                    'Sinar UV' => 'Lingkungan Kerja',
+                    'PM 10' => 'Lingkungan Kerja',
+                    'Getaran (Lengan & Tangan)' => 'Lingkungan Kerja',
+                    'Getaran (Seluruh Tubuh)' => 'Lingkungan Kerja',
+                    'Angka Kuman' => 'Lingkungan Kerja',
+
+                    // === Air ===
+                    'Air Bersih' => 'Air untuk Keperluan Higiene Sanitasi',
+                    'Air Limbah Domestik' => 'Air Limbah',
+                    'Air Limbah Industri' => 'Air Limbah',
+                    'Air Permukaan' => 'Air Sungai',
+                    'Air Kolam Renang' => 'Air Kolam Renang',
+                    'Air Higiene Sanitasi' => 'Air untuk Keperluan Higiene Sanitasi',
+                    'Air Khusus' => 'Air Reverse Osmosis',
+                    'Air Limbah Terintegrasi' => 'Air Limbah',
+                ];
 
                 $categoryName = explode('-', $category)[1];
-                if (
-                    $categoryName == 'Udara Lingkungan Kerja'
-                    || $categoryName == 'Debu'
-                    || $categoryName == 'Pencahayaan'
-                    || $categoryName == 'Kebisingan Personal'
-                    || $categoryName == 'Frekuensi Radio'
-                    || $categoryName == 'Medan Magnet'
-                    || $categoryName == 'Medan Listrik'
-                    || $categoryName == 'Power Density'
-                    || $categoryName == 'Iklim Kerja'
-                    || $categoryName == 'Suhu'
-                    || $categoryName == 'Kelembapan'
-                    || $categoryName == 'Sinar UV'
-                    || $categoryName == 'PM 10'
-                    || $categoryName == 'Getaran (Lengan & Tangan)'
-                    || $categoryName == 'Getaran (Seluruh Tubuh)'
-                    || $categoryName == 'Angka Kuman'
-                ) {
-                    $categoryName = 'Lingkungan Kerja';
+                if (array_key_exists($categoryName, $aliases)) {
+                    $categoryName = $aliases[$categoryName];
                 }
+
                 $detail[] = "$categoryName - $titikCount Titik";
             }
 

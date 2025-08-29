@@ -286,10 +286,6 @@
             </div>
             <div style="clear: both;"></div>
         </div>
-        <div class="footer-text">
-            <span>DPK7.8.1/F4; Rev 0; 08 November 2022</span>
-            <span>Hasil uji ini hanya berlaku untuk sampel yang diuji.</span>
-        </div>
     </div>
 </body>
 </html>
