@@ -103,6 +103,7 @@ class AuthController extends BaseController
             return response()->json(['message' => 'User is inactive'], 430);
         }
         
+        $copy_paste = [];
         $akses = $userToken->akses;
         if($akses!=null){
             $keys = $akses->akses;
