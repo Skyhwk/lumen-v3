@@ -14,7 +14,9 @@ class AksesMenu extends Sector
 
     protected $fillable = [
         'user_id',
-        'akses'
+        'akses',
+        'copy_access',
+        'paste_access',
     ];
 
     protected $casts = [
