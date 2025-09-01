@@ -1196,7 +1196,7 @@ class InputParameterController extends Controller
 					'message'=> 'Parameter sudah diinput..!!'
 				], 403);
 			}else {
-					$param = [365, 368, 364, 360, 377, 354, 358, 378, 385];
+					$param = [365, 368, 364, 360, 377, 354, 358, 378, 385, 362];
 					if($par->id == '355'){
 						$result = self::HelperEmisiCl2($request, $stp, $po, $datlapangan);
 						if($result->status){
