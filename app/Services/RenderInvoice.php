@@ -326,7 +326,7 @@ class RenderInvoice
                         $allPeriode = true;
                     }
                     if ($cekArray == []) {
-                        dd('atas');
+                        // dd('atas');
                         $tambah = 0;
 
                         if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
@@ -366,26 +366,12 @@ class RenderInvoice
                         $rowspan = $tambah + 1;
                         $pdf->writeHTML(
                             '<tr style="border: 1px solid; font-size: 9px;">
-                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                         );
 
                         if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-
-                            if (isset($values->keterangan_transportasi)) {
-                                $ket_transportasi = $values->keterangan_transportasi;
-                            } else {
-                                $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
-                            }
-
-                            $pdf->writeHTML('
-                                <tr>
-                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi) . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
-                                </tr>
-                            ');
+                            $totalBiayaQt += $values->harga_transportasi_total;
                         }
 
                         $perdiem_24 = '';
@@ -400,32 +386,17 @@ class RenderInvoice
                             if (isset($values->keterangan_perdiem)) {
                                 $ket_perdiem = $values->keterangan_perdiem;
                                 $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
+                                $totalBiayaQt += $values->harga_perdiem_personil_total;
                             } else {
                                 $ket_perdiem = "Perdiem " . $perdiem_24;
                                 $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                $totalBiayaQt += $values->harga_perdiem_personil_total + $total_perdiem;
                             }
-
-                            $pdf->writeHTML('
-                                <tr>
-                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
-                                </tr>
-                            ');
                         }
                         
                         if (isset($values->keterangan_lainnya)) {
                             foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
-                                
-                                $pdf->writeHTML('
-                                    <tr>
-                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $ket->deskripsi . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
-                                    </tr>
-                                ');
+                                $totalBiayaQt += $ket->harga_total;
                             }
                         }
                         
@@ -433,45 +404,28 @@ class RenderInvoice
                             if (isset($values->keterangan_biaya_lain)) {
                                 if (is_array($values->keterangan_biaya_lain)) {
                                     foreach ($values->keterangan_biaya_lain as $biayaLain) {
-                                        $pdf->writeHTML('
-                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3"' . $biayaLain->deskripsi . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->harga) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->total_biaya) . '</td></tr>
-                                        ');
+                                        $totalBiayaQt += $biayaLain->total_biaya;
                                     }
                                 } else {
-                                    $pdf->writeHTML('
-                                        <tr>
-                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
-                                        </tr>
-                                    ');
+                                    $totalBiayaQt += $values->biaya_lain;
                                 }
                             } else {
                                 // dd('masuk');
                                 $biayaLainArray = json_decode($values->keterangan_biaya, true);
                                 if (is_array($biayaLainArray)) {
                                     foreach ($biayaLainArray as $biayaLain) {
-                                        $pdf->writeHTML('
-                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya : ' . $biayaLain['deskripsi'] . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
-                                        ');
+                                        $totalBiayaQt += $biayaLain['harga'];
                                     }
                                 } else {
-                                    $pdf->writeHTML('
-                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
-                                    ');
+                                    $totalBiayaQt += $values->biaya_lain;
                                 }
                             }
                         }
+
+                        $pdf->writeHTML('
+                            <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">REIMBURSEMENT BIAYA TRANSPORTASI</td>
+                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($totalBiayaQt) . '</td></tr>
+                        ');
                     } else {
                         if (is_array($cekArray)) { // kondisi array
                             
@@ -574,7 +528,7 @@ class RenderInvoice
                             
 
                         } else { // kondisi object
-                            dd('bawah');
+                            // dd('bawah');
                             foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
 
                                 $tambah = 0;
@@ -617,15 +571,15 @@ class RenderInvoice
 
                                                 $pdf->writeHTML(
                                                     '<tr style="border: 1px solid; font-size: 9px;">
-                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
                                             } else {
                                                 $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
                                                 $pdf->writeHTML(
                                                     '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
-                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" >' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" ><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
                                             }
                                         }
@@ -673,14 +627,7 @@ class RenderInvoice
                                             }
                                         }
 
-
-                                        $pdf->writeHTML('
-                                                </td>
-                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $datasp->jumlah_titik . '</td>
-                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($datasp->harga_satuan) . '</td>
-                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $harga_total . '</td>
-                                            </tr>
-                                        ');
+                                        $totalBiayaQt += $harga_total;
 
                                     }
 
@@ -696,15 +643,7 @@ class RenderInvoice
 
                                                 $keterangan_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
                                             }
-
-                                            $pdf->writeHTML('
-                                                <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_transportasi . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
-                                                </tr>
-                                            ');
+                                            $totalBiayaQt += $values->harga_transportasi_total;
                                         }
 
 
@@ -739,58 +678,29 @@ class RenderInvoice
                                                 $jml_perdiem = '';
                                                 $satuan_perdiem = '';
                                             }
-
-                                            $pdf->writeHTML('
-                                                <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_perdiem . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $harga_perdiem . '</td>
-                                                </tr>
-                                            ');
+                                            $totalBiayaQt += $harga_perdiem;
                                         }
 
                                         if (isset($values->keterangan_lainnya)) {
                                             foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
-                                                $pdf->writeHTML('
-                                                    <tr>
-                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket->deskripsi . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
-                                                    </tr>
-                                                ');
+                                                $totalBiayaQt += $ket->harga_total;
                                             }
                                         }
 
                                         if ($values->biaya_lain != null) {
                                             foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
-                                                $qtyB = isset($biayaL->qty) ? $biayaL->qty : '';
-                                                $hargaSatuanB = isset($biayaL->harga_satuan) ? self::rupiah($biayaL->harga_satuan) : '';
-                                                $pdf->writeHTML('
-                                                    <tr>
-                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $biayaL->deskripsi . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $qtyB . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuanB . '</td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaL->harga) . '</td>
-                                                    </tr>
-                                                ');
+                                                $totalBiayaQt += $biayaL->harga;
                                             }
                                         }
 
                                         if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
-                                            $a = json_decode($values->biaya_preparasi);
-                                            $collection = collect($a);
-
-                                            $pdf->writeHTML('
-                                                <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $collection->first()->Deskripsi . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($collection->first()->Harga) . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->total_biaya_preparasi) . '</td>
-                                                </tr>
-                                            ');
+                                            $totalBiayaQt += $values->total_biaya_preparasi;
                                         }
+
+                                        $pdf->writeHTML('
+                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">REIMBURSEMENT BIAYA TRANSPORTASI</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($totalBiayaQt) . '</td></tr>
+                                        ');
                                     }
                                 }
 
