@@ -406,7 +406,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiGontrak ($data = null )
+    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='' )
     {   
         try {
             //code...
@@ -465,7 +465,7 @@ class TemplateLhpErgonomi
             $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
             $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
             
-            $html = View::make('ergonomgontrak',compact('pengukuran','personal'))->render();
+            $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik'))->render();
             return $html;
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
