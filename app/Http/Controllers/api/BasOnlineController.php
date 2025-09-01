@@ -3907,6 +3907,13 @@ class BasOnlineController extends Controller
                 "category" => "4-Udara",
                 "model" => DataLapanganSwab::class,
                 "model2" => null
+            ],
+            [
+                "parameter" => "N-Propil Asetat (SC)",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
+                "model2" => null
             ]
         ];
     }
