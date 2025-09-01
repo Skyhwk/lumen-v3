@@ -3385,7 +3385,7 @@ class RequestQuotationController extends Controller
                                     foreach ($oldSamplingList as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
@@ -3467,7 +3467,7 @@ class RequestQuotationController extends Controller
                                     foreach ($decodedSampling as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame  = $oldSampling['regulasi'] === $xyz->regulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
@@ -5219,7 +5219,7 @@ class RequestQuotationController extends Controller
                                     foreach ($oldSamplingList as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
@@ -5274,7 +5274,7 @@ class RequestQuotationController extends Controller
                                     foreach (reset($dataSamplingOld)['data_sampling'] as $oldSampling) {
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
@@ -13088,4 +13088,32 @@ class RequestQuotationController extends Controller
             ], 500);
         }
     }
+
+    function sameRegulasi(array $oldRegulasi, array $newRegulasi)
+    {
+        // Ambil ID dari old
+        $oldIds = array_map(function ($item) {
+            if (preg_match('/^(\d+)-/', $item, $matches)) {
+                return $matches[1];
+            }
+            return $item;
+        }, $oldRegulasi);
+        $oldIds = array_filter($oldIds);
+
+        // Ambil ID dari new
+        $newIds = array_map(function ($item) {
+            if (preg_match('/^(\d+)-/', $item, $matches)) {
+                return $matches[1];
+            }
+            return $item;
+        }, $newRegulasi);
+        $newIds = array_filter($newIds);
+
+        // Bandingkan (tidak peduli urutan)
+        $diff1 = array_diff($oldIds, $newIds);
+        $diff2 = array_diff($newIds, $oldIds);
+
+        return empty($diff1) && empty($diff2);
+    }
+
 }
