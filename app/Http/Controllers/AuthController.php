@@ -103,9 +103,14 @@ class AuthController extends BaseController
             return response()->json(['message' => 'User is inactive'], 430);
         }
         
+        $copy_paste = [];
         $akses = $userToken->akses;
         if($akses!=null){
             $keys = $akses->akses;
+            $copy_paste = [
+                "copy_access" => $akses->copy_access,
+                "paste_access" => $akses->paste_access,
+            ];
         } else {
             $keys = [];
         }
@@ -132,6 +137,7 @@ class AuthController extends BaseController
             'impersonate' => ($karyawan->id == 1 || $karyawan->id == 127 || $karyawan->id == 152) || $userToken->is_impersonate,
             'message' => 'Token Valid',
             'user_id' => $karyawan->id,
+            'copy_paste' => $copy_paste,
             'sip_username' => $userToken->webphone ? $userToken->webphone->sip_username : null,
             'sip_password' => $userToken->webphone ? $userToken->webphone->sip_password : null,
             'fdl_menu' => $menuList,

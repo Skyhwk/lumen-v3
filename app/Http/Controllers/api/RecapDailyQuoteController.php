@@ -15,20 +15,22 @@ use Carbon\Carbon;
 
 class RecapDailyQuoteController extends Controller
 {
-    public function index(Request $request){
-        switch($request->type){
+    public function index(Request $request)
+    {
+        switch ($request->type) {
             case 'penawaran':
                 $data = $this->penawaran($request->date);
                 return response()->json(['data' => $data], 200);
-            break;
+                break;
             case 'panggilan':
                 $data = $this->panggilan();
-            break;
+                break;
         }
     }
 
-    private function penawaranOld($date){
-        try{
+    private function penawaranOld($date)
+    {
+        try {
             $query = "
                 WITH sales_staff AS (
                     SELECT 
@@ -132,12 +134,106 @@ class RecapDailyQuoteController extends Controller
             $data = DB::select($query);
 
             return $data;
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             dd($e);
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
+    private function penawaran($date)
+    {
+        try {
+            // Buat subquery untuk data penawaran
+            $quotations = QuotationNonKontrak::getQuotationSummary($date)
+                ->unionAll(QuotationKontrakH::getQuotationKontrakSummary($date));
+
+            $quotationSubquery = DB::table(DB::raw("({$quotations->toSql()}) as combined"))
+                ->mergeBindings($quotations->getQuery())
+                ->selectRaw('
+                sales_id,
+                SUM(total_request_quotation) as total_request_quotation,
+                SUM(total_biaya_akhir) as total_biaya_akhir,
+                SUM(total_biaya_pelanggan_baru) as total_biaya_pelanggan_baru,
+                SUM(total_biaya_pelanggan_lama) as total_biaya_pelanggan_lama,
+                SUM(pelanggan_baru) as pelanggan_baru,
+                SUM(pelanggan_lama) as pelanggan_lama
+            ')
+                ->groupBy('sales_id');
+
+            // Query utama dimulai dari master_karyawan
+            $data = DB::table('master_karyawan')
+                ->select(
+                    'master_karyawan.id as sales_id',
+                    'master_karyawan.nama_lengkap as sales_name',
+                    DB::raw('COALESCE(q.total_request_quotation, 0) as total_request_quotation'),
+                    DB::raw('COALESCE(q.total_biaya_akhir, 0) as total_biaya_akhir'),
+                    DB::raw('COALESCE(q.total_biaya_pelanggan_baru, 0) as total_biaya_pelanggan_baru'),
+                    DB::raw('COALESCE(q.total_biaya_pelanggan_lama, 0) as total_biaya_pelanggan_lama'),
+                    DB::raw('COALESCE(q.pelanggan_baru, 0) as pelanggan_baru'),
+                    DB::raw('COALESCE(q.pelanggan_lama, 0) as pelanggan_lama')
+                )
+                ->leftJoinSub($quotationSubquery, 'q', function ($join) {
+                    $join->on('master_karyawan.id', '=', 'q.sales_id');
+                })
+                ->where(function ($query) {
+                    $query->whereIn('master_karyawan.id_jabatan', [15, 21, 24]) // Filter cuma sales aja
+                        ->orWhere('master_karyawan.id', 41);
+                })
+                ->where('master_karyawan.is_active', true) // Opsional: filter cuma yang aktif
+                ->get();
+
+            // Transform data untuk nambahin supervisor dan manager
+            $data->transform(function ($quotation) {
+                if ($quotation->sales_id) {
+                    $sales = MasterKaryawan::where('id', $quotation->sales_id)->first();
+                    if ($sales && $sales->atasan_langsung) {
+                        $atasanIds = json_decode($sales->atasan_langsung, true);
+
+                        $quotation->supervisor = MasterKaryawan::whereIn('id', $atasanIds)
+                            ->select('nama_lengkap')
+                            ->where('grade', 'SUPERVISOR')
+                            ->where('department', 'SALES')
+                            ->first();
+
+                        if ($quotation->supervisor === null) {
+                            $quotation->supervisor = (object) [
+                                'nama_lengkap' => $sales->nama_lengkap
+                            ];
+                        }
+
+                        $quotation->manager = MasterKaryawan::whereIn('id', $atasanIds)
+                            ->select('nama_lengkap')
+                            ->where('grade', 'Manager')
+                            ->where('department', 'SALES')
+                            ->first();
+
+                        if ($quotation->manager === null) {
+                            $quotation->manager = (object) [
+                                'nama_lengkap' => $sales->nama_lengkap
+                            ];
+                        }
+                    } else {
+                        // Fallback kalo ga ada data atasan
+                        $quotation->supervisor = (object) ['nama_lengkap' => $quotation->sales_name];
+                        $quotation->manager = (object) ['nama_lengkap' => $quotation->sales_name];
+                    }
+                }
+                return $quotation;
+            });
+
+            // Sort berdasarkan supervisor name
+            $data = $data->sortBy(function ($quotation) {
+                return optional($quotation->supervisor)->nama_lengkap ?? '';
+            })->values();
+
+            return $data;
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /* backup penawaran 
     private function penawaran($date)
     {
         try {
@@ -188,12 +284,13 @@ class RecapDailyQuoteController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    }
+    }*/
 
 
 
-    private function panggilan(){
-    
+    private function panggilan()
+    {
+
     }
 
 }
