@@ -2744,7 +2744,8 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperEmisiCerobong($request, $stp, $order_detail, $data_lapangan) {
+	public function HelperEmisiCerobong($request, $stp, $order_detail, $data_lapangan)
+	{
 		DB::beginTransaction();
 		try {
 			if ($data_lapangan) {
@@ -2771,32 +2772,32 @@ class InputParameterController extends Controller
 					// dd($dat);
 					if($dat != null) {
 						if (is_string($dat[0])) {
-							$nil_dry = explode("; ", $dat[0]);
-							$nil_dry = explode(":", $nil_dry[4]);
-							$nil_dry = str_replace(" ", "", $nil_dry[1]);
-							// dd($nil_dry);
-							$tekanan_dry = (float) $nil_dry;
+						$nil_dry = explode("; ", $dat[0]);
+						$nil_dry = explode(":", $nil_dry[4]);
+						$nil_dry = str_replace(" ", "", $nil_dry[1]);
+						// dd($nil_dry);
+						$tekanan_dry = (float) $nil_dry;
 
-							$nil_vol = explode("; ", $dat[0]);
-							$nil_vol = explode(":", $nil_vol[3]);
-							$nil_vol = str_replace(" ", "", $nil_vol[1]);
-							$volume_dry = (float) $nil_vol;
+						$nil_vol = explode("; ", $dat[0]);
+						$nil_vol = explode(":", $nil_vol[3]);
+						$nil_vol = str_replace(" ", "", $nil_vol[1]);
+						$volume_dry = (float) $nil_vol;
 
-							$dura = explode("; ", $dat[0]);
-							$dura = explode(":", $dura[2]);
-							$dura = str_replace(" ", "", $dura[1]);
-							$durasi_dry = (float) $dura;
+						$dura = explode("; ", $dat[0]);
+						$dura = explode(":", $dura[2]);
+						$dura = str_replace(" ", "", $dura[1]);
+						$durasi_dry = (float) $dura;
 
-							$awal = explode("; ", $dat[0]);
-							$awal = explode(":", $awal[0]);
-							$awal = str_replace(" ", "", $awal[1]);
-							$awal_dry = (float) $awal;
+						$awal = explode("; ", $dat[0]);
+						$awal = explode(":", $awal[0]);
+						$awal = str_replace(" ", "", $awal[1]);
+						$awal_dry = (float) $awal;
 
-							$akhir = explode("; ", $dat[0]);
-							$akhir = explode(":", $akhir[1]);
-							$akhir = str_replace(" ", "", $akhir[1]);
-							$akhir_dry = (float) $akhir;
-							$flow = ($akhir_dry + $awal_dry) / 2; //04-03-2025
+						$akhir = explode("; ", $dat[0]);
+						$akhir = explode(":", $akhir[1]);
+						$akhir = str_replace(" ", "", $akhir[1]);
+						$akhir_dry = (float) $akhir;
+						$flow = ($akhir_dry + $awal_dry) / 2; //04-03-2025
 						} else if (is_object($dat[0])) {
 							$tekanan_dry = (float) $dat[0]->tekanan;
 							$volume_dry = (float) $dat[0]->volume;
@@ -2820,7 +2821,6 @@ class InputParameterController extends Controller
 					$akhir_dry = 0;
 					$flow = 0;
 				}
-
 			} else {
 				$tekanan_dry = 0;
 				$volume_dry = 0;
@@ -2835,12 +2835,12 @@ class InputParameterController extends Controller
 			}
 
 			$parame = $request->parameter;
-			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
+			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
 
 			$functionObj = Formula::where('id_parameter', $data_parameter->id)->where('is_active', true)->first();
 			if (!$functionObj) {
 				return (object)[
-					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
@@ -2865,13 +2865,34 @@ class InputParameterController extends Controller
 				->where('id_parameter', $data_parameter->id)
 				->process();
 
-			if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
 				return (object)[
-					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
 			// dd($stp->id);
+			$data_analis = array_filter((array) $request->all(), function ($value, $key) {
+                $exlude = ['jenis_pengujian', 'note','no_sample', 'parameter', 'id_stp'];
+                return !in_array($key, $exlude);
+            }, ARRAY_FILTER_USE_BOTH);
+
+            $formatted_data_analis = [];
+            foreach ($data_analis as $key => $value) {
+                if ($key === 'ks') {
+                    $formatted_data_analis['k_sampel'] = $value;
+                } elseif ($key === 'kb') {
+                    $formatted_data_analis['k_blanko'] = $value;
+                } elseif ($key === 'vs') {
+                    $formatted_data_analis['volume_sampel'] = $value;
+                } elseif ($key === 'vtp') {
+                    $formatted_data_analis['volume_total_pengeceran'] = $value;
+                } else {
+                    $formatted_data_analis[$key] = $value;
+                }
+            }
+
+
 			$data = new EmisiCerobongHeader;
 			$data->no_sampel = $request->no_sample;
 			$data->parameter = $request->parameter;
@@ -2881,6 +2902,7 @@ class InputParameterController extends Controller
 			$data->tanggal_terima = $order_detail->tanggal_terima;
 			$data->created_by = $this->karyawan;
 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->data_analis = json_encode((object) $formatted_data_analis);
 			$data->save();
 
 			// dd($result);
@@ -2889,14 +2911,13 @@ class InputParameterController extends Controller
 			$data_kalkulasi['created_by'] = $this->karyawan;
 			WsValueEmisiCerobong::create($data_kalkulasi);
 
-			// dd('ok');
 			DB::commit();
 			return (object)[
 				'message' => 'Value Parameter berhasil disimpan.!',
 				'par' => $request->parameter,
 				'status' => 200
 			];
-		}catch (\Exception $e) {
+		} catch (\Exception $e) {
 			DB::rollBack();
 			return (object)[
 				'message' => 'Gagal input data: '.$e->getMessage(),
