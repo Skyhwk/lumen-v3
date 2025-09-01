@@ -100,6 +100,7 @@ class PerubahanParameterController extends Controller
                         foreach ($relations as $rel) {
                             $query->orWhereHas($rel, function($q) use ($parameter_existing_value) {
                                 $q->where('parameter', $parameter_existing_value);
+                                $q->whereNull('rejected_at');
                             });
                         }
                     })
