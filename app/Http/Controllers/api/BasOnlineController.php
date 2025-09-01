@@ -1955,6 +1955,10 @@ class BasOnlineController extends Controller
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
                 // dump($sample->no_sample);
+                if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
+                    continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
+                }
+                
                 $verified = $this->verifyStatus($sample->no_sample, $parameter);
                 if (!$verified) {
                     $status = 'belum selesai';
