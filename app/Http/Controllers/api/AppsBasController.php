@@ -2544,6 +2544,13 @@ class AppsBasController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "N-Propil Asetat (SC)",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Karbon Hitam (8 jam)",
                 "requiredCount" => 3,
                 "category" => "4-Udara",
