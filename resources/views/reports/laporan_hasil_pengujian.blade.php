@@ -131,36 +131,26 @@
 
     <div class="section-title">Jenis dan Jumlah Sampel</div>
 
-    <table class="sample-table" width="100%">
-        <?php
-        $items = $data->detail;
-        $total = count($items);
-        $perRow = 4;
-        $rows = $total > $perRow ? array_chunk($items, $perRow) : [array_pad([], $perRow, null)];
-        
-        if ($total <= $perRow) {
-            foreach ($items as $i => $val) {
-                $pos = round(($i * ($perRow - 1)) / max(1, $total - 1)); // spread posisi
-                $rows[0][$pos] = $val;
-            }
-        } else {
+    <table class="sample-table">
+        @php
+            $items = $data->detail;
+            $perRow = 4;
             $rows = array_chunk($items, $perRow);
-        }
-        
-        foreach ($rows as $row) :
-            $cols = count(array_filter($row, fn($x) => $x !== null));
-            $width = $cols > 0 ? round(100 / $cols, 2) : 25;
-            ?>
-        <tr>
-            <?php foreach (range(0, $perRow - 1) as $i) :
-                $val = $row[$i] ?? '';
-                $align = ['left', 'center', 'center', 'right'][$i];
-                $w = $val ? "$width%" : 'auto';
-                ?>
-            <td style='width:{{ $w }}; text-align:{{ $align }};'>{{ $val }}</td>
-            <?php endforeach; ?>
-        </tr>
-        <?php endforeach; ?>
+            $alignments = ['left', 'center', 'center', 'right'];
+        @endphp
+
+        @foreach ($rows as $row)
+            <tr>
+                @for ($i = 0; $i < $perRow; $i++)
+                    @php
+                        $val = $row[$i] ?? '';
+                    @endphp
+                    <td style="width: 25%; text-align: {{ $alignments[$i] }}; vertical-align: top;">
+                        {!! $val !!}
+                    </td>
+                @endfor
+            </tr>
+        @endforeach
     </table>
 </body>
 
