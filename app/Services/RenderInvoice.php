@@ -289,192 +289,46 @@ class RenderInvoice
                 </table>
             ');
 
-            $pdf->writeHTML('
-                <table style="border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
-                            <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
-                            <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
-                            <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
-                            <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
-                            <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            ');
-
-            $no = 1;
-
-            
-            foreach ($data1 as $k => $valSampling) {
+            $isIV = explode('/', $dataHead->no_invoice)[1] == 'IV' ? true : false;
+            if($isIV) {
+                $pdf->writeHTML('
+                    <table style="border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="5">KETERANGAN</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                ');
                 
-                $values = json_decode(json_encode($valSampling));
-                $cekArray = json_decode($values->data_pendukung_sampling);
-                $periode = null;
-                if ($values->periode != null && $values->periode != '' && $values->periode != 'null') {
-                    if ($values->periode === 'all') {
-                        $periode = 'Semua Periode';
-                    } else {
-                        $periode = self::tanggal_indonesia($values->periode, 'period');
-                    }
-                }
+                $no = 1;
 
-                $allPeriode = false;
-                if($periode === "Semua Periode"){
-                    $allPeriode = true;
-                }
-                if ($cekArray == []) {
-                    // dd('atas');
-                    $tambah = 0;
-
-                    if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-                        $tambah = $tambah + 1;
-                    }
-
-                    if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
-                        $tambah = $tambah + 1;
-                    }
-
-                    if (isset($values->keterangan_lainnya)) {
-                        $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
-                    }
-
-                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                        if (isset($values->keterangan_biaya_lain)) {
-
-                            if (is_array($values->keterangan_biaya_lain)) {
-                                $tambah = $tambah + count($values->keterangan_biaya_lain);
-                            } else {
-                                if (is_array(json_decode($values->keterangan_biaya_lain))) {
-                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya_lain));
-                                } else {
-                                    $tambah = $tambah + 1;
-                                }
-                            }
-                        } else {
-                            if (is_array(json_decode($values->keterangan_biaya))) {
-                                $tambah = $tambah + count(json_decode($values->keterangan_biaya));
-                            } else {
-                                $tambah = $tambah + 1;
-                            }
-                        }
-                    }
-
-
-                    $rowspan = $tambah + 1;
-                    $pdf->writeHTML(
-                        '<tr style="border: 1px solid; font-size: 9px;">
-                            <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                            <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
-                    );
-
-                    if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-
-                        if (isset($values->keterangan_transportasi)) {
-                            $ket_transportasi = $values->keterangan_transportasi;
-                        } else {
-                            $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
-                        }
-
-                        $pdf->writeHTML('
-                            <tr>
-                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi) . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
-                            </tr>
-                        ');
-                    }
-
-                    $perdiem_24 = '';
-                    $total_perdiem = 0;
-                    if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
-                        $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
-                        $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
-                    }
-
-                    if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
-
-                        if (isset($values->keterangan_perdiem)) {
-                            $ket_perdiem = $values->keterangan_perdiem;
-                            $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
-                        } else {
-                            $ket_perdiem = "Perdiem " . $perdiem_24;
-                            $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
-                        }
-
-                        $pdf->writeHTML('
-                            <tr>
-                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
-                            </tr>
-                        ');
-                    }
+                foreach ($data1 as $k => $valSampling) {
                     
-                    if (isset($values->keterangan_lainnya)) {
-                        foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
-                            
-                            $pdf->writeHTML('
-                                <tr>
-                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $ket->deskripsi . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
-                                </tr>
-                            ');
-                        }
-                    }
-                    
-                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                        if (isset($values->keterangan_biaya_lain)) {
-                            if (is_array($values->keterangan_biaya_lain)) {
-                                foreach ($values->keterangan_biaya_lain as $biayaLain) {
-                                    $pdf->writeHTML('
-                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3"' . $biayaLain->deskripsi . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->harga) . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->total_biaya) . '</td></tr>
-                                    ');
-                                }
-                            } else {
-                                $pdf->writeHTML('
-                                    <tr>
-                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
-                                    </tr>
-                                ');
-                            }
+                    $values = json_decode(json_encode($valSampling));
+                    $cekArray = json_decode($values->data_pendukung_sampling);
+                    $periode = null;
+                    if ($values->periode != null && $values->periode != '' && $values->periode != 'null') {
+                        if ($values->periode === 'all') {
+                            $periode = 'Semua Periode';
                         } else {
-                            // dd('masuk');
-                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
-                            if (is_array($biayaLainArray)) {
-                                foreach ($biayaLainArray as $biayaLain) {
-                                    $pdf->writeHTML('
-                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya : ' . $biayaLain['deskripsi'] . '</td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
-                                    ');
-                                }
-                            } else {
-                                $pdf->writeHTML('
-                                    <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
-                                ');
-                            }
+                            $periode = self::tanggal_indonesia($values->periode, 'period');
                         }
                     }
-                } else {
-                    if (is_array($cekArray)) { // kondisi array
-                        // dd('tengah');
+
+                    $totalBiayaQt = 0;
+
+                    $allPeriode = false;
+                    if($periode === "Semua Periode"){
+                        $allPeriode = true;
+                    }
+                    if ($cekArray == []) {
+                        dd('atas');
                         $tambah = 0;
+
                         if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
                             $tambah = $tambah + 1;
                         }
@@ -483,104 +337,327 @@ class RenderInvoice
                             $tambah = $tambah + 1;
                         }
 
-                        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                            if (is_array(json_decode($values->keterangan_biaya))) {
-                                $tambah = $tambah + count(json_decode($values->keterangan_biaya));
-                            } else {
-                                $tambah = $tambah + 1;
-                            }
-                        }
-                        
                         if (isset($values->keterangan_lainnya)) {
                             $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                         }
-                        for ($i = 0; $i < count(array_chunk($cekArray, 15)); $i++) {
-                            foreach (array_chunk($cekArray, 15)[$i] as $keys => $dataSampling) {
-                                if ($keys == 0) {
-                                    if ($i == count(array_chunk($cekArray, 15)) - 1) {
-                                        $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1 + $tambah;
-                                        $pdf->writeHTML(
-                                            '<tr style="border: 1px solid; font-size: 9px;">
-                                            <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                            <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
-                                        );
+
+                        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                            if (isset($values->keterangan_biaya_lain)) {
+
+                                if (is_array($values->keterangan_biaya_lain)) {
+                                    $tambah = $tambah + count($values->keterangan_biaya_lain);
+                                } else {
+                                    if (is_array(json_decode($values->keterangan_biaya_lain))) {
+                                        $tambah = $tambah + count(json_decode($values->keterangan_biaya_lain));
                                     } else {
-                                        $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1;
-                                        $pdf->writeHTML(
-                                            '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
-                                            <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                            <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
-                                        );
+                                        $tambah = $tambah + 1;
                                     }
                                 }
+                            } else {
+                                if (is_array(json_decode($values->keterangan_biaya))) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya));
+                                } else {
+                                    $tambah = $tambah + 1;
+                                }
+                            }
+                        }
+
+
+                        $rowspan = $tambah + 1;
+                        $pdf->writeHTML(
+                            '<tr style="border: 1px solid; font-size: 9px;">
+                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                        );
+
+                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+
+                            if (isset($values->keterangan_transportasi)) {
+                                $ket_transportasi = $values->keterangan_transportasi;
+                            } else {
+                                $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                            }
+
+                            $pdf->writeHTML('
+                                <tr>
+                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi) . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
+                                </tr>
+                            ');
+                        }
+
+                        $perdiem_24 = '';
+                        $total_perdiem = 0;
+                        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                            $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                        }
+
+                        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+
+                            if (isset($values->keterangan_perdiem)) {
+                                $ket_perdiem = $values->keterangan_perdiem;
+                                $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
+                            } else {
+                                $ket_perdiem = "Perdiem " . $perdiem_24;
+                                $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                            }
+
+                            $pdf->writeHTML('
+                                <tr>
+                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
+                                </tr>
+                            ');
+                        }
+                        
+                        if (isset($values->keterangan_lainnya)) {
+                            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
                                 
-                                
-                                $kategori2 = explode("-", $dataSampling->kategori_2);
-                                $split = explode("/", $values->no_document);
-                            
-                                if ($split[1] == 'QTC') {
-                                    if (isset($dataSampling->keterangan_pengujian)) {
-                                        $total_harga_qtc = self::rupiah($dataSampling->harga_total);
+                                $pdf->writeHTML('
+                                    <tr>
+                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $ket->deskripsi . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
+                                    </tr>
+                                ');
+                            }
+                        }
+                        
+                        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                            if (isset($values->keterangan_biaya_lain)) {
+                                if (is_array($values->keterangan_biaya_lain)) {
+                                    foreach ($values->keterangan_biaya_lain as $biayaLain) {
                                         $pdf->writeHTML('
-                                        <tr>
-                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span><br>
-                                        ');  
-                                    } else {
-                                        $total_harga_qtc = self::rupiah($allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
-                                        $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
+                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3"' . $biayaLain->deskripsi . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->harga) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->total_biaya) . '</td></tr>
                                         ');
+                                    }
+                                } else {
+                                    $pdf->writeHTML('
+                                        <tr>
+                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
+                                        </tr>
+                                    ');
+                                }
+                            } else {
+                                // dd('masuk');
+                                $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                if (is_array($biayaLainArray)) {
+                                    foreach ($biayaLainArray as $biayaLain) {
+                                        $pdf->writeHTML('
+                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya : ' . $biayaLain['deskripsi'] . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
+                                        ');
+                                    }
+                                } else {
+                                    $pdf->writeHTML('
+                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
+                                    ');
+                                }
+                            }
+                        }
+                    } else {
+                        if (is_array($cekArray)) { // kondisi array
+                            
+                            for ($i = 0; $i < count(array_chunk($cekArray, 15)); $i++) {
+                                foreach (array_chunk($cekArray, 15)[$i] as $keys => $dataSampling) {
+                                    if ($keys == 0) {
+                                        if ($i == count(array_chunk($cekArray, 15)) - 1) {
+                                            $pdf->writeHTML(
+                                                '<tr style="border: 1px solid; font-size: 9px;">
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                            );
+                                        } else {
+                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1;
+                                            $pdf->writeHTML(
+                                                '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                            );
+                                        }
+                                    }
+                                    
+                                    
+                                    $kategori2 = explode("-", $dataSampling->kategori_2);
+                                    $split = explode("/", $values->no_document);
+                                
+                                    if ($split[1] == 'QTC') {
+                                        if (isset($dataSampling->keterangan_pengujian)) {
+                                            $totalBiayaQt += $dataSampling->harga_total;
+                                        } else {
+                                            $totalBiayaQt += $allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik);
+                                        }
+                                    } else {
+                                        $totalBiayaQt += $dataSampling->harga_total;
+                                    }
 
-                                        foreach ($dataSampling->regulasi as $rg => $v) {
-                                            $reg = '';
+                                }
 
-                                            if ($v != '') {
-                                                $regulasi = explode("-", $v);
-                                                $reg = $regulasi[1];
-                                            }
+                                $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
 
-                                            if ($rg == 0) {
-                                                $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
+                                if ($isLastElement) {
+                                    if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                        // dump('Transport', $values->harga_transportasi_total);
+                                        $totalBiayaQt += $values->harga_transportasi_total;
+                                        
+                                    }
+                                    
+                                    $perdiem_24 = '';
+                                    $total_perdiem = 0;
+                                    if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                        $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                                        
+                                        // dump('penjulamlahan total Pardiem', $total_perdiem);
+                                        $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                    }
+
+                                    if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                        // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
+                                        if (isset($values->keterangan_perdiem)) {
+                                            // dump('plus biaya pardiem atas', $values->harga_perdiem_personil_total);
+                                            $totalBiayaQt += $values->harga_perdiem_personil_total;
+                                        } else {
+                                            // dump('plus biaya pardiem bawah', ($values->harga_perdiem_personil_total + $total_perdiem));
+                                            $totalBiayaQt += $values->harga_perdiem_personil_total + $total_perdiem;
+                                        }
+                                        
+                                    }
+
+                                    if (isset($values->keterangan_lainnya)) {
+                                        foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                            // dump('plus biaya keterangan', $ket->harga_total);
+                                            $totalBiayaQt += $ket->harga_total;
+                                        }
+                                    }
+
+                                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                        if (isset($values->keterangan_biaya_lain)) {
+                                            // dump('plus biaya Lain atas', $values->biaya_lain);
+                                            $totalBiayaQt += $values->biaya_lain;
+                                        } else {
+                                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                            if (is_array($biayaLainArray)) {
+                                                foreach ($biayaLainArray as $biayaLain) {
+                                                    // dump('plus biaya Lain foreach', $biayaLain['harga']);
+                                                    $totalBiayaQt += $biayaLain['harga'];
+                                                }
                                             } else {
-                                                $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
+                                                // dump('plus biaya Lain bawah', $values->biaya_lain);
+                                                $totalBiayaQt += $values->biaya_lain;
+                                            }
+                                        }
+                                    }
+                                    // dd('Akhir',$totalBiayaQt);
+                                    $pdf->writeHTML('
+                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="5">REIMBURSEMENT BIAYA TRANSPORTASI</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($totalBiayaQt) . '</td></tr>
+                                    ');
+                                }   
+                            }
+                            
+
+                        } else { // kondisi object
+                            dd('bawah');
+                            foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
+
+                                $tambah = 0;
+
+                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if ($values->biaya_lain != null) {
+                                    $tambah = $tambah + count(json_decode($values->biaya_lain));
+                                }
+
+                                if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if (isset($values->keterangan_lainnya)) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
+                                }
+                                //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
+                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 15)); $i++) {
+
+                                    foreach (array_chunk($dataSampling->data_sampling, 15)[$i] as $key => $datasp) {
+
+                                        if ($values->periode != null) {
+                                            $pr = self::tanggal_indonesia($values->periode, 'period');
+                                        } else {
+                                            $pr = "";
+                                        }
+
+                                        if ($key == 0) {
+
+
+                                            if ($i == count(array_chunk($dataSampling->data_sampling, 15)) - 1) {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1 + $tambah;
+
+                                                $pdf->writeHTML(
+                                                    '<tr style="border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
+                                            } else {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
+                                                $pdf->writeHTML(
+                                                    '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
                                             }
                                         }
 
-                                    }
+                                        $kategori2 = explode("-", $datasp->kategori_2);
+                                        if (isset($datasp->keterangan_pengujian)) {
+                                            $keterangan_pengujian = $datasp->keterangan_pengujian;
+                                            $harga_total = self::rupiah($datasp->harga_total);
 
-
-                                    $pdf->writeHTML('
-                                            </td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . ($allPeriode ? $dataSampling->jumlah_titik * count($dataSampling->periode) : $dataSampling->jumlah_titik) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $total_harga_qtc . '</td>
-                                        </tr>
-                                    
-                                    ');
-
-
-
-                                } else {
-                                    
-                                    if (isset($dataSampling->keterangan_pengujian)) {
-
-                                        $pdf->writeHTML('
+                                            $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . '</span><br>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
                                         ');
+                                        } else {
+                                            $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
+                                            $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
 
-                                    } else {
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
+                                            ');
 
-                                        $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
-                                        ');
+                                            if (is_string($datasp->regulasi)) {
+                                                $decodedRegulasi = json_decode($datasp->regulasi, true);
+                                                $datasp->regulasi = $decodedRegulasi ?: [];
+                                            }
 
+                                            if (!is_array($datasp->regulasi)) {
+                                                $datasp->regulasi = [];
+                                            }
 
-                                        if (is_array($dataSampling->regulasi)) {
-
-                                            foreach ($dataSampling->regulasi as $rg => $v) {
+                                            foreach ($datasp->regulasi as $rg => $v) {
                                                 $reg = '';
 
                                                 if ($v != '') {
@@ -596,131 +673,322 @@ class RenderInvoice
                                             }
                                         }
 
+
+                                        $pdf->writeHTML('
+                                                </td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $datasp->jumlah_titik . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($datasp->harga_satuan) . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $harga_total . '</td>
+                                            </tr>
+                                        ');
+
                                     }
 
+                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
 
-                                    $pdf->writeHTML('
-                                            </td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $dataSampling->jumlah_titik . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
-                                            <td style="border: 1px solid; font-size:9px; text-align:center" class="text-right">' . self::rupiah($dataSampling->harga_total) . '</td>
-                                        </tr>
-                                    ');
+                                    if ($isLastElement) {
 
-                                }
+                                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
-                            }
+                                            if (isset($values->keterangan_transportasi)) {
+                                                $keterangan_transportasi = $values->keterangan_transportasi;
+                                            } else {
 
-                            $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
+                                                $keterangan_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                                            }
 
-                            if ($isLastElement) {
-                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
-
-                                    if (isset($values->keterangan_transportasi)) {
-                                        $ket_transportasi = $values->keterangan_transportasi;
-                                    } else {
-                                        $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
-                                    }
-
-                                    $pdf->writeHTML('
-                                        <tr>
-                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
-                                        </tr>
-                                    ');
-                                }
-                                
-                                $perdiem_24 = '';
-                                $total_perdiem = 0;
-                                if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
-                                    $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
-                                    $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
-                                }
-
-                                if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
-                                    // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
-                                    if (isset($values->keterangan_perdiem)) {
-                                        $ket_perdiem = $values->keterangan_perdiem;
-                                        $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
-                                        $jml_perdiem = $values->perdiem_jumlah_orang;
-                                        if (isset($values->satuan_perdiem)) {
-                                            $satuan_perdiem = self::rupiah($values->satuan_perdiem);
-                                        } else {
-                                            $sdiem = $harga_perdiem_personil_total / $jml_perdiem;
-                                            $satuan_perdiem = self::rupiah($sdiem);
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_transportasi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
+                                                </tr>
+                                            ');
                                         }
-                                    } else {
-                                        $ket_perdiem = "Perdiem " . $perdiem_24;
-                                        $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
-                                        $jml_perdiem = '';
-                                        $satuan_perdiem = $haga_perdiem_non;
-                                    }
-                                    $pdf->writeHTML('
-                                        <tr>
-                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
-                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
-                                        </tr>
-                                    ');
-                                }
 
-                                if (isset($values->keterangan_lainnya)) {
-                                    foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
-                                        $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket->deskripsi . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
-                                            </tr>
-                                        ');
-                                    }
-                                }
 
-                                if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                                    if (isset($values->keterangan_biaya_lain)) {
-                                        $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
-                                            </tr>
-                                        ');
-                                    } else {
-                                        $biayaLainArray = json_decode($values->keterangan_biaya, true);
-                                        if (is_array($biayaLainArray)) {
-                                            foreach ($biayaLainArray as $biayaLain) {
+                                        $perdiem_24 = '';
+                                        $total_perdiem = 0;
+                                        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                                            $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                        }
+
+
+                                        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                            if (isset($values->keterangan_perdiem)) {
+                                                $keterangan_perdiem = $values->keterangan_perdiem;
+                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total);
+                                                $jml_perdiem = $values->perdiem_jumlah_orang;
+                                                if (isset($values->satuan_perdiem)) {
+                                                    $satuan_perdiem = self::rupiah($values->satuan_perdiem);
+                                                } else {
+                                                    if ($values->harga_perdiem_personil_total == 0) {
+                                                        $jml_perdiem = '';
+                                                        $satuan_perdiem = '';
+                                                        continue;
+                                                    } else {
+                                                        $sdiem = $harga_perdiem / $jml_perdiem;
+                                                        $satuan_perdiem = self::rupiah($sdiem);
+                                                    }
+                                                }
+                                            } else {
+                                                $keterangan_perdiem = "Perdiem " . $perdiem_24;
+                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                                $jml_perdiem = '';
+                                                $satuan_perdiem = '';
+                                            }
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $harga_perdiem . '</td>
+                                                </tr>
+                                            ');
+                                        }
+
+                                        if (isset($values->keterangan_lainnya)) {
+                                            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
                                                 $pdf->writeHTML('
-                                                    <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">' . $biayaLain['deskripsi'] . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
+                                                    <tr>
+                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket->deskripsi . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
+                                                    </tr>
                                                 ');
                                             }
-                                        } else {
+                                        }
+
+                                        if ($values->biaya_lain != null) {
+                                            foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
+                                                $qtyB = isset($biayaL->qty) ? $biayaL->qty : '';
+                                                $hargaSatuanB = isset($biayaL->harga_satuan) ? self::rupiah($biayaL->harga_satuan) : '';
+                                                $pdf->writeHTML('
+                                                    <tr>
+                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $biayaL->deskripsi . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $qtyB . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuanB . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaL->harga) . '</td>
+                                                    </tr>
+                                                ');
+                                            }
+                                        }
+
+                                        if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                            $a = json_decode($values->biaya_preparasi);
+                                            $collection = collect($a);
+
                                             $pdf->writeHTML('
-                                                <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $collection->first()->Deskripsi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($collection->first()->Harga) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->total_biaya_preparasi) . '</td>
+                                                </tr>
                                             ');
                                         }
                                     }
                                 }
-                            }   
+
+                            }
+
+                        }
+                    }
+
+                    $no++;
+
+                }
+            } else {        
+                $pdf->writeHTML('
+                    <table style="border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                ');
+
+                $no = 1;
+
+                
+                foreach ($data1 as $k => $valSampling) {
+                    
+                    $values = json_decode(json_encode($valSampling));
+                    $cekArray = json_decode($values->data_pendukung_sampling);
+                    $periode = null;
+                    if ($values->periode != null && $values->periode != '' && $values->periode != 'null') {
+                        if ($values->periode === 'all') {
+                            $periode = 'Semua Periode';
+                        } else {
+                            $periode = self::tanggal_indonesia($values->periode, 'period');
+                        }
+                    }
+
+                    $allPeriode = false;
+                    if($periode === "Semua Periode"){
+                        $allPeriode = true;
+                    }
+                    if ($cekArray == []) {
+                        // dd('atas');
+                        $tambah = 0;
+
+                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                            $tambah = $tambah + 1;
+                        }
+
+                        if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
+                            $tambah = $tambah + 1;
+                        }
+
+                        if (isset($values->keterangan_lainnya)) {
+                            $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
+                        }
+
+                        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                            if (isset($values->keterangan_biaya_lain)) {
+
+                                if (is_array($values->keterangan_biaya_lain)) {
+                                    $tambah = $tambah + count($values->keterangan_biaya_lain);
+                                } else {
+                                    if (is_array(json_decode($values->keterangan_biaya_lain))) {
+                                        $tambah = $tambah + count(json_decode($values->keterangan_biaya_lain));
+                                    } else {
+                                        $tambah = $tambah + 1;
+                                    }
+                                }
+                            } else {
+                                if (is_array(json_decode($values->keterangan_biaya))) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya));
+                                } else {
+                                    $tambah = $tambah + 1;
+                                }
+                            }
+                        }
+
+
+                        $rowspan = $tambah + 1;
+                        $pdf->writeHTML(
+                            '<tr style="border: 1px solid; font-size: 9px;">
+                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                        );
+
+                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+
+                            if (isset($values->keterangan_transportasi)) {
+                                $ket_transportasi = $values->keterangan_transportasi;
+                            } else {
+                                $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                            }
+
+                            $pdf->writeHTML('
+                                <tr>
+                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi) . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
+                                </tr>
+                            ');
+                        }
+
+                        $perdiem_24 = '';
+                        $total_perdiem = 0;
+                        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                            $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                        }
+
+                        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+
+                            if (isset($values->keterangan_perdiem)) {
+                                $ket_perdiem = $values->keterangan_perdiem;
+                                $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
+                            } else {
+                                $ket_perdiem = "Perdiem " . $perdiem_24;
+                                $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                            }
+
+                            $pdf->writeHTML('
+                                <tr>
+                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
+                                </tr>
+                            ');
                         }
                         
-
-                    } else { // kondisi object
-                        // dd('bawah');
-                        foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
-
+                        if (isset($values->keterangan_lainnya)) {
+                            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                
+                                $pdf->writeHTML('
+                                    <tr>
+                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $ket->deskripsi . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
+                                    </tr>
+                                ');
+                            }
+                        }
+                        
+                        if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                            if (isset($values->keterangan_biaya_lain)) {
+                                if (is_array($values->keterangan_biaya_lain)) {
+                                    foreach ($values->keterangan_biaya_lain as $biayaLain) {
+                                        $pdf->writeHTML('
+                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3"' . $biayaLain->deskripsi . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->harga) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain->total_biaya) . '</td></tr>
+                                        ');
+                                    }
+                                } else {
+                                    $pdf->writeHTML('
+                                        <tr>
+                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
+                                        </tr>
+                                    ');
+                                }
+                            } else {
+                                // dd('masuk');
+                                $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                if (is_array($biayaLainArray)) {
+                                    foreach ($biayaLainArray as $biayaLain) {
+                                        $pdf->writeHTML('
+                                            <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya : ' . $biayaLain['deskripsi'] . '</td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                            <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
+                                        ');
+                                    }
+                                } else {
+                                    $pdf->writeHTML('
+                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
+                                    ');
+                                }
+                            }
+                        }
+                    } else {
+                        if (is_array($cekArray)) { // kondisi array
+                            // dd('tengah');
                             $tambah = 0;
-
                             if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
                                 $tambah = $tambah + 1;
                             }
@@ -729,127 +997,155 @@ class RenderInvoice
                                 $tambah = $tambah + 1;
                             }
 
-                            if ($values->biaya_lain != null) {
-                                $tambah = $tambah + count(json_decode($values->biaya_lain));
+                            if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                if (is_array(json_decode($values->keterangan_biaya))) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya));
+                                } else {
+                                    $tambah = $tambah + 1;
+                                }
                             }
-
-                            if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
-                                $tambah = $tambah + 1;
-                            }
-
+                            
                             if (isset($values->keterangan_lainnya)) {
                                 $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                             }
-                            //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
-                            for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 15)); $i++) {
-
-                                foreach (array_chunk($dataSampling->data_sampling, 15)[$i] as $key => $datasp) {
-
-                                    if ($values->periode != null) {
-                                        $pr = self::tanggal_indonesia($values->periode, 'period');
-                                    } else {
-                                        $pr = "";
-                                    }
-
-                                    if ($key == 0) {
-
-
-                                        if ($i == count(array_chunk($dataSampling->data_sampling, 15)) - 1) {
-                                            $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1 + $tambah;
-
+                            for ($i = 0; $i < count(array_chunk($cekArray, 15)); $i++) {
+                                foreach (array_chunk($cekArray, 15)[$i] as $keys => $dataSampling) {
+                                    if ($keys == 0) {
+                                        if ($i == count(array_chunk($cekArray, 15)) - 1) {
+                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1 + $tambah;
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
-                                                    <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                    <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
+                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
-                                                    <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
-                                                    <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         }
                                     }
-
-                                    $kategori2 = explode("-", $datasp->kategori_2);
-                                    if (isset($datasp->keterangan_pengujian)) {
-                                        $keterangan_pengujian = $datasp->keterangan_pengujian;
-                                        $harga_total = self::rupiah($datasp->harga_total);
-
-                                        $pdf->writeHTML('
-                                        <tr>
-                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
-                                    ');
-                                    } else {
-                                        $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
-                                        $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
-
-                                        $pdf->writeHTML('
+                                    
+                                    
+                                    $kategori2 = explode("-", $dataSampling->kategori_2);
+                                    $split = explode("/", $values->no_document);
+                                
+                                    if ($split[1] == 'QTC') {
+                                        if (isset($dataSampling->keterangan_pengujian)) {
+                                            $total_harga_qtc = self::rupiah($dataSampling->harga_total);
+                                            $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
+                                            <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . ' Parameter</span><br>
+                                            ');  
+                                        } else {
+                                            $total_harga_qtc = self::rupiah($allPeriode ? $dataSampling->harga_satuan * ($dataSampling->jumlah_titik) * (count($dataSampling->periode)) : $dataSampling->harga_satuan * ($dataSampling->jumlah_titik));
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
+                                            ');
+
+                                            foreach ($dataSampling->regulasi as $rg => $v) {
+                                                $reg = '';
+
+                                                if ($v != '') {
+                                                    $regulasi = explode("-", $v);
+                                                    $reg = $regulasi[1];
+                                                }
+
+                                                if ($rg == 0) {
+                                                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
+                                                } else {
+                                                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
+                                                }
+                                            }
+
+                                        }
+
+
+                                        $pdf->writeHTML('
+                                                </td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . ($allPeriode ? $dataSampling->jumlah_titik * count($dataSampling->periode) : $dataSampling->jumlah_titik) . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $total_harga_qtc . '</td>
+                                            </tr>
+                                        
                                         ');
 
-                                        if (is_string($datasp->regulasi)) {
-                                            $decodedRegulasi = json_decode($datasp->regulasi, true);
-                                            $datasp->regulasi = $decodedRegulasi ?: [];
-                                        }
 
-                                        if (!is_array($datasp->regulasi)) {
-                                            $datasp->regulasi = [];
-                                        }
 
-                                        foreach ($datasp->regulasi as $rg => $v) {
-                                            $reg = '';
+                                    } else {
+                                        
+                                        if (isset($dataSampling->keterangan_pengujian)) {
 
-                                            if ($v != '') {
-                                                $regulasi = explode("-", $v);
-                                                $reg = $regulasi[1];
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . '</span><br>
+                                            ');
+
+                                        } else {
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
+                                            ');
+
+
+                                            if (is_array($dataSampling->regulasi)) {
+
+                                                foreach ($dataSampling->regulasi as $rg => $v) {
+                                                    $reg = '';
+
+                                                    if ($v != '') {
+                                                        $regulasi = explode("-", $v);
+                                                        $reg = $regulasi[1];
+                                                    }
+
+                                                    if ($rg == 0) {
+                                                        $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
+                                                    } else {
+                                                        $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
+                                                    }
+                                                }
                                             }
 
-                                            if ($rg == 0) {
-                                                $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
-                                            } else {
-                                                $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
-                                            }
                                         }
+
+
+                                        $pdf->writeHTML('
+                                                </td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $dataSampling->jumlah_titik . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($dataSampling->harga_satuan) . '</td>
+                                                <td style="border: 1px solid; font-size:9px; text-align:center" class="text-right">' . self::rupiah($dataSampling->harga_total) . '</td>
+                                            </tr>
+                                        ');
+
                                     }
-
-
-                                    $pdf->writeHTML('
-                                            </td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $datasp->jumlah_titik . '</td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($datasp->harga_satuan) . '</td>
-                                            <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $harga_total . '</td>
-                                        </tr>
-                                    ');
 
                                 }
 
-                                $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
+                                $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
 
                                 if ($isLastElement) {
-
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
 
                                         if (isset($values->keterangan_transportasi)) {
-                                            $keterangan_transportasi = $values->keterangan_transportasi;
+                                            $ket_transportasi = $values->keterangan_transportasi;
                                         } else {
-
-                                            $keterangan_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                                            $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
                                         }
 
                                         $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_transportasi . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
                                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
                                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
                                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
                                             </tr>
                                         ');
                                     }
-
-
+                                    
                                     $perdiem_24 = '';
                                     $total_perdiem = 0;
                                     if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
@@ -857,37 +1153,30 @@ class RenderInvoice
                                         $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
                                     }
 
-
                                     if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                        // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
                                         if (isset($values->keterangan_perdiem)) {
-                                            $keterangan_perdiem = $values->keterangan_perdiem;
-                                            $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total);
+                                            $ket_perdiem = $values->keterangan_perdiem;
+                                            $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
                                             $jml_perdiem = $values->perdiem_jumlah_orang;
                                             if (isset($values->satuan_perdiem)) {
                                                 $satuan_perdiem = self::rupiah($values->satuan_perdiem);
                                             } else {
-                                                if ($values->harga_perdiem_personil_total == 0) {
-                                                    $jml_perdiem = '';
-                                                    $satuan_perdiem = '';
-                                                    continue;
-                                                } else {
-                                                    $sdiem = $harga_perdiem / $jml_perdiem;
-                                                    $satuan_perdiem = self::rupiah($sdiem);
-                                                }
+                                                $sdiem = $harga_perdiem_personil_total / $jml_perdiem;
+                                                $satuan_perdiem = self::rupiah($sdiem);
                                             }
                                         } else {
-                                            $keterangan_perdiem = "Perdiem " . $perdiem_24;
-                                            $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                            $ket_perdiem = "Perdiem " . $perdiem_24;
+                                            $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
                                             $jml_perdiem = '';
-                                            $satuan_perdiem = '';
+                                            $satuan_perdiem = $haga_perdiem_non;
                                         }
-
                                         $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_perdiem . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
                                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
                                                 <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $harga_perdiem . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
                                             </tr>
                                         ');
                                     }
@@ -905,44 +1194,270 @@ class RenderInvoice
                                         }
                                     }
 
-                                    if ($values->biaya_lain != null) {
-                                        foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
-                                            $qtyB = isset($biayaL->qty) ? $biayaL->qty : '';
-                                            $hargaSatuanB = isset($biayaL->harga_satuan) ? self::rupiah($biayaL->harga_satuan) : '';
+                                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                        if (isset($values->keterangan_biaya_lain)) {
                                             $pdf->writeHTML('
                                                 <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $biayaL->deskripsi . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $qtyB . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuanB . '</td>
-                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaL->harga) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
+                                                </tr>
+                                            ');
+                                        } else {
+                                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                            if (is_array($biayaLainArray)) {
+                                                foreach ($biayaLainArray as $biayaLain) {
+                                                    $pdf->writeHTML('
+                                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">' . $biayaLain['deskripsi'] . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
+                                                    ');
+                                                }
+                                            } else {
+                                                $pdf->writeHTML('
+                                                    <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
+                                                ');
+                                            }
+                                        }
+                                    }
+                                }   
+                            }
+                            
+
+                        } else { // kondisi object
+                            // dd('bawah');
+                            foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
+
+                                $tambah = 0;
+
+                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if ($values->harga_perdiem_personil_total > 0 && $values->harga_perdiem_personil_total != null) {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if ($values->biaya_lain != null) {
+                                    $tambah = $tambah + count(json_decode($values->biaya_lain));
+                                }
+
+                                if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                    $tambah = $tambah + 1;
+                                }
+
+                                if (isset($values->keterangan_lainnya)) {
+                                    $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
+                                }
+                                //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
+                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 15)); $i++) {
+
+                                    foreach (array_chunk($dataSampling->data_sampling, 15)[$i] as $key => $datasp) {
+
+                                        if ($values->periode != null) {
+                                            $pr = self::tanggal_indonesia($values->periode, 'period');
+                                        } else {
+                                            $pr = "";
+                                        }
+
+                                        if ($key == 0) {
+
+
+                                            if ($i == count(array_chunk($dataSampling->data_sampling, 15)) - 1) {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1 + $tambah;
+
+                                                $pdf->writeHTML(
+                                                    '<tr style="border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
+                                            } else {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
+                                                $pdf->writeHTML(
+                                                    '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
+                                                        <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
+                                                        <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
+                                                );
+                                            }
+                                        }
+
+                                        $kategori2 = explode("-", $datasp->kategori_2);
+                                        if (isset($datasp->keterangan_pengujian)) {
+                                            $keterangan_pengujian = $datasp->keterangan_pengujian;
+                                            $harga_total = self::rupiah($datasp->harga_total);
+
+                                            $pdf->writeHTML('
+                                            <tr>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
+                                        ');
+                                        } else {
+                                            $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
+                                            $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
+                                            ');
+
+                                            if (is_string($datasp->regulasi)) {
+                                                $decodedRegulasi = json_decode($datasp->regulasi, true);
+                                                $datasp->regulasi = $decodedRegulasi ?: [];
+                                            }
+
+                                            if (!is_array($datasp->regulasi)) {
+                                                $datasp->regulasi = [];
+                                            }
+
+                                            foreach ($datasp->regulasi as $rg => $v) {
+                                                $reg = '';
+
+                                                if ($v != '') {
+                                                    $regulasi = explode("-", $v);
+                                                    $reg = $regulasi[1];
+                                                }
+
+                                                if ($rg == 0) {
+                                                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
+                                                } else {
+                                                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
+                                                }
+                                            }
+                                        }
+
+
+                                        $pdf->writeHTML('
+                                                </td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-center">' . $datasp->jumlah_titik . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . self::rupiah($datasp->harga_satuan) . '</td>
+                                                <td style="border: 1px solid; font-size: 9px;text-align:center;" class="text-right">' . $harga_total . '</td>
+                                            </tr>
+                                        ');
+
+                                    }
+
+                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
+
+                                    if ($isLastElement) {
+
+                                        if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+
+                                            if (isset($values->keterangan_transportasi)) {
+                                                $keterangan_transportasi = $values->keterangan_transportasi;
+                                            } else {
+
+                                                $keterangan_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                                            }
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_transportasi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
+                                                </tr>
+                                            ');
+                                        }
+
+
+                                        $perdiem_24 = '';
+                                        $total_perdiem = 0;
+                                        if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                            $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                                            $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                        }
+
+
+                                        if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                            if (isset($values->keterangan_perdiem)) {
+                                                $keterangan_perdiem = $values->keterangan_perdiem;
+                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total);
+                                                $jml_perdiem = $values->perdiem_jumlah_orang;
+                                                if (isset($values->satuan_perdiem)) {
+                                                    $satuan_perdiem = self::rupiah($values->satuan_perdiem);
+                                                } else {
+                                                    if ($values->harga_perdiem_personil_total == 0) {
+                                                        $jml_perdiem = '';
+                                                        $satuan_perdiem = '';
+                                                        continue;
+                                                    } else {
+                                                        $sdiem = $harga_perdiem / $jml_perdiem;
+                                                        $satuan_perdiem = self::rupiah($sdiem);
+                                                    }
+                                                }
+                                            } else {
+                                                $keterangan_perdiem = "Perdiem " . $perdiem_24;
+                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                                $jml_perdiem = '';
+                                                $satuan_perdiem = '';
+                                            }
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $keterangan_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $harga_perdiem . '</td>
+                                                </tr>
+                                            ');
+                                        }
+
+                                        if (isset($values->keterangan_lainnya)) {
+                                            foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                                $pdf->writeHTML('
+                                                    <tr>
+                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket->deskripsi . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
+                                                    </tr>
+                                                ');
+                                            }
+                                        }
+
+                                        if ($values->biaya_lain != null) {
+                                            foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
+                                                $qtyB = isset($biayaL->qty) ? $biayaL->qty : '';
+                                                $hargaSatuanB = isset($biayaL->harga_satuan) ? self::rupiah($biayaL->harga_satuan) : '';
+                                                $pdf->writeHTML('
+                                                    <tr>
+                                                        <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">Biaya : ' . $biayaL->deskripsi . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $qtyB . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $hargaSatuanB . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaL->harga) . '</td>
+                                                    </tr>
+                                                ');
+                                            }
+                                        }
+
+                                        if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                            $a = json_decode($values->biaya_preparasi);
+                                            $collection = collect($a);
+
+                                            $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $collection->first()->Deskripsi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($collection->first()->Harga) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->total_biaya_preparasi) . '</td>
                                                 </tr>
                                             ');
                                         }
                                     }
-
-                                    if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
-                                        $a = json_decode($values->biaya_preparasi);
-                                        $collection = collect($a);
-
-                                        $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $collection->first()->Deskripsi . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($collection->first()->Harga) . '</td>
-                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->total_biaya_preparasi) . '</td>
-                                            </tr>
-                                        ');
-                                    }
                                 }
+
                             }
 
                         }
-
                     }
+
+                    $no++;
+
                 }
-
-                $no++;
-
             }
 
             
