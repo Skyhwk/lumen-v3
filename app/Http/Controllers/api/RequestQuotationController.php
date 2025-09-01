@@ -3383,11 +3383,9 @@ class RequestQuotationController extends Controller
                                     $oldSamplingList = reset($oldData)['data_sampling'] ?? [];
                                     // dump($oldSamplingList);
                                     foreach ($oldSamplingList as $oldSampling) {
-                                        $idOldRegulasi = explode('-', $oldSampling['regulasi'])[0];
-                                        $idNewRegulasi = explode('-', $xyz->regulasi)[0];
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $idOldRegulasi === idNewRegulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
@@ -3467,11 +3465,9 @@ class RequestQuotationController extends Controller
                                     }
 
                                     foreach ($decodedSampling as $oldSampling) {
-                                        $idOldRegulasi = explode('-', $oldSampling['regulasi'])[0];
-                                        $idNewRegulasi = explode('-', $xyz->regulasi)[0];
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame  = $idOldRegulasi === $idNewRegulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
@@ -5221,11 +5217,9 @@ class RequestQuotationController extends Controller
                                     $oldSamplingList = reset($oldData)['data_sampling'] ?? [];
                                     // dump($oldSamplingList);
                                     foreach ($oldSamplingList as $oldSampling) {
-                                        $idOldRegulasi = explode('-', $oldSampling['regulasi'])[0];
-                                        $idNewRegulasi = explode('-', $xyz->regulasi)[0];
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $idOldRegulasi === $idNewRegulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
@@ -5278,11 +5272,9 @@ class RequestQuotationController extends Controller
                                 if($checkOldQt){
                                     $dataSamplingOld = json_decode($checkOldQt->data_pendukung_sampling, true);
                                     foreach (reset($dataSamplingOld)['data_sampling'] as $oldSampling) {
-                                        $idOldRegulasi = explode('-', $oldSampling['regulasi'])[0];
-                                        $idNewRegulasi = explode('-', $xyz->regulasi)[0];
                                         $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $idOldRegulasi === $idNewRegulasi;
+                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
                                         if ($kategori1Same && $kategori2Same && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
@@ -13096,4 +13088,32 @@ class RequestQuotationController extends Controller
             ], 500);
         }
     }
+
+    function sameRegulasi(array $oldRegulasi, array $newRegulasi)
+    {
+        // Ambil ID dari old
+        $oldIds = array_map(function ($item) {
+            if (preg_match('/^(\d+)-/', $item, $matches)) {
+                return $matches[1];
+            }
+            return $item;
+        }, $oldRegulasi);
+        $oldIds = array_filter($oldIds);
+
+        // Ambil ID dari new
+        $newIds = array_map(function ($item) {
+            if (preg_match('/^(\d+)-/', $item, $matches)) {
+                return $matches[1];
+            }
+            return $item;
+        }, $newRegulasi);
+        $newIds = array_filter($newIds);
+
+        // Bandingkan (tidak peduli urutan)
+        $diff1 = array_diff($oldIds, $newIds);
+        $diff2 = array_diff($newIds, $oldIds);
+
+        return empty($diff1) && empty($diff2);
+    }
+
 }
