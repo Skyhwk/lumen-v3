@@ -890,7 +890,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 $no++;
                             } else {
                                 if (
@@ -1297,7 +1297,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
                                     $cek_detail->regulasi != json_encode($value->regulasi) ||
@@ -1734,7 +1734,7 @@ class ReadyOrderController extends Controller
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else {
                                     if (count($value->parameter) == 1) {
-                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                             $no++;
                                         } else {
                                             if (
@@ -2131,7 +2131,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 // dump($cek_detail);
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
@@ -2469,6 +2469,16 @@ class ReadyOrderController extends Controller
         QrCode::format('png')->size(200)->generate($no_sampel, $path);
 
         return $filename;
+    }
+
+    private function directParamExclude ($value){
+        $array = [
+            "230;Ergonomi",
+            "2188;Ergonomi (GO-LK)",
+            "2116;Ergonomi (GS-LK)"
+        ];
+
+        return in_array($value, $array);
     }
 
     private function cekParamDirect($value)
