@@ -3292,8 +3292,8 @@ class DraftUlkErgonomiController extends Controller
             ->first();
 
         if ($generatedFiles && $generatedFiles->link) {
-            $url = 'http://127.0.0.1:8000/public/auth/'; // Dev
-            // $url = 'https://portal.intilab.com/public/auth/'; // Prod
+            // $url = 'http://127.0.0.1:8000/public/auth/'; // Dev
+            $url = 'https://portal.intilab.com/public/auth/'; // Prod
             $portal = $url . $generatedFiles->link->token;
 
             return response()->json([
