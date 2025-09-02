@@ -2184,19 +2184,6 @@ class DraftUlkErgonomiController extends Controller
                 'antropometri' =>9,
                 'desain_stasiun_kerja' =>10
             ];
-            /* $mpdfConfig = [
-                'mode' => 'utf-8',
-                'format' => 'A4',
-                'orientation' => 'P',
-                'margin_left' => 10,
-                'margin_right' => 10,
-                'margin_top' => 10,
-                'margin_bottom' => 10,
-                'margin_header' => 0,
-                'margin_footer' => 0,
-                'default_font_size' => 7,
-                'default_font' => 'arial'
-            ]; */
 
             $mpdfConfig = array(
                 'mode' => 'utf-8',
@@ -2211,140 +2198,127 @@ class DraftUlkErgonomiController extends Controller
             );
             $pdf = new PDF($mpdfConfig); // Inisialisasi mPDF hanya sekali
             $globalCssContent = '
-                * { box-sizing: border-box; }
-                
-                body {
-                    font-family: Arial, sans-serif;
-                    font-size: 8pt; /* Smaller base font for landscape */
-                    background-color: white;
-                    margin: 0;
-                    padding: 0;
-                    line-height: 1.3;
-                }
-                
-                .page-container {
-                    width: 100%;
-                    height: 100%;
-                    padding: 10px;
+                * {
                     box-sizing: border-box;
                 }
-                
-                /* Typography */
+
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 15px;
+                    font-size: 9px;
+                    background-color: #f9f9f9;
+                }
+
+                .page-container {
+                    width: 100%;
+                    background-color: #fff;
+                    border: 1px solid #ccc;
+                    text-align: center; /* opsional kalau mau text di dalam rata tengah */
+                }
+
                 .main-header-title {
                     text-align: center;
                     font-weight: bold;
-                    font-size: 12pt;
-                    margin-bottom: 10px;
+                    font-size: 1.5em;
+                    margin-bottom: 15px;
                     text-decoration: underline;
                 }
-                
-                /* Layout Utilities */
+
                 .two-column-layout {
-                    width: 100%;
-                    display: table;
-                    table-layout: fixed;
-                    margin-bottom: 10px;
+                    width: 900px;         /* atau fixed misalnya 800px */
+                    margin: 0 auto;     /* bikin center */
+                    overflow: hidden;
+                    text-align: left;   /* supaya isi kolom tidak ikut rata tengah */
                 }
-                
+
                 .column {
-                    display: table-cell;
-                    vertical-align: top;
-                    padding: 0 5px;
+                    float: left;
                 }
-                
-                .column-left { width: 65%; }
-                .column-right { width: 35%; }
-                
-                /* Section Styling */
+
+                .column-left {
+                    width: 500px;
+                }
+
+                .column-right {
+                    width: 390px; 
+                    margin-left:6px; 
+                }
+
                 .section {
                     border: 1px solid #000;
-                    padding: 5px;
-                    margin-bottom: 8px;
+                    padding: 6px;
                     background-color: #fff;
+                    margin-bottom: 10px;
                 }
-                
+
                 .section-title {
                     font-weight: bold;
                     background-color: #e0e0e0;
-                    padding: 2px 5px;
-                    margin: -5px -5px 5px -5px;
+                    padding: 3px 6px;
+                    margin: -6px -6px 6px -6px;
                     border-bottom: 1px solid #000;
-                    font-size: 8.5pt;
                 }
-                
-                /* Table Base Styling */
+
                 table {
                     width: 100%;
                     border-collapse: collapse;
                     margin-bottom: 5px;
                     table-layout: fixed;
                 }
-                
+
                 th, td {
                     border: 1px solid #000;
-                    padding: 2px 4px;
+                    padding: 3px;
                     text-align: left;
                     vertical-align: top;
-                    font-size: 7.5pt;
-                    word-wrap: break-word;
                 }
-                
+
                 th {
                     background-color: #f2f2f2;
                     font-weight: bold;
                     text-align: center;
                 }
-                
-                /* Input Elements */
+
                 .text-input-space {
                     width: 100%;
                     border: 1px solid #ccc;
-                    padding: 1px 3px;
-                    min-height: 1.2em;
+                    padding: 2px;
+                    min-height: 1.5em;
                     background-color: #fff;
-                    font-size: 7.5pt;
-                    display: inline-block;
-                    box-sizing: border-box;
                 }
-                
+
                 .multi-line-input {
                     width: 100%;
                     border: 1px solid #000;
-                    padding: 3px;
-                    min-height: 35px;
+                    padding: 4px;
+                    min-height: 40px;
                     background-color: #fff;
-                    font-size: 7.5pt;
-                    line-height: 1.3;
                 }
-                
-                /* Utility Classes */
-                .text-center { text-align: center; }
-                .text-left { text-align: left; }
-                .text-right { text-align: right; }
-                .text-justify { text-align: justify; }
-                .font-bold { font-weight: bold; }
-                
-                /* Footer */
+
                 .footer-text {
-                    font-size: 7pt;
-                    margin-top: 10px;
+                    font-size: 0.85em;
+                    margin-top: 15px;
                     border-top: 1px solid #ccc;
-                    padding-top: 5px;
+                    padding-top: 8px;
                     display: flex;
                     justify-content: space-between;
                 }
-                
+
                 .signature-block {
-                    margin-top: 10px;
+                    margin-top: 15px;
                     text-align: right;
-                    font-size: 7.5pt;
                 }
-                
-                .signature-name {
-                    margin-top: 25px;
+
+                .signature-block .signature-name {
+                    margin-top: 30px;
                     font-weight: bold;
                     text-decoration: underline;
                 }
+
+                .interpretasi-table td { text-align: center; }
+                .interpretasi-table td:last-child { text-align: left; }
+
+                .uraian-tugas-table td { height: 1.8em; }
             ';
             $templateSpecificCss = '
                 /* Specific untuk Body Parts Analysis */
@@ -2357,17 +2331,13 @@ class DraftUlkErgonomiController extends Controller
                 }
                 
                 .image-placeholder {
-                    display: table-cell;
-                    width: 150px;
-                    padding-right: 15px;
-                    vertical-align: top;
+                     float: left;
+                     width: 150px;
+                     margin-right: 15px;
                 }
                 
                 .body-map {
-                    width: 100%;
-                    height: 260px;
-                    border: 1px solid #000;
-                    object-fit: contain;
+                    overflow: hidden;
                 }
                 
                 .body-parts-list-container {
@@ -2435,11 +2405,518 @@ class DraftUlkErgonomiController extends Controller
                     padding: 2px;
                 }
             ';
+            $templateSpecificCssNbm='
+                /* CSS dengan font size yang konsisten - Layout Fixed */
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    font-size: 10px; /* Base font size yang konsisten */
+                    width: 100%;
+                    min-width: 800px; /* Minimum width untuk mempertahankan layout */
+                }
+
+                .header {
+                    text-align: center;
+                    margin-bottom: 15px;
+                }
+
+                .header h1 {
+                    font-size: 12px; /* Dikurangi untuk konsistensi */
+                    font-weight: bold;
+                    margin: 10px 0;
+                    text-decoration: underline;
+                }
+
+                .company-name {
+                    font-weight: bold;
+                    font-size: 10px; /* Konsisten dengan base */
+                    text-align: left;
+                    margin-bottom: 10px;
+                }
+
+                .section-title {
+                    font-weight: bold;
+                    margin: 10px 0 5px 0;
+                    font-size: 10px; /* Konsisten dengan base */
+                }
+
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 9px; /* Sedikit lebih kecil untuk tabel */
+                    margin-bottom: 10px;
+                    table-layout: fixed; /* Fixed table layout */
+                }
+
+                th,
+                td {
+                    border: 1px solid black;
+                    padding: 3px 5px;
+                    text-align: center;
+                    vertical-align: middle;
+                    font-size: 9px; /* Konsisten untuk semua sel tabel */
+                }
+
+                thead {
+                    display: table-header-group;
+                }
+
+                tbody {
+                    display: table-row-group;
+                }
+
+                .body-map {
+                    width: 80px;
+                    height: auto;
+                    margin: 5px auto;
+                    display: block;
+                }
+
+                .info-section {
+                    margin-bottom: 10px;
+                }
+
+                .info-section p {
+                    margin: 3px 0;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .info-label {
+                    font-weight: normal;
+                    width: 120px;
+                    float: left;
+                    font-size: 9px; /* Konsisten, tidak lagi 10pt */
+                }
+
+                .info-value {
+                    display: inline-block;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .customer-info,
+                .sampling-info,
+                .worker-info {
+                    margin-left: 0;
+                    margin-bottom: 10px;
+                }
+
+                .customer-info h4,
+                .sampling-info h4,
+                .worker-info h4 {
+                    margin: 5px 0 2px 0;
+                    font-size: 10px; /* Konsisten */
+                    font-weight: bold;
+                }
+
+                .risk-table {
+                    margin-top: 10px;
+                }
+
+                .left-section p {
+                    font-weight: bold;
+                    text-align: justify;
+                    margin-bottom: 5px;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .table-note {
+                    font-size: 8px; /* Tetap kecil untuk catatan */
+                    margin-top: 3px;
+                    font-style: italic;
+                }
+
+                .job-description {
+                    margin-top: 10px;
+                }
+
+                .job-description th {
+                    width: 30%;
+                    text-align: left;
+                    vertical-align: top;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .job-description td {
+                    vertical-align: top;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .conclusion-box {
+                    border: 1px solid black;
+                    padding: 5px;
+                    min-height: 30px;
+                    margin-top: 5px;
+                    margin-bottom: 10px;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .conclusion-box .section-title {
+                    margin-top: 0;
+                    margin-bottom: 5px;
+                    font-size: 10px; /* Konsisten */
+                }
+
+                /* Fixed Layout - Tidak Responsif */
+                .left-section {
+                    width: 60%;
+                    float: left;
+                    box-sizing: border-box;
+                    min-width: 60%;
+                    max-width: 60%;
+                }
+
+                .right-section {
+                    width: 39%;
+                    float: right;
+                    box-sizing: border-box;
+                    min-width: 39%;
+                    max-width: 39%;
+                }
+
+                /* Pastikan layout tetap fixed untuk print */
+                @media print {
+                    .left-section {
+                        width: 60% !important;
+                        min-width: 60% !important;
+                        max-width: 60% !important;
+                    }
+                    
+                    .right-section {
+                        width: 39% !important;
+                        min-width: 39% !important;
+                        max-width: 39% !important;
+                    }
+                }
+
+                .result-header {
+                    text-align: center;
+                    font-weight: bold;
+                    margin: 5px 0;
+                    font-size: 9px; /* Konsisten dengan tabel */
+                }
+
+                /* Styling untuk tabel nested SEBELUM/SESUDAH */
+                .nested-table-container {
+                    padding: 0;
+                }
+
+                .nested-table {
+                    width: 100%;
+                    margin: 0;
+                    border: none;
+                }
+
+                .nested-table td {
+                    border: 1px solid black;
+                    width: 50%;
+                    text-align: center;
+                    font-weight: bold;
+                    padding: 3px;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .total-score {
+                    font-weight: bold;
+                    text-align: center;
+                    margin-top: 5px;
+                    font-size: 9px; /* Konsisten */
+                }
+
+                .content-container {
+                    width: 100%;
+                    min-width: 800px; /* Pastikan layout minimum */
+                }
+
+                .clearfix::after {
+                    content: "";
+                    clear: both;
+                    display: table;
+                }
+                
+                .info-header {
+                    font-weight: bold;
+                    margin-top: 8px;
+                    margin-bottom: 3px;
+                    font-size: 10px; /* Konsisten, tidak lagi 10pt */
+                    clear: both;
+                }
+
+                /* Styling khusus untuk informasi di sisi kanan */
+                .right-section div {
+                    font-size: 9px; /* Base untuk right section */
+                }
+
+                .right-section span {
+                    font-size: 9px; /* Konsisten untuk semua span */
+                }
+
+                /* Styling untuk div dengan margin-bottom di right section */
+                .right-section div[style*="margin-bottom: 3px"] {
+                    margin-bottom: 3px;
+                    font-size: 9px; /* Konsisten, tidak lagi 10pt */
+            }';
+            $rebaSpecificCss = '
+                * { 
+                    box-sizing: border-box; 
+                    margin: 0;
+                    padding: 0;
+                }
+
+                body {
+                    font-family: Arial, sans-serif;
+                    font-size: 8pt;
+                    background-color: white;
+                    line-height: 1.1;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                .container {
+                    width: 100%;
+                    clear: both;
+                }
+
+                /* Header */
+                .main-header {
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 12pt;
+                    text-decoration: underline;
+                    margin-bottom: 6px;
+                    padding: 4px 0;
+                    clear: both;
+                    width: 100%;
+                    display: block;
+                }
+
+                /* Main content wrapper */
+                .main-content {
+                    clear: both;
+                    overflow: hidden;
+                    margin-bottom: 6px;
+                    width: 100%;
+                }
+
+                /* Column layouts */
+                .column-left {
+                    float: left;
+                    width: 30%;
+                    padding-right: 2px;
+                }
+
+                .column-center {
+                    float: left;
+                    width: 30%;
+                    padding: 0 1px;
+                }
+
+                .column-right {
+                    float: right;
+                    width: 40%;
+                    padding-left: 2px;
+                }
+
+                /* Bottom section */
+                .bottom-section {
+                    clear: both;
+                    overflow: hidden;
+                    margin-top: 6px;
+                    width: 100%;
+                }
+
+                .bottom-left {
+                    float: left;
+                    width: 60%;
+                    padding-right: 2px;
+                }
+
+                .bottom-right {
+                    float: right;
+                    width: 40%;
+                    padding-left: 2px;
+                }
+
+                /* Table styles */
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin-bottom: 4px;
+                    font-size: 8pt;
+                    border-spacing: 0;
+                }
+
+                th, td {
+                    border: 1px solid #000;
+                    padding: 1px 2px;
+                    vertical-align: top;
+                    font-size: 8pt;
+                    line-height: 1.0;
+                    margin: 0;
+                }
+
+                th {
+                    background-color: #f2f2f2;
+                    font-weight: bold;
+                    text-align: center;
+                    padding: 2px;
+                }
+
+                .section-header {
+                    font-weight: bold;
+                    font-size: 8pt;
+                    text-decoration: underline;
+                    text-align: left;
+                    margin: 2px 0 1px 0;
+                    display: block;
+                    clear: both;
+                }
+
+                .info-table {
+                    border: 0;
+                    margin-bottom: 3px;
+                }
+
+                .info-table td {
+                    border: 0;
+                    padding: 0px 1px;
+                    font-size: 8pt;
+                    vertical-align: top;
+                    line-height: 1.0;
+                }
+
+                .final-score {
+                    background-color: #e0e0e0;
+                    font-weight: bold;
+                }
+
+                /* Image optimization */
+                td img {
+                    max-width: 100%;
+                    max-height: 25px;
+                    object-fit: contain;
+                    display: block;
+                    margin: 0 auto;
+                    vertical-align: middle;
+                }
+
+                /* Specific table adjustments */
+                .score-table th:first-child { width: 8%; }
+                .score-table th:nth-child(2) { width: 67%; }
+                .score-table th:last-child { width: 25%; }
+
+                .header-info-table th { 
+                    width: 33.33%; 
+                    padding: 2px 1px;
+                    font-size: 8pt;
+                }
+
+                .header-info-table td {
+                    padding: 2px 1px;
+                    text-align: center;
+                    font-size: 8pt;
+                }
+
+                .reference-table th:nth-child(1) { width: 15%; }
+                .reference-table th:nth-child(2) { width: 12%; }
+                .reference-table th:nth-child(3) { width: 23%; }
+                .reference-table th:nth-child(4) { width: 50%; }
+
+                .reference-table td {
+                    font-size: 7pt;
+                    padding: 1px;
+                    line-height: 1.0;
+                }
+
+                /* Compact spacing */
+                .image-row td:first-child {
+                    text-align: center;
+                    vertical-align: middle;
+                    font-size: 8pt;
+                }
+
+                .image-row td:nth-child(2) {
+                    height: 25px;
+                    padding: 1px;
+                }
+
+                .image-row td:last-child {
+                    text-align: center;
+                    vertical-align: middle;
+                    font-size: 8pt;
+                }
+
+                .label-row td {
+                    text-align: center;
+                    font-size: 7pt;
+                    padding: 1px;
+                    height: 12px;
+                }
+
+                /* Footer notes */
+                .footer-notes {
+                    border: 0;
+                    margin-top: 15px;
+                }
+
+                .footer-notes td:first-child {
+                    width: 2%;
+                    text-align: right;
+                    vertical-align: top;
+                    font-size: 7pt;
+                    border: 0;
+                    padding-right: 3px;
+                }
+
+                .footer-notes td:last-child {
+                    width: 98%;
+                    text-align: left;
+                    font-size: 7pt;
+                    border: 0;
+                    line-height: 1.0;
+                }
+
+                /* Conclusion table specific */
+                .conclusion-table td:first-child {
+                    width: 35%;
+                    text-align: center;
+                    font-weight: bold;
+                    vertical-align: middle;
+                    height: 35px;
+                    font-size: 8pt;
+                }
+
+                .conclusion-table td:last-child {
+                    width: 65%;
+                    text-align: justify;
+                    vertical-align: top;
+                    font-size: 8pt;
+                    line-height: 1.1;
+                    padding: 3px;
+                }
+
+                /* Compact margin adjustments */
+                .compact-table {
+                    margin-bottom: 2px;
+                }
+
+                /* Text alignment helpers */
+                .text-left { text-align: left !important; padding-left: 3px; }
+                .text-center { text-align: center !important; }
+                .text-justify { text-align: justify !important; }
+
+                /* Clear floats helper */
+                .clearfix::after {
+                    content: "";
+                    display: table;
+                    clear: both;
+                }
+            ';
             // Atur watermark dan footer umum untuk semua halaman
 
             $pageWidth = $pdf->w;   // Lebar halaman dalam mm
             $pageHeight = $pdf->h;  // Tinggi halaman dalam mm
-            $watermarkPath = public_path().'/watermark-draft-A4.png';
+            $watermarkPath = public_path().'/watermark-draft.png';
             $watermarkWidth = $pageWidth; // Lebar sama dengan halaman
             $watermarkHeight = 0; // Auto-scale agar proporsional
             // Set watermark image
@@ -2480,10 +2957,10 @@ class DraftUlkErgonomiController extends Controller
                             $htmlContent = $render->ergonomiRwl($dataMethod);
                             break;
                         case 'nbm':
-                            $htmlContent = $render->ergonomiNbm($dataMethod); // Teruskan data
+                            $htmlContent = $render->ergonomiNbm($dataMethod,'',$templateSpecificCssNbm); // Teruskan data
                             break;
                         case 'reba':
-                            $htmlContent = $render->ergonomiReba($dataMethod);
+                            $htmlContent = $render->ergonomiReba($dataMethod,$globalCssContent,$rebaSpecificCss);
                             break;
                         case 'rula':
                             $htmlContent = $render->ergonomiRula($dataMethod);
@@ -2498,7 +2975,7 @@ class DraftUlkErgonomiController extends Controller
                             $htmlContent = $render->ergonomiGontrak($dataMethod,$globalCssContent,$templateSpecificCss);
                             break;
                         case 'sni_bahaya_ergonomi':
-                            $htmlContent = $render->ergonomiPotensiBahaya($dataMethod);
+                            $htmlContent = $render->ergonomiPotensiBahaya($dataMethod,$globalCssContent);
                             break;
                         // Tambahkan case lain untuk method lain yang ingin digabungkan
                     }
@@ -2815,8 +3292,8 @@ class DraftUlkErgonomiController extends Controller
             ->first();
 
         if ($generatedFiles && $generatedFiles->link) {
-            // $url = 'http://127.0.0.1:8000/public/auth/'; // Dev
-            $url = 'https://portal.intilab.com/public/auth/'; // Prod
+            $url = 'http://127.0.0.1:8000/public/auth/'; // Dev
+            // $url = 'https://portal.intilab.com/public/auth/'; // Prod
             $portal = $url . $generatedFiles->link->token;
 
             return response()->json([
