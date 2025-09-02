@@ -372,175 +372,278 @@ class DraftUdaraGetaranController extends Controller
         }
     }
 
-        public function handleDatadetail(Request $request)
-    {
-         $id_category = explode('-', $request->kategori_3)[0];
-        try {
-             $cekLhp = LhpsGetaranHeader::where('no_lhp', $request->cfr)
-                ->where('id_kategori_3', $id_category)
-                ->where('is_active', true)
-                ->first();
+    //     public function handleDatadetail(Request $request)
+    // {
+    //      $id_category = explode('-', $request->kategori_3)[0];
+    //     try {
+    //          $cekLhp = LhpsGetaranHeader::where('no_lhp', $request->cfr)
+    //             ->where('id_kategori_3', $id_category)
+    //             ->where('is_active', true)
+    //             ->first();
 
-            if($cekLhp) {
-              $detail = LhpsGetaranDetail::where('id_header', $cekLhp->id)->get();
+    //         if($cekLhp) {
+    //           $detail = LhpsGetaranDetail::where('id_header', $cekLhp->id)->get();
 
-                $existingSamples = $detail->pluck('no_sampel')->toArray();
-                $data = [];
-                $data1 = [];
-                $hasil = [];
+    //             $existingSamples = $detail->pluck('no_sampel')->toArray();
+    //             $data = [];
+    //             $data1 = [];
+    //             $hasil = [];
 
-                $orders = OrderDetail::where('cfr', $request->cfr)
-                    ->where('is_approve', 0)
-                    ->where('is_active', true)
-                    ->where('kategori_2', '4-Udara')
-                    ->where('kategori_3', $request->kategori_3)
-                    ->where('status', 2)
-                    ->pluck('no_sampel');
-                $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
-                    ->whereIn('no_sampel', $orders)
-                    ->where('is_approve', 1)
-                    ->where('is_active', 1)
-                    ->where('lhps', 1)
-                    ->get();
-                $i = 0;
-                if ($data->isNotEmpty()) {
-                    foreach ($data as $val) {
-                        $data1[$i]['id'] = $val->id;
-                        $data1[$i]['parameter'] = $val->parameter;
-                        $data1[$i]['satuan'] = $val->master_parameter->satuan;
-                        $data1[$i]['methode'] = $val->master_parameter->method; 
-                        $data1[$i]['status'] = $val->master_parameter->status;
-                        if ($val->parameter == "Getaran (LK) ST" || $val->parameter == "Getaran (LK) TL") {
-                            $data1[$i]['w_paparan'] = json_decode($val->lapangan_getaran_personal->durasi_paparan);
-                            $data1[$i]['hasil'] = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
-                            $data1[$i]['no_sampel'] = $val->lapangan_getaran_personal->no_sampel;
-                            $data1[$i]['sumber_get'] = $val->lapangan_getaran_personal->sumber_getaran;
-                            $data1[$i]['keterangan'] = $val->lapangan_getaran_personal->keterangan . ' (' . $val->lapangan_getaran_personal->nama_pekerja . ')';
-                            $data1[$i]['nab'] = $val->ws_udara->nab;
-                            $data1[$i]['tipe_getaran'] = 'getaran personal';
-                        } else {
-                            $hasilWs = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
-                            $data1[$i]['no_sampel'] = $val->lapangan_getaran->no_sampel;
-                            $data1[$i]['keterangan'] = $val->lapangan_getaran->keterangan . ' (' . $val->lapangan_getaran->nama_pekerja . ')';
-                            $data1[$i]['tipe_getaran'] = 'getaran';
-                            $data1[$i]['kecepatan'] = $hasilWs->Kecepatan;
-                            $data1[$i]['percepatan'] = $hasilWs->Percepatan;
-                        }
+    //             $orders = OrderDetail::where('cfr', $request->cfr)
+    //                 ->where('is_approve', 0)
+    //                 ->where('is_active', true)
+    //                 ->where('kategori_2', '4-Udara')
+    //                 ->where('kategori_3', $request->kategori_3)
+    //                 ->where('status', 2)
+    //                 ->pluck('no_sampel');
+    //             $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+    //                 ->whereIn('no_sampel', $orders)
+    //                 ->where('is_approve', 1)
+    //                 ->where('is_active', 1)
+    //                 ->where('lhps', 1)
+    //                 ->get();
+    //             $i = 0;
+    //             if ($data->isNotEmpty()) {
+    //                 foreach ($data as $val) {
+    //                     $data1[$i]['id'] = $val->id;
+    //                     $data1[$i]['parameter'] = $val->parameter;
+    //                     $data1[$i]['satuan'] = $val->master_parameter->satuan;
+    //                     $data1[$i]['methode'] = $val->master_parameter->method; 
+    //                     $data1[$i]['status'] = $val->master_parameter->status;
+    //                     if ($val->parameter == "Getaran (LK) ST" || $val->parameter == "Getaran (LK) TL") {
+    //                         $data1[$i]['w_paparan'] = json_decode($val->lapangan_getaran_personal->durasi_paparan);
+    //                         $data1[$i]['hasil'] = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
+    //                         $data1[$i]['no_sampel'] = $val->lapangan_getaran_personal->no_sampel;
+    //                         $data1[$i]['sumber_get'] = $val->lapangan_getaran_personal->sumber_getaran;
+    //                         $data1[$i]['keterangan'] = $val->lapangan_getaran_personal->keterangan . ' (' . $val->lapangan_getaran_personal->nama_pekerja . ')';
+    //                         $data1[$i]['nab'] = $val->ws_udara->nab;
+    //                         $data1[$i]['tipe_getaran'] = 'getaran personal';
+    //                     } else {
+    //                         $hasilWs = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
+    //                         $data1[$i]['no_sampel'] = $val->lapangan_getaran->no_sampel;
+    //                         $data1[$i]['keterangan'] = $val->lapangan_getaran->keterangan . ' (' . $val->lapangan_getaran->nama_pekerja . ')';
+    //                         $data1[$i]['tipe_getaran'] = 'getaran';
+    //                         $data1[$i]['kecepatan'] = $hasilWs->Kecepatan;
+    //                         $data1[$i]['percepatan'] = $hasilWs->Percepatan;
+    //                     }
                         
                         
 
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
+    //                     $i++;
+    //                 }
+    //                 $hasil[] = $data1;
+    //             }
 
-                $data_all = [];
-                $a = 0;
-                foreach ($hasil as $key => $value) {
-                    foreach ($value as $row => $col) {
-                        if (!in_array($col['no_sampel'], $existingSamples)) {
-                            $col['status'] = 'belom_diadjust';
-                            $data_all[$a] = $col;
-                            $a++;
-                        }
-                    }
-                }
+    //             $data_all = [];
+    //             $a = 0;
+    //             foreach ($hasil as $key => $value) {
+    //                 foreach ($value as $row => $col) {
+    //                     if (!in_array($col['no_sampel'], $existingSamples)) {
+    //                         $col['status'] = 'belom_diadjust';
+    //                         $data_all[$a] = $col;
+    //                         $a++;
+    //                     }
+    //                 }
+    //             }
 
-                // gabungkan dengan detail
-                foreach ($data_all as $key => $value) {
-                    $detail[] = $value;
-                }
+    //             // gabungkan dengan detail
+    //             foreach ($data_all as $key => $value) {
+    //                 $detail[] = $value;
+    //             }
 
-                return response()->json([
-                    'data' => $cekLhp,
-                    'detail' => $detail,
-                    'success' => true,
-                    'status' => 200,
-                    'message' => 'Data berhasil diambil'
-                ], 201);  
-            } else {
-                $data = array();
-                $data1 = array();
-                $hasil = [];
-                $orders = OrderDetail::where('cfr', $request->cfr)
-                    ->where('is_approve', 0)
-                    ->where('is_active', true)
-                    ->where('kategori_2', '4-Udara')
-                    ->where('kategori_3', $request->kategori_3)
-                    ->where('status', 2)
-                    ->pluck('no_sampel');
+    //             return response()->json([
+    //                 'data' => $cekLhp,
+    //                 'detail' => $detail,
+    //                 'success' => true,
+    //                 'status' => 200,
+    //                 'message' => 'Data berhasil diambil'
+    //             ], 201);  
+    //         } else {
+    //             $data = array();
+    //             $data1 = array();
+    //             $hasil = [];
+    //             $orders = OrderDetail::where('cfr', $request->cfr)
+    //                 ->where('is_approve', 0)
+    //                 ->where('is_active', true)
+    //                 ->where('kategori_2', '4-Udara')
+    //                 ->where('kategori_3', $request->kategori_3)
+    //                 ->where('status', 2)
+    //                 ->pluck('no_sampel');
 
-                  $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
-                    ->whereIn('no_sampel', $orders)
-                    ->where('is_approve', 1)
-                    ->where('is_active', 1)
-                    ->where('lhps', 1)
-                    ->get();
+    //               $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+    //                 ->whereIn('no_sampel', $orders)
+    //                 ->where('is_approve', 1)
+    //                 ->where('is_active', 1)
+    //                 ->where('lhps', 1)
+    //                 ->get();
 
-                $i = 0;
-                if ($data->isNotEmpty()) {
-                    foreach ($data as  $val) {
-                    $data1[$i]['id'] = $val->id;
-                    $data1[$i]['parameter'] = $val->parameter;
-                    $data1[$i]['satuan'] = $val->master_parameter->satuan;
-                    $data1[$i]['hasil'] = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
-                    $data1[$i]['hasil2'] = $val->ws_udara->hasil2;
-                    $data1[$i]['hasil3'] = $val->ws_udara->hasil3;
-                    $data1[$i]['methode'] = $val->master_parameter->method; 
+    //             $i = 0;
+    //             if ($data->isNotEmpty()) {
+    //                 foreach ($data as  $val) {
+    //                 $data1[$i]['id'] = $val->id;
+    //                 $data1[$i]['parameter'] = $val->parameter;
+    //                 $data1[$i]['satuan'] = $val->master_parameter->satuan;
+    //                 $data1[$i]['hasil'] = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
+    //                 $data1[$i]['hasil2'] = $val->ws_udara->hasil2;
+    //                 $data1[$i]['hasil3'] = $val->ws_udara->hasil3;
+    //                 $data1[$i]['methode'] = $val->master_parameter->method; 
 
-                    $data1[$i]['status'] = $val->master_parameter->status;
-                    if ($val->parameter == "Getaran (LK) ST" || $val->parameter == "Getaran (LK) TL") {
-                        // $data1[$i]['data_lapangan'] = $val->lapangan_getaran_personal;
-                        // $data1[$i]['data_lapangan']->durasi_paparan = json_decode($val->lapangan_getaran_personal->durasi_paparan);
-                        $data1[$i]['w_paparan'] = json_decode($val->lapangan_getaran_personal->durasi_paparan);
-                        $data1[$i]['no_sampel'] = $val->lapangan_getaran_personal->no_sampel;
-                        $data1[$i]['sumber_get'] = $val->lapangan_getaran_personal->sumber_getaran;
-                        $data1[$i]['keterangan'] = $val->lapangan_getaran_personal->keterangan . ' (' . $val->lapangan_getaran_personal->nama_pekerja . ')';
-                        $data1[$i]['nab'] = $val->ws_udara->nab;
-                        $data1[$i]['tipe_getaran'] = 'getaran personal';
-                    } else {
-                       $hasilWs = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
-                        $data1[$i]['no_sampel'] = $val->lapangan_getaran->no_sampel;
-                        $data1[$i]['keterangan'] = $val->lapangan_getaran->keterangan . ' (' . $val->lapangan_getaran->nama_pekerja . ')';
-                        $data1[$i]['tipe_getaran'] = 'getaran';
-                        $data1[$i]['kecepatan'] = $hasilWs->Kecepatan;
-                        $data1[$i]['percepatan'] = $hasilWs->Percepatan;
-                    }
+    //                 $data1[$i]['status'] = $val->master_parameter->status;
+    //                 if ($val->parameter == "Getaran (LK) ST" || $val->parameter == "Getaran (LK) TL") {
+    //                     // $data1[$i]['data_lapangan'] = $val->lapangan_getaran_personal;
+    //                     // $data1[$i]['data_lapangan']->durasi_paparan = json_decode($val->lapangan_getaran_personal->durasi_paparan);
+    //                     $data1[$i]['w_paparan'] = json_decode($val->lapangan_getaran_personal->durasi_paparan);
+    //                     $data1[$i]['no_sampel'] = $val->lapangan_getaran_personal->no_sampel;
+    //                     $data1[$i]['sumber_get'] = $val->lapangan_getaran_personal->sumber_getaran;
+    //                     $data1[$i]['keterangan'] = $val->lapangan_getaran_personal->keterangan . ' (' . $val->lapangan_getaran_personal->nama_pekerja . ')';
+    //                     $data1[$i]['nab'] = $val->ws_udara->nab;
+    //                     $data1[$i]['tipe_getaran'] = 'getaran personal';
+    //                 } else {
+    //                    $hasilWs = ($val->ws_udara->hasil1 != null) ? json_decode($val->ws_udara->hasil1) : '';
+    //                     $data1[$i]['no_sampel'] = $val->lapangan_getaran->no_sampel;
+    //                     $data1[$i]['keterangan'] = $val->lapangan_getaran->keterangan . ' (' . $val->lapangan_getaran->nama_pekerja . ')';
+    //                     $data1[$i]['tipe_getaran'] = 'getaran';
+    //                     $data1[$i]['kecepatan'] = $hasilWs->Kecepatan;
+    //                     $data1[$i]['percepatan'] = $hasilWs->Percepatan;
+    //                 }
                        
 
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
+    //                     $i++;
+    //                 }
+    //                 $hasil[] = $data1;
+    //             }
 
-                $data_all = array();
-                $a = 0;
-                foreach ($hasil as $key => $value) {
-                    foreach ($value as $row => $col) {
-                        $data_all[$a] = $col;
-                        $a++;
-                    }
-                }
+    //             $data_all = array();
+    //             $a = 0;
+    //             foreach ($hasil as $key => $value) {
+    //                 foreach ($value as $row => $col) {
+    //                     $data_all[$a] = $col;
+    //                     $a++;
+    //                 }
+    //             }
 
-                return response()->json([
-                    'data' => [],
-                    'detail' => $data_all,
-                    'status' => 200,
-                    'success' => true,
-                    'message' => 'Data berhasil diambil'
-                ], 201);
+    //             return response()->json([
+    //                 'data' => [],
+    //                 'detail' => $data_all,
+    //                 'status' => 200,
+    //                 'success' => true,
+    //                 'message' => 'Data berhasil diambil'
+    //             ], 201);
+    //         }
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         dd($e);
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Terjadi kesalahan ' . $e->getMessage(),
+    //             'getLine' => $e->getLine(),
+    //             'getFile' => $e->getFile()
+    //         ]);
+    //     }
+    // }
+    
+public function handleDatadetail(Request $request)
+{
+    $id_category = explode('-', $request->kategori_3)[0];
+
+    try {
+        $cekLhp = LhpsGetaranHeader::where('no_lhp', $request->cfr)
+            ->where('id_kategori_3', $id_category)
+            ->where('is_active', true)
+            ->first();
+
+        // Ambil order detail
+        $orders = OrderDetail::where([
+                ['cfr', $request->cfr],
+                ['is_approve', 0],
+                ['is_active', true],
+                ['kategori_2', '4-Udara'],
+                ['kategori_3', $request->kategori_3],
+                ['status', 2],
+            ])->pluck('no_sampel');
+
+        // Ambil data getaran
+        $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+            ->whereIn('no_sampel', $orders)
+            ->where([
+                ['is_approve', 1],
+                ['is_active', 1],
+                ['lhps', 1],
+            ])->get();
+
+        // Format data
+        $formattedData = $data->map(function ($val) {
+            $base = [
+                'id'        => $val->id,
+                'parameter' => $val->parameter,
+                'satuan'    => $val->master_parameter->satuan,
+                'methode'   => $val->master_parameter->method,
+                'status'    => $val->master_parameter->status,
+            ];
+
+            if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
+                return array_merge($base, [
+                    'w_paparan'    => json_decode($val->lapangan_getaran_personal->durasi_paparan),
+                    'hasil'        => $val->ws_udara->hasil1 ? json_decode($val->ws_udara->hasil1) : '',
+                    'no_sampel'    => $val->lapangan_getaran_personal->no_sampel,
+                    'sumber_get'   => $val->lapangan_getaran_personal->sumber_getaran,
+                    'keterangan'   => $val->lapangan_getaran_personal->keterangan . ' (' . $val->lapangan_getaran_personal->nama_pekerja . ')',
+                    'nab'          => $val->ws_udara->nab,
+                    'tipe_getaran' => 'getaran personal',
+                ]);
             }
-        } catch (\Exception $e) {
-            DB::rollBack();
-            dd($e);
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $e->getMessage(),
-                'getLine' => $e->getLine(),
-                'getFile' => $e->getFile()
+
+            $hasilWs = $val->ws_udara->hasil1 ? json_decode($val->ws_udara->hasil1) : (object)[];
+
+            return array_merge($base, [
+                'no_sampel'    => $val->lapangan_getaran->no_sampel,
+                'keterangan'   => $val->lapangan_getaran->keterangan . ' (' . $val->lapangan_getaran->nama_pekerja . ')',
+                'tipe_getaran' => 'getaran',
+                'kecepatan'    => $hasilWs->Kecepatan ?? null,
+                'percepatan'   => $hasilWs->Percepatan ?? null,
             ]);
+        });
+
+        // Jika ada LHP, gabungkan dengan existing detail
+        if ($cekLhp) {
+            $detail = LhpsGetaranDetail::where('id_header', $cekLhp->id)->get();
+            $existingSamples = $detail->pluck('no_sampel')->toArray();
+
+            $newData = $formattedData->reject(fn($item) => in_array($item['no_sampel'], $existingSamples))
+                ->map(function ($item) {
+                    $item['status'] = 'belom_diadjust';
+                    return $item;
+                });
+
+            $detail = $detail->merge($newData);
+
+            return response()->json([
+                'data'    => $cekLhp,
+                'detail'  => $detail,
+                'success' => true,
+                'status'  => 200,
+                'message' => 'Data berhasil diambil'
+            ], 201);
         }
+
+        // Jika tidak ada LHP, kirim data saja
+        return response()->json([
+            'data'    => [],
+            'detail'  => $formattedData,
+            'success' => true,
+            'status'  => 200,
+            'message' => 'Data berhasil diambil'
+        ], 201);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status'   => 'error',
+            'message'  => 'Terjadi kesalahan ' . $e->getMessage(),
+            'getLine'  => $e->getLine(),
+            'getFile'  => $e->getFile(),
+        ]);
     }
+}
 
 
       public function handleApprove(Request $request)

@@ -16,6 +16,10 @@ class LhpsLingHeader extends Sector
     {
         return $this->hasMany(LhpsLingDetail::class, 'id_header', 'id');
     }
+    public function lhpsLingCustom()
+    {
+        return $this->hasMany(LhpsLingCustom::class, 'id_header', 'id');
+    }
 
  
 }
