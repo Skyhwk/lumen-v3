@@ -589,18 +589,12 @@ class RenderInvoice
                                             $keterangan_pengujian = $datasp->keterangan_pengujian;
                                             $harga_total = $datasp->harga_total;
 
-                                            $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
-                                        ');
+                                            
                                         } else {
                                             $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
                                             $harga_total = $datasp->harga_satuan * $datasp->jumlah_titik;
 
-                                            $pdf->writeHTML('
-                                                <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
-                                            ');
+                                            
 
                                             if (is_string($datasp->regulasi)) {
                                                 $decodedRegulasi = json_decode($datasp->regulasi, true);
@@ -619,11 +613,7 @@ class RenderInvoice
                                                     $reg = $regulasi[1];
                                                 }
 
-                                                if ($rg == 0) {
-                                                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
-                                                } else {
-                                                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
-                                                }
+                                                
                                             }
                                         }
 
