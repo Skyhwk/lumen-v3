@@ -29,6 +29,9 @@ class SpektroUvVisEmisiController extends Controller
         ->where('emisi_cerobong_header.is_active', true)
         ->where('template_stp', $request->template_stp);
         return Datatables::of($data)
+            ->editColumn('data_analis', function ($data) {
+                return $data->data_analis ? json_decode($data->data_analis, true) : null;
+            })
             ->orderColumn('tanggal_terima', function ($query, $order) {
                 $query->orderBy('tanggal_terima', $order);
             })
@@ -45,17 +48,17 @@ class SpektroUvVisEmisiController extends Controller
                         if (isset($column['search']) && !empty($column['search']['value'])) {
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-                            
+
                             // Skip columns that aren't searchable
                             if (isset($column['searchable']) && $column['searchable'] === 'false') {
                                 continue;
                             }
-                            
+
                             // Special handling for date fields
                             if ($columnName === 'tanggal_terima') {
                                 // Assuming the search value is a date or part of a date
                                 $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            } 
+                            }
                             // Handle created_at separately if needed
                             elseif ($columnName === 'created_at') {
                                 $query->whereDate('created_at', 'like', "%{$searchValue}%");
@@ -74,7 +77,7 @@ class SpektroUvVisEmisiController extends Controller
     }
 
     public function approveData(Request $request){
-        
+
         DB::beginTransaction();
         try {
             $data = EmisiCerobongHeader::where('id', $request->id)->where('is_active', true)->first();

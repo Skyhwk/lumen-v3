@@ -37,7 +37,8 @@
                     <div class="section-title">HASIL ANALISIS SURVEI LANJUTAN GANGGUAN OTOT DAN RANGKA</div>
                     <div class="image-placeholder-container">
                         <div class="image-placeholder">
-                            <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}" alt="Body Map" class="body-map">
+                            <img src="{{ public_path(\'dokumen/img_ergo/gotrak/anatomygontrak.png\') }}" 
+                                 alt="Body Map" class="body-map">
                         </div>
                         <div class="body-parts-list-container">
                             <table class="body-parts-list">
@@ -101,6 +102,11 @@
                     <!-- Reference table -->
                 </div>
             </div>
+        </div>
+        
+        <div class="footer-text">
+            <span>Generated: {{ date("d/m/Y H:i") }}</span>
+            <span>Page 1 of 1</span>
         </div>
     </div>
 </body>

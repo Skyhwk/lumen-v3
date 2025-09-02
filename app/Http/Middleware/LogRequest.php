@@ -41,7 +41,7 @@ class LogRequest
                     'platform' => $platform
                 ];
 
-                Log::channel('log_request')->info('new request : ', $data_req);
+                // Log::channel('log_request')->info('new request : ', $data_req);
 
                 // RequestLog::create([
                 //     'name_req' => $name_req,

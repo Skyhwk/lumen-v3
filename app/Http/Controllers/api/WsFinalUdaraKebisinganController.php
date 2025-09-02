@@ -47,8 +47,8 @@ class WsFinalUdaraKebisinganController extends Controller
 			->whereJsonDoesntContain('parameter', [
 				"318;Psikologi"
 			])
-			// ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			// ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
 			->orderByDesc('max_id');
 

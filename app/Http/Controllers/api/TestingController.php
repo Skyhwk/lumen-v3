@@ -46,7 +46,9 @@ use Yajra\DataTables\Facades\DataTables;
 class TestingController extends Controller
 {
     public function show(Request $request)
+    
     {
+        
         switch ($request->menu) {
             case 'this':
                 dd($this);
@@ -523,113 +525,130 @@ class TestingController extends Controller
                     }
                     return response()->json($allNoSampel);
                 } else if ($request->mode == 'bynosampel') {
-
                     DB::beginTransaction();
                     try {
                         $data = OrderDetail::where('kategori_1', '!=', 'SD')
                             ->whereNull('tanggal_terima')
-                            ->where('no_sampel', $request->no_sampel)
+                            ->whereIn('no_sampel', $request->no_sampel)
                             ->where('is_active', 1)
-                            ->first();
-                        if (!$data) {
+                            ->get();
+
+                        if ($data->isEmpty()) {
                             return response()->json(['error' => 'Data tidak ditemukan'], 404);
                         }
-                        if (explode("-", $data->kategori_2)[1] == 'Air') {
-                            $parameter_names = array_map(function ($p) {
-                                return explode(';', $p)[1];
-                            }, json_decode($data->parameter) ?? []);
 
-                            $id_kategori = explode("-", $data->kategori_2)[0];
-                            $params = HargaParameter::where('id_kategori', $id_kategori)
-                                ->where('is_active', true)
-                                ->whereIn('nama_parameter', $parameter_names)
-                                ->get();
+                        foreach ($data as $value) {
+                            $kategoriParts = explode("-", $value->kategori_2);
+                            $kategoriType  = $kategoriParts[1] ?? null;
+                            $id_kategori   = $kategoriParts[0] ?? null;
 
-                            $param_map = [];
-                            foreach ($params as $param) {
-                                $param_map[$param->nama_parameter] = $param;
-                            }
+                            if ($kategoriType === 'Air') {
+                                // Ambil nama parameter
+                                $parameter_names = array_map(function ($p) {
+                                    return explode(';', $p)[1] ?? null;
+                                }, json_decode($value->parameter, true) ?? []);
 
-                            $botol_volumes = [];
-                            foreach (json_decode($data->parameter) ?? [] as $parameter) {
-                                $param_name = explode(';', $parameter)[1];
-                                if (isset($param_map[$param_name])) {
-                                    $param = $param_map[$param_name];
-                                    if (!isset($botol_volumes[$param->regen])) {
-                                        $botol_volumes[$param->regen] = 0;
+                                // Ambil parameter dari HargaParameter
+                                $params = HargaParameter::where('id_kategori', $id_kategori)
+                                    ->where('is_active', true)
+                                    ->whereIn('nama_parameter', $parameter_names)
+                                    ->get();
+
+                                // Mapping parameter -> object
+                                $param_map = [];
+                                foreach ($params as $param) {
+                                    $param_map[$param->nama_parameter] = $param;
+                                }
+
+                                // Hitung volume botol
+                                $botol_volumes = [];
+                                foreach (json_decode($value->parameter, true) ?? [] as $parameter) {
+                                    $param_name = explode(';', $parameter)[1] ?? null;
+                                    if ($param_name && isset($param_map[$param_name])) {
+                                        $param = $param_map[$param_name];
+                                        if (!isset($botol_volumes[$param->regen])) {
+                                            $botol_volumes[$param->regen] = 0;
+                                        }
+                                        $botol_volumes[$param->regen] += ($param->volume && $param->volume !== '-' )
+                                            ? (float) $param->volume
+                                            : 0;
                                     }
-                                    $botol_volumes[$param->regen] += ($param->volume != "" && $param->volume != "-" && $param->volume != null) ? (float) $param->volume : 0;
                                 }
-                            }
 
-                            // Generate botol dan barcode
-                            $botol = [];
+                                // Generate botol & barcode
+                                $botol = [];
 
-                            $ketentuan_botol = [
-                                'ORI' => 1000,
-                                'H2SO4' => 1000,
-                                'M100' => 100,
-                                'HNO3' => 500,
-                                'M1000' => 1000,
-                                'BENTHOS' => 100
-                            ];
-
-                            foreach ($botol_volumes as $type => $volume) {
-                                $typeUpper = strtoupper($type);
-                                if (!isset($ketentuan_botol[$typeUpper])) {
-                                    // kalau ketentuan botol tidak ditemukan, skip atau kasih default
-                                    continue;
-                                }
-                                $koding = $data->koding_sampling . strtoupper(Str::random(5));
-
-                                // Hitung jumlah botol yang dibutuhkan
-                                $jumlah_botol = ceil($volume / $ketentuan_botol[$typeUpper]);
-
-                                $botol[] = (object) [
-                                    'koding' => $koding,
-                                    'type_botol' => $type,
-                                    'volume' => $volume,
-                                    'file' => $koding . '.png',
-                                    'disiapkan' => (int) $jumlah_botol
+                                $ketentuan_botol = [
+                                    'ORI'     => 1000,
+                                    'H2SO4'   => 1000,
+                                    'M100'    => 100,
+                                    'HNO3'    => 500,
+                                    'M1000'   => 1000,
+                                    'BENTHOS' => 100
                                 ];
 
-                                if (!file_exists(public_path() . '/barcode/botol')) {
-                                    mkdir(public_path() . '/barcode/botol', 0777, true);
-                                }
-
-                                // file_put_contents(public_path() . '/barcode/botol/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
-                                self::generateQR($koding, '/barcode/botol');
-                            }
-
-                            $data->persiapan = json_encode($botol);
-                            $data->save();
-                        } else {
-
-                            if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                                $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
-                                    ->whereIn('parameter', json_decode($data->parameter) ?? [])
-                                    ->where('is_active', 1)
-                                    ->get();
-                                $persiapan = []; // Pastikan inisialisasi array sebelum digunakan
-                                foreach ($cek_ketentuan_parameter as $ketentuan) {
-                                    $koding = $data->koding_sampling . strtoupper(Str::random(5));
-                                    $persiapan[] = [
-                                        'parameter' => \explode(';', $ketentuan->parameter)[1],
-                                        'disiapkan' => $ketentuan->ketentuan,
-                                        'koding' => $koding,
-                                        'file' => $koding . '.png'
-                                    ];
-                                    if (!file_exists(public_path() . '/barcode/penjerap')) {
-                                        mkdir(public_path() . '/barcode/penjerap', 0777, true);
+                                foreach ($botol_volumes as $type => $volume) {
+                                    $typeUpper = strtoupper($type);
+                                    if (!isset($ketentuan_botol[$typeUpper])) {
+                                        // kalau ketentuan botol tidak ditemukan → skip
+                                        continue;
                                     }
-                                    // file_put_contents(public_path() . '/barcode/penjerap/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
-                                    self::generateQR($koding, '/barcode/penjerap');
+
+                                    $koding = $value->koding_sampling . strtoupper(Str::random(5));
+
+                                    // Hitung jumlah botol
+                                    $jumlah_botol = ceil($volume / $ketentuan_botol[$typeUpper]);
+
+                                    $botol[] = (object) [
+                                        'koding'     => $koding,
+                                        'type_botol' => $type,
+                                        'volume'     => $volume,
+                                        'file'       => $koding . '.png',
+                                        'disiapkan'  => (int) $jumlah_botol
+                                    ];
+
+                                    if (!file_exists(public_path('barcode/botol'))) {
+                                        mkdir(public_path('barcode/botol'), 0777, true);
+                                    }
+
+                                    // generate barcode/QR
+                                    self::generateQR($koding, '/barcode/botol');
                                 }
-                                // dd($persiapan, 'persiapan');
-                                $data->persiapan = json_encode($persiapan ?? []);
-                                $data->save();
+
+                                $value->persiapan = json_encode($botol);
+                                $value->save();
+                            } else {
+                                if (in_array($value->kategori_2, ['4-Udara', '5-Emisi'])) {
+                                    $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
+                                        ->whereIn('parameter', json_decode($value->parameter, true) ?? [])
+                                        ->where('is_active', 1)
+                                        ->get();
+
+                                    $persiapan = [];
+                                    foreach ($cek_ketentuan_parameter as $ketentuan) {
+                                        $koding = $value->koding_sampling . strtoupper(Str::random(5));
+
+                                        $persiapan[] = [
+                                            'parameter' => explode(';', $ketentuan->parameter)[1] ?? null,
+                                            'disiapkan' => $ketentuan->ketentuan,
+                                            'koding'    => $koding,
+                                            'file'      => $koding . '.png'
+                                        ];
+
+                                        if (!file_exists(public_path('barcode/penjerap'))) {
+                                            mkdir(public_path('barcode/penjerap'), 0777, true);
+                                        }
+
+                                        // generate barcode/QR
+                                        self::generateQR($koding, '/barcode/penjerap');
+                                    }
+
+                                    $value->persiapan = json_encode($persiapan);
+                                    $value->save();
+                                }
                             }
                         }
+
                         DB::commit();
                         return response()->json(['message' => "berhasil update"], 200);
                     } catch (\Exception $ex) {
