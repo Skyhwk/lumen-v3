@@ -4,258 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian (DRAFT)</title>
-    <style>
-        /* CSS dengan font size yang konsisten - Layout Fixed */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            font-size: 10px; /* Base font size yang konsisten */
-            width: 100%;
-            min-width: 800px; /* Minimum width untuk mempertahankan layout */
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .header h1 {
-            font-size: 12px; /* Dikurangi untuk konsistensi */
-            font-weight: bold;
-            margin: 10px 0;
-            text-decoration: underline;
-        }
-
-        .company-name {
-            font-weight: bold;
-            font-size: 10px; /* Konsisten dengan base */
-            text-align: left;
-            margin-bottom: 10px;
-        }
-
-        .section-title {
-            font-weight: bold;
-            margin: 10px 0 5px 0;
-            font-size: 10px; /* Konsisten dengan base */
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 9px; /* Sedikit lebih kecil untuk tabel */
-            margin-bottom: 10px;
-            table-layout: fixed; /* Fixed table layout */
-        }
-
-        th,
-        td {
-            border: 1px solid black;
-            padding: 3px 5px;
-            text-align: center;
-            vertical-align: middle;
-            font-size: 9px; /* Konsisten untuk semua sel tabel */
-        }
-
-        thead {
-            display: table-header-group;
-        }
-
-        tbody {
-            display: table-row-group;
-        }
-
-        .body-map {
-            width: 80px;
-            height: auto;
-            margin: 5px auto;
-            display: block;
-        }
-
-        .info-section {
-            margin-bottom: 10px;
-        }
-
-        .info-section p {
-            margin: 3px 0;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .info-label {
-            font-weight: normal;
-            width: 120px;
-            float: left;
-            font-size: 9px; /* Konsisten, tidak lagi 10pt */
-        }
-
-        .info-value {
-            display: inline-block;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .customer-info,
-        .sampling-info,
-        .worker-info {
-            margin-left: 0;
-            margin-bottom: 10px;
-        }
-
-        .customer-info h4,
-        .sampling-info h4,
-        .worker-info h4 {
-            margin: 5px 0 2px 0;
-            font-size: 10px; /* Konsisten */
-            font-weight: bold;
-        }
-
-        .risk-table {
-            margin-top: 10px;
-        }
-
-        .left-section p {
-            font-weight: bold;
-            text-align: justify;
-            margin-bottom: 5px;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .table-note {
-            font-size: 8px; /* Tetap kecil untuk catatan */
-            margin-top: 3px;
-            font-style: italic;
-        }
-
-        .job-description {
-            margin-top: 10px;
-        }
-
-        .job-description th {
-            width: 30%;
-            text-align: left;
-            vertical-align: top;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .job-description td {
-            vertical-align: top;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .conclusion-box {
-            border: 1px solid black;
-            padding: 5px;
-            min-height: 30px;
-            margin-top: 5px;
-            margin-bottom: 10px;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .conclusion-box .section-title {
-            margin-top: 0;
-            margin-bottom: 5px;
-            font-size: 10px; /* Konsisten */
-        }
-
-        /* Fixed Layout - Tidak Responsif */
-        .left-section {
-            width: 60%;
-            float: left;
-            box-sizing: border-box;
-            min-width: 60%;
-            max-width: 60%;
-        }
-
-        .right-section {
-            width: 39%;
-            float: right;
-            box-sizing: border-box;
-            min-width: 39%;
-            max-width: 39%;
-        }
-
-        /* Pastikan layout tetap fixed untuk print */
-        @media print {
-            .left-section {
-                width: 60% !important;
-                min-width: 60% !important;
-                max-width: 60% !important;
-            }
-            
-            .right-section {
-                width: 39% !important;
-                min-width: 39% !important;
-                max-width: 39% !important;
-            }
-        }
-
-        .result-header {
-            text-align: center;
-            font-weight: bold;
-            margin: 5px 0;
-            font-size: 9px; /* Konsisten dengan tabel */
-        }
-
-        /* Styling untuk tabel nested SEBELUM/SESUDAH */
-        .nested-table-container {
-            padding: 0;
-        }
-
-        .nested-table {
-            width: 100%;
-            margin: 0;
-            border: none;
-        }
-
-        .nested-table td {
-            border: 1px solid black;
-            width: 50%;
-            text-align: center;
-            font-weight: bold;
-            padding: 3px;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .total-score {
-            font-weight: bold;
-            text-align: center;
-            margin-top: 5px;
-            font-size: 9px; /* Konsisten */
-        }
-
-        .content-container {
-            width: 100%;
-            min-width: 800px; /* Pastikan layout minimum */
-        }
-
-        .clearfix::after {
-            content: "";
-            clear: both;
-            display: table;
-        }
-        
-        .info-header {
-            font-weight: bold;
-            margin-top: 8px;
-            margin-bottom: 3px;
-            font-size: 10px; /* Konsisten, tidak lagi 10pt */
-            clear: both;
-        }
-
-        /* Styling khusus untuk informasi di sisi kanan */
-        .right-section div {
-            font-size: 9px; /* Base untuk right section */
-        }
-
-        .right-section span {
-            font-size: 9px; /* Konsisten untuk semua span */
-        }
-
-        /* Styling untuk div dengan margin-bottom di right section */
-        .right-section div[style*="margin-bottom: 3px"] {
-            margin-bottom: 3px;
-            font-size: 9px; /* Konsisten, tidak lagi 10pt */
-        }
-    </style>
+    @if(!empty($spesifik))
+        <style>{!! $spesifik !!}</style>
+    @endif
 </head>
 <body>
     <div class="header">
@@ -498,12 +249,6 @@
                         </tr>
                 </table>
             </div>
-
-            <p class="table-note">* Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman
-                Teknis Penerapan K3 Penjelasan Tambahan Peraturan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.</p>
-            <p class="table-note">**Tabel Acuan Skor Risiko Mengacu kepada Evaluation of Human Work 3<sup>rd</sup>
-                Edition Chapter 16 : Static Muscle Loading and The Evaluation of Posture by E. Nigel Corlett, 1992.
-            </p>
         </div>
         <div class="right-section">
             <div style="margin-top: 30px;">
@@ -618,6 +363,11 @@
                     </tbody>
                 </table>
             </div>
+            <p class="table-note">* Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman
+                Teknis Penerapan K3 Penjelasan Tambahan Peraturan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.</p>
+            <p class="table-note">**Tabel Acuan Skor Risiko Mengacu kepada Evaluation of Human Work 3<sup>rd</sup>
+                Edition Chapter 16 : Static Muscle Loading and The Evaluation of Posture by E. Nigel Corlett, 1992.
+            </p>
         </div>
     </div>
 </body>
