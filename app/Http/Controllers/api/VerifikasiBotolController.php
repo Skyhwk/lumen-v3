@@ -93,6 +93,7 @@ class VerifikasiBotolController extends Controller
             $persiapan = null;
             $dataDisplay = null;
             $parameters = null;
+            $lapangan = null;
             $categoris = null;
             if (isset($datachek[1])) {
 
@@ -174,7 +175,7 @@ class VerifikasiBotolController extends Controller
             }
 
             if ($scan) {
-                $scanData = json_decode($scan->data_detail, true);
+                $scanData = json_decode($scan->data, true);
                 $scan->data = array_values($scanData);
                 $scan->filename = json_decode($scan->filename);
             }
@@ -249,20 +250,12 @@ class VerifikasiBotolController extends Controller
                         $dokumentasi_lainnya = $result['filename'];
                     }
                 }
-                $isAllReady = true;
-                foreach ($request->data_detail as $detail) {
-                    if ($detail['disiapkan'] > $detail['jumlah']) {
-                        $isAllReady = false;
-                        break;
-                    }
-                }
 
-                if ($isAllReady) {
-                    $ftc = Ftc::where('no_sample', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
-                    $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
-                    $ftc->user_verifier = $this->user_id;
-                    $ftc->save();
-                }
+
+                $ftc = Ftc::where('no_sample', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
+                $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
+                $ftc->user_verifier = $this->user_id;
+                $ftc->save();
 
                 $scanSampelTc = ScanSampelTc::where('no_sampel', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
                 if ($scanSampelTc) {
@@ -270,7 +263,7 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = $isAllReady ? 'lengkap' : 'belum_lengkap';
+                    $scanSampelTc->status = 'lengkap' ;
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -283,7 +276,7 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = $isAllReady ? 'lengkap' : 'belum_lengkap';
+                    $scanSampelTc->status =  'lengkap';
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -292,7 +285,6 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
                 }
-                DB::commit();
             } else {
                 $kondisi_sampel = '';
                 $dokumentasi_lainnya = '';
@@ -327,34 +319,26 @@ class VerifikasiBotolController extends Controller
                     }
                 }
 
-                $isAllReady = true;
-                foreach ($request->data_detail as $detail) {
-                    if ($detail['disiapkan'] > $detail['jumlah']) {
-                        $isAllReady = false;
-                        break;
-                    }
+                $ftc = Ftc::where('no_sample', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
+                if (!$ftc) {
+                    $ftc = new Ftc();
+                    $ftc->no_sample = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
+                    $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
+                    $ftc->user_verifier = $this->user_id;
+                } else {
+                    $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
+                    $ftc->user_verifier = $this->user_id;
                 }
-                if ($isAllReady) {
-                    $ftc = Ftc::where('no_sample', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
-                    if (!$ftc) {
-                        $ftc = new Ftc();
-                        $ftc->no_sample = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
-                        $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
-                        $ftc->user_verifier = $this->user_id;
-                    } else {
-                        $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
-                        $ftc->user_verifier = $this->user_id;
-                    }
 
-                    $ftc->save();
-                }
+                $ftc->save();
+                
 
                 $scanSampelTc = ScanSampelTc::where('no_sampel', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
                 if ($scanSampelTc) {
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = $isAllReady ? 'lengkap' : 'belum_lengkap';
+                    $scanSampelTc->status = 'lengkap' ;
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -367,7 +351,7 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = $isAllReady ? 'lengkap' : 'belum_lengkap';
+                    $scanSampelTc->status = 'lengkap';
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -376,9 +360,10 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
                 }
-                DB::commit();
             }
 
+            DB::commit();
+            
             return response()->json(["message" => "Berhasil disimpan", "code" => 200], 200);
         } catch (\Exception $th) {
             DB::rollBack();
