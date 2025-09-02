@@ -78,14 +78,19 @@ class FdlMethodRwlController extends Controller
 
             foreach ($inputs as $key => $value) {
                 if (strpos($key, 'lokasi_tangan') === 0) {
-                    $label = $key;
-                    $lok[$label] = $value;
+                    // Ambil teks dalam []
+                    if (preg_match('/\[(.*?)\]/', $key, $matches)) {
+                        $subKey = $matches[1]; // contoh: "Vertikal Awal"
+                        $lok[$subKey] = $value;
+                    }
                 }
                 if (strpos($key, 'sudut_asimetris') === 0) {
-                    $label = $key;
-                    $asimetris[$label] = $value;
+                    if (preg_match('/\[(.*?)\]/', $key, $matches)) {
+                        $subKey = $matches[1]; // contoh: "Vertikal Awal"
+                        $asimetris[$subKey] = $value;
+                    }
                 }
-            };
+            }
 
             $A1 = 23;
             $A2 = 23;
@@ -97,6 +102,7 @@ class FdlMethodRwlController extends Controller
             $I2 = $I1;
 
             $J1 = (float)(str_replace(',', '.', $request->frek_jml_angkatan));
+
             if ($J1 < 0.2) {
                 $J1 = 0.2;
             } else if ($J1 > 0.2 && $J1 < 1) {
@@ -106,6 +112,7 @@ class FdlMethodRwlController extends Controller
             } else {
                 $J1 = (int)floor($J1);
             }
+
             $J2 = $J1;
 
             if ($J1 < 0.2) {
@@ -223,8 +230,8 @@ class FdlMethodRwlController extends Controller
             }
 
             $pengukuran = [
-                "lokasi_tangan" => $request->lokasi_tangan,
-                "sudut_asimetris" => $request->sudut_asimetris,
+                "lokasi_tangan" => $lok,
+                "sudut_asimetris" => $asimetris,
                 'nilai_beban_rwl_awal' => $rwl_awal,
                 'nilai_beban_rwl_akhir' => $rwl_akhir,
                 'lifting_index_awal' => $li_awal,
