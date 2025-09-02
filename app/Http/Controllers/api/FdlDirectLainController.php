@@ -153,7 +153,7 @@ class FdlDirectLainController extends Controller
                 ->where('is_approve', 1)
                 ->count();
 
-            $approveCountNeeded = ($shift == '24 Jam') ? 4 : (($shift == '8 Jam' || $shift == '6 Jam') ? 2 : 1);
+            $approveCountNeeded = count($dataLapangan);
 
             // Always approve current record
             $fdl = $initialRecord;
@@ -202,6 +202,7 @@ class FdlDirectLainController extends Controller
                         'id_po' => $po->id,
                         'is_active' => 1,
                         'hasil1' => $data_kalkulasi['hasil'],
+                        'satuan' => $data_kalkulasi['satuan'],
                     ]
                 );
             }

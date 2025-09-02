@@ -10,15 +10,29 @@ class DirectLain {
         $jumlahElemen = 0;
         foreach ($data as $data) {
             $pengukuran = json_decode($data->pengukuran, true); // jadi array
-
             foreach ($pengukuran as $key => $value) {
                 $totalNilai += floatval($value);
                 $jumlahElemen++;
             }
         }
-        $average = $jumlahElemen > 0 ? number_format($totalNilai / $jumlahElemen, 4, '.', ',') : 0;
+        $paramKoma2 = ["O2 (UA)", "O2 (LK)"];
+        $paramMg = ["CO (mg-LK)"];
+        if (in_array($data->parameter, $paramKoma2)) {
+            $angkaBelakangKoma = 2;
+            $satuan = '%';  
+        } else {
+            if (in_array($data->parameter, $paramMg)) {
+                $satuan = 'mg/m3';
+            }
+            $angkaBelakangKoma = 4;
+            $satuan = 'PPM';
+        }
+
+        $average = $jumlahElemen > 0 ? number_format($totalNilai / $jumlahElemen, $angkaBelakangKoma, '.', ',') : 0;
         return [
-            'hasil' => $average
+            'hasil' => $average,
+            'satuan' => $satuan
         ];
+
     }
 }
