@@ -96,7 +96,7 @@ class FdlMethodRwlController extends Controller
             $I1 = (float)($request->berat_beban);
             $I2 = $I1;
 
-            $J1 = (float)($request->frek_jml_angkatan);
+            $J1 = (float)(str_replace(',', '.', $request->frek_jml_angkatan));
             if ($J1 < 0.2) {
                 $J1 = 0.2;
             } else if ($J1 > 0.2 && $J1 < 1) {
@@ -273,7 +273,7 @@ class FdlMethodRwlController extends Controller
             $data->method = 5;
             $data->berat_beban = $request->berat_beban;
             $data->pengukuran = json_encode($pengukuran);
-            $data->frekuensi_jumlah_angkatan = $request->frek_jml_angkatan;
+            $data->frekuensi_jumlah_angkatan = str_replace(',', '.', $request->frek_jml_angkatan);
             $data->kopling_tangan = $request->kopling_tangan;
             $data->jarak_vertikal = $request->jarak_vertikal;
             $data->durasi_jam_kerja = $request->durasi_jam_kerja;
