@@ -890,7 +890,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 $no++;
                             } else {
                                 if (
@@ -1297,7 +1297,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
                                     $cek_detail->regulasi != json_encode($value->regulasi) ||
@@ -1734,7 +1734,7 @@ class ReadyOrderController extends Controller
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else {
                                     if (count($value->parameter) == 1) {
-                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                             $no++;
                                         } else {
                                             if (
@@ -2131,7 +2131,7 @@ class ReadyOrderController extends Controller
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 // dump($cek_detail);
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
@@ -2471,52 +2471,61 @@ class ReadyOrderController extends Controller
         return $filename;
     }
 
+    private function directParamExclude ($value){
+        $array = [
+            "230;Ergonomi",
+            "2188;Ergonomi (GO-LK)",
+            "2116;Ergonomi (GS-LK)"
+        ];
+
+        return in_array($value, $array);
+    }
+
     private function cekParamDirect($value)
     {
-        $array = ["230;Ergonomi",
-        "2188;Ergonomi (GO-LK)",
-        "2116;Ergonomi (GS-LK)",
-        "268;Kebisingan",
-        "269;Kebisingan (24 Jam)",
-        "270;Kebisingan (8 Jam)",
-        "2136;Kebisingan SS (LK)",
-        "2137;Kebisingan SS (UA)",
-        "2234;Kebisingan 24J (UA)",
-        "2235;Kebisingan 8J (LK)",
-        "271;Kebisingan (P8J)",
-        "2236;Kebisingan PR 8J (LK)",
-        "2118;Getaran Bangunan (UA-m)",
-        "2119;Getaran Bangunan (UA-mm)",
-        "2120;Getaran Lingkungan (UA-m)",
-        "2121;Getaran Lingkungan (UA-mm)",
-        "242;Getaran",
-        "243;Getaran (LK) ST",
-        "244;Getaran (LK) TL",
-        "264;ISBB",
-        "2231;ISBB SS",
-        "2232;ISBB 8J",
-        "265;ISBB (8 Jam)",
-        "616;Iklim Kerja Dingin (Cold Stress) - 8 Jam",
-        "628;IKD (CS)",
-        "2134;IKD 8J (LK-mp)",
-        "2135;IKD SS (LK-mp)",
-        "2284;IKD 8J (LK-°C)",
-        "2286;IKD SS (LK-°C)",
-        "272;Kelembaban",
-        "275;Laju Ventilasi",
-        "333;Suhu",
-        "580;Laju Ventilasi (8 Jam)",
-        "2281;Laju Ventilasi 8J",
-        "1193;Pertukaran Udara",
-        "2175;Tekanan Udara (LK)",
-        "2176;Tekanan Udara (UA)",
-        "277;Medan Listrik",
-        "316;Power Density",
-        "563;Medan Magnit Statis",
-        "2117;Frekuensi Radio (LK)",
-        "236;Gelombang Elektro",
-        "324;Sinar UV",
-        "309;Pencahayaan"];
+        $array = [
+            "268;Kebisingan",
+            "269;Kebisingan (24 Jam)",
+            "270;Kebisingan (8 Jam)",
+            "2136;Kebisingan SS (LK)",
+            "2137;Kebisingan SS (UA)",
+            "2234;Kebisingan 24J (UA)",
+            "2235;Kebisingan 8J (LK)",
+            "271;Kebisingan (P8J)",
+            "2236;Kebisingan PR 8J (LK)",
+            "2118;Getaran Bangunan (UA-m)",
+            "2119;Getaran Bangunan (UA-mm)",
+            "2120;Getaran Lingkungan (UA-m)",
+            "2121;Getaran Lingkungan (UA-mm)",
+            "242;Getaran",
+            "243;Getaran (LK) ST",
+            "244;Getaran (LK) TL",
+            "264;ISBB",
+            "2231;ISBB SS",
+            "2232;ISBB 8J",
+            "265;ISBB (8 Jam)",
+            "616;Iklim Kerja Dingin (Cold Stress) - 8 Jam",
+            "628;IKD (CS)",
+            "2134;IKD 8J (LK-mp)",
+            "2135;IKD SS (LK-mp)",
+            "2284;IKD 8J (LK-°C)",
+            "2286;IKD SS (LK-°C)",
+            "272;Kelembaban",
+            "275;Laju Ventilasi",
+            "333;Suhu",
+            "580;Laju Ventilasi (8 Jam)",
+            "2281;Laju Ventilasi 8J",
+            "1193;Pertukaran Udara",
+            "2175;Tekanan Udara (LK)",
+            "2176;Tekanan Udara (UA)",
+            "277;Medan Listrik",
+            "316;Power Density",
+            "563;Medan Magnit Statis",
+            "2117;Frekuensi Radio (LK)",
+            "236;Gelombang Elektro",
+            "324;Sinar UV",
+            "309;Pencahayaan"
+        ];
 
         return in_array($value, $array);
     }
