@@ -8038,7 +8038,7 @@ class AppsFdlController extends Controller
                 $data->method = $request->method;
                 $data->berat_beban = $request->berat_beban;
                 $data->pengukuran = json_encode($pengukuran);
-                $data->frekuensi_jumlah_angkatan = $request->frek_jml_angkatan;
+                $data->frekuensi_jumlah_angkatan = str_replace(',', '.', $request->frek_jml_angkatan);
                 $data->kopling_tangan = $request->kopling_tangan;
                 $data->jarak_vertikal = $request->jarak_vertikal;
                 $data->durasi_jam_kerja = $request->durasi_jam_kerja;
