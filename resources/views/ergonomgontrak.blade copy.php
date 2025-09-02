@@ -3,14 +3,238 @@
 <head>
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian (DRAFT)</title>
-   
-    @if(!empty($cssGlobal))
-        <style>{!! $cssGlobal !!}</style>
-    @endif
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-    @if(!empty($spesifik))
-        <style>{!! $spesifik !!}</style>
-    @endif
+        body {
+            font-family: Arial, sans-serif;
+            margin: 15px;
+            font-size: 9px;
+            background-color: #f9f9f9;
+        }
+
+        .page-container {
+            width: 100%;
+            margin: auto;
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ccc;
+        }
+
+        .main-header-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-decoration: underline;
+        }
+
+        .two-column-layout {
+            width: 100%;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .column {
+            float: left;
+        }
+
+        .column-left {
+            width: 60%;
+            padding-right: 10px;
+        }
+
+        .column-right {
+            width: 30%;
+        }
+
+        .section {
+            border: 1px solid #000;
+            padding: 6px;
+            background-color: #fff;
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            background-color: #e0e0e0;
+            padding: 3px 6px;
+            margin: -6px -6px 6px -6px;
+            border-bottom: 1px solid #000;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+            table-layout: fixed;
+        }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 3px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .text-input-space {
+            width: 100%;
+            border: 1px solid #ccc;
+            padding: 2px;
+            min-height: 1.5em;
+            background-color: #fff;
+        }
+
+        .multi-line-input {
+            width: 100%;
+            border: 1px solid #000;
+            padding: 4px;
+            min-height: 40px;
+            background-color: #fff;
+        }
+
+        .footer-text {
+            font-size: 0.85em;
+            margin-top: 15px;
+            border-top: 1px solid #ccc;
+            padding-top: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .signature-block {
+            margin-top: 15px;
+            text-align: right;
+        }
+
+        .signature-block .signature-name {
+            margin-top: 30px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        .interpretasi-table td { text-align: center; }
+        .interpretasi-table td:last-child { text-align: left; }
+
+        .uraian-tugas-table td { height: 1.8em; }
+
+        /* Container gabungan antara gambar & daftar - menggunakan float */
+        .image-placeholder-container {
+            width: 100%;
+            margin-top: 10px;
+            overflow: hidden; /* Clearfix untuk float */
+            min-height: 350px; /* Minimum height untuk container */
+        }
+
+        /* Placeholder Gambar Tubuh - float left */
+        .image-placeholder {
+            width: 180px;
+            height: 330px;
+            border: 1px solid #000;
+            text-align: center;
+            font-size: 10px;
+            line-height: 1.4;
+            padding: 5px;
+            float: left;
+            vertical-align: top; /* Alignment ke atas */
+            margin-right: 20px; /* Jarak ke kanan */
+            box-sizing: border-box;
+            overflow: hidden; /* Mencegah gambar keluar dari container */
+            position: relative; /* Untuk positioning gambar */
+        }
+
+        .body-map {
+           width: 180px;
+           height: 330px;
+        }
+
+        /* Daftar bagian tubuh - float right dengan width yang tersisa */
+        .body-parts-list-container {
+            float: left;
+            width: calc(100% - 220px); /* Total width - (image width + margin) */
+            
+        }
+
+        /* Styling untuk tabel daftar bagian tubuh */
+        .body-parts-list {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px;
+            margin-bottom: 15px;
+        }
+
+        .body-parts-list td {
+            padding: 3px 5px;
+            border: 1px solid #000;
+            vertical-align: middle;
+        }
+
+        .body-parts-list td:first-child {
+            width: 70%;
+            text-align: left;
+        }
+
+        .body-parts-list td:last-child {
+            width: 30%;
+            text-align: center;
+        }
+
+        .input-line {
+            /* border-bottom: 1px solid #000;
+            min-height: 16px;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold; */
+        }
+
+        /* Styling untuk section dalam container */
+        .body-parts-list-container .section {
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+
+        .body-parts-list-container .section-title {
+            text-align: left;
+            font-size: 9px;
+            margin-bottom: 5px;
+        }
+
+        .body-parts-list-container .section div:not(.section-title) {
+            font-size: 9px;
+            line-height: 1.3;
+            text-align: justify;
+            padding: 5px;
+            border: 1px solid #000;
+        }
+
+        /* Clearfix untuk memastikan container tidak collapse */
+        .image-placeholder-container::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        /* Styling khusus untuk konten dalam box */
+        .analysis-content {
+            min-height: 80px;
+            padding: 5px;
+            border: 1px solid #000;
+        }
+
+        .conclusion-content {
+            min-height: 40px;
+            padding: 5px;
+            border: 1px solid #000;
+        }
+    </style>
 </head>
 <body>
     <div class="page-container">
@@ -269,4 +493,3 @@
     </div>
 </body>
 </html>
-

@@ -434,7 +434,12 @@ class DokumenFdlController extends Controller
                                                 $props = get_object_vars($pt);
                                                 $nomor = key($props);
                                                 $titik = $props[$nomor];
-                                                $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                                                // $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . empty($ds->regulasi) ? json_encode([]) : json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                                                $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . (
+                                                    empty($ds->regulasi) 
+                                                        ? json_encode([]) 
+                                                        : json_encode($ds->regulasi)
+                                                ) . ';' . json_encode($ds->parameter);
                                                 // dd($fullGroupKey);
                                                 $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
                                                     $nomor => $titik

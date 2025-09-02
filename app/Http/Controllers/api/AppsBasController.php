@@ -2338,8 +2338,8 @@ class AppsBasController extends Controller
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
-                if ($parameter['parameter'] == 'Gelombang Elektro') {
-                    continue; // Skip Gelombang Elektro
+                if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
+                    continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                 }
 
                 $verified = $this->verifyStatus($sample->no_sample, $parameter);
@@ -2541,6 +2541,13 @@ class AppsBasController extends Controller
                 "requiredCount" => 2,
                 "category" => "4-Udara",
                 "model" => DataLapanganDebuPersonal::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "N-Propil Asetat (SC)",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
                 "model2" => null
             ],
             [
