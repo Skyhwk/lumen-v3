@@ -7874,7 +7874,7 @@ class AppsFdlController extends Controller
                 $I1 = (float)($request->berat_beban);
                 $I2 = $I1;
 
-                $J1 = (float)($request->frek_jml_angkatan);
+                $J1 = (float)(str_replace(',', '.', $request->frek_jml_angkatan));
                 if($J1 < 0.2){
                     $J1 = 0.2;
                 }else if($J1 > 0.2 && $J1 < 1){
