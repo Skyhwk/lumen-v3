@@ -479,9 +479,8 @@ class ReadyOrderController extends Controller
                 }
             }
         } catch (\Throwable $th) {
-
             return response()->json([
-                'message' => 'Generate Order Non Kontrak Failed: ' . $th->getMessage() . ' - ' . $th->getLine(),
+                'message' => 'Generate Order Non Kontrak Failed: ' . $th->getMessage() . ' on file ' . $th->getFile() . ' on line ' . $th->getLine(),
                 'status' => 401
             ], 401);
         }
@@ -863,9 +862,35 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                        $no++;
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no++;
+                        } else {
+                            if(count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
+
+                            } else {
+                                $no++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                    } else if ($value->kategori_1 == '5-Emisi' && in_array($value->kategori_2, ['31-Emisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'])) {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no++;
+                        } else {
+                            if (
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) == json_encode($value->regulasi) && count($parameter) != count($value->parameter)) ||
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) != json_encode($value->regulasi))
+                            ) {
+                                $no++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
                                 $no++;
                             } else {
                                 if (
@@ -1219,9 +1244,9 @@ class ReadyOrderController extends Controller
                 $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
                 $n = $no_urut_sample + 1;
                 $trigger = 0;
-                $kategori = '';
-                $regulasi = [];
-                $parameter = [];
+                $kategori = $cek_detail->kategori_3;
+                $regulasi = json_decode($cek_detail->regulasi) ?? [];
+                $parameter = json_decode($cek_detail->parameter) ?? [];
                 foreach ($penambahan_data as $key => $changes) {
                     $value = (object) $detail_baru[$changes];
 
@@ -1244,9 +1269,35 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                        $no_urut_cfr++;
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no_urut_cfr++;
+                        } else {
+                            if(count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
+
+                            } else {
+                                $no_urut_cfr++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == '5-Emisi' && in_array($value->kategori_2, ['31-Emisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'])) {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no_urut_cfr++;
+                        } else {
+                            if (
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) == json_encode($value->regulasi) && count($parameter) != count($value->parameter)) ||
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) != json_encode($value->regulasi))
+                            ) {
+                                $no_urut_cfr++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
                                     $cek_detail->regulasi != json_encode($value->regulasi) ||
@@ -1655,9 +1706,35 @@ class ReadyOrderController extends Controller
                                 if ($value->kategori_1 == '1-Air') {
                                     $no++;
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                                } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                                    $no++;
+                                    $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                                } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
+                                    if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                                        $no++;
+                                    } else {
+                                        if(count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
+            
+                                        } else {
+                                            $no++;
+                                        }
+                                    }
+                                    $no_cfr = $no_order . '/' . sprintf("%03d", $no);
+                                } else if ($value->kategori_1 == '5-Emisi' && in_array($value->kategori_2, ['31-Emisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'])) {
+                                    if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                                        $no++;
+                                    } else {
+                                        if (
+                                            ($kategori == $value->kategori_2 && json_encode($regulasi) == json_encode($value->regulasi) && count($parameter) != count($value->parameter)) ||
+                                            ($kategori == $value->kategori_2 && json_encode($regulasi) != json_encode($value->regulasi))
+                                        ) {
+                                            $no++;
+                                        }
+                                    }
+                                    $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else {
                                     if (count($value->parameter) == 1) {
-                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames)) {
+                                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
                                             $no++;
                                         } else {
                                             if (
@@ -2000,8 +2077,8 @@ class ReadyOrderController extends Controller
                 $no = $no_urut_sample;
                 $trigger = 0;
                 $kategori = '';
-                $regulasi = [];
-                $parameter = [];
+                $regulasi = $cek_detail->regulasi ?? [];
+                $parameter = $cek_detail->parameter ?? [];
                 $oldPeriode = '';
                 $mark = [];
                 foreach ($penambahan_data as $changes) {
@@ -2026,9 +2103,35 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                        $no_urut_cfr++;
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no_urut_cfr++;
+                        } else {
+                            if(count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
+
+                            } else {
+                                $no_urut_cfr++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
+                    } else if ($value->kategori_1 == '5-Emisi' && in_array($value->kategori_2, ['31-Emisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'])) {
+                        if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
+                            $no_urut_cfr++;
+                        } else {
+                            if (
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) == json_encode($value->regulasi) && count($parameter) != count($value->parameter)) ||
+                                ($kategori == $value->kategori_2 && json_encode($regulasi) != json_encode($value->regulasi))
+                            ) {
+                                $no_urut_cfr++;
+                            }
+                        }
+                        $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else {
                         if (count($value->parameter) == 1) {
-                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames)) {
+                            if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || in_array('Ergonomi', $parameterNames) || in_array('Ergonomi (GS-LK)', $parameterNames) || in_array('Ergonomi (GO-LK)', $parameterNames)) {
                                 // dump($cek_detail);
                                 if (
                                     $cek_detail->kategori_3 != $value->kategori_2 ||
@@ -2366,5 +2469,55 @@ class ReadyOrderController extends Controller
         QrCode::format('png')->size(200)->generate($no_sampel, $path);
 
         return $filename;
+    }
+
+    private function cekParamDirect($value)
+    {
+        $array = ["230;Ergonomi",
+        "2188;Ergonomi (GO-LK)",
+        "2116;Ergonomi (GS-LK)",
+        "268;Kebisingan",
+        "269;Kebisingan (24 Jam)",
+        "270;Kebisingan (8 Jam)",
+        "2136;Kebisingan SS (LK)",
+        "2137;Kebisingan SS (UA)",
+        "2234;Kebisingan 24J (UA)",
+        "2235;Kebisingan 8J (LK)",
+        "271;Kebisingan (P8J)",
+        "2236;Kebisingan PR 8J (LK)",
+        "2118;Getaran Bangunan (UA-m)",
+        "2119;Getaran Bangunan (UA-mm)",
+        "2120;Getaran Lingkungan (UA-m)",
+        "2121;Getaran Lingkungan (UA-mm)",
+        "242;Getaran",
+        "243;Getaran (LK) ST",
+        "244;Getaran (LK) TL",
+        "264;ISBB",
+        "2231;ISBB SS",
+        "2232;ISBB 8J",
+        "265;ISBB (8 Jam)",
+        "616;Iklim Kerja Dingin (Cold Stress) - 8 Jam",
+        "628;IKD (CS)",
+        "2134;IKD 8J (LK-mp)",
+        "2135;IKD SS (LK-mp)",
+        "2284;IKD 8J (LK-°C)",
+        "2286;IKD SS (LK-°C)",
+        "272;Kelembaban",
+        "275;Laju Ventilasi",
+        "333;Suhu",
+        "580;Laju Ventilasi (8 Jam)",
+        "2281;Laju Ventilasi 8J",
+        "1193;Pertukaran Udara",
+        "2175;Tekanan Udara (LK)",
+        "2176;Tekanan Udara (UA)",
+        "277;Medan Listrik",
+        "316;Power Density",
+        "563;Medan Magnit Statis",
+        "2117;Frekuensi Radio (LK)",
+        "236;Gelombang Elektro",
+        "324;Sinar UV",
+        "309;Pencahayaan"];
+
+        return in_array($value, $array);
     }
 }
