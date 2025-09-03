@@ -35,7 +35,7 @@
         }
         
         .header-title {
-            font-size: 12pt;
+            font-size: 12px;
             text-align: center;
             font-weight: bold;
             font-family: Arial, sans-serif;
@@ -107,11 +107,8 @@
     <!-- Header -->
     <table class="main-table">
         <tr>
-            <td colspan="4" class="header-company">PT INTI SURYA LABORATORIUM</td>
-        </tr>
-        <tr>
             <td colspan="4" class="header-title">
-                <u>LAPORAN HASIL PENGUJIAN (DRAFT)</u>
+                <u>LAPORAN HASIL PENGUJIAN</u>
             </td>
         </tr>
     </table>

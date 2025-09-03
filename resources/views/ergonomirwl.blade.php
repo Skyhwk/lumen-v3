@@ -3,29 +3,27 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian (DRAFT)</title>
+    <title>Laporan Hasil Pengujian</title>
     <style>
         /* --- CSS Anda --- */
         body {
             font-family: Arial, sans-serif;
             font-size: 11pt;
-            background-color: white;
         }
 
         .container {
             width: 100%;
             position: relative;
             box-sizing: border-box;
-            border: 1px solid #000;
             padding: 11px;
         }
 
         h1 {
             text-align: center;
-            font-size: 16pt;
+            font-size: 12px;
             font-weight: bold;
             text-decoration: underline;
-            margin-bottom: 15px;
+            margin-bottom: 5px;
         }
 
         .header-text {
@@ -192,7 +190,7 @@
 
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN</h1>
 
         <div class="content-layout clearfix">
             <div class="column-left">
@@ -211,23 +209,23 @@
                         <tr>
                             <td>1</td>
                             <td class="text-left">Jarak Tangan Horizontal (cm)</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{ $pengukuran->lokasi_tangan->{'Horizontal Awal'}  }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->{'Horizontal Akhir'} }}</td>
                             <td class="text-left">Jarak horizontal/proyeksi tangan yang memegang beban dengan titik
                                 pusat tubuh</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Jarak Tangan Vertikal (cm)</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{ $pengukuran->lokasi_tangan->{'Vertikal Awal'} }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->{'Vertikal Akhir'} }}</td>
                             <td class="text-left">Jarak vertikal posisi tangan yang memegang beban terhadap lantai</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Sudut Asimetris (°)</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->sudut_asimetris->Awal}}</td>
+                            <td>{{$pengukuran->sudut_asimetris->Akhir}}</td>
                             <td class="text-left">Sudut asimetri gerakan yang dibentuk antara bagian dan kaki</td>
                         </tr>
                     </tbody>
@@ -247,27 +245,27 @@
                         <tr>
                             <td>1</td>
                             <td class="text-left">Jarak Vertikal (cm)</td>
-                            <td></td>
+                            <td>{{$pengukuran->jarak_vertikal}}</td>
                             <td class="text-left">Jarak perpindahan beban secara vertikal antara tempat asal sampai
                                 tujuan</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Berat Beban (kg)</td>
-                            <td></td>
+                            <td>{{$pengukuran->berat_beban}}</td>
                             <td class="text-left">Jumlah beban atau barang material yang dibombong/diangkat/dipindahkan
                                 pekeria</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Frekuensi (jumlah angkat/menit)</td>
-                            <td></td>
+                            <td>{{$pengukuran->frekuensi}}</td>
                             <td class="text-left">Jumlah pengangkatan beban setiap menit</td>
                         </tr>
                         <tr>
                             <td>4</td>
                             <td class="text-left">Durasi Waktu Kerja</td>
-                            <td></td>
+                            <td>{{$pengukuran->durasi_jam_kerja}}</td>
                             <td class="text-left">Jumlah waktu aktual durasi pekerjaan dalam hitungan jam</td>
                         </tr>
                         <tr>
@@ -293,44 +291,44 @@
                         <tr>
                             <td>1</td>
                             <td class="text-left">Konstanta Beban</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->konstanta_beban_awal}}</td>
+                            <td>{{$pengukuran->konstanta_beban_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Pengali Horizontal</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_horizontal_awal}}</td>
+                            <td>{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Pengali Vertikal</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_vertikal_awal}}</td>
+                            <td>{{$pengukuran->pengali_vertikal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
                             <td class="text-left">Pengali Jarak</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_jarak_awal}}</td>
+                            <td>{{$pengukuran->pengali_jarak_akhir}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
                             <td class="text-left">Pengali Asimetris</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_asimetris_awal}}</td>
+                            <td>{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
                         <tr>
                             <td>6</td>
                             <td class="text-left">Pengali Frekuensi</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_frekuensi_awal}}</td>
+                            <td>{{$pengukuran->pengali_frekuensi_akhir}}</td>
                         </tr>
                         <tr>
                             <td>7</td>
                             <td class="text-left">Pengali Kopling</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->pengali_kopling_awal}}</td>
+                            <td>{{$pengukuran->pengali_kopling_akhir}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -349,14 +347,14 @@
                         <tr>
                             <td>1</td>
                             <td class="text-left">Recommended Weight Limit (RWL)</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->nilai_beban_rwl_awal}}</td>
+                            <td>{{$pengukuran->nilai_beban_rwl_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Lifting Index</td>
-                            <td></td>
-                            <td></td>
+                            <td>{{$pengukuran->lifting_index_awal}}</td>
+                            <td>{{$pengukuran->lifting_index_akhir}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -390,15 +388,15 @@
                     <table cellpadding="4" cellspacing="0">
                         <thead>
                             <tr>
-                                <td>No. DIP</td>
+                                <td>No. LHP</td>
                                 <td>No. Sampel</td>
                                 <td>Jenis Sampel</td>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td></td>
-                                <td></td>
+                                <td>{{$personal->no_lhp}}</td>
+                                <td>{{$personal->no_sampel}}</td>
                                 <td>Ergonomi</td>
                             </tr>
                         </tbody>
@@ -407,24 +405,45 @@
 
                 <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <div class="info-line"><span class="info-label">Nama Pelanggan</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
-                    <div class="info-line"><span class="info-label">Alamat / Lokasi</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
-                    <div class="info-line"><span class="info-label">Sampling</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
+                    <div class="info-line">
+                        <span class="info-label">Nama Pelanggan</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-label">{{$personal->nama_pelanggan}}</span>
+                    </div>
+                    <div class="info-line">
+                        <span class="info-label">Alamat / Lokasi</span>
+                        <span class="info-separator">:</span>
+                        <span class="">{{$personal->alamat_pelanggan}}</span>
+                    </div>
+                    <div class="info-line">
+                        <span class="info-label">Sampling</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-label"></span>
+                    </div>
 
                     <div class="info-header">Informasi Sampling</div>
-                    <div class="info-line"><span class="info-label">Tanggal Sampling</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
-                    <div class="info-line"><span class="info-label">Periode Analisa</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
+                    <div class="info-line">
+                        <span class="info-label">Tanggal Sampling</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-label">{{$personal->tanggal_sampling}}</span>
+                    </div>
+                    <div class="info-line">
+                        <span class="info-label">Periode Analisa</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-value"></span>
+                    </div>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <div class="info-line"><span class="info-label">Nama Pekerja</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
-                    <div class="info-line"><span class="info-label">Jenis Pekerjaan</span><span
-                            class="info-separator">:</span><span class="info-value"></span></div>
+                    <div class="info-line">
+                        <span class="info-label">Nama Pekerja</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-value">{{ $personal->nama_pekerja }}</span>
+                    </div>
+                    <div class="info-line">
+                        <span class="info-label">Jenis Pekerjaan</span>
+                        <span class="info-separator">:</span>
+                        <span class="info-value">{{ $personal->divisi}}</span>
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 10px; margin-top:20px;">

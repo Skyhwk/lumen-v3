@@ -21,10 +21,10 @@
 
         h1 {
             text-align: center;
-            font-size: 14pt; /* Reduced from 16pt */
+            font-size: 12px; /* Reduced from 16pt */
             font-weight: bold;
             text-decoration: underline;
-            margin-bottom: 15px;
+            margin-bottom: 5px;
             margin-top: 8px;
         }
 
@@ -186,7 +186,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
+        <h1>LAPORAN HASIL PENGUJIAN</h1>
         <!-- Main layout with table and information -->
         <div class="table-layout">
             <!-- Left side - Tables -->

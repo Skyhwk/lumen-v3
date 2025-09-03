@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian (DRAFT)</title>
+    <title>Laporan Hasil Pengujian</title>
    
     @if(!empty($cssGlobal))
         <style>{!! $cssGlobal !!}</style>

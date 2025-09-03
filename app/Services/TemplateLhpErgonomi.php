@@ -66,6 +66,7 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analis" => null,
             ];
+            
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonomirula',compact('pengukuran', 'personal'))->render();
             
@@ -93,8 +94,33 @@ class TemplateLhpErgonomi
             'margin_top' => 5,
             'margin_bottom' => 15,
         ];
+        $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            ->where('method', 5)
+            ->first();
+        $pengukuran = json_decode($dataRula->pengukuran);
+        $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
+        $pengukuran->frekuensi = $avrageFrequesi;
+        $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
+        $pengukuran->jarak_vertikal = $dataRula->jarak_vertikal;
+        $pengukuran->kopling_tangan = $dataRula->kopling_tangan;
+        $pengukuran->durasi_jam_kerja = $dataRula->durasi_jam_kerja;
+        $pengukuran->berat_beban = $dataRula->berat_beban;
+        $personal = (object) [
+                "no_sampel" => $dataRula->no_sampel,
+                "nama_pekerja" => $dataRula->nama_pekerja,
+                "usia" => $dataRula->usia,
+                "lama_kerja" => $dataRula->lama_kerja,
+                "divisi" => $dataRula->divisi,
+                "jenis_kelamin" => $dataRula->jenis_kelamin,
+                "aktivitas_ukur" => $dataRula->aktivitas_ukur,
+                "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
+                "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
+                "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
+                "periode_analis" => null,
+            ];
         $pdf = new PDF($mpdfConfig);
-        $html = View::make('ergonomirwl')->render();
+        $html = View::make('ergonomirwl',compact('pengukuran','personal'))->render();
         return $html;
     }
 

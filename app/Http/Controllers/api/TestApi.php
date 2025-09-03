@@ -32,16 +32,15 @@ class TestApi extends Controller
     {
         try {
             Carbon::setLocale('id');
-            
             $render = new TemplateLhpErgonomi();
             $noSampel = $request->no_sampel; // Ambil no_sampel dari request frontend $request->no_sampel
 
             // Definisikan metode yang ingin digabungkan dan ID methodnya
             $methodsToCombine = [
-                'nbm' => 1,
-                'reba' => 2,
-                'rula' => 3,
-                'rosa' => 4,
+                'nbm' => 1,  //✅
+                'reba' => 2, //✅
+                'rula' => 3, //✅
+                'rosa' => 4, //✅
                 'rwl' => 5,
                 'brief' => 6,
                 'sni_gotrak' => 7,
@@ -296,13 +295,13 @@ class TestApi extends Controller
 
                 .header {
                     text-align: center;
-                    margin-bottom: 15px;
+                    margin-bottom: 5px;
                 }
 
                 .header h1 {
                     font-size: 12px; /* Dikurangi untuk konsistensi */
                     font-weight: bold;
-                    margin: 10px 0;
+                    margin: 5px 0;
                     text-decoration: underline;
                 }
 
@@ -388,7 +387,7 @@ class TestApi extends Controller
                 }
 
                 .risk-table {
-                    margin-top: 10px;
+                    margin-top: 5px;
                 }
 
                 .left-section p {
@@ -544,8 +543,6 @@ class TestApi extends Controller
                 body {
                     font-family: Arial, sans-serif;
                     font-size: 8pt;
-                    background-color: white;
-                    line-height: 1.1;
                     margin: 0;
                     padding: 0;
                 }

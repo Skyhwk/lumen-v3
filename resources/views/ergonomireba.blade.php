@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian REBA</title>
+    <title>Laporan Hasil Pengujian</title>
     <style>
         * { 
             box-sizing: border-box; 
@@ -27,7 +27,7 @@
         .main-header {
             text-align: center;
             font-weight: bold;
-            font-size: 12pt;
+            font-size: 12px;
             text-decoration: underline;
             margin-bottom: 8px;
             padding: 5px 0;
