@@ -50,6 +50,12 @@ class FdlMethodGotrakController extends Controller
         DB::beginTransaction();
         try {
             $inputs = $request->all();
+            $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 7)->first();
+            if ($fdl){
+                return response()->json([
+                    'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
+                ], 401);
+            }
             $umum = [];
             $tubuh = [];
 
@@ -111,35 +117,34 @@ class FdlMethodGotrakController extends Controller
             $keluhanBagianTubuh = $request->Keluhan_Bagian_Tubuh;
             if (is_array($keluhanBagianTubuh) && !in_array("null", $keluhanBagianTubuh)) {
                 foreach ($keluhanBagianTubuh as $bagian => $keluhan) {
-                    // Pastikan keluhan adalah array dan tidak bernilai "Tidak"
-                    if (is_array($keluhan) && $keluhan != "Tidak") {
-                        // Cek apakah kunci "Seberapa_Parah" dan "Seberapa_Sering" ada
-                        if (isset($keluhan['Seberapa_Parah'], $keluhan['Seberapa_Sering'])) {
-                            $seberapaParah = $keluhan['Seberapa_Parah'];
-                            $seberapaSering = $keluhan['Seberapa_Sering'];
-
-                            // Hitung risiko berdasarkan tabel
-                            $risiko = hitungRisikoKeluhan($seberapaParah, $seberapaSering);
-
-                            // Simpan array tanpa "nilai" terlebih dahulu
-                            $keluhanBagianTubuh[$bagian] = $keluhan;
-
-                            // Tambahkan risiko ke array keluhan
-                            $keluhanBagianTubuh[$bagian]['Poin'] = $risiko;
-                        } else {
-                            // Jika data tidak lengkap
-                            $keluhanBagianTubuh[$bagian]['Poin'] = 'Data tidak lengkap';
+                    if($bagian != "cedera"){
+                        if (is_array($keluhan) && $keluhan != "Tidak") {
+                            // Cek apakah kunci "Seberapa_Parah" dan "Seberapa_Sering" ada
+                            if (isset($keluhan['Seberapa_Parah'], $keluhan['Seberapa_Sering'])) {
+                                $seberapaParah = $keluhan['Seberapa_Parah'];
+                                $seberapaSering = $keluhan['Seberapa_Sering'];
+    
+                                // Hitung risiko berdasarkan tabel
+                                $risiko = hitungRisikoKeluhan($seberapaParah, $seberapaSering);
+    
+                                // Simpan array tanpa "nilai" terlebih dahulu
+                                $keluhanBagianTubuh[$bagian] = $keluhan;
+    
+                                // Tambahkan risiko ke array keluhan
+                                $keluhanBagianTubuh[$bagian]['Poin'] = $risiko;
+                            } else {
+                                // Jika data tidak lengkap
+                                $keluhanBagianTubuh[$bagian]['Poin'] = 'Data tidak lengkap';
+                            }
                         }
                     }
+                    // Pastikan keluhan adalah array dan tidak bernilai "Tidak"
                 }
             }
 
-
-
             // $pengukuran = ["Identitas_Umum" => $request->Identitas_Umum, "Keluhan_Bagian_Tubuh" => $request->Keluhan_Bagian_Tubuh];
             $pengukuran = ["Identitas_Umum" => $request->Identitas_Umum, "Keluhan_Bagian_Tubuh" => $keluhanBagianTubuh];
-            // dd($pengukuran);
-
+            
             $data = new DataLapanganErgonomi();
             if ($request->no_order != '')
                 $data->no_order = $request->no_order;
@@ -169,11 +174,10 @@ class FdlMethodGotrakController extends Controller
                 $data->foto_depan = self::convertImg($request->foto_depan, 3, $this->user_id);
             if ($request->foto_belakang != '')
                 $data->foto_belakang = self::convertImg($request->foto_belakang, 4, $this->user_id);
-            $data->aktivitas_ukur = $request->aktivitas_ukur;
-            $data->permission = $request->permis;
+            $data->aktivitas_ukur = $request->aktivitas;
+            $data->permission = $request->permission;
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-            // dd($data);
             $data->save();
 
             // UPDATE ORDER DETAIL
@@ -199,25 +203,6 @@ class FdlMethodGotrakController extends Controller
             ], 401);
         }
     }
-
-    // public function index(Request $request)
-    // {
-    //     try {
-    //         $data = array();
-    //         if ($request->tipe != '') {
-    //             $data = DataLapanganErgonomi::with('detail')->orderBy('id', 'desc');
-    //         } else {
-    //             if ($request->method == 2) {
-    //                 $data = DataLapanganErgonomi::with('detail')->where('method', 2)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
-    //                     ->orderBy('id', 'desc');
-    //             }
-    //         }
-    //         return Datatables::of($data)->make(true);
-    //     } catch (Exception $e) {
-    //         dd($e);
-    //     }
-    // }
 
 
     public function index(Request $request)
