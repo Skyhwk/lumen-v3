@@ -282,12 +282,29 @@ class VerifikasiLabISLController extends Controller
 
 
             }
-            foreach ($dataDisplay as $item) {
+            foreach ($dataDisplay as $key => $item) {
                 if ($data->kategori == '4-Udara' || $data->kategori == '5-Emisi') {
                     $item->disiapkan = '1';
                 }
                 $item->kategori = $data->kategori;
+
+
+                 $parameterExcludeEmisi = [
+                    'SO2',
+                    'NO2',
+                    'Velocity',
+                    'NOX'
+                 ];
+
+                if($data->kategori == '5-Emisi' && in_array($item->parameter, $parameterExcludeEmisi)){ 
+                    unset($dataDisplay[$key]);
+                }
+    
             }
+
+            $dataDisplay = array_values($dataDisplay);
+
+           
 
 
 
