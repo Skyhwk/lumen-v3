@@ -125,7 +125,6 @@ class FdlMethodNbmController extends Controller
 
     public function store(Request $request)
     {
-        // dd($request->all());
         DB::beginTransaction();
         try{
             $inputs = $request->all();
