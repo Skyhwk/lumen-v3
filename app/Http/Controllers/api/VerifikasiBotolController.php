@@ -140,32 +140,41 @@ class VerifikasiBotolController extends Controller
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters) ?? null;
 
-                foreach ($dataDisplay as $item) {
+                foreach ($dataDisplay as $key => $item) {
                     if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
                         $type = $item->parameter;
                     } else {
                         $type = $item->type_botol;
                     }
 
+                $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
 
-                    if (isset($parameters->air->$type)) {
-                        $item->disiapkan = $parameters->air->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else if (isset($parameters->udara->$type)) {
-                        $item->disiapkan = $parameters->udara->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else if (isset($parameters->emisi->$type)) {
-                        $item->disiapkan = $parameters->emisi->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else {
-                        $item->disiapkan = null;
+                if (isset($parameters->emisi)) {
+                    if(in_array($type, $paramExplane)){
+                        unset($dataDisplay[$key]);
                     }
+                }
+                if (isset($parameters->air->$type)) {
+                    $item->disiapkan = $parameters->air->$type->disiapkan;
+                    if ($item->koding == $request->no_sampel) {
+                        $item->scanned = 1;
+                    }
+                } else if (isset($parameters->udara->$type)) {
+                    $item->disiapkan = $parameters->udara->$type->disiapkan;
+                    if ($item->koding == $request->no_sampel) {
+                        $item->scanned = 1;
+                    }
+                } else if (isset($parameters->emisi->$type)) {
+
+
+                    $item->disiapkan = $parameters->emisi->$type->disiapkan;
+                    if ($item->koding == $request->no_sampel) {
+                        $item->scanned = 1;
+                    }
+                } else {
+                    $item->disiapkan = null;
+                }
+
                 }
             }
             foreach ($dataDisplay as $item) {
