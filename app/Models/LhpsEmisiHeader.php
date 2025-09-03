@@ -17,6 +17,11 @@ class LhpsEmisiHeader extends Sector
         return $this->hasMany(LhpsEmisiDetail::class, 'id_header', 'id');
     }
 
+    public function lhpsEmisiCustom()
+    {
+        return $this->hasMany(LhpsEmisiCustom::class, 'id_header', 'id');
+    }
+
     public function link ()
     {
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
