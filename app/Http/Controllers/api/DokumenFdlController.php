@@ -156,7 +156,7 @@ class DokumenFdlController extends Controller
             $arrayFinal = array_filter($final, function ($item) {
                 if (empty($item['sampler'])) return false;
 
-                $samplerArray = array_map(explode(',', $item['sampler']));
+                $samplerArray = array_map('trim', explode(',', $item['sampler']));
                 
                 foreach ($samplerArray as $name) {
                     if (strcasecmp($name, $this->karyawan) === 0) {
@@ -271,7 +271,7 @@ class DokumenFdlController extends Controller
                                 $allowPush = true;
                             } else {
                                 // Non-programmer hanya kalau termasuk dalam sampler
-                                $samplerList = array_map(explode(',', $jadwal->sampler));
+                                $samplerList = array_map('trim', explode(',', $jadwal->sampler));
                                 if (in_array($loggedInUser, $samplerList)) {
                                     $allowPush = true;
                                 }
