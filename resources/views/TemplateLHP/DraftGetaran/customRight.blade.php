@@ -14,38 +14,35 @@
                 </table>
             </td>
         </tr>
-
-        {{-- Informasi Pelanggan --}}
         <tr>
             <td>
-                <table style="padding-top: 20px;" width="100%">
+                {{-- Informasi Pelanggan --}}
+                <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
+                        <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->nama_pelanggan }}</td>
+                        <td class="custom5"><strong>{!! html_entity_decode($header->nama_pelanggan) !!}</strong></td>
                     </tr>
                 </table>
 
                 {{-- Alamat Sampling --}}
-                <table style="padding-top: 10px;" width="100%">
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->alamat_sampling }}</td>
+                        <td class="custom5">{!! html_entity_decode($header->alamat_sampling) !!}</td>
                     </tr>
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding-top: 10px;" width="100%">
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120">
-                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
-                        </td>
-                    </tr>
-                       @php
+                        <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
+                    </tr> 
+                    @php
                         if ($header->methode_sampling != null) {
                             
                             $methode_sampling = "";
@@ -79,7 +76,7 @@
                             <td class="custom5">{!! $methode_sampling !!}</td>
                         @endif
                     </tr>
-                     <tr>
+                    <tr>
                         <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
                         <td class="custom5" width="12">:</td>
                         @php
@@ -91,26 +88,24 @@
                         @endphp
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
                     </tr>
-                    @php
-                        $periode = explode(' - ', $header['periode_analisa']);
-                        $periode1 = $periode[0] ?? '';
-                        $periode2 = $periode[1] ?? '';
-                    @endphp
-                  
+                   
+                 
+                   
                 </table>
 
                 {{-- Regulasi --}}
-                @if (!empty($header->regulasi))
-                    <table style="padding-top: 10px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
+                @if ($header->regulasi_custom!=null)
+                    <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                </tr>
+                            @endif
                         @endforeach
                     </table>
                 @endif
-
-                {{-- Tabel Kebisingan --}}
+                   {{-- Tabel Kebisingan --}}
                 <table border="1" cellspacing="0" cellpadding="2" width="100%" style="margin-top: 10px;">
                     <thead>
                         <tr>
@@ -153,7 +148,6 @@
                         </tr>
                     </tbody>
                 </table>
-
             </td>
         </tr>
     </table>

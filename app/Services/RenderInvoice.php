@@ -587,20 +587,14 @@ class RenderInvoice
                                         $kategori2 = explode("-", $datasp->kategori_2);
                                         if (isset($datasp->keterangan_pengujian)) {
                                             $keterangan_pengujian = $datasp->keterangan_pengujian;
-                                            $harga_total = self::rupiah($datasp->harga_total);
+                                            $harga_total = $datasp->harga_total;
 
-                                            $pdf->writeHTML('
-                                            <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
-                                        ');
+                                            
                                         } else {
                                             $keterangan_pengujian = strtoupper($kategori2[1]) . ' - ' . $datasp->total_parameter . ' Parameter';
-                                            $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
+                                            $harga_total = $datasp->harga_satuan * $datasp->jumlah_titik;
 
-                                            $pdf->writeHTML('
-                                                <tr>
-                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $keterangan_pengujian . '</span><br>
-                                            ');
+                                            
 
                                             if (is_string($datasp->regulasi)) {
                                                 $decodedRegulasi = json_decode($datasp->regulasi, true);
@@ -619,11 +613,7 @@ class RenderInvoice
                                                     $reg = $regulasi[1];
                                                 }
 
-                                                if ($rg == 0) {
-                                                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
-                                                } else {
-                                                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
-                                                }
+                                                
                                             }
                                         }
 
@@ -658,7 +648,7 @@ class RenderInvoice
                                         if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
                                             if (isset($values->keterangan_perdiem)) {
                                                 $keterangan_perdiem = $values->keterangan_perdiem;
-                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total);
+                                                $harga_perdiem = $values->harga_perdiem_personil_total;
                                                 $jml_perdiem = $values->perdiem_jumlah_orang;
                                                 if (isset($values->satuan_perdiem)) {
                                                     $satuan_perdiem = self::rupiah($values->satuan_perdiem);
@@ -674,7 +664,7 @@ class RenderInvoice
                                                 }
                                             } else {
                                                 $keterangan_perdiem = "Perdiem " . $perdiem_24;
-                                                $harga_perdiem = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                                $harga_perdiem = $values->harga_perdiem_personil_total + $total_perdiem;
                                                 $jml_perdiem = '';
                                                 $satuan_perdiem = '';
                                             }

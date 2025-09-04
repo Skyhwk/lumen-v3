@@ -135,8 +135,8 @@ class FdlEmisiKendaraanController extends Controller
                     'message' => 'Qr Code tidak diterbitkan oleh INTILAB'
                 ], 401);
             }
-        } else if (isset($request->no_sample) && $request->no_sample != null) {
-            $po_s = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
+        } else if (isset($request->no_sampel) && $request->no_sampel != null) {
+            $po_s = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             return response()->json([
                 'client' => $po_s->nama_perusahaan,
                 'kategori_3' => explode('-', $po_s->kategori_3)[0],
@@ -154,6 +154,14 @@ class FdlEmisiKendaraanController extends Controller
         DB::beginTransaction();
         try {
             if (isset($request->kode_qr) && $request->kode_qr != null) {
+                
+                $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', $request->no_sampel)->where('is_active',true)->first();
+                if($fdlKendaraan){
+                    return response()->json([
+                        'message'=>'No Sampel sudah terinput'
+                    ],401);
+                }
+
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
                 if ($cek_qr->id_kendaraan != null) {
                     $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
@@ -167,118 +175,115 @@ class FdlEmisiKendaraanController extends Controller
 
                     $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                     if ($cek_po != null) {
-                        $fdl = DataLapanganEmisiKendaraan::where('no_sampel', $request)->where('is_active', true)->first();
-                        if (!isset($fdl->id) || $fdl->id == null) {
-
-                            $co2 = NULL;
-                            $co = NULL;
-                            $hc = NULL;
-                            $o2 = NULL;
-                            $opasitas = NULL;
-                            $nilai_k = NULL;
-                            $rpm = NULL;
-                            $oli = NULL;
-                            $data_co2 = NULL;
-                            $data_co = NULL;
-                            $data_hc = NULL;
-                            $data_o2 = NULL;
-                            $data_opasitas = NULL;
-                            if ($request->jenis_kendaraan == 31) {
-                                if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
-                                    $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
-                                    $data_co2 = json_encode($request->co2);
-                                }
-                                if ($request->co[0] != NULL && $request->co[1] != NULL && $request->co[2] != NULL) {
-                                    $co  = \str_replace(",", "", number_format(array_sum($request->co) / 3, 2));
-                                    $data_co = json_encode($request->co);
-                                }
-                                if ($request->hc[0] != NULL && $request->hc[1] != NULL && $request->hc[2] != NULL) {
-                                    $hc  = \str_replace(",", "", number_format(array_sum($request->hc) / 3, 2));
-                                    $data_hc = json_encode($request->hc);
-                                }
-                                if ($request->o2[0] != NULL && $request->o2[1] != NULL && $request->o2[2] != NULL) {
-                                    $o2  =  \str_replace(",", "", number_format(array_sum($request->o2) / 3, 2));
-                                    $data_o2 = json_encode($request->o2);
-                                }
-                            } else if ($request->jenis_kendaraan == 32) {
-                                if ($request->opasitas[0] != NULL && $request->opasitas[1] != NULL && $request->opasitas[2] != NULL) {
-                                    $opasitas  =  \str_replace(",", "", number_format(array_sum($request->opasitas) / 3, 2));
-                                    $data_opasitas = json_encode($request->opasitas);
-                                }
-                                if ($request->nilai_k[0] != NULL && $request->nilai_k[1] != NULL && $request->nilai_k[2] != NULL) $nilai_k  =  \str_replace(",", "", number_format(array_sum($request->nilai_k) / 3, 2));
-                                if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
-                                if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
+                        $co2 = NULL;
+                        $co = NULL;
+                        $hc = NULL;
+                        $o2 = NULL;
+                        $opasitas = NULL;
+                        $nilai_k = NULL;
+                        $rpm = NULL;
+                        $oli = NULL;
+                        $data_co2 = NULL;
+                        $data_co = NULL;
+                        $data_hc = NULL;
+                        $data_o2 = NULL;
+                        $data_opasitas = NULL;
+                        if ($request->jenis_kendaraan == 31) {
+                            if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
+                                $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
+                                $data_co2 = json_encode($request->co2);
                             }
-                            $data_fdl = new DataLapanganEmisiKendaraan;
-                            // $data_fdl->id_po 	= $cek_po->id;
-                            $data_fdl->no_sampel = strtoupper($request->no_sampel);
-                            $data_fdl->data_co     = $data_co;
-                            $data_fdl->data_co2     = $data_co2;
-                            $data_fdl->data_hc     = $data_hc;
-                            $data_fdl->data_o2     = $data_o2;
-                            $data_fdl->data_opasitas     = $data_opasitas;
-                            $data_fdl->km        = $request->km;
-                            $data_fdl->co2        = $co2;
-                            $data_fdl->co        = $co;
-                            $data_fdl->hc        = $hc;
-                            $data_fdl->o2        = $o2;
-                            $data_fdl->lamda    = $request->lamda;
-                            $data_fdl->opasitas = $opasitas;
-                            $data_fdl->nilai_km = $nilai_k;
-                            $data_fdl->rpm        = $rpm;
-                            $data_fdl->suhu_oli = $oli;
-                            if ($request->foto_lok != '')
-                                $data_fdl->foto_depan = self::convertImg($request->foto_lok, 1, $this->user_id);
-                            if ($request->foto_sampl != '')
-                                $data_fdl->foto_belakang = self::convertImg($request->foto_sampl, 2, $this->user_id);
-                            if ($request->foto_lain != '')
-                                $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
-                            $data_fdl->created_by    = $this->karyawan;
-                            $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
-                            $data_fdl->save();
-
-                            $kendaraan->merk_kendaraan     = ucfirst($request->merk);
-                            $kendaraan->id_bbm        = $request->jenis_kendaraan;
-                            if ($request->jenis_kendaraan == 31) $kendaraan->jenis_bbm     = "Bensin";
-                            if ($request->jenis_kendaraan == 32) $kendaraan->jenis_bbm     = "Solar";
-                            $kendaraan->plat_nomor         = $request->no_plat;
-                            $kendaraan->bobot_kendaraan    = $request->bobot_kendaraan;
-                            $kendaraan->tahun_pembuatan    = $request->tahun;
-                            $kendaraan->no_mesin            = $request->no_mesin;
-                            $kendaraan->transmisi            = $request->transmisi;
-                            $kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;
-                            $kendaraan->km                 = $request->km;
-                            $kendaraan->cc                 = $request->cc;
-                            $kendaraan->created_by                = $this->karyawan;
-                            $kendaraan->created_at             = Carbon::now()->format('Y-m-d H:i:s');
-                            $kendaraan->save();
-
-                            $data_order = new DataLapanganEmisiOrder;
-                            // $data_order->id_po			= $cek_po->id;
-                            $data_order->no_sampel            = strtoupper($request->no_sampel);
-                            $data_order->id_qr            = $cek_qr->id;
-                            $data_order->id_fdl            = $data_fdl->id;
-                            $data_order->id_kendaraan    = $cek_qr->id_kendaraan;
-                            $data_order->id_regulasi    = $id_regulasi;
-                            $data_order->created_by            = $this->karyawan;
-                            $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
-                            $data_order->save();
-
-                            DB::table('order_detail')
-                                ->where('no_sampel', strtoupper(trim($request->no_sampel)))
-                                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
-
-                            DB::commit();
-                            return response()->json([
-                                'status' => 21,
-                                'success' => true,
-                                'message' => 'Data Emisi Add Succesfully'
-                            ], 201);
-                        } else {
-                            return response()->json([
-                                'message' => 'No Sample Already Exist.!'
-                            ], 401);
+                            if ($request->co[0] != NULL && $request->co[1] != NULL && $request->co[2] != NULL) {
+                                $co  = \str_replace(",", "", number_format(array_sum($request->co) / 3, 2));
+                                $data_co = json_encode($request->co);
+                            }
+                            if ($request->hc[0] != NULL && $request->hc[1] != NULL && $request->hc[2] != NULL) {
+                                $hc  = \str_replace(",", "", number_format(array_sum($request->hc) / 3, 2));
+                                $data_hc = json_encode($request->hc);
+                            }
+                            if ($request->o2[0] != NULL && $request->o2[1] != NULL && $request->o2[2] != NULL) {
+                                $o2  =  \str_replace(",", "", number_format(array_sum($request->o2) / 3, 2));
+                                $data_o2 = json_encode($request->o2);
+                            }
+                        } else if ($request->jenis_kendaraan == 32) {
+                            if ($request->opasitas[0] != NULL && $request->opasitas[1] != NULL && $request->opasitas[2] != NULL) {
+                                $opasitas  =  \str_replace(",", "", number_format(array_sum($request->opasitas) / 3, 2));
+                                $data_opasitas = json_encode($request->opasitas);
+                            }
+                            if ($request->nilai_k[0] != NULL && $request->nilai_k[1] != NULL && $request->nilai_k[2] != NULL) $nilai_k  =  \str_replace(",", "", number_format(array_sum($request->nilai_k) / 3, 2));
+                            if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
+                            if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                         }
+                        $data_fdl = new DataLapanganEmisiKendaraan;
+                        // $data_fdl->id_po 	= $cek_po->id;
+                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->data_co     = $data_co;
+                        $data_fdl->data_co2     = $data_co2;
+                        $data_fdl->data_hc     = $data_hc;
+                        $data_fdl->data_o2     = $data_o2;
+                        $data_fdl->data_opasitas     = $data_opasitas;
+                        $data_fdl->km        = $request->km;
+                        $data_fdl->co2        = $co2;
+                        $data_fdl->co        = $co;
+                        $data_fdl->hc        = $hc;
+                        $data_fdl->o2        = $o2;
+                        $data_fdl->lamda    = $request->lamda;
+                        $data_fdl->opasitas = $opasitas;
+                        $data_fdl->nilai_km = $nilai_k;
+                        $data_fdl->rpm        = $rpm;
+                        $data_fdl->suhu_oli = $oli;
+                        if ($request->foto_lok != '')
+                            $data_fdl->foto_depan = self::convertImg($request->foto_lok, 1, $this->user_id);
+                        if ($request->foto_sampl != '')
+                            $data_fdl->foto_belakang = self::convertImg($request->foto_sampl, 2, $this->user_id);
+                        if ($request->foto_lain != '')
+                            $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        $data_fdl->created_by    = $this->karyawan;
+                        $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
+                        $data_fdl->save();
+
+                        if($kendaraan){
+                            $kendaraan = MasterKendaraan::updateOrCreate(
+                                ['id' => $cek_qr->id_kendaraan], // kunci pencarian
+                                [
+                                    'merk_kendaraan'     => ucfirst($request->merk),
+                                    'id_bbm'             => $request->jenis_kendaraan,
+                                    'jenis_bbm'          => $request->jenis_kendaraan == 31 ? "Bensin" : "Solar",
+                                    'plat_nomor'         => $request->no_plat,
+                                    'bobot_kendaraan'    => $request->bobot_kendaraan,
+                                    'tahun_pembuatan'    => $request->tahun,
+                                    'no_mesin'           => $request->no_mesin,
+                                    'transmisi'          => $request->transmisi,
+                                    'kategori_kendaraan' => $request->kategori_kendaraan,
+                                    'km'                 => $request->km,
+                                    'cc'                 => $request->cc,
+                                    'created_by'         => $this->karyawan,
+                                    'created_at'         => Carbon::now()->format('Y-m-d H:i:s')
+                                ]
+                            );
+                        }
+
+                        $data_order = new DataLapanganEmisiOrder;
+                        // $data_order->id_po			= $cek_po->id;
+                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->id_qr            = $cek_qr->id;
+                        $data_order->id_fdl            = $data_fdl->id;
+                        $data_order->id_kendaraan    = $cek_qr->id_kendaraan;
+                        $data_order->id_regulasi    = $id_regulasi;
+                        $data_order->created_by            = $this->karyawan;
+                        $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
+                        $data_order->save();
+
+                        DB::table('order_detail')
+                            ->where('no_sampel', strtoupper(trim($request->no_sampel)))
+                            ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+
+                        DB::commit();
+                        return response()->json([
+                            'status' => 21,
+                            'success' => true,
+                            'message' => 'Data Emisi Add Succesfully'
+                        ], 201);
                     } else {
                         return response()->json([
                             'message' => 'No Sample Not Exist.!'
@@ -291,136 +296,128 @@ class FdlEmisiKendaraanController extends Controller
                     $array2 = ["Opasitas (Solar)"];
                     $keterangan = $request->merk . ', ' . $request->tahun;
 
-                    $cek_po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
+                    $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                     if ($cek_po != null) {
-                        $fdl = DataLapanganEmisiKendaraan::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
-                        if (!isset($fdl->id) || $fdl->id == null) {
-
-                            $co2 = NULL;
-                            $co = NULL;
-                            $hc = NULL;
-                            $o2 = NULL;
-                            $opasitas = NULL;
-                            $nilai_k = NULL;
-                            $rpm = NULL;
-                            $oli = NULL;
-                            $data_co2 = NULL;
-                            $data_co = NULL;
-                            $data_hc = NULL;
-                            $data_o2 = NULL;
-                            $data_opasitas = NULL;
-                            if ($request->jenis_kendaraan == 31) {
-                                if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
-                                    $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
-                                    $data_co2 = json_encode($request->co2);
-                                }
-                                if ($request->co[0] != NULL && $request->co[1] != NULL && $request->co[2] != NULL) {
-                                    $co  = \str_replace(",", "", number_format(array_sum($request->co) / 3, 2));
-                                    $data_co = json_encode($request->co);
-                                }
-                                if ($request->hc[0] != NULL && $request->hc[1] != NULL && $request->hc[2] != NULL) {
-                                    $hc  = \str_replace(",", "", number_format(array_sum($request->hc) / 3, 2));
-                                    $data_hc = json_encode($request->hc);
-                                }
-                                if ($request->o2[0] != NULL && $request->o2[1] != NULL && $request->o2[2] != NULL) {
-                                    $o2  =  \str_replace(",", "", number_format(array_sum($request->o2) / 3, 2));
-                                    $data_o2 = json_encode($request->o2);
-                                }
-                            } else if ($request->jenis_kendaraan == 32) {
-                                if ($request->opasitas[0] != NULL && $request->opasitas[1] != NULL && $request->opasitas[2] != NULL) {
-                                    $opasitas  =  \str_replace(",", "", number_format(array_sum($request->opasitas) / 3, 2));
-                                    $data_opasitas = json_encode($request->opasitas);
-                                }
-                                if ($request->nilai_k[0] != NULL && $request->nilai_k[1] != NULL && $request->nilai_k[2] != NULL) $nilai_k  =  \str_replace(",", "", number_format(array_sum($request->nilai_k) / 3, 2));
-                                if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
-                                if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
+                        $co2 = NULL;
+                        $co = NULL;
+                        $hc = NULL;
+                        $o2 = NULL;
+                        $opasitas = NULL;
+                        $nilai_k = NULL;
+                        $rpm = NULL;
+                        $oli = NULL;
+                        $data_co2 = NULL;
+                        $data_co = NULL;
+                        $data_hc = NULL;
+                        $data_o2 = NULL;
+                        $data_opasitas = NULL;
+                        if ($request->jenis_kendaraan == 31) {
+                            if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
+                                $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
+                                $data_co2 = json_encode($request->co2);
                             }
-
-                            $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
-                            if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
-                                $data_kendaraan = new MasterKendaraan;
-                                $data_kendaraan->merk_kendaraan     = ucfirst($request->merk);
-                                $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
-                                if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
-                                if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
-                                $data_kendaraan->plat_nomor         = $request->no_plat;
-                                $data_kendaraan->bobot_kendaraan    = $request->bobot_kendaraan;
-                                $data_kendaraan->tahun_pembuatan    = $request->tahun;
-                                $data_kendaraan->no_mesin            = $request->no_mesin;
-                                $data_kendaraan->transmisi            = $request->transmisi;
-                                $data_kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;
-                                $data_kendaraan->km                 = $request->km;
-                                $data_kendaraan->cc                 = $request->cc;
-                                $data_kendaraan->created_by                = $this->karyawan;
-                                $data_kendaraan->created_at             = Carbon::now()->format('Y-m-d H:i:s');
-                                $data_kendaraan->save();
-
-                                $qr = MasterQr::where('kode', $request->kode_qr)->first();
-                                $qr->status = 1;
-                                $qr->id_kendaraan = $data_kendaraan->id;
-                                $qr->save();
-                            } else {
-                                $qr = MasterQr::where('kode', $request->kode_qr)->first();
-                                $qr->status = 1;
-                                $qr->save();
+                            if ($request->co[0] != NULL && $request->co[1] != NULL && $request->co[2] != NULL) {
+                                $co  = \str_replace(",", "", number_format(array_sum($request->co) / 3, 2));
+                                $data_co = json_encode($request->co);
                             }
-                            // if($co!=null && $co < 0.02) $co = "<0.02";
-                            // if($co2!=null && $co2 < 0.10) $co2 = "<0.10";
-
-                            $data_fdl = new DataLapanganEmisiKendaraan;
-                            // $data_fdl->id_po 	= $cek_po->id;
-                            $data_fdl->no_sampel = strtoupper($request->no_sample);
-                            $data_fdl->data_co     = $data_co;
-                            $data_fdl->data_co2     = $data_co2;
-                            $data_fdl->data_hc     = $data_hc;
-                            $data_fdl->data_o2     = $data_o2;
-                            $data_fdl->data_opasitas     = $data_opasitas;
-                            $data_fdl->km        = $request->km;
-                            $data_fdl->co2        = $co2;
-                            $data_fdl->co        = $co;
-                            $data_fdl->hc        = $hc;
-                            $data_fdl->o2        = $o2;
-                            $data_fdl->lamda    = $request->lamda;
-                            $data_fdl->opasitas = $opasitas;
-                            $data_fdl->nilai_km = $nilai_k;
-                            $data_fdl->rpm        = $rpm;
-                            $data_fdl->suhu_oli = $oli;
-                            if ($request->foto_lok != '')
-                                $data_fdl->foto_depan = self::convertImg($request->foto_lok, 1, $this->user_id);
-                            if ($request->foto_sampl != '')
-                                $data_fdl->foto_belakang = self::convertImg($request->foto_sampl, 2, $this->user_id);
-                            if ($request->foto_lain != '')
-                                $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
-                            $data_fdl->created_by    = $this->karyawan;
-                            $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
-                            $data_fdl->save();
-
-                            $data_order = new DataLapanganEmisiOrder;
-                            // $data_order->id_po			= $cek_po->id;
-                            $data_order->no_sampel            = strtoupper($request->no_sample);
-                            $data_order->id_qr            = $cek_qr->id;
-                            $data_order->id_fdl            = $data_fdl->id;
-                            $data_order->id_kendaraan    = $data_kendaraan->id;
-                            $data_order->id_regulasi    = $id_regulasi;
-                            $data_order->created_by            = $this->karyawan;
-                            $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
-                            $data_order->save();
-
-
-                            $update_order = OrderDetail::where('no_sampel', strtoupper($request->no_sample))->where('is_active', 1)->update([
-                                'tanggal_terima' => Carbon::now()->format('Y-m-d'),
-                            ]);
-                            DB::commit();
-                            return response()->json([
-                                'status' => 201,
-                                'success' => true,
-                                'message' => 'Data Emisi Add Succesfully'
-                            ], 201);
-                        } else {
-                            return response()->json([
-                                'message' => 'No Sample Already Exist.!'
-                            ], 401);
+                            if ($request->hc[0] != NULL && $request->hc[1] != NULL && $request->hc[2] != NULL) {
+                                $hc  = \str_replace(",", "", number_format(array_sum($request->hc) / 3, 2));
+                                $data_hc = json_encode($request->hc);
+                            }
+                            if ($request->o2[0] != NULL && $request->o2[1] != NULL && $request->o2[2] != NULL) {
+                                $o2  =  \str_replace(",", "", number_format(array_sum($request->o2) / 3, 2));
+                                $data_o2 = json_encode($request->o2);
+                            }
+                        } else if ($request->jenis_kendaraan == 32) {
+                            if ($request->opasitas[0] != NULL && $request->opasitas[1] != NULL && $request->opasitas[2] != NULL) {
+                                $opasitas  =  \str_replace(",", "", number_format(array_sum($request->opasitas) / 3, 2));
+                                $data_opasitas = json_encode($request->opasitas);
+                            }
+                            if ($request->nilai_k[0] != NULL && $request->nilai_k[1] != NULL && $request->nilai_k[2] != NULL) $nilai_k  =  \str_replace(",", "", number_format(array_sum($request->nilai_k) / 3, 2));
+                            if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
+                            if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                         }
+
+                        $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
+                        if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
+                            $data_kendaraan = new MasterKendaraan;
+                            $data_kendaraan->merk_kendaraan     = ucfirst($request->merk);
+                            $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
+                            if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
+                            if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
+                            $data_kendaraan->plat_nomor         = $request->no_plat;
+                            $data_kendaraan->bobot_kendaraan    = $request->bobot_kendaraan;
+                            $data_kendaraan->tahun_pembuatan    = $request->tahun;
+                            $data_kendaraan->no_mesin            = $request->no_mesin;
+                            $data_kendaraan->transmisi            = $request->transmisi;
+                            $data_kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;
+                            $data_kendaraan->km                 = $request->km;
+                            $data_kendaraan->cc                 = $request->cc;
+                            $data_kendaraan->created_by                = $this->karyawan;
+                            $data_kendaraan->created_at             = Carbon::now()->format('Y-m-d H:i:s');
+                            $data_kendaraan->save();
+
+                            $qr = MasterQr::where('kode', $request->kode_qr)->first();
+                            $qr->status = 1;
+                            $qr->id_kendaraan = $data_kendaraan->id;
+                            $qr->save();
+                        } else {
+                            $qr = MasterQr::where('kode', $request->kode_qr)->first();
+                            $qr->status = 1;
+                            $qr->save();
+                        }
+                        // if($co!=null && $co < 0.02) $co = "<0.02";
+                        // if($co2!=null && $co2 < 0.10) $co2 = "<0.10";
+
+                        $data_fdl = new DataLapanganEmisiKendaraan;
+                        // $data_fdl->id_po 	= $cek_po->id;
+                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->data_co     = $data_co;
+                        $data_fdl->data_co2     = $data_co2;
+                        $data_fdl->data_hc     = $data_hc;
+                        $data_fdl->data_o2     = $data_o2;
+                        $data_fdl->data_opasitas     = $data_opasitas;
+                        $data_fdl->km        = $request->km;
+                        $data_fdl->co2        = $co2;
+                        $data_fdl->co        = $co;
+                        $data_fdl->hc        = $hc;
+                        $data_fdl->o2        = $o2;
+                        $data_fdl->lamda    = $request->lamda;
+                        $data_fdl->opasitas = $opasitas;
+                        $data_fdl->nilai_km = $nilai_k;
+                        $data_fdl->rpm        = $rpm;
+                        $data_fdl->suhu_oli = $oli;
+                        if ($request->foto_lok != '')
+                            $data_fdl->foto_depan = self::convertImg($request->foto_lok, 1, $this->user_id);
+                        if ($request->foto_sampl != '')
+                            $data_fdl->foto_belakang = self::convertImg($request->foto_sampl, 2, $this->user_id);
+                        if ($request->foto_lain != '')
+                            $data_fdl->foto_sampling = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        $data_fdl->created_by    = $this->karyawan;
+                        $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
+                        $data_fdl->save();
+
+                        $data_order = new DataLapanganEmisiOrder;
+                        // $data_order->id_po			= $cek_po->id;
+                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->id_qr            = $cek_qr->id;
+                        $data_order->id_fdl            = $data_fdl->id;
+                        $data_order->id_kendaraan    = $data_kendaraan->id;
+                        $data_order->id_regulasi    = $id_regulasi;
+                        $data_order->created_by            = $this->karyawan;
+                        $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
+                        $data_order->save();
+
+
+                        $update_order = OrderDetail::where('no_sampel', strtoupper($request->no_sampel))->where('is_active', 1)->update([
+                            'tanggal_terima' => Carbon::now()->format('Y-m-d'),
+                        ]);
+                        DB::commit();
+                        return response()->json([
+                            'status' => 201,
+                            'success' => true,
+                            'message' => 'Data Emisi Add Succesfully'
+                        ], 201);
                     } else {
                         return response()->json([
                             'message' => 'No Sample Not Exist.!'

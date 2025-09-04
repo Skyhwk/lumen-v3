@@ -49,13 +49,18 @@ class FdlMethodRulaController extends Controller
         DB::beginTransaction();
         try {
             $rawData = $request->all();
-
             $parsedData = [];
-            foreach ($rawData as $key => $value) {
-                parse_str($key . '=' . $value, $output);
-                $parsedData = array_merge_recursive($parsedData, $output);
-            }
 
+            foreach ($rawData as $key => $value) {
+                if (is_array($value)) {
+                    // langsung merge karena sudah array
+                    $parsedData[$key] = $value;
+                } else {
+                    // kalau string query, baru diparse
+                    parse_str($key . '=' . $value, $output);
+                    $parsedData = array_merge_recursive($parsedData, $output);
+                }
+            }
             $data = [
                 'skor_A' => $parsedData['skor_A'] ?? [],
                 'skor_B' => $parsedData['skor_B'] ?? [],
@@ -247,8 +252,7 @@ class FdlMethodRulaController extends Controller
                 'total_skor_B' => $totalSkorB,
                 'skor_rula' => $skorC
             ];
-
-            // dd($pengukuran);
+            
             $data = new DataLapanganErgonomi();
             if ($request->no_order != '')
                 $data->no_order = $request->no_order;
@@ -269,7 +273,7 @@ class FdlMethodRulaController extends Controller
             if ($request->aktivitas != '')
                 $data->aktivitas = $request->aktivitas;
             $data->method = 3;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_SLASHES);
             if ($request->foto_samping_kiri != '')
                 $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
             if ($request->foto_samping_kanan != '')
@@ -279,7 +283,7 @@ class FdlMethodRulaController extends Controller
             if ($request->foto_belakang != '')
                 $data->foto_belakang = self::convertImg($request->foto_belakang, 4, $this->user_id);
             $data->aktivitas_ukur = $request->aktivitas_ukur;
-            $data->permission = $request->permis;
+            $data->permission = $request->permission;
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();

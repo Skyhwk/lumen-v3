@@ -44,7 +44,7 @@ use Carbon\Carbon;
 class WsFinalUdaraGetaranController extends Controller
 {
 
-	private $categoryGetaran = [13, 14, 15, 16, 18, 19];
+	private $categoryGetaran = [13, 14, 15, 16, 18, 19, 20];
 
 
 	// public function index(Request $request)
@@ -78,7 +78,7 @@ class WsFinalUdaraGetaranController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
+			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima');
 		// Filter by date (YYYY-MM or YYYY-MM-DD)

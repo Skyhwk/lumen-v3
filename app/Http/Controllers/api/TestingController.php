@@ -19,7 +19,10 @@ use App\Models\{
     MasterBakumutu,
     HargaParameter,
     KelengkapanKonfirmasiQs,
-    Parameter,DataLapanganAir,SampelTidakSelesai,MasterKaryawan
+    Parameter,
+    DataLapanganAir,
+    SampelTidakSelesai,
+    MasterKaryawan
 };
 use App\Services\{
     GetAtasan,
@@ -46,9 +49,8 @@ use Yajra\DataTables\Facades\DataTables;
 class TestingController extends Controller
 {
     public function show(Request $request)
-    
     {
-        
+
         switch ($request->menu) {
             case 'this':
                 dd($this);
@@ -539,8 +541,8 @@ class TestingController extends Controller
 
                         foreach ($data as $value) {
                             $kategoriParts = explode("-", $value->kategori_2);
-                            $kategoriType  = $kategoriParts[1] ?? null;
-                            $id_kategori   = $kategoriParts[0] ?? null;
+                            $kategoriType = $kategoriParts[1] ?? null;
+                            $id_kategori = $kategoriParts[0] ?? null;
 
                             if ($kategoriType === 'Air') {
                                 // Ambil nama parameter
@@ -569,7 +571,7 @@ class TestingController extends Controller
                                         if (!isset($botol_volumes[$param->regen])) {
                                             $botol_volumes[$param->regen] = 0;
                                         }
-                                        $botol_volumes[$param->regen] += ($param->volume && $param->volume !== '-' )
+                                        $botol_volumes[$param->regen] += ($param->volume && $param->volume !== '-')
                                             ? (float) $param->volume
                                             : 0;
                                     }
@@ -579,11 +581,11 @@ class TestingController extends Controller
                                 $botol = [];
 
                                 $ketentuan_botol = [
-                                    'ORI'     => 1000,
-                                    'H2SO4'   => 1000,
-                                    'M100'    => 100,
-                                    'HNO3'    => 500,
-                                    'M1000'   => 1000,
+                                    'ORI' => 1000,
+                                    'H2SO4' => 1000,
+                                    'M100' => 100,
+                                    'HNO3' => 500,
+                                    'M1000' => 1000,
                                     'BENTHOS' => 100
                                 ];
 
@@ -600,11 +602,11 @@ class TestingController extends Controller
                                     $jumlah_botol = ceil($volume / $ketentuan_botol[$typeUpper]);
 
                                     $botol[] = (object) [
-                                        'koding'     => $koding,
+                                        'koding' => $koding,
                                         'type_botol' => $type,
-                                        'volume'     => $volume,
-                                        'file'       => $koding . '.png',
-                                        'disiapkan'  => (int) $jumlah_botol
+                                        'volume' => $volume,
+                                        'file' => $koding . '.png',
+                                        'disiapkan' => (int) $jumlah_botol
                                     ];
 
                                     if (!file_exists(public_path('barcode/botol'))) {
@@ -631,8 +633,8 @@ class TestingController extends Controller
                                         $persiapan[] = [
                                             'parameter' => explode(';', $ketentuan->parameter)[1] ?? null,
                                             'disiapkan' => $ketentuan->ketentuan,
-                                            'koding'    => $koding,
-                                            'file'      => $koding . '.png'
+                                            'koding' => $koding,
+                                            'file' => $koding . '.png'
                                         ];
 
                                         if (!file_exists(public_path('barcode/penjerap'))) {
@@ -680,7 +682,7 @@ class TestingController extends Controller
                         ->select(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1'])
                         ->where('is_active', true)
                         ->where('kategori_1', '!=', 'SD')
-                        ->where('no_quotation','ISL/QTC/25-I/000041R13');
+                        ->where('no_quotation', 'ISL/QTC/25-I/000041R13');
                     if ($isProgrammer) {
                         // $orderDetail->whereBetween('tanggal_sampling', [
                         //     Carbon::now()->startOfMonth()->toDateString(),
@@ -1036,7 +1038,7 @@ class TestingController extends Controller
                         }
 
                     }
-                    return response()->json($filteredResult,200);
+                    return response()->json($filteredResult, 200);
                     return DataTables::of($filteredResult)->make(true);
                 } catch (\Exception $ex) {
                     dd($ex);
