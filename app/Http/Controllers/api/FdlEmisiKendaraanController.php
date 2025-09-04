@@ -471,22 +471,25 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->created_at	= Carbon::now()->format('Y-m-d H:i:s');
                         $data_fdl->save();
 
-                        if ($kendaraan) {
-                            $kendaraan->merk_kendaraan    = ucfirst($request->merk);
-                            $kendaraan->id_bbm            = $request->jenis_kendaraan;
-                            if ($request->jenis_kendaraan == 31) $kendaraan->jenis_bbm = "Bensin";
-                            if ($request->jenis_kendaraan == 32) $kendaraan->jenis_bbm = "Solar";
-                            $kendaraan->plat_nomor        = $request->no_plat;
-                            $kendaraan->bobot_kendaraan   = $request->bobot_kendaraan;
-                            $kendaraan->tahun_pembuatan   = $request->tahun;
-                            $kendaraan->no_mesin          = $request->no_mesin;
-                            $kendaraan->transmisi         = $request->transmisi;
-                            $kendaraan->kategori_kendaraan= $request->kategori_kendaraan;
-                            $kendaraan->km                = $request->km;
-                            $kendaraan->cc                = $request->cc;
-                            $kendaraan->created_by        = $this->karyawan;
-                            $kendaraan->created_at        = Carbon::now()->format('Y-m-d H:i:s');
-                            $kendaraan->save();
+                        if($kendaraan){
+                            $kendaraan = MasterKendaraan::updateOrCreate(
+                                ['id' => $cek_qr->id_kendaraan], // kunci pencarian
+                                [
+                                    'merk_kendaraan'     => ucfirst($request->merk),
+                                    'id_bbm'             => $request->jenis_kendaraan,
+                                    'jenis_bbm'          => $request->jenis_kendaraan == 31 ? "Bensin" : "Solar",
+                                    'plat_nomor'         => $request->no_plat,
+                                    'bobot_kendaraan'    => $request->bobot_kendaraan,
+                                    'tahun_pembuatan'    => $request->tahun,
+                                    'no_mesin'           => $request->no_mesin,
+                                    'transmisi'          => $request->transmisi,
+                                    'kategori_kendaraan' => $request->kategori_kendaraan,
+                                    'km'                 => $request->km,
+                                    'cc'                 => $request->cc,
+                                    'created_by'         => $this->karyawan,
+                                    'created_at'         => Carbon::now()->format('Y-m-d H:i:s')
+                                ]
+                            );
                         }
 
                         $data_order = new DataLapanganEmisiOrder;
