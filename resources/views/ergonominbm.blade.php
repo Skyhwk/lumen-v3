@@ -259,7 +259,7 @@
         /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
         .signature-section {
             width: 100%;
-            margin-top: 15px;
+            margin-top: 8px;
             clear: both;
         }
 
@@ -310,7 +310,7 @@
     </div>
     <div class="content-container clearfix">
         <div class="left-section">
-            <div class="section-title">A. KELUHAN SISTEM MUSCULOSKETALX</div>
+            <div class="section-title">A. KELUHAN SISTEM MUSCULOSKETAL</div>
             <table>
                 <thead>
                     <tr>
@@ -335,142 +335,142 @@
                     <tr>
                         <td>0.</td>
                         <td style="text-align: left;">Leher atas</td>
-                        <td>0</td>
-                        <td>1</td>
-                        <td rowspan="12" colspan="2" style="padding:0; vertical-align: top;"> 
-                            <img src="https://via.placeholder.com/80x120.png?text=BODY+MAP" alt="Body Map" class="body-map">
+                        <td>{{$pengukuran->sebelum->skor_leher_atas}}</td>
+                        <td>{{$pengukuran->setelah->skor_leher_atas}}</td>
+                        <td rowspan="12" colspan="2" style="padding:0; vertical-align: top;"> <img
+                                src="{{ public_path('dokumen/img_ergo/nbm/anatomi.jpg') }}" alt="Body Map" class="body-map">
                         </td>
                         <td>1.</td>
                         <td style="text-align: left;">Tengkuk</td>
-                        <td>0</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_tengkuk}}</td>
+                        <td>{{$pengukuran->setelah->skor_tengkuk}}</td>
                     </tr>
                     <tr>
                         <td>2.</td>
                         <td style="text-align: left;">Bahu kiri</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_bahu_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_bahu_kiri}}</td>
                         <td>3.</td>
                         <td style="text-align: left;">Bahu kanan</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_bahu_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_bahu_kanan}}</td>
                     </tr>
                     <tr>
                         <td>4.</td>
                         <td style="text-align: left;">Lengan atas kiri</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_lengan_atas_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_lengan_atas_kiri}}</td>
                         <td>5.</td>
                         <td style="text-align: left;">Punggung</td>
-                        <td>2</td>
-                        <td>3</td>
+                        <td>{{$pengukuran->sebelum->skor_lengan_atas_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_lengan_atas_kiri}}</td>
                     </tr>
                     <tr>
                         <td>6.</td>
                         <td style="text-align: left;">Lengan atas kanan</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_lengan_atas_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_lengan_atas_kanan}}</td>
                         <td>7.</td>
                         <td style="text-align: left;">Pinggang</td>
-                        <td>2</td>
-                        <td>3</td>
+                        <td>{{$pengukuran->sebelum->skor_pinggang}}</td>
+                        <td>{{$pengukuran->setelah->skor_pinggang}}</td>
                     </tr>
                     <tr>
                         <td>8.</td>
                         <td style="text-align: left;">Pinggul</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_pinggul}}</td>
+                        <td>{{$pengukuran->setelah->skor_pinggul}}</td>
                         <td>9.</td>
                         <td style="text-align: left;">Pantat</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>{{$pengukuran->sebelum->skor_pantat}}</td>
+                        <td>{{$pengukuran->setelah->skor_pantat}}</td>
                     </tr>
                     <tr>
                         <td>10.</td>
                         <td style="text-align: left;">Siku kiri</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_siku_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_siku_kiri}}</td>
                         <td>11.</td>
                         <td style="text-align: left;">Siku kanan</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_siku_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_siku_kanan}}</td>
                     </tr>
                     <tr>
                         <td>12.</td>
                         <td style="text-align: left;">Lengan bawah kiri</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>{{$pengukuran->sebelum->skor_lengan_bawah_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_lengan_bawah_kiri}}</td>
                         <td>13.</td>
                         <td style="text-align: left;">Lengan bawah kanan</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_lengan_bawah_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_lengan_bawah_kanan}}</td>
                     </tr>
                     <tr>
                         <td>14.</td>
                         <td style="text-align: left;">Pergelangan tangan kiri</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_pergelangan_tangan_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_pergelangan_tangan_kiri}}</td>
                         <td>15.</td>
                         <td style="text-align: left;">Pergelangan tangan kanan</td>
-                        <td>2</td>
-                        <td>3</td>
+                        <td>{{$pengukuran->sebelum->skor_pergelangan_tangan_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_pergelangan_tangan_kanan}}</td>
                     </tr>
                     <tr>
                         <td>16.</td>
                         <td style="text-align: left;">Tangan kiri</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_tangan_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_tangan_kiri}}</td>
                         <td>17.</td>
                         <td style="text-align: left;">Tangan kanan</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_tangan_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_tangan_kanan}}</td>
                     </tr>
                     <tr>
                         <td>18.</td>
                         <td style="text-align: left;">Paha kiri</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>{{$pengukuran->sebelum->skor_paha_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_paha_kiri}}</td>
                         <td>19.</td>
                         <td style="text-align: left;">Paha kanan</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_paha_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_paha_kanan}}</td>
                     </tr>
                     <tr>
                         <td>20.</td>
                         <td style="text-align: left;">Lutut kiri</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_lutut_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_lutut_kiri}}</td>
                         <td>21.</td>
                         <td style="text-align: left;">Lutut kanan</td>
-                        <td>1</td>
-                        <td>2</td>
+                        <td>{{$pengukuran->sebelum->skor_lutut_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_lutut_kanan}}</td>
                     </tr>
                     <tr>
                         <td>22.</td>
                         <td style="text-align: left;">Betis kiri</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_betis_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_betis_kiri}}</td>
                         <td>23.</td>
                         <td style="text-align: left;">Betis kanan</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_betis_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_betis_kanan}}</td>
                     </tr>
                     <tr>
                         <td>24.</td>
                         <td style="text-align: left;">Pergelangan kaki kiri</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>{{$pengukuran->sebelum->skor_pergelangan_kaki_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_pergelangan_kaki_kiri}}</td>
                         <td colspan="2" class="result-header">HASIL AKHIR</td>
                         <td>25.</td>
                         <td style="text-align: left;">Pergelangan kaki kanan</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_pergelangan_kaki_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_pergelangan_kaki_kanan}}</td>
                     </tr>
                     <tr>
                         <td>26.</td>
                         <td style="text-align: left;">Kaki kiri</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>{{$pengukuran->sebelum->skor_kaki_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_kaki_kiri}}</td>
                         <td colspan="2" class="nested-table-container">
                             <table class="nested-table">
                                 <tr>
@@ -481,22 +481,22 @@
                         </td>
                         <td>27.</td>
                         <td style="text-align: left;">Kaki kanan</td>
-                        <td>0</td>
-                        <td>1</td>
+                        <td>{{$pengukuran->sebelum->skor_kaki_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_kaki_kanan}}</td>
                     </tr>
                     <tr>
                         <td colspan="2" class="total-score">TOTAL SKOR KIRI</td>
-                        <td>8</td>
-                        <td>15</td>
+                        <td>{{$pengukuran->sebelum->skor_kiri}}</td>
+                        <td>{{$pengukuran->setelah->skor_kiri}}</td>
                         <td class="nested-table-container">
-                            18
+                            {{$pengukuran->sebelum->total_skor}}
                         </td>
                         <td class="nested-table-container">
-                            35
+                            {{$pengukuran->setelah->total_skor}}
                         </td>
                         <td colspan="2" class="total-score">TOTAL SKOR KANAN</td>
-                        <td>10</td>
-                        <td>20</td>
+                        <td>{{$pengukuran->sebelum->skor_kanan}}</td>
+                        <td>{{$pengukuran->setelah->skor_kanan}}</td>
                     </tr>
                     <tr>
                       <td rowspan="3" colspan="2">KESIMPULAN AKHIR KELUHAN SISTEM MUSCULOSKETAL</td>
@@ -518,15 +518,15 @@
                 <tbody>
                     <tr>
                         <td style="text-align: left;">SEBELUM BEKERJA</td>
-                        <td>18</td>
-                        <td>0</td>
-                        <td>Rendah</td>
+                        <td>{{$pengukuran->sebelum->total_skor}}</td>
+                        <td>{{$pengukuran->sebelum->tingkat_resiko}}</td>
+                        <td>{{$pengukuran->sebelum->kategori_risiko}}</td>
                     </tr>
                     <tr>
                         <td style="text-align: left;">SETELAH BEKERJA</td>
-                        <td>35</td>
-                        <td>1</td>
-                        <td>Sedang</td>
+                        <td>{{$pengukuran->setelah->total_skor}}</td>
+                        <td>{{$pengukuran->setelah->tingkat_resiko}}</td>
+                        <td>{{$pengukuran->setelah->kategori_risiko}}</td>
                     </tr>
                     <tr>
                      <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
@@ -539,14 +539,24 @@
                         <tr>
                             <th>DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
                             <td colspan="2" height="60" style="vertical-align: top; text-align:left;">
-                                Pekerjaan operator komputer dengan posisi duduk selama 8 jam per hari
+                                {{$personal->aktivitas_ukur}}
                             </td>
                         </tr>
                 </table>
             </div>
+            <ul style="font-family: Arial, sans-serif; font-size: 8px; text-align: left; list-style-type: none; padding-left: 10px; margin: 0;">
+                <li>
+                    <sup>*</sup> Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis<br>
+                    Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
+                </li>
+                <li>
+                    <sup>**</sup> Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and<br>
+                    Ergonomics Methods</i> by Neville Stanton et al, 2005.
+                </li>
+            </ul>
         </div>
         <div class="right-section">
-            <div style="margin-top: 30px;">
+            <div>
                 <table>
                     <thead>
                         <tr>
@@ -557,43 +567,42 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td>LHP/001/2025</td>
-                            <td>S001</td>
+                            <td>{{$personal->no_lhp}}</td>
+                            <td>{{$personal->no_sampel}}</td>
                             <td>Lingkungan</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-
             <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama Pelanggan</span>
-                        <span>: PT. Contoh Perusahaan </span>
+                        <span>: {{$personal->nama_pelanggan}} </span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Alamat / Lokasi Sampling</span>
-                        <span>: Jakarta Selatan </span>
+                        <span>: {{$personal->alamat_pelanggan}} </span>
                     </div>
 
                     <div class="info-header">Informasi Sampling</div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Tanggal Sampling</span>
-                        <span>: 01 September 2025 </span>
+                        <span>: {{$personal->tanggal_sampling}} </span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Periode Analisa</span>
-                        <span>: 01-03 September 2025 </span>
+                        <span>: {{$personal->periode_analis}} </span>
                     </div>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama Pekerja</span>
-                        <span>: John Doe </span>
+                        <span>: {{$personal->nama_pekerja}} </span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Jenis Pekerjaan</span>
-                        <span>: Operator Komputer</span>
+                        <span>: </span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Jenis Analisa</span>
@@ -608,15 +617,15 @@
                     <div class="info-header">Informasi Data Individu/Pekerja yang Diukur</div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Nama</span>
-                        <span>: John Doe </span>
+                        <span>: {{$personal->nama_pekerja}} </span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Usia</span>
-                        <span>: 28 Tahun</span>
+                        <span>: {{$personal->usia}}</span>
                     </div>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Lama Bekerja</span>
-                        <span>: 3 Tahun</span>
+                        <span>: {{$personal->lama_kerja}}</span>
                     </div>
             </div>
             <div class="risk-table">
@@ -658,7 +667,6 @@
                     </tbody>
                 </table>
             </div>
-            
             <!-- Signature Section yang disesuaikan -->
             <div class="signature-section">
                 <table class="signature-table">
@@ -666,9 +674,9 @@
                         <td class="signature-left"></td>
                         <td class="signature-right">
                             <div class="signature-date">
-                                Jakarta, 03 September 2025
-                            </div>
-                            <img src="https://via.placeholder.com/60x60.png?text=QR" class="signature-qr" alt="QR Code" />
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
                             <div class="signature-text">(Tanda Tangan Digital)</div>
                         </td>
                     </tr>

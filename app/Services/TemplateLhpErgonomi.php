@@ -66,7 +66,7 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analis" => null,
             ];
-            
+           
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonomirula',compact('pengukuran', 'personal'))->render();
             
@@ -119,6 +119,7 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analis" => null,
             ];
+       
         $pdf = new PDF($mpdfConfig);
         $html = View::make('ergonomirwl',compact('pengukuran','personal'))->render();
         return $html;

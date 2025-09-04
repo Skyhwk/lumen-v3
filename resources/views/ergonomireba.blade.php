@@ -184,6 +184,52 @@
             text-align: left;
             font-size: 7pt;
         }
+        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
+        }
     </style>
 </head>
 <body>
@@ -505,6 +551,16 @@
                         <td style="font-size: 7pt;">Diperlukan tindakan sesegera mungkin</td>
                     </tr>
                 </table>
+                <!-- Footer Notes -->
+                <ul style="font-family: Arial, sans-serif; font-size: 10px; text-align: left; list-style-type: none; padding-left: 10px; margin: 0;">
+                    <li>
+                        <sup>*</sup>Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
+                    </li>
+                    <li>
+                        <sup>**</sup> Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and<br>
+                        Ergonomics Methods</i> by Neville Stanton et al, 2005.
+                    </li>
+                </ul>
             </div>
         </div>
         
@@ -530,20 +586,16 @@
                     </tr>
                 </table>
             </div>
-            
             <div class="bottom-right">
-                <!-- Footer Notes -->
-                <table class="footer-notes" style="margin-top: 20px;">
+                <table class="signature-table">
                     <tr>
-                        <td>*</td>
-                        <td>
-                            Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>**</td>
-                        <td>
-                            Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and by Neville Stanton et al, 2005.
+                        <td class="signature-left"></td>
+                        <td class="signature-right">
+                            <div class="signature-date">
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                            <div class="signature-text">(Tanda Tangan Digital)</div>
                         </td>
                     </tr>
                 </table>

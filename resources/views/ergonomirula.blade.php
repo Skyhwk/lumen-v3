@@ -15,7 +15,6 @@
             width: 100%;
             position: relative;
             box-sizing: border-box;
-            border: 1px solid #000;
             padding: 8px; /* Reduced from 11px */
         }
 
@@ -181,6 +180,52 @@
 
         .inline-block {
             display: inline-block;
+        }
+        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
         }
     </style>
 </head>
@@ -405,11 +450,22 @@
                     </div>
                 </div>
             </div>
-            <div style="clear: both;"></div>
-        </div>
 
-        <div class="footer-note">
-            Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.
+            <div class="signature-section">
+                <table class="signature-table">
+                    <tr>
+                        <td class="signature-left"></td>
+                        <td class="signature-right">
+                            <div class="signature-date">
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                            <div class="signature-text">(Tanda Tangan Digital)</div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <div style="clear: both;"></div>
         </div>
     </div>
 </body>

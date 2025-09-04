@@ -185,6 +185,53 @@
         .info-line .info-value {
             /* Biarkan sisa lebar */
         }
+
+        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
+        }
     </style>
 </head>
 
@@ -194,7 +241,7 @@
 
         <div class="content-layout clearfix">
             <div class="column-left">
-                <div class="table-title">DATA VARIABEL PENGUKURAN</div>
+                <div class="table-title">DATA VARIABEL PENGUKURAN U</div>
                 <table cellpadding="4" cellspacing="0">
                     <thead>
                         <tr>
@@ -491,10 +538,22 @@
                     ** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Peraturan Menteri Ketenagakerjaan Republik
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
+                <div class="signature-section">
+                <table class="signature-table">
+                    <tr>
+                        <td class="signature-left"></td>
+                        <td class="signature-right">
+                            <div class="signature-date">
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                            <div class="signature-text">(Tanda Tangan Digital)</div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
             </div>
         </div>
-        <div class="footer-note">*hasil uji ini hanya berlaku untuk sampel yang diuji, sertifikat tidak boleh
-            diduplikat sebagian dengan tanpa izin tertulis dari pihak laboratorium.</div>
     </div>
 </body>
 
