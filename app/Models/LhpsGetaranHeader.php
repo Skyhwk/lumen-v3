@@ -16,6 +16,10 @@ class LhpsGetaranHeader extends Sector
     {
         return $this->hasMany(LhpsGetaranDetail::class, 'id_header', 'id');
     }
+    public function lhpsGetaranCustom()
+    {
+        return $this->hasMany(LhpsGetaranCustom::class, 'id_header', 'id');
+    }
 
  
 }

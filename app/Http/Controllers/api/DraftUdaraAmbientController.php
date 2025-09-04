@@ -177,7 +177,7 @@ class DraftUdaraAmbientController extends Controller
             foreach ($oldDetails as $detail) {
                 $detailHistory = $detail->replicate();
                 $detailHistory->setTable((new LhpsLingDetailHistory())->getTable());
-                $detailHistory->id = $detail->id;
+                // $detailHistory->id = $detail->id;
                 $detailHistory->created_by = $this->karyawan;
                 $detailHistory->created_at = Carbon::now();
                 $detailHistory->save();

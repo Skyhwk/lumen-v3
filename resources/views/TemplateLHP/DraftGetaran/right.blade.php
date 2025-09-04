@@ -4,8 +4,8 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="240">JENIS SAMPEL</td>
+                        <td class="custom" width="120">No. LHP</td>
+                        <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
@@ -45,29 +45,58 @@
                             <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
                     </tr>
+                       @php
+                        if ($header->methode_sampling != null) {
+                            
+                            $methode_sampling = "";
+                            $dataArray = json_decode($header->methode_sampling ?? []);
+                            
+                            $result = array_map(function ($item) {
+                                $parts = explode(';', $item);
+                                $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                $sni = $parts[1] ?? '-';
+                                return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                            }, $dataArray);
+
+                            foreach ($result as $index => $item) {
+                                $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                            }
+
+                            if($header->status_sampling == 'SD') {
+                                $methode_sampling = $dataArray[0] ?? '-';
+                            }
+                        } else {
+                            $methode_sampling = "-";
+                        }
+                    @endphp
+
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{!! $header->metode_sampling ?? '-' !!}</td>
+                        @if ($header->status_sampling == 'SD')
+                            <td class="custom5">****** {!! str_replace('-', '', $methode_sampling) !!}</td>
+                        @else
+                            <td class="custom5">{!! $methode_sampling !!}</td>
+                        @endif
                     </tr>
-                    <tr>
-                        <td class="custom5">Tanggal Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
+                     <tr>
+                        <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
+                        <td class="custom5" width="12">:</td>
+                        @php
+                            if($header->status_sampling == 'SD'){ 
+                                $tanggal_ = $header->tanggal_terima ;
+                            } else { 
+                                $tanggal_ = $header->tanggal_sampling;
+                            }
+                        @endphp
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
                     </tr>
                     @php
                         $periode = explode(' - ', $header['periode_analisa']);
                         $periode1 = $periode[0] ?? '';
                         $periode2 = $periode[1] ?? '';
                     @endphp
-                    <!-- <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - 
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
-                        </td>
-                    </tr> -->
+                  
                 </table>
 
                 {{-- Regulasi --}}
