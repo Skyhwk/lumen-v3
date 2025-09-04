@@ -40,4 +40,8 @@ class LingkunganHeader extends Sector
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('id_kategori', 4)->where('is_active', true);
     }
+    public function parameter_udara()
+    {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('id_kategori', 4)->where('is_active', true);
+    }
 }
