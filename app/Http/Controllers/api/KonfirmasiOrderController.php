@@ -492,7 +492,8 @@ class KonfirmasiOrderController extends Controller
 			return response()->json([
 				'success' => false,
 				'message' => $th->getMessage(),
-				'line' => $th->getLine()
+				'line' => $th->getLine(),
+				'file' => $th->getFile()
 			], 500);
 		}
 	}
@@ -513,7 +514,6 @@ class KonfirmasiOrderController extends Controller
 				], 401);
 			}
 
-			$fileType = $fileData['type'];
 			$fileExtension = $fileData['extension'];
 			$fileContent = $fileData['content'];
 
