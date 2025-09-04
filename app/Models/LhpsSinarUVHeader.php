@@ -12,9 +12,13 @@ class LhpsSinarUVHeader extends Sector
 
     protected $guarded = [];
 
-    public function lhpsSinarUVDetail()
+    public function lhpsSinaruvDetail()
     {
         return $this->hasMany(LhpsSinarUVDetail::class, 'id_header', 'id');
+    }
+    public function lhpsSinaruvCustom()
+    {
+        return $this->hasMany(LhpsSinarUVCustom::class, 'id_header', 'id');
     }
 
  

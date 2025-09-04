@@ -1,6 +1,6 @@
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-        <tr>
+    <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
@@ -17,7 +17,7 @@
         <tr>
             <td>
                 {{-- Informasi Pelanggan --}}
-               <table style="padding: 20px 0px 0px 0px;" width="100%">
+                <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
                         <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
@@ -43,14 +43,38 @@
                         <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr> 
                     @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
+                        if ($header->methode_sampling != null) {
+                            
+                            $methode_sampling = "";
+                            $dataArray = json_decode($header->methode_sampling ?? []);
+                            
+                            $result = array_map(function ($item) {
+                                $parts = explode(';', $item);
+                                $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                $sni = $parts[1] ?? '-';
+                                return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                            }, $dataArray);
+
+                            foreach ($result as $index => $item) {
+                                $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                            }
+
+                            if($header->status_sampling == 'SD') {
+                                $methode_sampling = $dataArray[0] ?? '-';
+                            }
+                        } else {
+                            $methode_sampling = "-";
+                        }
                     @endphp
+
                     <tr>
-                         <tr>
-                         <td class="custom5">Metode Sampling</td>
+                        <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{!! $methode_sampling !!}</td>
-                    </tr>
+                        @if ($header->status_sampling == 'SD')
+                            <td class="custom5">****** {!! str_replace('-', '', $methode_sampling) !!}</td>
+                        @else
+                            <td class="custom5">{!! $methode_sampling !!}</td>
+                        @endif
                     </tr>
                     <tr>
                         <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
@@ -67,16 +91,17 @@
                 </table>
 
                 {{-- Regulasi --}}
-                @if (!empty($header->regulasi))
+                @if ($header->regulasi_custom!=null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                </tr>
+                            @endif
                         @endforeach
                     </table>
                 @endif
-              
             </td>
         </tr>
     </table>
