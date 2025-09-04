@@ -4,8 +4,8 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="240">JENIS SAMPEL</td>
+                        <td class="custom" width="120">No. LHP</td>
+                        <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
@@ -18,57 +18,76 @@
         {{-- Informasi Pelanggan --}}
         <tr>
             <td>
-                <table style="padding-top: 20px;" width="100%">
+                 <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
+                        <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->nama_pelanggan }}</td>
+                        <td class="custom5"><strong>{!! html_entity_decode($header->nama_pelanggan) !!}</strong></td>
                     </tr>
                 </table>
 
                 {{-- Alamat Sampling --}}
-                <table style="padding-top: 10px;" width="100%">
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->alamat_sampling }}</td>
+                        <td class="custom5">{!! html_entity_decode($header->alamat_sampling) !!}</td>
                     </tr>
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding-top: 10px;" width="100%">
-                    <tr>
-                        <td class="custom5" width="120">
-                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{!! $header->metode_sampling ?? '-' !!}</td>
-                    </tr>
-                    <tr>
-                        <td class="custom5">Tanggal Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>
-                    @php
-                        $periode = explode(' - ', $header['periode_analisa']);
-                        $periode1 = $periode[0] ?? '';
-                        $periode2 = $periode[1] ?? '';
-                    @endphp
-                    <!-- <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - 
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
-                        </td>
-                    </tr> -->
-                </table>
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        <tr>
+                            <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
+                        </tr> 
+                        @php
+                            if ($header->metode_sampling != null) {
+                                
+                                $metode_sampling = "";
+                                $dataArray = json_decode($header->metode_sampling ?? []);
+                                
+                                $result = array_map(function ($item) {
+                                    $parts = explode(';', $item);
+                                    $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                    $sni = $parts[1] ?? '-';
+                                    return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                }, $dataArray);
+
+                                foreach ($result as $index => $item) {
+                                    $metode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                }
+
+                            
+                            } else {
+                                $metode_sampling = "-";
+                            }
+                        @endphp
+
+                        <tr>
+                            <td class="custom5">Metode Sampling</td>
+                            <td class="custom5">:</td>
+                            @if ($header->status_sampling == 'SD')
+                                <td class="custom5">****** {!! str_replace('-', '', $metode_sampling) !!}</td>
+                            @else
+                                <td class="custom5">{!! $metode_sampling !!}</td>
+                            @endif
+                        </tr>
+                        <tr>
+                            <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
+                            <td class="custom5" width="12">:</td>
+                            @php
+                                if($header->status_sampling == 'SD'){ 
+                                    $tanggal_ = $header->tanggal_terima ;
+                                } else { 
+                                    $tanggal_ = $header->tanggal_sampling;
+                                }
+                            @endphp
+                            <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
+                        </tr>
+                    </table>
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi))
