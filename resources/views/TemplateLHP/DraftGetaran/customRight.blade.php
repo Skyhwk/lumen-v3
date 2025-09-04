@@ -5,12 +5,10 @@
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
                         <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="120">No. SAMPEL</td>
                         <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->no_sampel }}</td>
                         <td class="custom">{{ $header->sub_kategori }}</td>
                     </tr>
                 </table>
@@ -43,19 +41,7 @@
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
                         <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr>
-                    <tr>
-                        <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
-                        <td class="custom5" width="12">:</td>
-                        @php
-                            if($header->status_sampling == 'SD'){ 
-                                $tanggal_ = $header->tanggal_terima ;
-                            } else { 
-                                $tanggal_ = $header->tanggal_sampling;
-                            }
-                        @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                    </tr>
+                    </tr> 
                     @php
                         if ($header->methode_sampling != null) {
                             
@@ -91,24 +77,26 @@
                         @endif
                     </tr>
                     <tr>
-                        <td class="custom5">Keterangan</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
+                        <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
+                        <td class="custom5" width="12">:</td>
+                        @php
+                            if($header->status_sampling == 'SD'){ 
+                                $tanggal_ = $header->tanggal_terima ;
+                            } else { 
+                                $tanggal_ = $header->tanggal_sampling;
+                            }
+                        @endphp
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
                     </tr>
-                    <tr>
-                        <td class="custom5">Titik Koordinat</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ $header->titik_koordinat }}</td>
-                    </tr>
+                   
+                 
+                   
                 </table>
 
                 {{-- Regulasi --}}
                 @if ($header->regulasi_custom!=null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                          <!-- @php
-                        dd($y);
-                        @endphp -->
                             @if ($y->page == $page)
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
@@ -117,41 +105,49 @@
                         @endforeach
                     </table>
                 @endif
+                   {{-- Tabel Kebisingan --}}
+                <table border="1" cellspacing="0" cellpadding="2" width="100%" style="margin-top: 10px;">
+                    <thead>
+                        <tr>
+                            <th>Durasi Pajanan Kebisingan per Hari</th>
+                            <th>Level Kebisingan (dBA)</th>
+                            <th>Durasi Pajanan Kebisingan per Hari</th>
+                            <th>Level Kebisingan (dBA)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @php
+                            $dataKebisingan = [
+                                ['24 Jam', '80', '28,12 Detik', '115'],
+                                ['16', '82', '14,06', '118'],
+                                ['8', '85', '7,03', '121'],
+                                ['4', '88', '3,52', '124'],
+                                ['2', '91', '1,76', '127'],
+                                ['1', '94', '0,88', '130'],
+                                ['30 Menit', '97', '0,44', '133'],
+                                ['15', '100', '0,22', '136'],
+                                ['7,5', '103', '0,11', '139'],
+                                ['3,75', '106', '', ''],
+                                ['1,88', '109', '', ''],
+                                ['0,94', '112', '', ''],
+                            ];
+                        @endphp
 
-                {{-- Keterangan --}}
-                @php
-                $temptArrayPush = [];
-                    if (!empty($detail)) {
-                        foreach ($detail as $v) {
-                            if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
-                                $temptArrayPush[] = $v['akr'];
-                            }
-                            if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
-                                $temptArrayPush[] = $v['attr'];
-                            }
-                        }
-                    }
-                @endphp
-
-                @if (!empty($header->keterangan))
-                    <table style="padding: 5px 0px 0px 10px;" width="100%">
-                        @foreach (json_decode($header->keterangan) as $vx)
-                            @foreach ($temptArrayPush as $symbol)
-                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
-                                    <tr>
-                                        <td class="custom5" colspan="3">{{ $vx }}</td>
-                                    </tr>
-                                    @break
-                                @endif
-                            @endforeach
-                        @endforeach
-                        @if ($header->status_sampling == 'SD')
+                        @foreach ($dataKebisingan as $row)
                             <tr>
-                                <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
+                                @foreach ($row as $cell)
+                                    <td style="text-align: center; vertical-align: middle;">{{ $cell }}</td>
+                                @endforeach
                             </tr>
-                        @endif
-                    </table>
-                @endif
+                        @endforeach
+
+                        <tr>
+                            <td colspan="4" style="text-align: center; vertical-align: middle;">
+                                <em>Catatan: Pajanan bising tidak boleh melebihi level 140 dBA walaupun hanya sesaat</em>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </td>
         </tr>
     </table>
