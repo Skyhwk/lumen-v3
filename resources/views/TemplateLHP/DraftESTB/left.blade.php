@@ -17,7 +17,7 @@
         </thead>
         <tbody>
             @php $total = count((array) $detail); @endphp
-                @foreach ((array) $detail as $kk => $yy)
+                @foreach ($detail->toArray() as $kk => $yy)
                     @continue(!$yy)
 
                     @php
