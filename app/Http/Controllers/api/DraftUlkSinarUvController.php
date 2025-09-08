@@ -55,6 +55,12 @@ class DraftUlkSinarUvController extends Controller
             ->where('status', 2)
             ->get();
 
+            foreach ($data as $key => $value) {
+                if(isset($value->lhps_sinaruv) && $value->lhps_sinaruv->metode_sampling != null ){
+                    $data[$key]->lhps_sinaruv->metode_sampling = json_decode($value->lhps_sinaruv->metode_sampling);
+                }
+            }
+
         return Datatables::of($data)->make(true);
     }
 
@@ -74,32 +80,62 @@ class DraftUlkSinarUvController extends Controller
 
     // Tidak digunakan sekarang, gatau nanti
    public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
+
+        $header = LhpsSinarUVHeader::where('id', $request->id_lhp)->first();
+        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
+
+        // konversi collection ke array biar bisa diubah
+        $result = $data->toArray();
+
+        foreach ($data as $key => $value) {
+            // pecah string metode_sampling menjadi array (misal dipisah koma)
+            $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+            // cari nilai header yang belum ada di value
+            $missing = array_diff($headerMetode, $valueMetode);
+
+            if (!empty($missing)) {
+                foreach ($missing as $miss) {
+                    // tambahkan ke result dengan index baru
+                    $result[] = [
+                        'id' => null, // karena ini bukan dari DB
+                        'metode_sampling' => $miss,
+                        'kategori' => $value->kategori,
+                        'sub_kategori' => $value->sub_kategori,
+                    ];
+                }
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        if (!empty($result)) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Available data retrieved successfully',
+                'data' => $result
+            ], 200);
+        } else {
+            return response()->json([
+                'status' => true,
+                'message' => 'Belum ada method',
+                'data' => []
+            ], 200);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine()
+        ], 500);
     }
+}
+
 
     public function store2(Request $request)
     {
