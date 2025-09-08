@@ -129,6 +129,13 @@ return [
             'days' => 7,
         ],
 
+        'utf8' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/utf8/sanitizer.log'),
+            'level' => 'info',
+            'days' => 3,
+        ],
+
         'transaction' => [
             'driver' => 'daily',
             'path' => storage_path('logs/transaction/transaction.log'),
