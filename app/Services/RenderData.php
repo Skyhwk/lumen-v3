@@ -668,8 +668,6 @@ class RenderData
             $filePath = public_path('quotation/' . $fileName);
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            // chmod($filePath, 0777);
-            chmod($filePath, 0777);
             return $fileName;
         } catch (Exception $e) {
             return response()->json(
@@ -2688,9 +2686,6 @@ class RenderData
             $filePath = public_path('quotation/' . $fileName);
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
-            // dd('masuk 2');
-            // chmod($filePath, 0777);
             return $fileName;
         } catch (Exception $e) {
             throw new Exception("Message : " . $e->getMessage() . ", Line : " . $e->getLine() . ", File : " . $e->getFile(), 401);
@@ -3238,8 +3233,6 @@ class RenderData
             $filePath = public_path('quotation/' . $fileName);
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
-            // chmod($filePath, 0777);
             return $fileName;
         } catch (Exception $e) {
             return response()->json(
@@ -4863,8 +4856,6 @@ class RenderData
             $filePath = public_path('quotation/' . $fileName);
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
-            // chmod($filePath, 0777);
             return $fileName;
         } catch (Exception $e) {
             return response()->json(

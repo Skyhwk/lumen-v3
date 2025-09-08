@@ -329,7 +329,6 @@ class RenderPersiapanSample
 
             $filePath = public_path('persiapan_sampel/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
 
             return $fileName;
         } catch (\Exception $ex) {

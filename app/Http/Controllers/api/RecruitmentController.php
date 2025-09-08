@@ -491,8 +491,6 @@ class RecruitmentController extends Controller{
                                         // Pindahkan file hasil kompresi ke lokasi tujuan
                                         rename($tempFile, $uploadPath . '/' . $fileName);
                                         $path = $uploadPath . '/' . $fileName;
-
-                                        chmod($path, 0644); // Set permission
                                     } catch (\ImagickException $e) {
                                         Helpers::sendTo(843302196, "Gagal memproses gambar: " . $e->getMessage());
                                         $path = null;
@@ -503,7 +501,6 @@ class RecruitmentController extends Controller{
                                 }
 
                                 if($path) {
-                                    chmod($path, 0644);
 
                                     if(isset($jsonData['attach']) && $jsonData['attach'] != null){
                                         $attach = json_decode($jsonData['attach'], true);
