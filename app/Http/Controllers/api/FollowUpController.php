@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 
-use Datatables;
+// use Datatables;
 use Carbon\Carbon;
 
 Carbon::setLocale('id');
@@ -21,6 +21,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use Yajra\DataTables\DataTables as DataTables;
 
 class FollowUpController extends Controller
 {
@@ -128,8 +129,9 @@ class FollowUpController extends Controller
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
         switch ($jabatan) {
             case 24: // Sales Staff
-                $dfus = DFUS::with('pelanggan')
-                    ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
+                $dfus = DFUS::select('dfus.*')
+                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
+                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
                     ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
                     ->orderBy('dfus.tanggal', 'desc')
                     ->orderBy('dfus.jam', 'desc')
@@ -142,8 +144,9 @@ class FollowUpController extends Controller
                     ->toArray();
                 array_push($bawahan, $this->karyawan);
 
-                $dfus = DFUS::with('pelanggan')
-                    ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
+                $dfus = DFUS::select('dfus.*')
+                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
+                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
                     ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
                     ->orderBy('dfus.tanggal', 'desc')
                     ->orderBy('dfus.jam', 'desc')
@@ -151,8 +154,9 @@ class FollowUpController extends Controller
                 break;
 
             default:
-                $dfus = DFUS::with('pelanggan')
-                    ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
+                $dfus = DFUS::select('dfus.*')
+                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
+                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
                     ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
                     ->orderBy('dfus.tanggal', 'desc')
                     ->orderBy('dfus.jam', 'desc');
@@ -160,15 +164,15 @@ class FollowUpController extends Controller
                 break;
         }
 
-        return Datatables::eloquent($dfus)
-            ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
-                $query->whereHas('pelanggan', function ($q) use ($keyword) {
-                    $q->where('nama_pelanggan', 'like', "%{$keyword}%");
-                });
-            })
+        return DataTables::of($dfus)
+            // ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
+            //     $query->whereHas('pelanggan', function ($q) use ($keyword) {
+            //         $q->where('nama_pelanggan', 'like', "%{$keyword}%");
+            //     });
+            // })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn($row) => "Coming Soon")
-            ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
+            ->addColumn('log_webphone', fn($row) => '$row->getLogWebphoneAttribute()->toArray()')
             ->make(true);
     }
 
