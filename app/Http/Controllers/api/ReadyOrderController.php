@@ -2025,7 +2025,7 @@ class ReadyOrderController extends Controller
             $pengurangan_data = array_values(array_diff($sampel_order_lama, $sampel_detail_baru));
             $penambahan_data = array_values(array_diff($sampel_detail_baru, $sampel_order_lama));
 
-            // dd($perubahan_data, $pengurangan_data, $penambahan_data);
+            // dd($penambahan_data);
             if (!empty($perubahan_data)) {
                 foreach ($perubahan_data as $changes) {
                     $existing_detail = OrderDetail::where('no_order', $data_lama->no_order)
@@ -2073,6 +2073,7 @@ class ReadyOrderController extends Controller
                     ->first();
 
                 $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                // dd($no_urut_sample);
                 $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
                 $no = $no_urut_sample;
                 $trigger = 0;
@@ -2173,7 +2174,8 @@ class ReadyOrderController extends Controller
                         }
                     }
 
-                    $number_imaginer = sprintf("%03d", $no);
+                    $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
+                    
                     $tanggal_sampling = $value->periode_kontrak . '-01';
                     //dedi 2025-02-14
                     if ($value->status_sampling != 'SD') {
