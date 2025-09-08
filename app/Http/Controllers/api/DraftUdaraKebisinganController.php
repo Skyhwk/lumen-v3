@@ -147,7 +147,7 @@ class DraftUdaraKebisinganController extends Controller
             $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL;
             $header->sub_kategori = ($request->jenis_sampel != '') ? $request->jenis_sampel : NULL;
             $header->deskripsi_titik = ($request->keterangan_1 != '') ? $request->keterangan_1 : NULL;
-            $header->metode_sampling = ($request->method_sampling != '') ? $request->method_sampling : NULL;
+            $header->metode_sampling = ($request->metode_sampling) ? $request->metode_sampling : NULL;
             $header->tanggal_sampling = ($request->tanggal_tugas != '') ? $request->tanggal_tugas : NULL;
             $header->suhu = ($request->suhu != '') ? $request->suhu : NULL;
             $header->kelembapan = ($request->kelembapan != '') ? $request->kelembapan : NULL;
@@ -269,8 +269,8 @@ class DraftUdaraKebisinganController extends Controller
                     $header->file_qr = $file_qr;
                     $header->save();
                 }
-   
 
+                // dd($header);
                 if($parameter[0] == 'Kebisingan (P8J)' ){
                 $fileName = LhpTemplate::setDataDetail($details)
                     ->setDataHeader($header)
