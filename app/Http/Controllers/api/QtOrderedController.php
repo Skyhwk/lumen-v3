@@ -33,7 +33,16 @@ class QtOrderedController extends Controller
     {
         try {
             if ($request->mode == 'non_kontrak') {
-                $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                $data = QuotationNonKontrak::with(['sampling', 'sales', 'konfirmasi', 'order:no_order,no_document'])
+                    ->withCount([
+                        // hitung jadwal lewat sampling langsung
+                        'sampling as count_jadwal' => function ($q) {
+                            $q->where('is_active', 1)
+                            ->whereHas('jadwal', function ($qq) {
+                                $qq->where('is_active', 1);
+                            });
+                        }
+                    ])
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
                     ->where('request_quotation.is_approved', true)
@@ -41,7 +50,18 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
-                $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                $data = QuotationKontrakH::with(['sampling', 'sales', 'konfirmasi', 'order:no_order,no_document'])
+                    ->withCount([
+                        'detail as count_detail' => function ($q) {
+                            $q->where('is_active', 1);
+                        },
+                        'sampling as count_jadwal' => function ($q) {
+                            $q->where('is_active', 1)
+                            ->whereHas('jadwal', function ($qq) {
+                                $qq->where('is_active', 1);
+                            });
+                        }
+                    ])
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
                     ->where('request_quotation_kontrak_H.flag_status', 'ordered')
                     ->where('request_quotation_kontrak_H.is_approved', true)
@@ -65,17 +85,6 @@ class QtOrderedController extends Controller
             }
 
             return DataTables::of($data)
-                ->addColumn('count_jadwal', function ($row) {
-                    return $row->sampling ? $row->sampling->sum(function ($sampling) {
-                        return $sampling->jadwal->count();
-                    }) : 0;
-                })
-                ->addColumn('count_detail', function ($row) {
-                    return $row->detail ? $row->detail->count() : 0;
-                })
-                ->filterColumn('konfirmasi', function ($query, $keyword) {
-                    // dd($query, $keyword);
-                })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {
                         $query->where('no_order', 'like', '%' . $keyword . '%');
@@ -84,10 +93,11 @@ class QtOrderedController extends Controller
                 ->make(true);
         } catch (Exception $e) {
             return response()->json([
-                'error' => $e->getMessage()
+                'error' => $e->getMessage() . ' on file ' . $e->getFile() . ' on line ' . $e->getLine()
             ], 500);
         }
     }
+
 
     public function getCabang(Request $request)
     {

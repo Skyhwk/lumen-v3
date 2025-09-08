@@ -185,6 +185,14 @@ class AksesMenuController extends Controller
 
         return response()->json(['message' => 'Data hasbeen delete'], 200);
     }
+
+    public function getTemplateAkses(Request $request){
+        $data = TemplateAkses::where('is_active', true)->where('userid', $this->user_id)->get();
+        return response()->json([
+            'message' => 'get data template akses success',
+            'data' => $data
+        ]);
+    }
 }
 
 
