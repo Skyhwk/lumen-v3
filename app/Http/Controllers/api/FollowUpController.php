@@ -172,7 +172,7 @@ class FollowUpController extends Controller
             // })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn($row) => "Coming Soon")
-            ->addColumn('log_webphone', fn($row) => '$row->getLogWebphoneAttribute()->toArray()')
+            ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
             ->make(true);
     }
 
