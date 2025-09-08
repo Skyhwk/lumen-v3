@@ -49,7 +49,7 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc');
             }
-
+    
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -63,7 +63,7 @@ class QtOrderedController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
-
+    
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
@@ -88,6 +88,7 @@ class QtOrderedController extends Controller
             ], 500);
         }
     }
+
 
     public function getCabang(Request $request)
     {
