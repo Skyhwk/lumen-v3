@@ -14,6 +14,7 @@ use App\Models\LhpsMedanLMHeader;
 use App\Models\LhpsIklimHeader;
 use App\Models\LhpsIklimHeaderHistory;
 use App\Models\LhpsIklimDetail;
+use App\Models\LhpsIklimCustom;
 use App\Models\LhpsIklimDetailHistory;
 
 use App\Models\MasterSubKategori;
@@ -43,23 +44,54 @@ class DraftUdaraIklimKerjaController extends Controller
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
+
         $data = OrderDetail::with([
             'lhps_iklim',
-            'orderHeader'
-            => function ($query) {
+            'orderHeader' => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
         ])
-            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel, GROUP_CONCAT(regulasi SEPARATOR "||") as regulasi_all')
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "21-Iklim Kerja")
-            ->groupBy('cfr')
             ->where('status', 2)
+            ->groupBy('cfr')
             ->get();
+
+        // Bersihin regulasi duplikat berdasarkan ID
+        foreach ($data as $item) {
+            $regsRaw = explode("||", $item->regulasi_all ?? '');
+            $allRegs = [];
+
+            foreach ($regsRaw as $reg) {
+                if (empty($reg)) continue;
+
+                // Decode JSON array misal: ["127-Peraturan...", "213-Peraturan..."]
+                $decoded = json_decode($reg, true);
+
+                if (is_array($decoded)) {
+                    foreach ($decoded as $r) {
+                        $allRegs[] = $r;
+                    }
+                }
+            }
+
+            // Hilangin duplikat berdasarkan ID
+            $unique = [];
+            foreach ($allRegs as $r) {
+                [$id, $text] = explode("-", $r, 2);
+                $unique[$id] = $r;
+            }
+
+            $item->regulasi_all = array_values($unique); // hasil array unik, rapi
+        }
+
+
         return Datatables::of($data)->make(true);
     }
+
 
     // Amang
     public function getKategori(Request $request)
@@ -135,6 +167,18 @@ class DraftUdaraIklimKerjaController extends Controller
                 $header->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             }
 
+            if (empty($request->tanggal_lhp)) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+                    'status' => false
+                ], 400);
+            }
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
             $parameter = explode(', ', $request->parameter);
             $header->no_order = $request->no_order ? $request->no_order : NULL;
             $header->no_lhp = $request->no_lhp ? $request->no_lhp : NULL;
@@ -150,10 +194,11 @@ class DraftUdaraIklimKerjaController extends Controller
             $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : NULL;
             $header->tanggal_sampling = $request->tanggal_tugas ? $request->tanggal_tugas : NULL;
             $header->periode_analisa = $request->periode_analisa ? $request->periode_analisa : NULL;
-            $header->nama_karyawan = 'Abidah Walfathiyyah';
-            $header->jabatan_karyawan = 'Technical Control Supervisor';
+            $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
     
             $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
+            $header->regulasi_custom = $request->regulasi_custom ? json_encode($request->regulasi_custom) : NULL;
             $header->tanggal_lhp = $request->tanggal_lhp ? $request->tanggal_lhp : NULL;
 
             $header->save();
@@ -171,57 +216,104 @@ class DraftUdaraIklimKerjaController extends Controller
             $detail = LhpsIklimDetail::where('id_header', $header->id)->delete();
             $i = 0;
             foreach ($request->no_sampel as $key => $val) {          
-                    $cleaned_key_no_sampel = array_map(fn($k) => trim($k, " '\""), array_keys($request->no_sampel));
-                    $cleaned_no_sampel = array_combine($cleaned_key_no_sampel, array_values($request->no_sampel));
-                    $cleaned_key_parameter = array_map(fn($k) => trim($k, " '\""), array_keys($request->param));
-                    $cleaned_parameter = array_combine($cleaned_key_parameter, array_values($request->param));
-                    $cleaned_key_lokasi = array_map(fn($k) => trim($k, " '\""), array_keys($request->keterangan_lokasi));
-                    $cleaned_lokasi = array_combine($cleaned_key_lokasi, array_values($request->keterangan_lokasi));
+                $cleaned_no_sampel  = $this->cleanArrayKeys($request->no_sampel);
+                $cleaned_parameter  = $this->cleanArrayKeys($request->param);
+                $cleaned_lokasi     = $this->cleanArrayKeys($request->keterangan_lokasi);
+
                 if (in_array("ISBB", $parameter) || in_array("ISBB (8 Jam)", $parameter)) {
-                    $cleaned_key_hasil = array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil));
-                    $cleaned_hasil = array_combine($cleaned_key_hasil, array_values($request->hasil));
-                    $cleaned_key_pekerjaan = array_map(fn($k) => trim($k, " '\""), array_keys($request->aktivitas_pekerjaan));
-                    $cleaned_aktivitas_pekerjaan = array_combine($cleaned_key_pekerjaan, array_values($request->aktivitas_pekerjaan));
-                    $cleaned_key_paparan = array_map(fn($k) => trim($k, " '\""), array_keys($request->durasi_paparan));
-                    $cleaned_durasi_paparan = array_combine($cleaned_key_paparan, array_values($request->durasi_paparan));
+                    $cleaned_hasil               = $this->cleanArrayKeys($request->hasil);
+                    $cleaned_aktivitas_pekerjaan = $this->cleanArrayKeys($request->aktivitas_pekerjaan);
+                    $cleaned_durasi_paparan      = $this->cleanArrayKeys($request->durasi_paparan);
+
                     if (array_key_exists($val, $cleaned_no_sampel)) {
                         $detail = new LhpsIklimDetail;
-                        $detail->id_header = $header->id;
-                        $detail->no_sampel = $val;
-                        $detail->param = $cleaned_parameter[$val];
-                        $detail->keterangan = $cleaned_lokasi[$val];
-                        $detail->hasil = $cleaned_hasil[$val];
-                        $detail->aktivitas_pekerjaan = $cleaned_aktivitas_pekerjaan[$val];
-                        $detail->durasi_paparan = $cleaned_durasi_paparan[$val];
+                        $detail->id_header          = $header->id;
+                        $detail->no_sampel          = $val;
+                        $detail->param              = $cleaned_parameter[$val] ?? null;
+                        $detail->keterangan         = $cleaned_lokasi[$val] ?? null;
+                        $detail->hasil              = $cleaned_hasil[$val] ?? null;
+                        $detail->aktivitas_pekerjaan= $cleaned_aktivitas_pekerjaan[$val] ?? null;
+                        $detail->durasi_paparan     = $cleaned_durasi_paparan[$val] ?? null;
                     }
                 } else {
-                    $cleaned_key_kecepatan_angin = array_map(fn($k) => trim($k, " '\""), array_keys($request->kecepatan_angin));
-                    $cleaned_kecepatan_angin = array_combine($cleaned_key_kecepatan_angin, array_values($request->kecepatan_angin));
-                    $cleaned_key_suhu_temperatur = array_map(fn($k) => trim($k, " '\""), array_keys($request->suhu_temperatur));
-                    $cleaned_suhu_temperatur = array_combine($cleaned_key_suhu_temperatur, array_values($request->suhu_temperatur));
-                    $cleaned_key_indeks_suhu = array_map(fn($k) => trim($k, " '\""), array_keys($request->indeks_suhu_basah));
-                    $cleaned_indeks_suhu = array_combine($cleaned_key_indeks_suhu, array_values($request->indeks_suhu_basah));
-                    $cleaned_key_kondisi = array_map(fn($k) => trim($k, " '\""), array_keys($request->kondisi));
-                    $cleaned_kondisi = array_combine($cleaned_key_kondisi, array_values($request->kondisi));
+                    $cleaned_kecepatan_angin = $this->cleanArrayKeys($request->kecepatan_angin);
+                    $cleaned_suhu_temperatur = $this->cleanArrayKeys($request->suhu_temperatur);
+                    $cleaned_indeks_suhu     = $this->cleanArrayKeys($request->indeks_suhu_basah);
+                    $cleaned_kondisi         = $this->cleanArrayKeys($request->kondisi);
+
                     if (array_key_exists($val, $cleaned_no_sampel)) {
                         $detail = new LhpsIklimDetail;
-                        $detail->id_header = $header->id;
-                        $detail->no_sampel = $val;
-                        $detail->param = $cleaned_parameter[$val];
-                        $detail->keterangan = $cleaned_lokasi[$val];
-                        $detail->indeks_suhu_basah = $cleaned_indeks_suhu[$val];
-
-                        $detail->kecepatan_angin = $cleaned_kecepatan_angin[$val];
-                        $detail->suhu_temperatur = $cleaned_suhu_temperatur[$val];
-                        $detail->kondisi = $cleaned_kondisi[$val];
+                        $detail->id_header      = $header->id;
+                        $detail->no_sampel      = $val;
+                        $detail->param          = $cleaned_parameter[$val] ?? null;
+                        $detail->keterangan     = $cleaned_lokasi[$val] ?? null;
+                        $detail->indeks_suhu_basah = $cleaned_indeks_suhu[$val] ?? null;
+                        $detail->kecepatan_angin   = $cleaned_kecepatan_angin[$val] ?? null;
+                        $detail->suhu_temperatur   = $cleaned_suhu_temperatur[$val] ?? null;
+                        $detail->kondisi           = $cleaned_kondisi[$val] ?? null;
                     }
                 }
 
                 $detail->save();
                 $i++;
             }
+            
+            LhpsIklimCustom::where('id_header', $header->id)->delete();
+            $custom = isset($request->regulasi_custom) && !empty($request->regulasi_custom);
+
+            if($custom) {
+                foreach ($request->regulasi_custom as $key => $value) {
+                    foreach ($request->custom_no_sampel[$key] as $idx => $val) {          
+                        $custom_cleaned_no_sampel  = $this->cleanArrayKeys($request->custom_no_sampel[$key]);
+                        $custom_cleaned_parameter  = $this->cleanArrayKeys($request->custom_param[$key]);
+                        $custom_cleaned_lokasi     = $this->cleanArrayKeys($request->custom_keterangan_lokasi[$key]);
+
+                        if (in_array("ISBB", $parameter) || in_array("ISBB (8 Jam)", $parameter)) {
+                            $custom_cleaned_hasil               = $this->cleanArrayKeys($request->custom_hasil[$key]);
+                            $custom_cleaned_aktivitas_pekerjaan = $this->cleanArrayKeys($request->custom_aktivitas_pekerjaan[$key]);
+                            $custom_cleaned_durasi_paparan      = $this->cleanArrayKeys($request->custom_durasi_paparan[$key]);
+
+                            if (array_key_exists($val, $custom_cleaned_no_sampel)) {
+                                $custom = new LhpsIklimCustom;
+                                $custom->id_header          = $header->id;
+                                $custom->page               = $key + 1;
+                                $custom->no_sampel          = $val;
+                                $custom->param              = $custom_cleaned_parameter[$val] ?? null;
+                                $custom->keterangan         = $custom_cleaned_lokasi[$val] ?? null;
+                                $custom->hasil              = $custom_cleaned_hasil[$val] ?? null;
+                                $custom->aktivitas_pekerjaan= $custom_cleaned_aktivitas_pekerjaan[$val] ?? null;
+                                $custom->durasi_paparan     = $custom_cleaned_durasi_paparan[$val] ?? null;
+                            }
+                        } else {
+                            $custom_cleaned_kecepatan_angin = $this->cleanArrayKeys($request->custom_kecepatan_angin[$key]);
+                            $custom_cleaned_suhu_temperatur = $this->cleanArrayKeys($request->custom_suhu_temperatur[$key]);
+                            $custom_cleaned_indeks_suhu     = $this->cleanArrayKeys($request->custom_indeks_suhu_basah[$key]);
+                            $custom_cleaned_kondisi         = $this->cleanArrayKeys($request->custom_kondisi[$key]);
+
+                            if (array_key_exists($val, $custom_cleaned_no_sampel)) {
+                                $custom = new LhpsIklimCustom;
+                                $custom->id_header      = $header->id;
+                                $custom->page           = $key + 1;
+                                $custom->no_sampel      = $val;
+                                $custom->param          = $custom_cleaned_parameter[$val] ?? null;
+                                $custom->keterangan     = $custom_cleaned_lokasi[$val] ?? null;
+                                $custom->indeks_suhu_basah = $custom_cleaned_indeks_suhu[$val] ?? null;
+                                $custom->kecepatan_angin   = $custom_cleaned_kecepatan_angin[$val] ?? null;
+                                $custom->suhu_temperatur   = $custom_cleaned_suhu_temperatur[$val] ?? null;
+                                $custom->kondisi           = $custom_cleaned_kondisi[$val] ?? null;
+                            }
+                        }
+
+                        $custom->save();
+                        $i++;
+                    }
+                }
+            }
 
             $details = LhpsIklimDetail::where('id_header', $header->id)->get();
+            $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
             if ($header) {
                 $file_qr = new GenerateQrDocumentLhp();
                 $file_qr = $file_qr->insert('LHP_IKLIM', $header, $this->karyawan);
@@ -229,28 +321,19 @@ class DraftUdaraIklimKerjaController extends Controller
                     $header->file_qr = $file_qr;
                     $header->save();
                 }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page]))
-                            $groupedByPage[$page] = [];
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-
         
                 if($parameter[0] == 'ISBB' || $parameter[0] == 'ISBB (8 Jam)'){
-                       $fileName = LhpTemplate::setDataDetail($details)
-                                    ->setDataHeader($header)
-                                    ->whereView('DraftIklimPanas')
-                                    ->render();
+                    $fileName = LhpTemplate::setDataDetail($details)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->whereView('DraftIklimPanas')
+                        ->render();
                 } else {
-                     $fileName = LhpTemplate::setDataDetail($details)
-                                    ->setDataHeader($header)
-                                    ->whereView('DraftIklimDingin')
-                                    ->render();
+                    $fileName = LhpTemplate::setDataDetail($details)
+                        ->setDataHeader($header)
+                        ->setDataCustom($custom)
+                        ->whereView('DraftIklimDingin')
+                        ->render();
                 }
                 
                 // $fileName = 'LHP-IKLIM_KERJA-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
@@ -276,6 +359,12 @@ class DraftUdaraIklimKerjaController extends Controller
         }
     }
 
+    private function cleanArrayKeys($arr) {
+        if (!$arr) return [];
+        $cleanedKeys = array_map(fn($k) => trim($k, " '\""), array_keys($arr));
+        return array_combine($cleanedKeys, array_values($arr));
+    }
+
 
      public function handleDatadetail(Request $request)
     {
@@ -286,8 +375,15 @@ class DraftUdaraIklimKerjaController extends Controller
                 ->where('is_active', true)
                 ->first();
 
+            $jumlah_custom = count($request->regulasi) - 1;
+
             if($cekLhp) {
               $detail = LhpsIklimDetail::where('id_header', $cekLhp->id)->get();
+
+              $custom = LhpsIklimCustom::where('id_header', $cekLhp->id)
+                    ->get()
+                    ->groupBy('page')
+                    ->toArray();
 
             $existingSamples = $detail->pluck('no_sampel')->toArray();
             $data = [];
@@ -355,14 +451,27 @@ class DraftUdaraIklimKerjaController extends Controller
                 $detail[] = $value;
             }
 
-                return response()->json([
-                    'data' => $cekLhp,
-                    'detail' => $detail,
-                    'success' => true,
-                    'status' => 200,
-                    'message' => 'Data berhasil diambil'
-                ], 201);  
+            foreach ($custom as $idx => $cstm) {
+                foreach ($data_all as $key => $value) {
+                    $value['page'] = $idx;
+                    $custom[$idx][] = $value;
+                }
+            }
+
+            if(count($custom) < $jumlah_custom) {
+                $custom[] = $detail;
+            }
+
+            return response()->json([
+                'data' => $cekLhp,
+                'detail' => $detail,
+                'custom' => $custom,
+                'success' => true,
+                'status' => 200,
+                'message' => 'Data berhasil diambil'
+            ], 201);  
             } else {
+                $custom = array();
                 $data = array();
                 $data1 = array();
                 $hasil = [];
@@ -418,9 +527,16 @@ class DraftUdaraIklimKerjaController extends Controller
                     }
                 }
 
+                if($jumlah_custom > 0) {
+                    for ($i = 0; $i < $jumlah_custom; $i++) {
+                        $custom[$i + 1] = $data_all;
+                    }
+                }
+
                 return response()->json([
                     'data' => [],
                     'detail' => $data_all,
+                    'custom' => $custom,
                     'status' => 200,
                     'success' => true,
                     'message' => 'Data berhasil diambil'
