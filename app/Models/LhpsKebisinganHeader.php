@@ -12,6 +12,10 @@ class LhpsKebisinganHeader extends Sector
 
     protected $guarded = [];
 
+    protected $casts = [
+        'metode_sampling' => 'array',
+    ];
+
     public function lhpsKebisinganDetail()
     {
         return $this->hasMany(LhpsKebisinganDetail::class, 'id_header', 'id');
