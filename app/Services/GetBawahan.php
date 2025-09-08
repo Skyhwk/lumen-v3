@@ -77,6 +77,7 @@ class GetBawahan
         }
         return collect([$this->karyawan])->merge($dataBawahanlevel1)->merge($dataBawahanlevel2)->merge($dataBawahanlevel3);
     }
+    
     public function all()
     {
         // Ambil data atasan (Manager, Supervisor, atau Staff)
