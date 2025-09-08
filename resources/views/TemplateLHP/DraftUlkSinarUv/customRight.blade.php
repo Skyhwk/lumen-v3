@@ -39,36 +39,36 @@
 
                 {{-- Informasi Sampling --}}
                  <table style="padding: 10px 0px 0px 0px;" width="100%">
-                <tr>
-                    <td class="custom5" width="120" colspan="3">
-                        <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
-                    </td>
-                </tr> 
+                    <tr>
+                        <td class="custom5" width="120" colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                        </td>
+                    </tr> 
 
-                @php
-                    $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : '-';
-                @endphp
+                    @php
+                        $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : '-';
+                    @endphp
 
-                {{-- Metode Sampling --}}
-                <tr>
-                    <td class="custom5" width="120">Metode Sampling</td>
-                    <td class="custom5" width="12">:</td>
-                    <td class="custom5">
-                        <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                            @foreach($methode_sampling as $index => $item)
-                                <tr>
-                                    @if (count($methode_sampling) > 1)
-                                        <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                        <td class="custom5">{{ $item ?? '-' }}</td>
-                                    @else
-                                        <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                    @endif
-                                </tr>
-                            @endforeach
-                        </table>
-                    </td>
+                    {{-- Metode Sampling --}}
+                    <tr>
+                        <td class="custom5" width="120">Metode Sampling</td>
+                        <td class="custom5" width="12">:</td>
+                        <td class="custom5">
+                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                                @foreach($methode_sampling as $index => $item)
+                                    <tr>
+                                        @if (count($methode_sampling) > 1)
+                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
+                                            <td class="custom5">{{ $item ?? '-' }}</td>
+                                        @else
+                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </table>
+                        </td>
 
-                </tr>
+                    </tr>
 
                 {{-- Tanggal Sampling / Terima --}}
                 <tr>
