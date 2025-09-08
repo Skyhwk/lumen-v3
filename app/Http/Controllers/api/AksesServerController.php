@@ -38,7 +38,7 @@ class AksesServerController extends Controller
             $password = $request->input('password');
 
             // Cek apakah username sudah ada di DB
-            if (AksesServer::where('username', $username)->exists()) {
+            if (AksesServer::where('username', $username)->where('is_active', 1)->exists()) {
                 return response()->json([
                     'message' => "User $username sudah ada di database."
                 ], 400);
