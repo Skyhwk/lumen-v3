@@ -82,22 +82,48 @@ class DraftUdaraGetaranController extends Controller
         ], 201);
     }
 
-    public function handleMetodeSampling(Request $request)
+     public function handleMetodeSampling(Request $request)
     {
         try {
             $subKategori = explode('-', $request->kategori_3);
+
+            $header = LhpsSinarUVHeader::where('id', $request->id_lhp)->first();
+            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+
             $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
+                ->where('sub_kategori', strtoupper($subKategori[1]))
+                ->get();
+
+            // konversi collection ke array biar bisa diubah
+            $result = $data->toArray();
+
+            foreach ($data as $key => $value) {
+                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+                $missing = array_diff($headerMetode, $valueMetode);
+
+                if (!empty($missing)) {
+                    foreach ($missing as $miss) {
+                        $result[] = [
+                            'id' => null, 
+                            'metode_sampling' => $miss,
+                            'kategori' => $value->kategori,
+                            'sub_kategori' => $value->sub_kategori,
+                        ];
+                    }
+                }
+            }
+
+            if (!empty($result)) {
                 return response()->json([
                     'status' => true,
                     'message' => 'Available data retrieved successfully',
-                    'data' => $data
+                    'data' => $result
                 ], 200);
             } else {
                 return response()->json([
                     'status' => true,
-                    'message' => 'Belom ada method',
+                    'message' => 'Belum ada method',
                     'data' => []
                 ], 200);
             }
