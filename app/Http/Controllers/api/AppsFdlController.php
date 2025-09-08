@@ -1647,6 +1647,11 @@ class AppsFdlController extends Controller
                         'message' => 'Foto Roadmap tidak boleh kosong .!'
                     ], 401);
                 }
+                if($request->jml_kerja == ''){
+                    return response()->json([
+                        'message' => 'Jumlah Jam Kerja tidak boleh kosong .!'
+                    ], 401);
+                }
 
                 if ($request->categori == 'Pencahayaan Umum') {
                     if ($request->mulai == '') {
@@ -1733,9 +1738,12 @@ class AppsFdlController extends Controller
                 if ($request->jenis_penem != '') $data->jenis_tempat_alat_sensor          = $request->jenis_penem;
                 if ($request->lebar != '') $data->lebar                    = $request->lebar;
                 if ($request->luas != '') $data->luas                      = $request->luas;
-                if ($request->jml_titik_p != '') $data->jumlah_titik_pengujian        = $request->jml_titik_p;
-                if ($request->titik_p_sampler != '') $data->titik_pengujian_sampler        = $request->titik_p_sampler;
                 if ($request->jenis_cahaya != '') $data->jenis_cahaya      = $request->jenis_cahaya;
+                if($request->jenis_penem != ""){
+                    if ($request->jml_titik_p != '') $data->titik_pengujian_sampler        = $request->jml_titik_p;
+                }
+                if ($request->titik_p_sampler != '') $data->titik_pengujian_sampler        = $request->titik_p_sampler;
+                if ($request->jml_titik_p != '') $data->jumlah_titik_pengujian        = $request->jml_titik_p;
                 if ($request->jenis_lamp != '') $data->jenis_lampu         = $request->jenis_lamp;
                 if ($request->jml_kerja != '') $data->jumlah_tenaga_kerja            = $request->jml_kerja;
                 if ($request->mulai != '') $data->jam_mulai_pengukuran                    = $request->mulai;
