@@ -26,6 +26,12 @@ class FdlCahayaController extends Controller
                     'message' => 'No Sample tidak ditemukan di FDL Pencahayaan'
                 ], 404);
             } else {
+                $fdl = DataLapanganCahaya::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+                if ($fdl) {
+                    return response()->json([
+                        'message' => 'No Sample sudah diinput!.'
+                    ], 401);
+                }
                 $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
                 return response()->json([
                     'no_sampel'    => $data->no_sampel,
@@ -116,12 +122,9 @@ class FdlCahayaController extends Controller
                 
                 $data = new DataLapanganCahaya;
 
-                $data->no_sampel                 = strtoupper(trim($request->no_sampel));
+                $data->no_sampel                 = strtoupper(trim($request->no_sampel)) ?? null;
                 $data->keterangan                = $request->penamaan_titik ?? null;
                 $data->informasi_tambahan        = $request->penamaan_tambahan ?? null;
-                $data->titik_koordinat           = $request->koordinat ?? null;
-                $data->latitude                  = $request->latitude ?? null;
-                $data->longitude                 = $request->longitude ?? null;
                 $data->waktu_pengambilan         = $request->waktu_pengambilan ?? null;
                 $data->panjang                   = $request->panjang_area ?? null;
                 $data->kategori                  = $request->kategori_pencahayaan ?? null;
@@ -171,7 +174,11 @@ class FdlCahayaController extends Controller
 
     public function index(Request $request)
     {
-        $data = DataLapanganCahaya::with('detail')
+        $perPage = $request->input('limit', 10);
+        $page = $request->input('page', 1);
+        $search = $request->input('search');
+
+        $query = DataLapanganCahaya::with('detail')
             ->where('created_by', $this->karyawan)
             ->where(function ($q) {
                 $q->where('is_rejected', 1)
@@ -181,7 +188,19 @@ class FdlCahayaController extends Controller
                 });
             });
 
-        return Datatables::of($data)->make(true);
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('no_sampel', 'like', "%$search%")
+                ->orWhereHas('detail', function ($q2) use ($search) {
+                    $q2->where('nama_perusahaan', 'like', "%$search%");
+                });
+            });
+        }
+
+        $data = $query->orderBy('id', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json($data);
     }
 
     public function approve(Request $request)
