@@ -17,5 +17,9 @@ class LhpsKebisinganHeader extends Sector
         return $this->hasMany(LhpsKebisinganDetail::class, 'id_header', 'id');
     }
 
+    public function lhpsKebisinganCustom()
+    {
+        return $this->hasMany(LhpsKebisinganCustom::class, 'id_header', 'id');
+    }
  
 }
