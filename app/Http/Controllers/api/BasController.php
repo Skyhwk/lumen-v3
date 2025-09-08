@@ -873,7 +873,6 @@ class BasController extends Controller
         </body>
         </html>');
             $pdf->Output(public_path() . '/bas/' . $filename, 'F');
-            chmod(public_path() . '/bas/' . $filename, 0777);
             if ($bsDocument !== null) {
                 return response()->json(['status' => true, 'data' => $bsDocument], 200);
             } else {
