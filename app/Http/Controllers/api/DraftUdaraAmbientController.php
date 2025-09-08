@@ -177,7 +177,7 @@ class DraftUdaraAmbientController extends Controller
             foreach ($oldDetails as $detail) {
                 $detailHistory = $detail->replicate();
                 $detailHistory->setTable((new LhpsLingDetailHistory())->getTable());
-                $detailHistory->id = $detail->id;
+                // $detailHistory->id = $detail->id;
                 $detailHistory->created_by = $this->karyawan;
                 $detailHistory->created_at = Carbon::now();
                 $detailHistory->save();
@@ -469,76 +469,7 @@ class DraftUdaraAmbientController extends Controller
 
 
  
-    public function handleApprove2(Request $request)
-    {
-
-        $category = explode('-', $request->kategori_3)[0];
-        $data_order = OrderDetail::where('no_sampel', $request->no_lhp)
-            ->where('id', $request->id)
-            ->where('is_active', true)
-            ->firstOrFail();
-
-            try {
-                $data = LhpsLingHeader::where('no_lhp', $request->no_lhp)
-                    ->where('id_kategori_3', $category)
-                    ->where('is_active', true)
-                    ->first();
-                // dd($data);
-                $details = LhpsLingDetail::where('id_header', $data->id)->get();
-                $qr = QrDocument::where('id_document', $data->id)
-                    ->where('type_document', 'LHP_LINGKUNGAN')
-                    ->where('is_active', 1)
-                    ->where('file', $data->file_qr)
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if ($data != null) {
-                    $data_order->is_approve = 1;
-                    $data_order->status = 3;
-                    $data_order->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data_order->approved_by = $this->karyawan;
-                    $data_order->save();
-
-                    $data->is_approve = 1;
-                    $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data->approved_by = $this->karyawan;
-                    $data->nama_karyawan = $this->karyawan;
-                    $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-                    $data->save();
-
-                    HistoryAppReject::insert([
-                        'no_lhp' => $data_order->cfr,
-                        'no_sampel' => $data_order->no_sampel,
-                        'kategori_2' => $data_order->kategori_2,
-                        'kategori_3' => $data_order->kategori_3,
-                        'menu' => 'Draft Udara',
-                        'status' => 'approve',
-                        'approved_at' => Carbon::now(),
-                        'approved_by' => $this->karyawan
-                    ]);
-                    if ($qr != null) {
-                        $dataQr = json_decode($qr->data);
-                        $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                        $dataQr->Disahkan_Oleh = $this->karyawan;
-                        $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-                        $qr->data = json_encode($dataQr);
-                        $qr->save();
-                    }
-                }
-                return response()->json([
-                    'data' => $data,
-                    'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $request->no_lhp . ' berhasil diapprove'
-                ], 200);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'getFile' => $th->getFile(),
-                    'status' => false
-                ], 500);
-            }
-    }
+  
 
     public function handleApprove(Request $request)
         {

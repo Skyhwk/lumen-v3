@@ -109,8 +109,14 @@ class FdlMethodRosaController extends Controller
 
             $parsedData = [];
             foreach ($rawData as $key => $value) {
-                parse_str($key . '=' . $value, $output);
-                $parsedData = array_merge_recursive($parsedData, $output);
+                if (is_array($value)) {
+                    // langsung merge karena sudah array
+                    $parsedData[$key] = $value;
+                } else {
+                    // kalau string query, baru diparse
+                    parse_str($key . '=' . $value, $output);
+                    $parsedData = array_merge_recursive($parsedData, $output);
+                }
             }
 
             $data = [
@@ -244,7 +250,7 @@ class FdlMethodRosaController extends Controller
             if ($request->aktivitas != '')
                 $data->aktivitas = $request->aktivitas;
             $data->method = 4;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($request->foto_samping_kiri != '')
                 $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
             if ($request->foto_samping_kanan != '')
@@ -254,7 +260,7 @@ class FdlMethodRosaController extends Controller
             if ($request->foto_belakang != '')
                 $data->foto_belakang = self::convertImg($request->foto_belakang, 4, $this->user_id);
             $data->aktivitas_ukur = $request->aktivitas_ukur;
-            $data->permission = $request->permis;
+            $data->permission = $request->permission;
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
@@ -283,26 +289,6 @@ class FdlMethodRosaController extends Controller
             ], 401);
         }
     }
-
-    // public function index(Request $request)
-    // {
-    //     try {
-    //         $data = array();
-    //         if ($request->tipe != '') {
-    //             $data = DataLapanganErgonomi::with('detail')->orderBy('id', 'desc');
-    //         } else {
-    //             if ($request->method == 2) {
-    //                 $data = DataLapanganErgonomi::with('detail')->where('method', 2)
-    //                     ->whereDate('created_at', '>=', Carbon::now()->subDays(3))
-    //                     ->orderBy('id', 'desc');
-    //             }
-    //         }
-    //         return Datatables::of($data)->make(true);
-    //     } catch (Exception $e) {
-    //         dd($e);
-    //     }
-    // }
-
 
     public function index(Request $request)
     {

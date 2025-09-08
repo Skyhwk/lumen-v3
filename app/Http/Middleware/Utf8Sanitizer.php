@@ -50,6 +50,7 @@ class Utf8Sanitizer
             );
         }
 
+        // Log::info([$response]);
         return $response;
     }
 }

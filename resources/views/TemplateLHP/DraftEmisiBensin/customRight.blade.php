@@ -9,7 +9,7 @@
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">EMISI SUMBER TIDAK BERGERAK</td>
+                        <td class="custom">EMISI SUMBER BERGERAK</td>
                     </tr>
                 </table>
             </td>
@@ -102,15 +102,14 @@
                 @php
                     $bintang = '**';
                 @endphp
-                @if (!empty($header->regulasi))
+                @if ($header->regulasi_custom != null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $t => $y)
-                            <tr>
-                                <td class="custom5" colspan="3">{{ $bintang }}{{ $y }}</td>
-                            </tr>
-                            @php
-                                $bintang .= '*';
-                            @endphp
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3">{{ $bintang }}{{ $y->regulasi }}</td>
+                                </tr>
+                            @endif
                         @endforeach
                     </table>
                 @endif

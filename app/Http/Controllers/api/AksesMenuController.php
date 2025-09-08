@@ -9,6 +9,7 @@ use App\Models\Menu;
 use App\Models\AksesMenu;
 use App\Models\MasterKaryawan;
 use App\Models\TemplateAkses;
+use App\Services\GetBawahan;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 
@@ -19,7 +20,8 @@ class AksesMenuController extends Controller
         if($this->user_id == 1 || $this->user_id == 127 ){
             $aksesMenus = AksesMenu::with('karyawan');
         } else {
-            $subordinates = $this->getSubordinates((string)$this->user_id);
+            $subordinates = GetBawahan::where('user_id', $this->user_id)->get()->pluck('id')->toArray();
+            unset($subordinates[array_search($this->user_id, $subordinates)]);
             $aksesMenus = AksesMenu::whereIn('akses_menu.user_id', $subordinates)->with('karyawan');
             // $aksesMenus = AksesMenu::whereIn('user_id', $subordinates)->with('karyawan');
         }
@@ -57,7 +59,8 @@ class AksesMenuController extends Controller
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
                 ->get();
         } else {
-            $subordinates = $this->getSubordinates((string)$userId);
+            $subordinates = GetBawahan::where('user_id', $userId)->get()->pluck('id')->toArray();
+            unset($subordinates[array_search($userId, $subordinates)]);
             $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)
                 ->where('master_karyawan.is_active', true)
                 ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
@@ -181,88 +184,6 @@ class AksesMenuController extends Controller
         $aksesMenu->delete();
 
         return response()->json(['message' => 'Data hasbeen delete'], 200);
-    }
-
-    private function getSubordinates($userId) {
-        $subordinates = [];
-        $queue = [$userId]; 
-        $visited = []; 
-        
-        while (!empty($queue)) {
-            $currentId = array_shift($queue);
-            
-            if (!in_array($currentId, $visited)) {
-                $visited[] = $currentId;
-                
-                $directSubordinates = MasterKaryawan::whereJsonContains('atasan_langsung', $currentId)
-                    ->where('is_active', true)
-                    ->pluck('user_id')
-                    ->toArray();
-                // Cari bawahan dari setiap direct subordinate
-                foreach ($directSubordinates as $subordinateId) {
-                    $bawahanSubordinate = MasterKaryawan::whereJsonContains('atasan_langsung', (string)$subordinateId)
-                        ->where('is_active', true)
-                        ->pluck('user_id')
-                        ->toArray();
-                        
-                    $directSubordinates = array_merge($directSubordinates, $bawahanSubordinate);
-                    if (!empty($bawahanSubordinate)) {
-                        // Cari bawahan dari setiap bawahan subordinate
-                        foreach ($bawahanSubordinate as $bawahanId) {
-                            $bawahanBawahan = MasterKaryawan::whereJsonContains('atasan_langsung', $bawahanId)
-                                ->where('is_active', true)
-                                ->pluck('user_id')
-                                ->toArray();
-                            
-                            if (!empty($bawahanBawahan)) {
-                                $directSubordinates = array_merge($directSubordinates, $bawahanBawahan);
-                            }
-                        }
-                    }
-                }
-                $subordinates = array_merge($subordinates, $directSubordinates);
-                $queue = array_merge($queue, $directSubordinates);
-            }
-        }
-        
-        return array_values(array_filter(array_unique($subordinates)));
-    } 
-
-    private function transformAccess($privileges)
-    {
-        dd($privileges);
-        $result = array_map(function ($privilege) {
-            $access = [];
-            foreach ($privilege as $key => $value) {
-                if ($key !== 'name' && $key !== 'all' && $value === 'true') {
-                    $access[] = $key;
-                }
-            }
-
-            dd($access);
-            if (!empty($access)) {
-                return [
-                    'name' => $privilege['name'],
-                    'access' => $access
-                ];
-            }
-
-            return null;
-        }, $privileges);
-        $result = array_filter($result);
-        usort($result, function ($a, $b) {
-            return strcmp($a['name'], $b['name']);
-        });
-
-        return $result;
-    }
-
-    public function getTemplateAkses(Request $request){
-        $data = TemplateAkses::where('is_active', true)->where('userid', $this->user_id)->get();
-        return response()->json([
-            'message' => 'get data template akses success',
-            'data' => $data
-        ]);
     }
 }
 

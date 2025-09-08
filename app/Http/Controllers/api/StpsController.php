@@ -882,7 +882,7 @@ class StpsController extends Controller
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
-
+            
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
                 // $request->no_order = $request->no_order;
@@ -891,7 +891,7 @@ class StpsController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-
+                
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {
@@ -901,7 +901,7 @@ class StpsController extends Controller
                         };
                     }
                 }
-
+                
                 if (!$isMustPrepared) {
                     return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
                 } else {
@@ -910,28 +910,41 @@ class StpsController extends Controller
                         'no_quotation' => $request->no_document,
                         'tanggal_sampling' => $request->jadwal,
                         'nama_perusahaan' => $request->nama_perusahaan,
+                        'kategori_jadwal' => $request->kategori,
                         'periode' => $request->periode,
                         'analis_berangkat' => null,
                         'sampler_berangkat' => null,
                         'analis_pulang' => null,
                         'sampler_pulang' => null,
-                        'masker' => [
+                        'masker' => [   
                             'disiapkan' => 2,
-                            'tambahan' => null,
+                            'tambahan' => "",
                         ],
                         'sarung_tangan_karet' => [
                             'disiapkan' => 2,
-                            'tambahan' => null,
+                            'tambahan' => "",
                         ],
                         'sarung_tangan_bintik' => [
                             'disiapkan' => 2,
-                            'tambahan' => null,
+                            'tambahan' => "",
                         ],
-                        'detail' => []
+                        'detail' => [],
+                        'plastik_benthos' => [
+                            "tambahan"=> "",
+                            "disiapkan"=> ""
+                        ],
+                        'media_petri_dish' => [
+                            "tambahan"=> "",
+                            "disiapkan"=> ""
+                        ],
+                        'media_tabung' => [
+                            "tambahan"=> "",
+                            "disiapkan"=> ""
+                        ],
                     ]);
-
+                    
                     $psController->save($requestPsData);
-
+                    
                     $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                         ->where('no_order', $dataOrder->no_order)
                         ->where('tanggal_sampling', $request->jadwal)
