@@ -20,7 +20,7 @@ class AksesMenuController extends Controller
         if($this->user_id == 1 || $this->user_id == 127 ){
             $aksesMenus = AksesMenu::with('karyawan');
         } else {
-            $subordinates = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+            $subordinates = GetBawahan::where('id', $this->user_id)->get()->pluck('user_id')->toArray();
             unset($subordinates[array_search($this->user_id, $subordinates)]);
             $aksesMenus = AksesMenu::whereIn('akses_menu.user_id', $subordinates)->with('karyawan');
             // $aksesMenus = AksesMenu::whereIn('user_id', $subordinates)->with('karyawan');
