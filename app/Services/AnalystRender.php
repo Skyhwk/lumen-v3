@@ -219,7 +219,6 @@ class AnalystRender
         }
         
         $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-        chmod($filePath, 0644);
         
         return $fileName;
     }
