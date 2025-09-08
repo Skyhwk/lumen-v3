@@ -12,6 +12,10 @@ class LhpsIklimHeader extends Sector
 
     protected $guarded = [];
 
+    protected $casts = [
+        'metode_sampling' => 'array',
+    ];
+
     public function lhpsIklimDetail()
     {
         return $this->hasMany(LhpsIklimDetail::class, 'id_header', 'id');
