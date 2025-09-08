@@ -860,7 +860,6 @@ class BasOnlineController extends Controller
         </body>
         </html>');
             $pdf->Output(public_path() . '/bas/' . $filename, 'F');
-            chmod(public_path() . '/bas/' . $filename, 0777);
             if ($bsDocument !== null) {
                 // dd($bsDocument);
                 return response()->json(['status' => true, 'data' => $bsDocument], 200);
@@ -1844,7 +1843,6 @@ class BasOnlineController extends Controller
         $filePath = $path . '/' . $filename;
 
         $pdf->Output($filePath, 'F');
-        chmod($filePath, 0777);
         // return $pdf->Output('', 'I');
         return response()->json([$filename], 200);
     }

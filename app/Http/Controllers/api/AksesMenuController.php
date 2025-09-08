@@ -20,7 +20,7 @@ class AksesMenuController extends Controller
         if($this->user_id == 1 || $this->user_id == 127 ){
             $aksesMenus = AksesMenu::with('karyawan');
         } else {
-            $subordinates = GetBawahan::where('user_id', $this->user_id)->get()->pluck('id')->toArray();
+            $subordinates = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
             unset($subordinates[array_search($this->user_id, $subordinates)]);
             $aksesMenus = AksesMenu::whereIn('akses_menu.user_id', $subordinates)->with('karyawan');
             // $aksesMenus = AksesMenu::whereIn('user_id', $subordinates)->with('karyawan');
@@ -59,7 +59,7 @@ class AksesMenuController extends Controller
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
                 ->get();
         } else {
-            $subordinates = GetBawahan::where('user_id', $userId)->get()->pluck('id')->toArray();
+            $subordinates = GetBawahan::where('id', $userId)->get()->pluck('id')->toArray();
             unset($subordinates[array_search($userId, $subordinates)]);
             $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)
                 ->where('master_karyawan.is_active', true)
@@ -184,6 +184,14 @@ class AksesMenuController extends Controller
         $aksesMenu->delete();
 
         return response()->json(['message' => 'Data hasbeen delete'], 200);
+    }
+
+    public function getTemplateAkses(Request $request){
+        $data = TemplateAkses::where('is_active', true)->where('userid', $this->user_id)->get();
+        return response()->json([
+            'message' => 'get data template akses success',
+            'data' => $data
+        ]);
     }
 }
 

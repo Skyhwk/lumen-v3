@@ -407,7 +407,6 @@ class RenderSD
             $filePath = public_path('dokumen/SampelDiantar/' . $fileName);
             return $pdf->Output("","I");
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
             return $fileName;
         } catch (\Exception $e) {
             return response()->json(
@@ -682,12 +681,10 @@ class RenderSD
                 // The following code is unreachable due to the return statement above
                 try {
                     $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                    chmod($filePath, 0777);
                 } catch (\Mpdf\MpdfException $e) {
                     dd("Gagal simpan PDF: " . $e->getMessage());
                 }
                 // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                // chmod($filePath, 0777);
                 return $fileName;
             }
             // Add a page break
@@ -864,12 +861,10 @@ class RenderSD
             // The following code is unreachable due to the return statement above
             try {
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                chmod($filePath, 0777);
             } catch (\Mpdf\MpdfException $e) {
                 dd("Gagal simpan PDF: " . $e->getMessage());
             }
             // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            // chmod($filePath, 0777);
             return $fileName;
         } catch (\Exception $e) {
             return response()->json(
@@ -1100,12 +1095,10 @@ class RenderSD
                 // The following code is unreachable due to the return statement above
                 try {
                     $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                    chmod($filePath, 0777);
                 } catch (\Mpdf\MpdfException $e) {
                     dd("Gagal simpan PDF: " . $e->getMessage());
                 }
                 // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                // chmod($filePath, 0777);
                 return $fileName;
             }
             // Add a page break
@@ -1279,12 +1272,10 @@ class RenderSD
             // The following code is unreachable due to the return statement above
             try {
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                chmod($filePath, 0777);
             } catch (\Mpdf\MpdfException $e) {
                 dd("Gagal simpan PDF: " . $e->getMessage());
             }
             // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            // chmod($filePath, 0777);
             return $fileName;
         } catch (\Exception $e) {
             return response()->json(

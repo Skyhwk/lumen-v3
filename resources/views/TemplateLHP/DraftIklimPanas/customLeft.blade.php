@@ -2,8 +2,8 @@
   
 @endphp
 
-@if (!empty($detail))
-    <div class="left">
+@if (!empty($custom))
+    <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
@@ -16,7 +16,7 @@
                
             </thead>
             <tbody>
-                @foreach ($detail as $k => $yy)
+                @foreach ($custom as $k => $yy)
        
                     <tr>
                         <td class="pd-5-solid-center">{{ $k + 1 }}</td>

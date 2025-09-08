@@ -91,12 +91,14 @@
                 </table>
 
                 {{-- Regulasi --}}
-                @if (!empty($header->regulasi))
+                @if (!empty($header->regulasi_custom))
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                        @if($key == $page)
                             <tr>
                                 <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
                             </tr>
+                        @endif
                         @endforeach
                     </table>
                 @endif

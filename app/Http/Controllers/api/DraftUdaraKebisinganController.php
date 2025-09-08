@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Models\HistoryAppReject;
 use App\Models\LhpsKebisinganHeader;
 use App\Models\LhpsKebisinganDetail;
+use App\Models\LhpsKebisinganCustom;
 
 
 use App\Models\LhpsKebisinganHeaderHistory;
@@ -101,6 +102,7 @@ class DraftUdaraKebisinganController extends Controller
 
     public function store(Request $request)
     {
+        // dd($request->all());
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
         try {
@@ -120,6 +122,19 @@ class DraftUdaraKebisinganController extends Controller
                 $header->updated_by = $this->karyawan;
                 $header->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             }
+
+            if (empty($request->tanggal_lhp)) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+                    'status' => false
+                ], 400);
+            }
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+            
             $parameter = \explode(', ', $request->parameter);
             $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
             $header->no_sampel = ($request->no_sampel != '') ? $request->noSampel : NULL;
@@ -132,14 +147,15 @@ class DraftUdaraKebisinganController extends Controller
             $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL;
             $header->sub_kategori = ($request->jenis_sampel != '') ? $request->jenis_sampel : NULL;
             $header->deskripsi_titik = ($request->keterangan_1 != '') ? $request->keterangan_1 : NULL;
-            $header->metode_sampling = ($request->method_sampling != '') ? $request->method_sampling : NULL;
+            $header->metode_sampling = ($request->metode_sampling) ? $request->metode_sampling : NULL;
             $header->tanggal_sampling = ($request->tanggal_tugas != '') ? $request->tanggal_tugas : NULL;
             $header->suhu = ($request->suhu != '') ? $request->suhu : NULL;
             $header->kelembapan = ($request->kelembapan != '') ? $request->kelembapan : NULL;
             $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
-            $header->nama_karyawan = 'Abidah Walfathiyyah';
-            $header->jabatan_karyawan = 'Technical Control Supervisor';
+            $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
             $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
+            $header->regulasi_custom = ($request->regulasi_custom != null) ? json_encode($request->regulasi_custom) : NULL;
             $header->tanggal_lhp = ($request->tanggal_lhp != '') ? $request->tanggal_lhp : NULL;
             $header->save();
 
@@ -155,32 +171,20 @@ class DraftUdaraKebisinganController extends Controller
                 $detail = LhpsKebisinganDetail::where('id_header', $header->id)->delete();
             }
 
-            if ($request->parameter == "Kebisingan (P8J)") {
-                $cleaned_key_nama_pekerja = array_map(fn($k) => trim($k, " '\""), array_keys($request->nama_pekerja));
-                $cleaned_nama_pekerja = array_combine($cleaned_key_nama_pekerja, array_values($request->nama_pekerja));
-                $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
-                $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
-            }
-            if ($request->hasil_uji) {
-                $cleaned_key_hasil_uji = array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil_uji));
-                $cleaned_hasil_uji = array_combine($cleaned_key_hasil_uji, array_values($request->hasil_uji));
-          
-            }
-            if ($request->ls) {
-                $cleaned_key_ls = array_map(fn($k) => trim($k, " '\""), array_keys($request->ls));
-                $cleaned_ls = array_combine($cleaned_key_ls, array_values($request->ls));
-                $cleaned_key_lm = array_map(fn($k) => trim($k, " '\""), array_keys($request->lm));
-                $cleaned_lm = array_combine($cleaned_key_lm, array_values($request->lm));
-            }
+            $cleaned_param      = $this->cleanArrayKeys($request->param);
+            $cleaned_paparan    = $this->cleanArrayKeys($request->paparan);
+            $cleaned_lokasi     = $this->cleanArrayKeys($request->lokasi);
+            $cleaned_noSampel   = $this->cleanArrayKeys($request->no_sampel);
+            $cleaned_hasil_uji  = $this->cleanArrayKeys($request->hasil_uji ?? []);
+            $cleaned_ls         = $this->cleanArrayKeys($request->ls ?? []);
+            $cleaned_lm         = $this->cleanArrayKeys($request->lm ?? []);
+            $cleaned_nama_pekerja = [];
+            $cleaned_nab        = [];
 
-            $cleaned_key_param = array_map(fn($k) => trim($k, " '\""), array_keys($request->param));
-            $cleaned_param = array_combine($cleaned_key_param, array_values($request->param));
-            $cleaned_key_paparan = array_map(fn($k) => trim($k, " '\""), array_keys($request->paparan));
-            $cleaned_paparan = array_combine($cleaned_key_paparan, array_values($request->paparan));
-            $cleaned_key_lokasi = array_map(fn($k) => trim($k, " '\""), array_keys($request->lokasi));
-            $cleaned_lokasi = array_combine($cleaned_key_lokasi, array_values($request->lokasi));
-            $cleaned_key_noSampel = array_map(fn($k) => trim($k, " '\""), array_keys($request->no_sampel));
-            $cleaned_noSampel = array_combine($cleaned_key_noSampel, array_values($request->no_sampel));
+            if ($parameter[0] == "Kebisingan (P8J)") {
+                $cleaned_nama_pekerja = $this->cleanArrayKeys($request->nama_pekerja ?? []);
+                $cleaned_nab          = $this->cleanArrayKeys($request->nab ?? []);
+            }
 
             foreach ($request->no_sampel as $key => $val) {
                 // dd(array_key_exists($val, $cleaned_noSampel), $cleaned_noSampel, $val);
@@ -196,16 +200,67 @@ class DraftUdaraKebisinganController extends Controller
                     $detail->leq_lm = $cleaned_lm[$val] ?? null;
                     $detail->paparan = $cleaned_paparan[$val];
                     $detail->hasil_uji = $cleaned_hasil_uji[$val] ?? null;
-                    if ($request->parameter == "Kebisingan (P8J)") {
+                    if ($parameter[0] == "Kebisingan (P8J)") {
                         $detail->nama_pekerja = $cleaned_nama_pekerja[$val] ?? null;
                         $detail->nab = $cleaned_nab[$val] ?? null;
                     }
                     $detail->save();
                 }
             }
+            
+            LhpsKebisinganCustom::where('id_header', $header->id)->delete();
+
+            $custom = isset($request->regulasi_custom) && !empty($request->regulasi_custom);
+
+            if($custom) {
+                foreach ($request->regulasi_custom as $key => $value) {
+                    $custom_cleaned_param      = $this->cleanArrayKeys($request->custom_param[$key]);
+                    $custom_cleaned_paparan    = $this->cleanArrayKeys($request->custom_paparan[$key]);
+                    $custom_cleaned_lokasi     = $this->cleanArrayKeys($request->custom_lokasi[$key]);
+                    $custom_cleaned_noSampel   = $this->cleanArrayKeys($request->custom_no_sampel[$key]);
+                    $custom_cleaned_hasil_uji  = $this->cleanArrayKeys($request->custom_hasil_uji[$key] ?? []);
+                    $custom_cleaned_ls         = $this->cleanArrayKeys($request->custom_ls[$key] ?? []);
+                    $custom_cleaned_lm         = $this->cleanArrayKeys($request->custom_lm[$key] ?? []);
+                    $custom_cleaned_nama_pekerja = [];
+                    $custom_cleaned_nab        = [];
+
+                    if ($parameter[0] == "Kebisingan (P8J)") {
+                        $custom_cleaned_nama_pekerja = $this->cleanArrayKeys($request->custom_nama_pekerja[$key] ?? []);
+                        $custom_cleaned_nab          = $this->cleanArrayKeys($request->custom_nab[$key] ?? []);
+                    }
+
+                    foreach ($request->custom_no_sampel[$key] as $idx => $val) {
+                        // dd($idx, $val, $key);
+                        // dd(array_key_exists($val, $custom_cleaned_noSampel), $custom_cleaned_noSampel, $val);
+                        if (array_key_exists($val, $custom_cleaned_noSampel)) {
+                            $custom = new LhpsKebisinganCustom;
+                            $custom->id_header = $header->id;
+                            $custom->page = number_format($key) + 1;
+                            $custom->no_sampel = $custom_cleaned_noSampel[$val];
+                            $custom->param = $custom_cleaned_param[$val];
+                            $custom->lokasi_keterangan = $custom_cleaned_lokasi[$val];
+                            $custom->min = $custom_cleaned_min[$val] ?? null;
+                            $custom->max = $custom_cleaned_max[$val] ?? null;
+                            $custom->leq_ls = $custom_cleaned_ls[$val] ?? null;
+                            $custom->leq_lm = $custom_cleaned_lm[$val] ?? null;
+                            $custom->paparan = $custom_cleaned_paparan[$val];
+                            $custom->hasil_uji = $custom_cleaned_hasil_uji[$val] ?? null;
+                            if ($parameter[0] == "Kebisingan (P8J)") {
+                                $custom->nama_pekerja = $custom_cleaned_nama_pekerja[$val] ?? null;
+                                $custom->nab = $custom_cleaned_nab[$val] ?? null;
+                            }
+                            $custom->save();
+                        }
+                    }
+                }
+            }
             // dd($detail);
 
             $details = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+            $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+            // dd($custom);
             if ($header != null) {
 
                 $file_qr = new GenerateQrDocumentLhp();
@@ -214,29 +269,21 @@ class DraftUdaraKebisinganController extends Controller
                     $header->file_qr = $file_qr;
                     $header->save();
                 }
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-   
 
+                // dd($header);
                 if($parameter[0] == 'Kebisingan (P8J)' ){
                 $fileName = LhpTemplate::setDataDetail($details)
-                            ->setDataHeader($header)
-                           ->whereView('DraftKebisinganPersonal')
-                            ->render();
+                    ->setDataHeader($header)
+                    ->setDataCustom($custom)
+                    ->whereView('DraftKebisinganPersonal')
+                    ->render();
 
                 } else {
-                     $fileName = LhpTemplate::setDataDetail($details)
-                                    ->setDataHeader($header)  
-                                    ->whereView('DraftKebisingan')
-                                    ->render();
+                    $fileName = LhpTemplate::setDataDetail($details)
+                        ->setDataHeader($header)  
+                        ->setDataCustom($custom)
+                        ->whereView('DraftKebisingan')
+                        ->render();
                 }
 
                 $header->file_lhp = $fileName;
@@ -257,6 +304,12 @@ class DraftUdaraKebisinganController extends Controller
                 'file' => $th->getFile()
             ], 500);
         }
+    }
+
+    private function cleanArrayKeys($arr) {
+        if (!$arr) return [];
+        $cleanedKeys = array_map(fn($k) => trim($k, " '\""), array_keys($arr));
+        return array_combine($cleanedKeys, array_values($arr));
     }
 
          public function updateTanggalLhp(Request $request)
@@ -334,9 +387,14 @@ class DraftUdaraKebisinganController extends Controller
                 ->where('id_kategori_3', $id_category)
                 ->where('is_active', true)
                 ->first();
-
+            
+            $jumlah_custom = count($request->regulasi) - 1;
             if($cekLhp) {
-              $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
+                $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
+                $custom = LhpsKebisinganCustom::where('id_header', $cekLhp->id)
+                    ->get()
+                    ->groupBy('page')
+                    ->toArray();
 
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
@@ -401,14 +459,26 @@ class DraftUdaraKebisinganController extends Controller
                 foreach ($data_all as $key => $value) {
                     $detail[] = $value;
                 }
+
+                foreach ($custom as $idx => $cstm) {
+                    foreach ($data_all as $key => $value) {
+                        $value['page'] = $idx;
+                        $custom[$idx][] = $value;
+                    }
+                }
+                if(count($custom) < $jumlah_custom) {
+                    $custom[] = $detail;
+                }
                 return response()->json([
                     'data' => $cekLhp,
                     'detail' => $detail,
+                    'custom' => $custom,
                     'success' => true,
                     'status' => 200,
                     'message' => 'Data berhasil diambil'
                 ], 201);  
             } else {
+                $custom = array();
                 $data = array();
                 $data1 = array();
                 $hasil = [];
@@ -452,9 +522,16 @@ class DraftUdaraKebisinganController extends Controller
                         $a++;
                     }
                 }
+
+                if($jumlah_custom > 0) {
+                    for ($i = 0; $i < $jumlah_custom; $i++) {
+                        $custom[$i + 1] = $data_all;
+                    }
+                }
                 return response()->json([
                     'data' => [],
                     'detail' => $data_all,
+                    'custom' => $custom,
                     'status' => 200,
                     'success' => true,
                     'message' => 'Data berhasil diambil'

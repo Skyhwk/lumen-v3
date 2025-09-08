@@ -2,21 +2,21 @@
   
 @endphp
 
-@if (!empty($detail))
-    <div class="left">
+@if (!empty($custom))
+    <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
                     <th width="8%" class="custom">NO</th>
                     <th width="30%" class="custom">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="20%"  class="custom">INDEX SUHU BASAH DAN BOLA (°C)</th>
-                    <th width="21%" class="custom">AKTIVITAS PEKERJAAN</th>
-                    <th width="21%" class="custom">DURASI PAPARAN TERHADAP PEKERJAAN PER JAM</th>
+                    <th width="20%"  class="custom">KECEPATAN ANGIN (mph)</th>
+                    <th width="21%" class="custom">SUHU TEMPERATUR AKTUAL (°C)</th>
+                    <th width="21%" class="custom">KONDISI</th>
                 </tr>
                
             </thead>
             <tbody>
-                @foreach ($detail as $k => $yy)
+                @foreach ($custom as $k => $yy)
        
                     <tr>
                         <td class="pd-5-solid-center">{{ $k + 1 }}</td>
@@ -24,9 +24,9 @@
                             <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                           {{ $yy['keterangan'] }}
                         </td>
-                        <td class="pd-5-solid-center">{{ $yy['hasil'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['aktivitas_pekerjaan'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['durasi_paparan'] }} Jam</td>
+                        <td class="pd-5-solid-center">{{ $yy['kecepatan_angin'] }}</td>
+                        <td class="pd-5-solid-center">{{ $yy['suhu_temperatur'] }}</td>
+                        <td class="pd-5-solid-center">{{ $yy['kondisi'] }}</td>
                       
                     </tr>
                 @endforeach

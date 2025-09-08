@@ -108,11 +108,9 @@ class UploadDatabaseDeviceController extends Controller
             $storagePath = storage_path("app/database_devices");
             if (!is_dir($storagePath)) {
                 mkdir($storagePath, 0777, true);
-                chmod($storagePath, 0777);
             }
 
             $file->move($storagePath, $newFileName);
-            chmod($storagePath . '/' . $newFileName, 0777);
             $data = DatabaseDevice::create([
                 'filename' => $newFileName,
                 'created_by' => $this->karyawan,

@@ -356,7 +356,6 @@ class NewRenderInvoice
                         
                 $filePath = public_path('invoice/' . $fileName);
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                chmod($filePath, 0777);
                 return $fileName;
             
         } catch (\Exception $e) {
@@ -517,7 +516,6 @@ class NewRenderInvoice
 
             $filePath = public_path('dokumen/invoice/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
             return $fileName;
         } catch (\Throwable $th) {
             dd($th);

@@ -65,6 +65,7 @@ class DraftUlkMedanMagnetController extends Controller
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
         ])
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel, GROUP_CONCAT(regulasi SEPARATOR "||") as regulasi_all')
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
@@ -75,7 +76,34 @@ class DraftUlkMedanMagnetController extends Controller
                 $query->where('parameter', 'like', '%Power Density%')
                     ->orWhere('parameter', 'like', '%Medan Magnit Statis%')
                     ->orWhere('parameter', 'like', '%Medan Listrik%');
-            });
+            })->get();
+
+            foreach ($data as $item) {
+            $regsRaw = explode("||", $item->regulasi_all ?? '');
+            $allRegs = [];
+
+            foreach ($regsRaw as $reg) {
+                if (empty($reg)) continue;
+
+                // Decode JSON array misal: ["127-Peraturan...", "213-Peraturan..."]
+                $decoded = json_decode($reg, true);
+
+                if (is_array($decoded)) {
+                    foreach ($decoded as $r) {
+                        $allRegs[] = $r;
+                    }
+                }
+            }
+
+            // Hilangin duplikat berdasarkan ID
+            $unique = [];
+            foreach ($allRegs as $r) {
+                [$id, $text] = explode("-", $r, 2);
+                $unique[$id] = $r;
+            }
+
+            $item->regulasi_all = array_values($unique); // hasil array unik, rapi
+        }
 
         return Datatables::of($data)->make(true);
     }
