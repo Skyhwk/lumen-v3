@@ -9,7 +9,7 @@ class AksesServer extends Sector
 {
     protected $table = 'akses_server';
 
-    protected $guard = [];
+    protected $guarded = [];
     public $timestamps = false;
 
     public function karyawan()
