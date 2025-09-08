@@ -90,9 +90,28 @@ class FollowUpController extends Controller
             $no_tlp_perusahaan = "0" . substr($no_tlp_perusahaan, 2);
         }
 
+        // Menghapus PT, CV, UD, PD, Koperasi, Perum, Persero, BUMD, Yayasan (beserta variasi di belakang nama pelanggan)
+        $clearNamaPelanggan = preg_replace('/(,?\s*\.?\s*(PT|CV|UD|PD|KOPERASI|PERUM|PERSERO|BUMD|YAYASAN))\s*$/i', '', $request->nama_pelanggan);
+        
         // Cek duplikasi berdasarkan nama pelanggan dan no kontak
-        $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
-            ->orWhere('id_pelanggan', $idPelanggan)
+        // $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
+        //     ->orWhere('id_pelanggan', $idPelanggan)
+        //     ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
+        //         $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+        //     })->first();
+
+        $existingData = MasterPelanggan::whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
+                $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+            })->first();
+
+        if ($existingData) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pelanggan dengan nama dan atau nomor kontak sudah ada.'
+            ], 401);
+        }
+
+        $existingData = MasterPelanggan::where('nama_pelanggan', 'like', '%' . $clearNamaPelanggan . '%')
             ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
                 $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
             })->first();
