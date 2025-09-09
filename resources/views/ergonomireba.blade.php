@@ -230,14 +230,60 @@
             margin-top: 3px;
             font-size: 7px;
         }
+        /* header */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+        }
+
+        .header-table td {
+            border: none;
+            padding: 10px;
+            vertical-align: middle;
+            height: 60px;
+        }
+
+        .header-table .left-cell {
+            width: 33.33%;
+            text-align: left;
+            padding-left: 20px;
+        }
+
+        .header-table .center-cell {
+            width: 33.33%;
+            text-align: center;
+        }
+
+        .header-table .right-cell {
+            width: 33.33%;
+            text-align: right;
+            padding-right: 50px;
+        }
+        .header-logo {
+            height: 50px;
+            width: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
-        <div class="main-header">
-            LAPORAN HASIL PENGUJIAN
-        </div>
+        <table class="header-table">
+            <tr>
+                <td class="left-cell">
+                    <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
+                </td>
+                <td class="center-cell">
+                    <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                </td>
+                <td class="right-cell">
+                    <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
+                </td>
+            </tr>
+        </table>
         
         <!-- Main Content -->
         <div class="main-content">
@@ -466,7 +512,6 @@
                         <td>{{ $personal->alamat_pelanggan }}</td>
                     </tr>
                 </table>
-                
                 <!-- Informasi Sampling -->
                 <table class="info-table">
                     <tr>
@@ -490,7 +535,6 @@
                         <td>Pengamatan Langsung - Rapid Entire Body Assessment</td>
                     </tr>
                 </table>
-                
                 <!-- Data Individu -->
                 <div class="section-header">Data Individu/Pekerja yang Diukur</div>
                 <table class="info-table">
@@ -510,7 +554,6 @@
                         <td>{{ $personal->lama_kerja }} Tahun</td>
                     </tr>
                 </table>
-                
                 <!-- Tabel Acuan -->
                 <div class="section-header">Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</div>
                 <table class="reference-table">
@@ -594,7 +637,7 @@
                             <div class="signature-date">
                                 Jakarta, 04 September 2025
                             </div><br>
-                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                            
                             <div class="signature-text">(Tanda Tangan Digital)</div>
                         </td>
                     </tr>

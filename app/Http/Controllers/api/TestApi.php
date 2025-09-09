@@ -48,20 +48,7 @@ class TestApi extends Controller
                 'antropometri' =>9,
                 'desain_stasiun_kerja' =>10
             ];
-            /* $mpdfConfig = [
-                'mode' => 'utf-8',
-                'format' => 'A4',
-                'orientation' => 'P',
-                'margin_left' => 10,
-                'margin_right' => 10,
-                'margin_top' => 10,
-                'margin_bottom' => 10,
-                'margin_header' => 0,
-                'margin_footer' => 0,
-                'default_font_size' => 7,
-                'default_font' => 'arial'
-            ]; */
-
+            
             $mpdfConfig = array(
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -74,6 +61,7 @@ class TestApi extends Controller
                 'margin_right' => 10,
                 'orientation' => 'L',
             );
+           
             $pdf = new PDF($mpdfConfig); // Inisialisasi mPDF hanya sekali
             $globalCssContent = '
                 * {
@@ -805,14 +793,35 @@ class TestApi extends Controller
                 $watermarkHeight     // Tinggi otomatis (0 = auto)
             );
             $pdf->showWatermarkImage = true;
+            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;>
+                            <td style="width: 33.33%; padding-left: 20px;" class="text-left text-wrap">
+                                <img class="img_0" src="' . public_path() . '/img/isl_logo.png" alt="ISL">
+                            </td>
+                            <td style="width: 33.33%; text-align: center;">
+                                <span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span>
+                            </td>
+                            <td style="width: 33.33%; text-align: right; padding-right: 50px;">
+                                <img src="' . public_path() . '/img/logo_kan.png" alt="ISL" width="100px" height="50px">
+                            </td>
+                        </table>';
 
             $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
                                 <tr>
-                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"></td>
-                                    <td colspan="2" style="font-family:Arial, sans-serif; font-size:x-small; border:none;"> Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.</td>
-                                    <td width="13%" style="font-size:xx-small; font-weight: bold; text-align: right; border:none;"><i>Page {PAGENO} of {nb}</i></td>
+                                    <td width="15%" style="vertical-align: bottom;">
+                                    <div style="font-size:8px;">PT Inti Surya laboratirum</div>
+                                    <div style="font-size:8px;">Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                                    <div style="font-size:8px;">021-5089-8988/89 contact@intilab.com</div>
+                                    </td>
+                                    <td width="59%" style="font-size:8px; vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
+                                    Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
+                                        <br>Halaman {PAGENO} - {nbpg}
+                                    </td>
+                                    <td width="23%" style="text-align: right;">
+                                        <img src="'.public_path('qr_documents/ISL_STPS_25-VIII_5054.svg').'" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                                    </td>
                                 </tr>
                             </table>';
+            $pdf->SetHeader($header);
             $pdf->SetFooter($footerHtml);
             $pdf->setAutoBottomMargin = 'stretch';
             $firstPageAdded = false;
@@ -881,18 +890,7 @@ class TestApi extends Controller
            
             $namaFile = 'ERGONOMI_'.str_replace('/', '_', $noSampel).'.pdf';
             $pathFile = $dir.'/'.$namaFile;
-            // $pdf->Output($pathFile, 'F');
-            /* save file */
-            /* $saveFilePDF = new DraftErgonomiFile;
-            $saveFilePDF::where('no_sampel',$dataMethod->no_sampel)->first();
-            if($saveFilePDF != NULL){
-                $saveFilePDF->no_sampel = $dataMethod->no_sampel;
-                $saveFilePDF->name_file = $namaFile;
-                $saveFilePDF->create_at = Carbon::now('Asia/Jakarta');
-                $saveFilePDF->create_by =$this->karyawan;
-                $saveFilePDF->save();
-            }
-            return response()->json('data berhasil di render',200); */
+            
             return response($pdf->Output('laporan.pdf', 'S'), 200, [
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',

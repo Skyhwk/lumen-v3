@@ -459,7 +459,7 @@
                             <div class="signature-date">
                                 Jakarta, 04 September 2025
                             </div><br>
-                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
+                            
                             <div class="signature-text">(Tanda Tangan Digital)</div>
                         </td>
                     </tr>

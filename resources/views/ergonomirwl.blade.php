@@ -232,6 +232,38 @@
             margin-top: 3px;
             font-size: 7px;
         }
+        /* header */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+        }
+        .header-table td {
+            border: none;
+            padding: 10px;
+            vertical-align: middle;
+            height: 60px;
+        }
+        .header-table .left-cell {
+            width: 33.33%;
+            text-align: left;
+            padding-left: 20px;
+        }
+        .header-table .center-cell {
+            width: 33.33%;
+            text-align: center;
+        }
+        .header-table .right-cell {
+            width: 33.33%;
+            text-align: right;
+            padding-right: 50px;
+        }
+        .header-logo {
+            height: 50px;
+            width: auto;
+            display: block;
+        }
     </style>
 </head>
 
@@ -539,19 +571,19 @@
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
                 <div class="signature-section">
-                <table class="signature-table">
-                    <tr>
-                        <td class="signature-left"></td>
-                        <td class="signature-right">
-                            <div class="signature-date">
-                                Jakarta, 04 September 2025
-                            </div><br>
-                            <img src="{{public_path('qr_documents/ISL_STPS_25-VIII_5054.svg')}}" width="30px" height="30px" class="signature-qr" alt="QR Code" />
-                            <div class="signature-text">(Tanda Tangan Digital)</div>
-                        </td>
-                    </tr>
-                </table>
-            </div>
+                    <table class="signature-table">
+                        <tr>
+                            <td class="signature-left"></td>
+                            <td class="signature-right">
+                                <div class="signature-date">
+                                    Jakarta, 04 September 2025
+                                </div><br>
+                                
+                                <div class="signature-text">(Tanda Tangan Digital)</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
