@@ -47,9 +47,10 @@
                         </td>
                     </tr> 
 
-                    @php
-                        $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : '-';
-                    @endphp
+                @php
+                    $methode_sampling = $header->methode_sampling ? json_decode($header->methode_sampling, true) : [];
+                @endphp
+
 
                     {{-- Metode Sampling --}}
                     <tr>
@@ -95,9 +96,6 @@
                 @if ($header->regulasi_custom!=null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                          <!-- @php
-                        dd($y);
-                        @endphp -->
                             @if ($y->page == $page)
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>

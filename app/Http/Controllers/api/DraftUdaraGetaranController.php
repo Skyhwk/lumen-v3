@@ -87,7 +87,7 @@ class DraftUdaraGetaranController extends Controller
         try {
             $subKategori = explode('-', $request->kategori_3);
 
-            $header = LhpsSinarUVHeader::where('id', $request->id_lhp)->first();
+            $header = LhpsGetaranHeader::where('id', $request->id_lhp)->first();
             $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
             $data = MetodeSampling::where('kategori', '4-UDARA')

@@ -2,28 +2,14 @@
 
 namespace App\Http\Controllers\api;
 use App\Models\HistoryAppReject;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsGetaranDetail;
-use App\Models\LhpsPencahayaanDetail;
+
+
 use App\Models\LhpsMedanLMHeader;
 use App\Models\LhpsMedanLMDetail;
 
-use App\Models\LhpsKebisinganHeaderHistory;
-use App\Models\LhpsKebisinganDetailHistory;
-use App\Models\LhpsGetaranHeaderHistory;
-use App\Models\LhpsGetaranDetailHistory;
-use App\Models\LhpsPencahayaanHeaderHistory;
-use App\Models\LhpsPencahayaanDetailHistory;
+
 use App\Models\LhpsMedanLMHeaderHistory;
 use App\Models\LhpsMedanLMDetailHistory;
-use App\Models\LhpSinarUVHeaderHistory;
-use App\Models\LhpsLingHeaderHistory;
-use App\Models\LhpsLingDetailHistory;
 
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
@@ -39,7 +25,6 @@ use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
 use App\Services\GenerateQrDocumentLhp;
-use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -122,34 +107,58 @@ class DraftUlkMedanMagnetController extends Controller
         ], 201);
     }
 
-    // Tidak digunakan sekarang, gatau nanti
-    public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
+      public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
+
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
+
+        $result = $data->toArray();
+
+        if ($request->filled('id_lhp')) {
+            $header = LhpsMedanLMHeader::find($request->id_lhp);
+
+            if ($header) {
+                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+                    $missing = array_diff($headerMetode, $valueMetode);
+
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
+                        }
+                    }
+                }
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
+
 
     public function store(Request $request)
     {
@@ -381,15 +390,6 @@ class DraftUlkMedanMagnetController extends Controller
             $method = Parameter::where('is_active', true)->where('id_kategori', 1)->whereNotNull('method')->select('method')->groupBy('method')->get()->toArray();
             $result_method = array_unique(array_values(array_merge($method_regulasi, array_column($method, 'method'))));
 
-            if ($id_category == 11 || $id_category == 27) {
-                $keterangan = [
-                    '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-                    '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                    'ẍ Parameter belum terakreditasi.'
-                ];
-            } else {
-                $keterangan = [];
-            }
             if (count($data_lapangan) > 0) {
                 $data_lapangan_send = (object) $data_lapangan[0];
             } else {
@@ -541,16 +541,12 @@ class DraftUlkMedanMagnetController extends Controller
 
                 if ($data) {
                     $orderDetailParameter = json_decode($data->parameter); // array of strings
-
-
                     foreach ($orderDetailParameter as $item) {
                         $parts = explode(';', $item);
                         if (isset($parts[1])) {
                             $parsedParam[] = trim($parts[1]); // "Medan Magnit Statis"
                         }
                     }
-
-
                         $id_kategori = explode('-', $data->kategori_3);
                         $lhps = LhpsMedanLMHeader::where('no_lhp', $data->cfr)
                             ->where('no_order', $data->no_order)
@@ -559,7 +555,6 @@ class DraftUlkMedanMagnetController extends Controller
                             ->first();
 
                         if ($lhps) {
-                            // History Header Medan Listrik, Medan Magnit Statis, Power Density
                             $lhpsHistory = $lhps->replicate();
                             $lhpsHistory->setTable((new LhpsMedanLMHeaderHistory())->getTable());
                             $lhpsHistory->created_at = $lhps->created_at;
@@ -568,7 +563,6 @@ class DraftUlkMedanMagnetController extends Controller
                             $lhpsHistory->deleted_by = $this->karyawan;
                             $lhpsHistory->save();
 
-                            // History Detail Medan Listrik, Medan Magnit Statis, Power Density
                             $oldDetails = LhpsMedanLMDetail::where('id_header', $lhps->id)->get();
                             foreach ($oldDetails as $detail) {
                                 $detailHistory = $detail->replicate();
@@ -605,47 +599,10 @@ class DraftUlkMedanMagnetController extends Controller
     // Amang
     public function generate(Request $request)
     {
-        $categoryKebisingan = [23, 24, 25];
-        $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-        $categoryLingkunganKerja = [11, 27, 53];
-        $categoryPencahayaan = [28];
-        $category = explode('-', $request->kategori_3)[0];
-        $sub_category = explode('-', $request->kategori_3)[1];
-        // dd('masuk');
         DB::beginTransaction();
         try {
-            if (in_array($category, $categoryKebisingan)) {
-                // dd('Kebisingan');
-                $header = LhpsKebisinganHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                $quotation_status = "draft_lhp_kebisingan";
-            } else if (in_array($category, $categoryGetaran)) {
-                // dd('Getaran');
-                $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                $quotation_status = "draft_lhp_getaran";
-            } else if (in_array($category, $categoryPencahayaan)) {
-                // dd('Pencahayaan');
-                $header = LhpsPencahayaanHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                $quotation_status = "draft_lhp_pencahayaan";
-            } else if (in_array($category, $categoryLingkunganKerja)) {
-                // dd('Lingkungan Kerja');
-                if (is_string($request->parameter)) {
-                    $decodedString = html_entity_decode($request->parameter);
-                    $parameter = json_decode($decodedString, true);
-                    $cleanedParameter = array_map(function ($item) {
-                        return preg_replace('/^\d+;/', '', $item);
-                    }, $parameter);
-                }
-                if (in_array("Medan Listrik", $cleanedParameter) || in_array("Medan Magnit Statis", $cleanedParameter) || in_array("Power Density", $cleanedParameter)) {
-                    $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                    $quotation_status = "draft_lhp_medanlm";
-                } else if (in_array("Sinar UV", $cleanedParameter)) {
-                    $header = LhpsSinarUVHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                    $quotation_status = "draft_lhp_sinaruv";
-                } else {
-                    $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-                    $quotation_status = "draft_lhp_lingkungan";
-                }
-            }
+            $header = LhpsMedanLMHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $quotation_status = "draft_lhp_medanlm";
             if ($header != null) {
                 $key = $header->no_sampel . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
@@ -715,59 +672,12 @@ class DraftUlkMedanMagnetController extends Controller
     {
         DB::beginTransaction();
         try {
-            $categoryKebisingan = [23, 24, 25];
-            $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-            $categoryLingkunganKerja = [11, 27, 53];
-            $categoryPencahayaan = [28];
-            $category = explode('-', $request->kategori)[0];
-            $sub_category = explode('-', $request->kategori)[1];
             if ($request->id != '' || isset($request->id)) {
-                if (in_array($category, $categoryKebisingan)) {
-                    $data = LhpsKebisinganHeader::where('id', $request->id)->update([
+                LhpsMedanLMHeader::where('id', $request->id)->update([
                         'is_emailed' => true,
                         'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'emailed_by' => $this->karyawan
-                    ]);
-                } else if (in_array($category, $categoryGetaran)) {
-                    $data = LhpsGetaranHeader::where('id', $request->id)->update([
-                        'is_emailed' => true,
-                        'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'emailed_by' => $this->karyawan
-                    ]);
-                } else if (in_array($category, $categoryPencahayaan)) {
-                    $data = LhpsPencahayaanHeader::where('id', $request->id)->update([
-                        'is_emailed' => true,
-                        'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'emailed_by' => $this->karyawan
-                    ]);
-                } else if (in_array($category, $categoryLingkunganKerja)) {
-                    if (is_string($request->parameter)) {
-                        $decodedString = html_entity_decode($request->parameter);
-                        $parameter = json_decode($decodedString, true);
-                        $cleanedParameter = array_map(function ($item) {
-                            return preg_replace('/^\d+;/', '', $item);
-                        }, $parameter);
-                    }
-                    if (in_array("Medan Listrik", $cleanedParameter) || in_array("Medan Magnit Statis", $cleanedParameter) || in_array("Power Density", $cleanedParameter)) {
-                        $data = LhpsMedanLMHeader::where('id', $request->id)->update([
-                            'is_emailed' => true,
-                            'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                            'emailed_by' => $this->karyawan
-                        ]);
-                    } else if (in_array("Sinar UV", $cleanedParameter)) {
-                        $data = LhpsSinarUVHeader::where('id', $request->id)->update([
-                            'is_emailed' => true,
-                            'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                            'emailed_by' => $this->karyawan
-                        ]);
-                    } else {
-                        $data = LhpsLingHeader::where('id', $request->id)->update([
-                            'is_emailed' => true,
-                            'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                            'emailed_by' => $this->karyawan
-                        ]);
-                    }
-                }
+                ]);
             }
             $email = SendEmail::where('to', $request->to)
                 ->where('subject', $request->subject)
@@ -815,75 +725,6 @@ class DraftUlkMedanMagnetController extends Controller
             ], 500);
         }
     }
-
-    // public function setSignature(Request $request)
-    // {
-    //     $categoryKebisingan = [23, 24, 25];
-    //     $categoryGetaran = [13, 14, 15, 16, 17, 18, 19, 20];
-    //     $categoryLingkunganKerja = [11, 27, 53];
-    //     $categoryPencahayaan = [28];
-
-    //     try {
-    //         if (in_array($request->category, $categoryKebisingan)) {
-    //             $header = LhpsKebisinganHeader::where('id', $request->id)->first();
-    //             $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryPencahayaan)) {
-    //             $header = LhpsPencahayaanHeader::where('id', $request->id)->first();
-    //             $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
-    //         } else if (in_array($request->category, $categoryLingkunganKerja)) {
-    //             if ($request->mode == "medanlm") {
-    //                 $header = LhpsMedanLMHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
-    //             } else if ($request->mode == "sinaruv") {
-    //                 $header = LhpsSinarUVHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-    //             } else {
-    //                 $header = LhpsLingHeader::where('id', $request->id)->first();
-    //                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-    //             }
-    //         }
-
-    //         if ($header != null) {
-    //             $header->nama_karyawan = $this->karyawan;
-    //             $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-    //             $header->save();
-
-    //             $file_qr = new GenerateQrDocumentLhp();
-    //             $file_qr = $file_qr->insert('LHP_AIR', $header, $this->karyawan);
-    //             if ($file_qr) {
-    //                 $header->file_qr = $file_qr;
-    //                 $header->save();
-    //             }
-
-    //             $groupedByPage = [];
-    //             if (!empty($custom)) {
-    //                 foreach ($custom as $item) {
-    //                     $page = $item['page'];
-    //                     if (!isset($groupedByPage[$page])) {
-    //                         $groupedByPage[$page] = [];
-    //                     }
-    //                     $groupedByPage[$page][] = $item;
-    //                 }
-    //             }
-
-    //             $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-    //             $this->dispatch($job);
-
-    //             $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-    //             $this->dispatch($job);
-
-    //             return response()->json([
-    //                 'message' => 'Signature berhasil diubah'
-    //             ], 200);
-    //         }
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //             'line' => $e->getLine(),
-    //             'file' => $e->getFile()
-    //         ]);
-    //     }
-    // }
 
     // Amang
     public function encrypt($data)
