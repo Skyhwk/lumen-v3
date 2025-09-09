@@ -54,7 +54,7 @@ class ImportDataCustomerController extends Controller
             $column_range = range( 'E', $column_limit );
             $startcount   = 1;
             $data = array();   
-
+            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
             foreach ( $row_range as $row ) {
                 // pattern Excel B->Nama Customer, C->No Telepon Perusahaan, D->email perusahaan E->alamat perusahaan
 
@@ -91,40 +91,71 @@ class ImportDataCustomerController extends Controller
                 $email_perusahaan = $sheet->getCell('D' . $row)->getValue();
                 $alamat_perusahaan = $sheet->getCell('E' . $row)->getValue();
 
-                $existingPelanggan = MasterPelanggan::whereRaw("REPLACE(REPLACE(REPLACE(UPPER(nama_pelanggan), ' ', ''), '\t', ''), ',', '') LIKE ?", ['%' . $namaPelangganBersih . '%'])
-                    ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan, $email_perusahaan) {
-                        if (!empty($no_tlp_perusahaan)) {
-                            $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
-                        }
-                        if (!empty($email_perusahaan)) {
-                            $query->orWhere('email_perusahaan', $email_perusahaan);
-                        }
-                    })
-                    ->orWhereHas('alamat_pelanggan', function ($query) use ($alamat_perusahaan) {
-                        if (!empty($alamat_perusahaan)) {
-                            $query->where('alamat', $alamat_perusahaan);
-                        }
-                    })
-                    ->first();
+                $existingPelanggan = MasterPelanggan::whereRaw("
+                    REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                REGEXP_REPLACE(
+                                    UPPER(nama_pelanggan),
+                                    '[[:space:]\.,]*(PT|CV|UD|PD|KOPERASI|PERUM|PERSERO|BUMD|YAYASAN)[[:space:]\.,]*$',
+                                    '',
+                                    'ig'
+                                ),
+                            ' ', ''), '\t', ''), ',', ''
+                        ) = ?
+                    ", [$namaPelangganBersih]
+                )
+                ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan, $email_perusahaan) {
+                    if (!empty($no_tlp_perusahaan)) {
+                        $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+                    }
+                    if (!empty($email_perusahaan)) {
+                        $query->orWhere('email_perusahaan', $email_perusahaan);
+                    }
+                })
+                ->orWhereHas('alamat_pelanggan', function ($query) use ($alamat_perusahaan) {
+                    if (!empty($alamat_perusahaan)) {
+                        $query->where('alamat', $alamat_perusahaan);
+                    }
+                })
+                ->first();
                 
                 if($existingPelanggan) continue;
 
                 $data[] = [
                     'filename' => $filename,
-                    'nama pelanggan' => trim($namaPelangganBersih . ($title != '' ? ', ' . $title : '')),
+                    'nama_pelanggan' => trim($namaPelangganBersih . ($title != '' ? ', ' . $title : '')),
                     'no_tlp_perusahaan' => $no_tlp_perusahaan,
                     'email_perusahaan' => $email_perusahaan,
                     'alamat_perusahaan' => $alamat_perusahaan,
                     'created_by' => $this->karyawan,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s')
+                    'created_at' => $timestamp
                 ];
                 
                 $startcount++;
             }
+
+            $data = collect($data)
+            ->unique(function ($item) {
+                return strtolower($item['nama_pelanggan']);
+            })
+            ->values()
+            ->all();
+
             
             if(!empty($data)){
+                if(ImportDataCustomer::where('is_generated', false)->exists()){
+                    return response()->json([
+                        'message'=>'Ada data yang belum tergenerate, silahkan generated terlebih dahulu.!'
+                    ],401);
+                }
+
                 ImportDataCustomer::insert($data);
                 DB::commit();
+
+                return response()->json([
+                    'message'=>'Data berhasil diimport.!'
+                ],200);
             } else {
                 return response()->json([
                     'message'=>'Tidak ada data yang diimport.!'
@@ -137,5 +168,13 @@ class ImportDataCustomerController extends Controller
                 'message'=>'Error = '.$e->getMessage()
             ],401);
         }
+    }
+
+    public function generate(Request $request){
+    }
+
+    public function delete(Request $request){
+        $importDataCustomer = ImportDataCustomer::where('filename', $request->filename)->delete();
+        return response()->json(['message'=>'Data berhasil dihapus.!'], 200);
     }
 }
