@@ -705,23 +705,11 @@ class FdlEmisiKendaraanController extends Controller
                             $data_fdl->save();
 
                             if ($kendaraan) {
-                                $kendaraan->merk_kendaraan      = ucfirst($request->merk);
-                                $kendaraan->id_bbm              = $request->jenis_kendaraan;
-                                $kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
-                                $kendaraan->plat_nomor          = $request->no_plat;
-                                $kendaraan->bobot_kendaraan     = $request->bobot_kendaraan;
-                                $kendaraan->tahun_pembuatan     = $request->tahun;
-                                $kendaraan->no_mesin            = $request->no_mesin;
-                                $kendaraan->transmisi           = $request->transmisi;
-                                $kendaraan->kategori_kendaraan  = $request->kategori_kendaraan;
-                                $kendaraan->km                  = $request->km;
-                                $kendaraan->cc                  = $request->cc;
-
-                                // ✅ metadata untuk update
                                 $kendaraan->updated_by          = $this->karyawan;
                                 $kendaraan->updated_at          = Carbon::now()->format('Y-m-d H:i:s');
                                 $kendaraan->save();
                             }
+
                             $data_order = new DataLapanganEmisiOrder;
                             // $data_order->id_po			= $cek_po->id;
                             $data_order->no_sampel			= strtoupper($request->no_sample);
