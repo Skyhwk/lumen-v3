@@ -26,11 +26,16 @@ class Utf8Sanitizer
         if ($response instanceof JsonResponse) {
             $data = $response->getData(true);
 
-            array_walk_recursive($data, function (&$item, $key) {
-                if (is_string($item)) {
-                    $item = $this->sanitizeString($item, $key, 'response');
-                }
-            });
+            // Perbaikan: handle jika $data adalah string, bukan array
+            if (is_array($data)) {
+                array_walk_recursive($data, function (&$item, $key) {
+                    if (is_string($item)) {
+                        $item = $this->sanitizeString($item, $key, 'response');
+                    }
+                });
+            } elseif (is_string($data)) {
+                $data = $this->sanitizeString($data, 'root', 'response');
+            }
 
             return response()->json(
                 $data,
