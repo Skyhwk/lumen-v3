@@ -59,7 +59,7 @@ class AksesMenuController extends Controller
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
                 ->get();
         } else {
-            $subordinates = GetBawahan::where('id', $userId)->get()->pluck('id')->toArray();
+            $subordinates = GetBawahan::where('id', $userId)->get()->pluck('user_id')->toArray();
             unset($subordinates[array_search($userId, $subordinates)]);
             $data = MasterKaryawan::whereIn('master_karyawan.user_id', $subordinates)
                 ->where('master_karyawan.is_active', true)
