@@ -658,7 +658,9 @@ class FdlEmisiKendaraanController extends Controller
 
                     $cek_po = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active',true)->first();
                     if($cek_po!=null){
-                        $fdl = DataLapanganEmisiKendaraan::where('no_sampel', $request)->where('is_active',true)->first();
+                        $fdl = DataLapanganEmisiKendaraan::where('no_sampel', $request->no_sample)
+                                ->where('is_active', true)
+                                ->first();
                         if(!isset($fdl->id) || $fdl->id == null) {
 
                             $co2=NULL; $co=NULL; $hc=NULL; $o2=NULL; $opasitas=NULL; $nilai_k=NULL; $rpm=NULL; $oli=NULL;
@@ -705,7 +707,7 @@ class FdlEmisiKendaraanController extends Controller
                             if ($kendaraan) {
                                 $kendaraan->merk_kendaraan      = ucfirst($request->merk);
                                 $kendaraan->id_bbm              = $request->jenis_kendaraan;
-                                $data_kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
+                                $kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
                                 $kendaraan->plat_nomor          = $request->no_plat;
                                 $kendaraan->bobot_kendaraan     = $request->bobot_kendaraan;
                                 $kendaraan->tahun_pembuatan     = $request->tahun;
@@ -777,15 +779,10 @@ class FdlEmisiKendaraanController extends Controller
                                 if($request->oli[0]!=NULL && $request->oli[1]!=NULL && $request->oli[2]!=NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                             }
 
-                            if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
-                                // 🔹 Buat baru
+                            if (!isset($kendaraan) || !isset($kendaraan->id_kendaraan)) {
                                 $data_kendaraan = new MasterKendaraan;
                             } else {
-                                // 🔹 Update yang sudah ada
-                                $data_kendaraan = MasterKendaraan::find($kendaraan->id_kendaraan);
-                                if (!$data_kendaraan) {
-                                    $data_kendaraan = new MasterKendaraan; // fallback kalau ID tidak ketemu
-                                }
+                                $data_kendaraan = MasterKendaraan::find($kendaraan->id_kendaraan) ?? new MasterKendaraan;
                             }
 
                             // 🔹 Isi data (baik create maupun update)
