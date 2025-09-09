@@ -112,6 +112,7 @@ class FdlEmisiKendaraanController extends Controller
                         'order_id' => $order[0]->id ?? null,
                         'id_qr' => $data->id,
                         'bbm' => $kendaraan->id_bbm,
+                        'jenis_bbm' => $kendaraan->jenis_bbm,
                         'plat' => $kendaraan->plat_nomor,
                         'no_mesin' => $kendaraan->no_mesin,
                         'merk' => $kendaraan->merk_kendaraan,

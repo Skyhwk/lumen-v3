@@ -55,8 +55,8 @@ class DraftUdaraAmbientController extends Controller
             ->get();
 
             foreach ($data as $key => $value) {
-                if(isset($value->lhps_ling) && $value->lhps_ling->metode_sampling != null ){
-                    $data[$key]->lhps_ling->metode_sampling = json_decode($value->lhps_ling->metode_sampling);
+                if(isset($value->lhps_ling) && $value->lhps_ling->methode_sampling != null ){
+                    $data[$key]->lhps_ling->methode_sampling = json_decode($value->lhps_ling->methode_sampling);
                 }
             }
 
@@ -77,58 +77,58 @@ class DraftUdaraAmbientController extends Controller
         ], 201);
     }
 
-   public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
+  public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
 
-            $header = LhpsLingHeader::where('id', $request->id_lhp)->first();
-            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
 
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+        $result = $data->toArray();
 
-            $result = $data->toArray();
+        // Jika ada id_lhp, lakukan perbandingan array
+        if ($request->filled('id_lhp')) {
+            $header = LhpsLingHeader::find($request->id_lhp);
 
-            foreach ($data as $key => $value) {
-                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+            if ($header) {
+                $headerMetode = json_decode($header->methode_sampling, true) ?? [];
 
-                $missing = array_diff($headerMetode, $valueMetode);
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                if (!empty($missing)) {
-                    foreach ($missing as $miss) {
-                        $result[] = [
-                            'id' => null, 
-                            'metode_sampling' => $miss,
-                            'kategori' => $value->kategori,
-                            'sub_kategori' => $value->sub_kategori,
-                        ];
+                    $missing = array_diff($headerMetode, $valueMetode);
+
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
+                        }
                     }
                 }
             }
-
-            if (!empty($result)) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $result
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belum ada method',
-                    'data' => []
-                ], 200);
-            }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
 
    public function store(Request $request)
     {
@@ -173,7 +173,6 @@ class DraftUdaraAmbientController extends Controller
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                 return ['page' => (int)$page, 'regulasi' => $item];
             })->values()->toArray();
-
             // === 4. Simpan / update header ===
             $header->fill([
                 'no_order'        => $request->no_order ?: null,
