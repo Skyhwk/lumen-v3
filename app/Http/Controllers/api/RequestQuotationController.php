@@ -3388,7 +3388,7 @@ class RequestQuotationController extends Controller
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             $matchedOldPenamaan = $oldSampling['penamaan_titik'] ?? [];
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
@@ -3442,7 +3442,7 @@ class RequestQuotationController extends Controller
                                     //     $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                     //     $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
 
-                                    //     if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                    //     if ($kategori1Same  && $regulasiSame) {
                                     //         if (in_array($oldSampling, $tempUsedOldData, true)) {
                                     //             continue;
                                     //         }
@@ -3469,7 +3469,7 @@ class RequestQuotationController extends Controller
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
                                             }
@@ -5222,7 +5222,7 @@ class RequestQuotationController extends Controller
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             $matchedOldPenamaan = $oldSampling['penamaan_titik'] ?? [];
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
@@ -5276,7 +5276,7 @@ class RequestQuotationController extends Controller
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
                                             }

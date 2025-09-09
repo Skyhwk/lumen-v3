@@ -14,7 +14,6 @@ use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
@@ -34,8 +33,6 @@ use Yajra\Datatables\Datatables;
 
 class DraftUlkSinarUvController extends Controller
 {
-    // done if status = 2
-    // AmanghandleDatadetail
     public function index()
     {
         DB::statement("SET SESSION sql_mode = ''");
@@ -78,211 +75,61 @@ class DraftUlkSinarUvController extends Controller
         ], 201);
     }
 
-    // Tidak digunakan sekarang, gatau nanti
-   public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
 
-            $header = LhpsSinarUVHeader::where('id', $request->id_lhp)->first();
-            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+      public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
 
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
 
-            $result = $data->toArray();
+        $result = $data->toArray();
 
-            foreach ($data as $key => $value) {
-                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+        if ($request->filled('id_lhp')) {
+            $header = LhpsSinarUVHeader::find($request->id_lhp);
 
-                $missing = array_diff($headerMetode, $valueMetode);
+            if ($header) {
+                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                if (!empty($missing)) {
-                    foreach ($missing as $miss) {
-                        $result[] = [
-                            'id' => null, 
-                            'metode_sampling' => $miss,
-                            'kategori' => $value->kategori,
-                            'sub_kategori' => $value->sub_kategori,
-                        ];
-                    }
-                }
-            }
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-            if (!empty($result)) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $result
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belum ada method',
-                    'data' => []
-                ], 200);
-            }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
-        }
-    }
+                    $missing = array_diff($headerMetode, $valueMetode);
 
-
-    public function store2(Request $request)
-    {
-        $category = explode('-', $request->kategori_3)[0];
-        // dd($request->all());
-        DB::beginTransaction();
-        try {
-
-            $orderDetail = OrderDetail::where('id', $request->id)->where('is_active', true)->where('kategori_3', 'LIKE', "%{$category}%")->where('cfr', $request->no_lhp)->first();
-            $orderDetailParameter = json_decode($orderDetail->parameter);
-            $parameterNames = array_map(function ($param) {
-                $parts = explode(';', $param);
-                return $parts[1] ?? null;
-            }, $orderDetailParameter);
-
-
-            $id_kategori3 = explode('-', $request->kategori_3)[0];
-            $header = LhpsSinarUVHeader::where('no_lhp', $request->no_lhp)->where('no_order', $request->no_order)->where('id_kategori_3', $id_kategori3)->where('is_active', true)->first();
-
-
-            if ($header == null) {
-                $header = new LhpsSinarUVHeader;
-                $header->created_by = $this->karyawan;
-                $header->created_at = DATE('Y-m-d H:i:s');
-                // dd('masuk');
-            } else {
-                $history = $header->replicate();
-                $history->setTable((new LhpsSinarUVHeaderHistory())->getTable());
-                $history->created_by = $this->karyawan;
-                $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                $history->updated_by = null;
-                $history->updated_at = null;
-                $history->save();
-                $header->updated_by = $this->karyawan;
-                $header->updated_at = DATE('Y-m-d H:i:s');
-            }
-            $parameter = is_array($request->parameter) ? $request->parameter : explode(', ', $request->parameter);
-         
-            $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
-            $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL;
-            $header->no_sampel = ($request->noSampel != '') ? $request->noSampel : NULL;
-            $header->no_qt = ($request->no_penawaran != '') ? $request->no_penawaran : NULL;
-            $header->jenis_sampel = ($request->kategori_3 != '') ? explode("-", $request->kategori_3)[1] : NULL;
-            $header->parameter_uji = json_encode($parameter);
-            $header->nama_karyawan = 'Abidah Walfathiyyah';
-            $header->jabatan_karyawan = 'Technical Control Supervisor';
-            // $header->nama_karyawan = 'Kharina Waty';
-            // $header->jabatan_karyawan = 'Technical Control Manager';
-            $header->nama_pelanggan = ($request->nama_perusahaan != '') ? $request->nama_perusahaan : NULL;
-            $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL;
-            $header->id_kategori_3 = ($id_kategori3 != '') ? $id_kategori3 : NULL;
-            $header->sub_kategori = ($request->kategori_3 != '') ? explode("-", $request->kategori_3)[1] : NULL;
-            $header->metode_sampling = ($request->metode_sampling != '') ? $request->metode_sampling : NULL;
-            $header->keterangan = ($request->keterangan != '') ? $request->keterangan : NULL;
-            $header->tanggal_lhp = ($request->tanggal_lhp != '') ? $request->tanggal_lhp : NULL;
-            $header->tanggal_sampling = ($request->tanggal_sampling != '') ? $request->tanggal_sampling : NULL;
-            $header->tanggal_sampling_text = ($request->tgl_terima_hide != '') ? $request->tgl_terima_hide : NULL;
-            $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
-            $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
-            // dd($request->regulasi);
-            if (count(array_filter($request->regulasi)) > 0) {
-                $header->id_regulasi = ($request->regulasi1 != null) ? $request->regulasi1 : NULL;
-            }
-
-            $header->save();
-
-            $detail = LhpsSinarUVDetail::where('id_header', $header->id)->first();
-            if ($detail != null) {
-                $history = $detail->replicate();
-                $history->setTable((new LhpsSinarUVDetailHistory())->getTable());
-                $history->created_by = $this->karyawan;
-                $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                $history->save();
-            }
-            $detail = LhpsSinarUVDetail::where('id_header', $header->id)->delete();
-            foreach ($request->no_sampel as $key => $val) {   
-                $cleaned_key_no_sampel = array_map(fn($k) => trim($k, " '\""), array_keys($request->no_sampel));
-                $cleaned_no_sampel = array_combine($cleaned_key_no_sampel, array_values($request->no_sampel));
-                $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
-                $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
-                $cleaned_key_waktu_pemaparan = array_map(fn($k) => trim($k, " '\""), array_keys($request->waktu_pemaparan));
-                $cleaned_waktu_pemaparan = array_combine($cleaned_key_waktu_pemaparan, array_values($request->waktu_pemaparan));
-                $cleaned_key_keterangan = array_map(fn($k) => trim($k, " '\""), array_keys($request->keterangan2));
-                $cleaned_keterangan = array_combine($cleaned_key_keterangan, array_values($request->keterangan2));
-                $cleaned_key_mata = array_map(fn($k) => trim($k, " '\""), array_keys($request->mata));
-                $cleaned_mata = array_combine($cleaned_key_mata, array_values($request->mata));
-                $cleaned_key_siku = array_map(fn($k) => trim($k, " '\""), array_keys($request->siku));
-                $cleaned_siku = array_combine($cleaned_key_siku, array_values($request->siku));
-                $cleaned_key_betis = array_map(fn($k) => trim($k, " '\""), array_keys($request->betis));
-                $cleaned_betis = array_combine($cleaned_key_betis, array_values($request->betis));
-// dd($cleaned_key_no_sampel, $val, array_key_exists($val, $cleaned_key_no_sampel),$request->no_sampel);
-                if (array_key_exists($val, $cleaned_no_sampel)) {
-
-                    $parame = Parameter::where('id_kategori', 4)->where('nama_lab', $val)->where('is_active', true)->first();
-                    $detail = new LhpsSinarUVDetail;
-                    $detail->id_header = $header->id;
-                    $detail->no_sampel = $val;
-                    $detail->parameter = $parame;
-                    $detail->keterangan = $cleaned_keterangan[$val];
-                    $detail->nab = $cleaned_nab[$val];
-                    $detail->waktu_pemaparan = $cleaned_waktu_pemaparan[$val];
-                    $detail->mata = $cleaned_mata[$val];
-                    $detail->betis = $cleaned_betis[$val];
-                    $detail->siku = $cleaned_siku[$val];
-                    $detail->save();
-
-                }
-            }
-            $details = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-            if ($header != null) {
-                $file_qr = new GenerateQrDocumentLhp();
-                $file_qr = $file_qr->insert('LHP_SINAR_UV', $header, $this->karyawan);
-                if ($file_qr) {
-                    $header->file_qr = $file_qr;
-                    $header->save();
-                }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
                         }
-                        $groupedByPage[$page][] = $item;
                     }
                 }
-
-             
-                $fileName = LhpTemplate::setDataDetail($details)
-                                ->setDataHeader($header)
-                                ->whereView('DraftUlkSinarUv')
-                                ->render();
-                $header->file_lhp = $fileName;
-                $header->save();
             }
-            // dd($header);
-            DB::commit();
-            return response()->json([
-                'message' => 'Data draft LHP Lingkungan no sampel ' . $request->no_lhp . ' berhasil disimpan',
-                'status' => true
-            ], 201);
-        } catch (\Exception $th) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'line' => $th->getLine(),
-                'status' => false
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
+
+
+  
     public function store(Request $request)
     {
         DB::beginTransaction();
