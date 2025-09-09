@@ -735,7 +735,7 @@ class StpsController extends Controller
                             return $kategori3Group->map(function ($regulasiGroup) {
                                 return $regulasiGroup->map(function ($parameterGroup) {
                                     $first = $parameterGroup->first();
-
+                                    // dd($parameterGroup->toArray());
                                     return [
                                         'kategori_3' => \explode('-', $first->kategori_3)[1],
                                         'kategori_1' => $parameterGroup->first()->kategori_1,
@@ -752,12 +752,23 @@ class StpsController extends Controller
                                             $param = Parameter::find($paramId);
                                             return $param ? $param->nama_lab : null;
                                         }, json_decode($first->parameter)),
+
                                         'persiapan' => ($first->kategori_2 == '1-Air' ? '( ' . number_format((array_sum(array_map(function ($item) {
-                                            if (!is_object($item))
+                                            
+                                            
+                                            if (!is_object($item)) {
+                                                if (is_array($item) && isset($item['persiapan'])) {
+                                                    $itemObj = (object) $item;
+                                                    $persiapan = json_decode($itemObj->persiapan, true);
+                                                    return $persiapan ? array_sum(array_column($persiapan, 'volume')) : 0;
+                                                }
+                                            } else {
                                                 return 0;
+                                            }
                                             $persiapan = json_decode($item->persiapan, true);
                                             return $persiapan ? array_sum(array_column($persiapan, 'volume')) : 0;
                                         }, $parameterGroup->toArray())) / 1000), 1) . ' L )' : ''),
+
                                         'total_parameter' => count(json_decode($first->parameter) ?: []),
                                         'jumlah_titik' => $parameterGroup->count(),
                                         'no_sampel' => $parameterGroup->pluck('no_sampel')->toArray()
@@ -767,8 +778,6 @@ class StpsController extends Controller
                         })->collapse()
                         ->values()
                         ->toArray();
-
-                    // dd($dataOrderDetailPerPeriode);
 
                     usort($dataOrderDetailPerPeriode, function ($a, $b) {
                         // Ambil angka terakhir dari no_sampel, misalnya dari "ISDI012502/021" ambil 021 → jadi 21
