@@ -192,11 +192,13 @@ class DraftCustomerController extends Controller
                     'merk_pelanggan',
                 ]);
 
+                
                 $lastPelanggan = MasterPelanggan::where('id_cabang', $this->idcabang)->orderBy('no_urut', 'desc')->first();
                 $noUrut = $lastPelanggan ? (int) $lastPelanggan->no_urut + 1 : 1;
                 $dataPelanggan['no_urut'] = str_pad($noUrut, 5, '0', STR_PAD_LEFT);
-
+                
                 $namaPelangganUpper = strtoupper(str_replace([' ', '\t', ','], '', $dataPelanggan['nama_pelanggan']));
+                $clearNamaPelanggan = preg_replace('/(,?\s*\.?\s*(PT|CV|UD|PD|KOPERASI|PERUM|PERSERO|BUMD|YAYASAN))\s*$/i', '', $namaPelangganUpper);
                 $idPelanggan = null;
                 for ($i = 1; $i <= 10; $i++) {
                     $generatedId = $this->randomstr($namaPelangganUpper, $i);
@@ -257,6 +259,9 @@ class DraftCustomerController extends Controller
                 $dataPelanggan['sales_penanggung_jawab'] = $selectedSales->nama_lengkap;
                 // END RANDOMIZE SALES
 
+                $existingPelanggan = MasterPelanggan::where('nama_pelanggan', 'like', '%' . $clearNamaPelanggan . '%')->where('is_active', true)->first();
+
+                if ($existingPelanggan) return response()->json(['message' => 'Pelanggan dengan data yang sama sudah ada'], 400);
 
                 $pelanggan = MasterPelanggan::create($dataPelanggan);
                 if (!$request->kontak_pelanggan['no_tlp_perusahaan'][0]) return response()->json(['message' => 'Nomor telepon perusahaan harus diisi'], 400);
