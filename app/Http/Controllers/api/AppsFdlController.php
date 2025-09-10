@@ -1647,11 +1647,6 @@ class AppsFdlController extends Controller
                         'message' => 'Foto Roadmap tidak boleh kosong .!'
                     ], 401);
                 }
-                if($request->jml_kerja == ''){
-                    return response()->json([
-                        'message' => 'Jumlah Jam Kerja tidak boleh kosong .!'
-                    ], 401);
-                }
 
                 if ($request->categori == 'Pencahayaan Umum') {
                     if ($request->mulai == '') {
