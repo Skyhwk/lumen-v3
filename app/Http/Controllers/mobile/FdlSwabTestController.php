@@ -39,7 +39,7 @@ class FdlSwabTestController extends Controller
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
-                    $q->orWhere('parameter', 'like', '%' . $keyword . '%');
+                    $q->orWhere('parameter', 'like', "%$keyword%");
                 }
             })
             ->where('is_active', 1)->first();

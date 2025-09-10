@@ -45,7 +45,7 @@ class FdlMicrobiologiUdaraController extends Controller
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where(function($q) use ($parameterList) {
                     foreach ($parameterList as $param) {
-                        $q->orWhere('parameter', 'like', "%;$param");
+                        $q->orWhere('parameter', 'like', "%$param%");
                     }
                 })
                 ->where('is_active', 1)->first();

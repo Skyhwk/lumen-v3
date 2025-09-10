@@ -42,7 +42,7 @@ class FdlIklimPanasController extends Controller
             ->where('kategori_3', '21-Iklim Kerja')
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
-                    $q->orWhere('parameter', 'like', '%' . $keyword . '%');
+                    $q->orWhere('parameter', 'like', "%$keyword%");
                 }
             })
             ->first();
