@@ -537,16 +537,24 @@ class FdlDirectLainController extends Controller
     }
 
     public function validatorForm(){
+        $form1 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','tvoc_voc_hcho_h2co_durasi')->where('kategori','4-Udara')->first();
+        $form2 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co2_durasi')->where('kategori','4-Udara')->first();
+        $form3 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co_durasi')->where('kategori','4-Udara')->first();
+        $sesaat_1 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','voc_sesaat')->where('kategori','4-Udara')->first();
+        $sesaat_2 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','h2co_hcho_sesaat')->where('kategori','4-Udara')->first();
+        $sesaat_3 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co2_sesaat')->where('kategori','4-Udara')->first();
+        $sesaat_4 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','co_sesaat')->where('kategori','4-Udara')->first();
+        $sesaat_5 = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','o2_sesaat')->where('kategori','4-Udara')->first();
         return response()->json([
             'data' =>[
-                'pengukuran_1' => ['VOC (8 Jam)', 'HCHO (8 Jam)', 'HCHO 8J (LK-pm)', 'HCHO 8J (LK-µg)'],
-                'pengukuran_2' => ['CO2 (8 Jam)', 'CO2 (24 Jam)','CO2 8J (LK)'],
-                'pengukuran_3' => ['CO (6 Jam)', 'CO (24 Jam)','CO (8 Jam)' ,'CO 6J', 'CO 24J (UA)', 'CO 8J (LK-mg)', 'CO 8J (LK-pm)'],
-                'sesaat_1' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
-                'sesaat_2' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
-                'sesaat_3' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
-                'sesaat_4' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
-                'sesaat_5' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+                'pengukuran_1' => $form1->parameters != null ? json_decode($form1->parameters, true) : [],
+                'pengukuran_2' => $form2->parameters != null ? json_decode($form2->parameters, true) : [],
+                'pengukuran_3' => $form3->parameters != null ? json_decode($form3->parameters, true) : [],
+                'sesaat_1' => $sesaat_1->parameters != null ? json_decode($sesaat_1->parameters, true) : [],
+                'sesaat_2' => $sesaat_2->parameters != null ? json_decode($sesaat_2->parameters, true) : [],
+                'sesaat_3' => $sesaat_3->parameters != null ? json_decode($sesaat_3->parameters, true) : [],
+                'sesaat_4' => $sesaat_4->parameters != null ? json_decode($sesaat_4->parameters, true) : [],
+                'sesaat_5' => $sesaat_5->parameters != null ? json_decode($sesaat_5->parameters, true) : [],
             ]
         ]);
     }
