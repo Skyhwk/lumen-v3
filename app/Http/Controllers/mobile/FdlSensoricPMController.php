@@ -39,7 +39,7 @@ class FdlSensoricPMController extends Controller
             ->whereIn('kategori_3', ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
-                    $q->orWhere('parameter', 'like', '%' . $keyword . '%');
+                    $q->orWhere('parameter', 'like', "%$keyword%");
                 }
             })
             ->where('is_active', 1)->first();

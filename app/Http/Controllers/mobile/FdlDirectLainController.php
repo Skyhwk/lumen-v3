@@ -35,20 +35,17 @@ class FdlDirectLainController extends Controller
 {
     public function getSample(Request $request)
     {
-        // dd($request->all());
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','direct_lain')->where('kategori','4-Udara')->first();
             $listParameter = json_decode($parameter->parameters, true);
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', '27-Udara lingkungan Kerja')
-                ->where(function($q) use ($parameterList) {
-                    foreach ($parameterList as $param) {
-                        $q->orWhere('parameter', 'like', "%;$param");
+                ->whereIn('kategori_3', ['27-Udara lingkungan Kerja', '11-Udara Ambient'])
+                ->where(function($q) use ($listParameter) {
+                    foreach ($listParameter as $param) {
+                        $q->orWhere('parameter', 'like', "%$param%");
                     }
                 })
                 ->where('is_active', 1)->first();
-
-
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan..'
@@ -79,7 +76,7 @@ class FdlDirectLainController extends Controller
                     $gabungParam = array_unique(array_merge($par2, $paramBelumAda));
                 
                     // Encode final
-                    $param_fin = json_encode(array_values($gabungParam));
+                    $param_fin = json_encode(array_values($gabungParam), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                     $cek = MasterSubKategori::find(explode('-', $data->kategori_3)[0]);
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
@@ -87,7 +84,7 @@ class FdlDirectLainController extends Controller
                         'keterangan' => $data->keterangan_1,
                         'id_ket'     => explode('-', $data->kategori_3)[0],
                         'param'      => $param_fin,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $listParameter
                     ], 200);
                 }                
                 else {
@@ -104,7 +101,7 @@ class FdlDirectLainController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $pDecoded,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $listParameter
                     ], 200);
                 }
             }
@@ -537,6 +534,21 @@ class FdlDirectLainController extends Controller
                 'message' => 'Gagal Delete'
             ], 401);
         }
+    }
+
+    public function validatorForm(){
+        return response()->json([
+            'data' =>[
+                'pengukuran_1' => ['VOC (8 Jam)', 'HCHO (8 Jam)', 'HCHO 8J (LK-pm)', 'HCHO 8J (LK-µg)'],
+                'pengukuran_2' => ['CO2 (8 Jam)', 'CO2 (24 Jam)','CO2 8J (LK)'],
+                'pengukuran_3' => ['CO (6 Jam)', 'CO (24 Jam)','CO (8 Jam)' ,'CO 6J', 'CO 24J (UA)', 'CO 8J (LK-mg)', 'CO 8J (LK-pm)'],
+                'sesaat_1' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+                'sesaat_2' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+                'sesaat_3' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+                'sesaat_4' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+                'sesaat_5' => ['VOC (8 Jam)', 'HCHO (8 Jam)'],
+            ]
+        ]);
     }
 
     public function convertImg($foto = '', $type = '', $user = '')
