@@ -16,13 +16,18 @@ class ReorderNotifierService
     private $no_order;
     public function run($orderHeader, $log, $bcc, $userid)
     {
+        $this->no_order = $orderHeader->no_order;
         $dataLama = collect($log['data_lama']);
         $dataBaru = collect($log['data_baru']);
 
         // Identifikasi penambahan dan pengurangan sampel
         $add = $this->identifyAdditions($dataLama, $dataBaru);
         $sub = $this->identifyRemovals($dataLama, $dataBaru);
-        $changes = $this->identifyChanges($dataLama, $dataBaru);
+        if (str_contains($orderHeader->no_document, '/QTC/')) {
+            $changes = $this->identifyChangesContract($dataLama, $dataBaru);
+        } else if (str_contains($orderHeader->no_document, '/QT/')) {
+            $changes = $this->identifyChanges($dataLama, $dataBaru);
+        }
 
         // Mengumpulkan no_sampel yang ada di add dan sub
         $addNoSampel = collect($add)->pluck('no_sampel')->toArray();
@@ -62,8 +67,8 @@ class ReorderNotifierService
             ]
         ];
 
-        $reorderNotifierService = new PerubahanSampelService();
-        $reorderNotifierService->run($this->no_order, $userid);
+        // $reorderNotifierService = new PerubahanSampelService();
+        // $reorderNotifierService->run($this->no_order, $userid);
 
         $this->notify($result, $bcc);
     }
@@ -102,131 +107,268 @@ class ReorderNotifierService
             })->values()->all();
     }
 
+    private function identifyChangesContract($dataLama, $dataBaru)
+    {
+        // $no_order = $dataBaru->toArray()[0]['no_order'];
+
+        $oldData = [];
+        $oldPeriod = $dataLama->pluck('periode')->unique()->values()->toArray();
+        foreach ($oldPeriod as $item) {
+            $oldData[$item] = $dataLama->where('periode', $item)->pluck('no_sampel')->toArray();
+        }
+
+        $newData = [];
+        $newPeriod = $dataBaru->pluck('periode')->unique()->values()->toArray();
+        foreach ($newPeriod as $item) {
+            $newData[$item] = $dataBaru->where('periode', $item)->pluck('no_sampel')->toArray();
+        }
+
+        $oldSample = [];
+        foreach ($oldData as $periode => $samples) {
+            $diff = array_diff($samples, $newData[$periode] ?? []);
+            if (!empty($diff)) {
+                $oldSample[$periode] = array_diff($samples, $newData[$periode] ?? []);
+            }
+        }
+
+        $newSample = [];
+        foreach ($newData as $periode => $samples) {
+            $diff = array_diff($samples, $oldData[$periode] ?? []);
+            if (!empty($diff)) {
+                $newSample[$periode] = array_diff($samples, $oldData[$periode] ?? []);
+            }
+        }
+
+        // dd($oldData, $newData, $oldSample, $newSample);
+        $matchedLama = [];
+        $matchedBaru = [];
+        $perubahan_data = [];
+        $penambahan_data = [];
+        $pengurangan_data = [];
+        $matchPeriod = array_intersect(array_keys($oldSample), array_keys($newSample));
+        foreach ($matchPeriod as $periode) {
+            $data_old = $dataLama->whereIn('no_sampel', $oldSample[$periode])->values();
+            $data_new = $dataBaru->whereIn('no_sampel', $newSample[$periode])->values();
+
+            // ======================= Perubahan No Sampel pada Data Sama =======================
+            foreach ($data_new as $new) {
+                if (isset($matchedBaru[$new["no_sampel"]])) {
+                    continue;
+                }
+
+                $foundMatch = false;
+                foreach ($data_old as $old) {
+                    if (isset($matchedLama[$old["no_sampel"]])) {
+                        continue;
+                    }
+
+                    // Extract regulasi
+                    $regulasiLama = json_decode($old['regulasi'], true);
+                    $regulasiBaru = json_decode($new['regulasi'], true);
+
+                    $paramLama = json_decode($old['parameter'], true);
+                    $paramBaru = json_decode($new['parameter'], true);
+
+                    // Kriteria data sama
+                    $isSameBasic = $old['kategori_2'] == $new['kategori_2'] &&
+                        $old['kategori_3'] == $new['kategori_3'] &&
+                        $paramLama == $paramBaru;
+
+                    $isSameRegulasi = $regulasiLama == $regulasiBaru;
+                    if ($isSameBasic && $isSameRegulasi) {
+                        // Hanya berubah No Sampel
+                        $perubahan_data[] = [
+                            'no_sampel' => $new["no_sampel"],
+                            'before' => $old,
+                            'after' => $new,
+                            'changes' => [
+                                'no_sampel' => [
+                                    'old' => $old["no_sampel"],
+                                    'new' => $new["no_sampel"]
+                                ]
+                            ],
+                            'type' => 'no_sampel'
+                        ];
+
+                        $matchedLama[$old["no_sampel"]] = true;
+                        $matchedBaru[$new["no_sampel"]] = true;
+                        $foundMatch = true;
+                        break;
+
+                    } elseif ($isSameBasic && !$isSameRegulasi) {
+                        // No Sampel & Regulasi berubah
+                        $perubahan_data[] = [
+                            'no_sampel' => $new["no_sampel"],
+                            'before' => $old,
+                            'after' => $new,
+                            'changes' => [
+                                'regulasi' => [
+                                    'old' => $old['regulasi'] ?? null,
+                                    'new' => $new['regulasi'] ?? null
+                                ],
+                                'no_sampel' => [
+                                    'old' => $old["no_sampel"],
+                                    'new' => $new["no_sampel"]
+                                ]
+                            ],
+                            'type' => 'no_sampel_dan_regulasi'
+                        ];
+
+                        $matchedLama[$old["no_sampel"]] = true;
+                        $matchedBaru[$new["no_sampel"]] = true;
+                        $foundMatch = true;
+                        break;
+                    }
+                }
+
+                // Tidak ada match (penambahan data baru)
+                if (!$foundMatch) {
+                    $penambahan_data[] = $new;
+                    $matchedBaru[$new["no_sampel"]] = true;
+                }
+            }
+
+            // Data tidak relevan (penghapusan data lama)
+            foreach ($data_old as $old) {
+                if (!isset($matchedLama[$old["no_sampel"]])) {
+                    $pengurangan_data[] = $old;
+                }
+            }
+        }
+
+        // ======================= Format data untuk disimpan ke DB =======================
+        $no_sampel_changes = array_filter($perubahan_data, function ($item) {
+            return in_array($item['type'], ['no_sampel', 'no_sampel_dan_regulasi']);
+        });
+
+        $grouped_by_periode = [];
+        foreach ($no_sampel_changes as $change) {
+            $periode = $change['after']['periode'];
+
+            if (!isset($grouped_by_periode[$periode])) {
+                $grouped_by_periode[$periode] = [];
+            }
+
+            $grouped_by_periode[$periode][] = [
+                'old' => $change['changes']['no_sampel']['old'],
+                'new' => $change['changes']['no_sampel']['new']
+            ];
+        }
+
+        $final_data = [];
+        foreach ($grouped_by_periode as $periode => $changes) {
+            if (!empty($changes)) {
+                $final_data[] = [
+                    'no_order' => $this->no_order,
+                    'periode' => $periode,
+                    'perubahan' => $changes
+                ];
+            }
+        }
+
+        if (!empty($final_data)) {
+            foreach ($final_data as $data) {
+                PerubahanSampel::create([
+                    'no_order' => $data['no_order'],
+                    'periode' => $data['periode'],
+                    'perubahan' => json_encode($data['perubahan'] ?? [])
+                ]);
+            }
+        }
+
+        return [
+            'penambahan' => $penambahan_data,
+            'pengurangan' => $pengurangan_data,
+            'perubahan' => array_map(function ($item) {
+                return [
+                    'no_sampel' => $item['changes']['no_sampel'] ?? null,
+                    'regulasi' => $item['changes']['regulasi'] ?? null,
+                    'type' => $item['type'] ?? null,
+                ];
+            }, $perubahan_data)
+        ];
+    }
+
     private function identifyChanges($dataLama, $dataBaru)
     {
+        $oldSample = $dataLama->pluck('no_sampel')->values()->toArray();
+        $newSample = $dataBaru->pluck('no_sampel')->values()->toArray();
+
+        $subSample = array_diff($oldSample, $newSample);
+        $addSample = array_diff($newSample, $oldSample);
+
+        $data_old = $dataLama->whereIn('no_sampel', $subSample)->values();
+        $data_new = $dataBaru->whereIn('no_sampel', $addSample)->values();
+
         $penambahan_data = [];
         $pengurangan_data = [];
         $perubahan_data = [];
 
-        $sampelLama = [];
-        $sampelBaru = [];
-
-        foreach ($dataLama as $item) {
-            $sampelLama[$item['no_sampel']] = $item;
-        }
-
-        foreach ($dataBaru as $item) {
-            $sampelBaru[$item['no_sampel']] = $item;
-        }
-
-        $matchedLama = [];
-        $matchedBaru = [];
-
-        $no_order = $dataBaru->toArray()[0]['no_order'];
-        // ======================= Perubahaan Data pada No Sample sama =======================
-        foreach ($sampelBaru as $noSampel => $itemBaru) {
-            if (isset($sampelLama[$noSampel])) {
-                $itemLama = $sampelLama[$noSampel];
-                $changes = [];
-
-                foreach ($itemBaru as $field => $value) {
-                    if ($field === 'no_sampel' || $field === 'no_order') {
-                        continue; // Skip primary keys
-                    }
-
-                    if ($itemLama[$field] !== $value) {
-                        $changes[$field] = [
-                            'old' => $itemLama[$field],
-                            'new' => $value
-                        ];
-                    }
-                }
-
-                if (!empty($changes)) {
-                    $perubahan_data[] = [
-                        'no_sampel' => $noSampel,
-                        'before' => $itemLama,
-                        'after' => $itemBaru,
-                        'changes' => $changes,
-                        'type' => 'update_data'
-                    ];
-                }
-
-                $matchedLama[$noSampel] = true;
-                $matchedBaru[$noSampel] = true;
-            }
-        }
-
-        // ======================= Perubahan No Sampel pada Data Sama =======================
-        foreach ($sampelBaru as $noSampelBaru => $itemBaru) {
-            if (isset($matchedBaru[$noSampelBaru])) {
+        foreach ($data_new as $new) {
+            if (isset($matchedBaru[$new["no_sampel"]])) {
                 continue;
             }
 
             $foundMatch = false;
-            foreach ($sampelLama as $noSampelLama => $itemLama) {
-                if (isset($matchedLama[$noSampelLama])) {
+            foreach ($data_old as $old) {
+                if (isset($matchedLama[$old["no_sampel"]])) {
                     continue;
                 }
 
                 // Extract regulasi
-                $regulasiLama = isset($itemLama['regulasi']) && is_array($itemLama['regulasi'])
-                    ? array_map(fn($item) => explode('-', $item)[0], $itemLama['regulasi'])
-                    : (isset($itemLama['regulasi']) ? [explode('-', $itemLama['regulasi'])[0]] : []);
+                $regulasiLama = json_decode($old['regulasi'], true);
+                $regulasiBaru = json_decode($new['regulasi'], true);
 
-                $regulasiBaru = isset($itemBaru['regulasi']) && is_array($itemBaru['regulasi'])
-                    ? array_map(fn($item) => explode('-', $item)[0], $itemBaru['regulasi'])
-                    : (isset($itemBaru['regulasi']) ? [explode('-', $itemBaru['regulasi'])[0]] : []);
+                $paramLama = json_decode($old['parameter'], true);
+                $paramBaru = json_decode($new['parameter'], true);
 
                 // Kriteria data sama
-                $isSameBasic = ($itemLama['kategori_1'] ?? '') == ($itemBaru['kategori_1'] ?? '') &&
-                    ($itemLama['kategori_2'] ?? '') == ($itemBaru['kategori_2'] ?? '') &&
-                    ($itemLama['parameter'] ?? '') == ($itemBaru['parameter'] ?? '') &&
-                    ($itemLama['penamaan_titik'] ?? '') == ($itemBaru['penamaan_titik'] ?? '');
+                $isSameBasic = $old['kategori_2'] == $new['kategori_2'] &&
+                    $old['kategori_3'] == $new['kategori_3'] &&
+                    $paramLama == $paramBaru;
 
                 $isSameRegulasi = $regulasiLama == $regulasiBaru;
-
                 if ($isSameBasic && $isSameRegulasi) {
                     // Hanya berubah No Sampel
                     $perubahan_data[] = [
-                        'no_sampel' => $noSampelBaru,
-                        'before' => $itemLama,
-                        'after' => $itemBaru,
+                        'no_sampel' => $new["no_sampel"],
+                        'before' => $old,
+                        'after' => $new,
                         'changes' => [
                             'no_sampel' => [
-                                'old' => $noSampelLama,
-                                'new' => $noSampelBaru
+                                'old' => $old["no_sampel"],
+                                'new' => $new["no_sampel"]
                             ]
                         ],
                         'type' => 'no_sampel'
                     ];
 
-                    $matchedLama[$noSampelLama] = true;
-                    $matchedBaru[$noSampelBaru] = true;
+                    $matchedLama[$old["no_sampel"]] = true;
+                    $matchedBaru[$new["no_sampel"]] = true;
                     $foundMatch = true;
                     break;
 
                 } elseif ($isSameBasic && !$isSameRegulasi) {
                     // No Sampel & Regulasi berubah
                     $perubahan_data[] = [
-                        'no_sampel' => $noSampelBaru,
-                        'before' => $itemLama,
-                        'after' => $itemBaru,
+                        'no_sampel' => $new["no_sampel"],
+                        'before' => $old,
+                        'after' => $new,
                         'changes' => [
                             'regulasi' => [
-                                'old' => $itemLama['regulasi'] ?? null,
-                                'new' => $itemBaru['regulasi'] ?? null
+                                'old' => $old['regulasi'] ?? null,
+                                'new' => $new['regulasi'] ?? null
                             ],
                             'no_sampel' => [
-                                'old' => $noSampelLama,
-                                'new' => $noSampelBaru
+                                'old' => $old["no_sampel"],
+                                'new' => $new["no_sampel"]
                             ]
                         ],
                         'type' => 'no_sampel_dan_regulasi'
                     ];
 
-                    $matchedLama[$noSampelLama] = true;
-                    $matchedBaru[$noSampelBaru] = true;
+                    $matchedLama[$old["no_sampel"]] = true;
+                    $matchedBaru[$new["no_sampel"]] = true;
                     $foundMatch = true;
                     break;
                 }
@@ -234,21 +376,21 @@ class ReorderNotifierService
 
             // Tidak ada match (penambahan data baru)
             if (!$foundMatch) {
-                $penambahan_data[] = $itemBaru;
-                $matchedBaru[$noSampelBaru] = true;
+                $penambahan_data[] = $new;
+                $matchedBaru[$new["no_sampel"]] = true;
             }
         }
 
         // Data tidak relevan (penghapusan data lama)
-        foreach ($sampelLama as $noSampel => $itemLama) {
-            if (!isset($matchedLama[$noSampel])) {
-                $pengurangan_data[] = $itemLama;
+        foreach ($data_old as $old) {
+            if (!isset($matchedLama[$old["no_sampel"]])) {
+                $pengurangan_data[] = $old;
             }
         }
 
         // ======================= Format data untuk disimpan ke DB =======================
         $no_sampel_changes = array_filter($perubahan_data, function ($item) {
-            return in_array($item['type'], ['no_sampel']);
+            return in_array($item['type'], ['no_sampel', 'no_sampel_dan_regulasi']);
         });
 
         $grouped_by_periode = [];
@@ -269,7 +411,7 @@ class ReorderNotifierService
         foreach ($grouped_by_periode as $periode => $changes) {
             if (!empty($changes)) {
                 $final_data[] = [
-                    'no_order' => $no_order,
+                    'no_order' => $this->no_order,
                     'periode' => $periode,
                     'perubahan' => $changes
                 ];
@@ -283,11 +425,9 @@ class ReorderNotifierService
                     'periode' => $data['periode'],
                     'perubahan' => json_encode($data['perubahan'] ?? [])
                 ]);
-                $no_order = $data['no_order'];
             }
         }
 
-        $this->no_order = $no_order;
         return [
             'penambahan' => $penambahan_data,
             'pengurangan' => $pengurangan_data,

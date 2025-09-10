@@ -28,6 +28,8 @@ use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
 use App\Jobs\RenderSamplingPlan;
+use App\Services\ReorderNotifierService;
+
 
 class ReadyOrderController extends Controller
 {
@@ -862,14 +864,14 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
-                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
                         $no++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
                         if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
                             $no++;
                         } else {
-                            if(count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
+                            if (count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
 
                             } else {
                                 $no++;
@@ -1269,14 +1271,14 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
-                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
                         if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
                             $no_urut_cfr++;
                         } else {
-                            if(count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
+                            if (count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
 
                             } else {
                                 $no_urut_cfr++;
@@ -1575,7 +1577,7 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             $data_detail_baru = OrderDetail::where('no_order', $no_order)->where('is_active', 1)
-                ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'keterangan_1', 'regulasi', 'parameter')->get();
+                ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'kategori_3', 'keterangan_1', 'regulasi', 'parameter')->get();
 
             $data_to_log = [
                 'data_lama' => $data_detail_lama->toArray(),
@@ -1588,8 +1590,11 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            // $workerOperation = new WorkerOperation();
-            // $workerOperation->index($data, $data_to_log, $bcc, $this->user_id);
+            $workerOperation = new WorkerOperation();
+            $workerOperation->index($data, $data_to_log, $bcc, $this->user_id);
+            // $reorderNotifierService = new ReorderNotifierService();
+            // $reorderNotifierService->run($data, $data_to_log, $bcc, $this->user_id);
+
             // dd('stop');
             DB::commit();
             return response()->json([
@@ -1706,15 +1711,15 @@ class ReadyOrderController extends Controller
                                 if ($value->kategori_1 == '1-Air') {
                                     $no++;
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
-                                } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                                } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
                                     $no++;
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
                                     if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
                                         $no++;
                                     } else {
-                                        if(count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
-            
+                                        if (count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
+
                                         } else {
                                             $no++;
                                         }
@@ -2104,14 +2109,14 @@ class ReadyOrderController extends Controller
                     if ($value->kategori_1 == '1-Air') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
-                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient"){
+                    } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "27-Udara Lingkungan Kerja") {
                         if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi)) {
                             $no_urut_cfr++;
                         } else {
-                            if(count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
+                            if (count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
 
                             } else {
                                 $no_urut_cfr++;
@@ -2175,7 +2180,7 @@ class ReadyOrderController extends Controller
                     }
 
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
-                    
+
                     $tanggal_sampling = $value->periode_kontrak . '-01';
                     //dedi 2025-02-14
                     if ($value->status_sampling != 'SD') {
@@ -2429,7 +2434,7 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             $data_detail_baru = OrderDetail::where('id_order_header', $data_lama->id_order)->where('is_active', 1)
-                ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'keterangan_1', 'regulasi', 'parameter')->get();
+                ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'kategori_3', 'keterangan_1', 'regulasi', 'parameter')->get();
 
             $data_to_log = [
                 'data_lama' => $data_detail_lama->toArray(),
@@ -2442,8 +2447,12 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            // $workerOperation = new WorkerOperation();
-            // $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
+            $workerOperation = new WorkerOperation();
+            $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
+
+            // $reorderNotifierService = new ReorderNotifierService();
+            // $reorderNotifierService->run($updateHeader, $data_to_log, $bcc, $this->user_id);
+
             // dd('stop');
             DB::commit();
             return response()->json([
@@ -2473,7 +2482,8 @@ class ReadyOrderController extends Controller
         return $filename;
     }
 
-    private function directParamExclude ($value){
+    private function directParamExclude($value)
+    {
         $array = [
             "230;Ergonomi",
             "2188;Ergonomi (GO-LK)",
