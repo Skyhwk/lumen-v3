@@ -174,6 +174,9 @@ class FollowUpController extends Controller
                 'id_pelanggan'  => $row->idPelanggan,
                 'nama_pelanggan' => $row->namaPelanggan,
             ])
+            ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
+                $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
+            })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn() => "Coming Soon")
             ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
