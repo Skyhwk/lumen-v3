@@ -19,7 +19,7 @@ class TrackingSampleTdlController extends Controller
     {
         $data = OrderDetail::with('orderHeader')
             ->where('is_active', true)
-            ->where('status',  3)
+            ->where('status', '!=',  3)
             ->where('kategori_1', '!=', 'SD')
             ->orderBy('created_at', 'desc');
 
