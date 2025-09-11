@@ -425,8 +425,8 @@ class MasterKaryawanController extends Controller
             //     ]);
             // }
             
-            // reassign customer ke sales lain =================
-            if($karyawan->id_jabatan == 24) { // staff sales
+            // Reassign customer ke sales lain =================
+            if($karyawan->id_jabatan == 24) { // Staff sales
                 $activeSalesStaff = MasterKaryawan::where('id_jabatan', 24)
                     ->where('is_active', true)
                     ->where('id', '!=', 41) // Novva Novita Ayu Putri Rukmana
