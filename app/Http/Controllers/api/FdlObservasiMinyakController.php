@@ -188,7 +188,8 @@ class FdlObservasiMinyakController extends Controller
                 $status = $totalNilai > 0 ? 'ADA' : 'NIHIL';
             
                 if ($status) {
-                    $header = Colorimetri::firstOrNew(['no_sampel' => $data->no_sampel]);
+                    $header = new Colorimetri();
+                    $header->no_sampel = $data->no_sampel;
                     $header->parameter = $minyak;
                     $header->created_by = $this->karyawan;
                     $header->created_at = Carbon::now();
@@ -198,7 +199,8 @@ class FdlObservasiMinyakController extends Controller
                     $header->approved_at = Carbon::now();
                     $header->save();
             
-                    $ws = WsValueAir::firstOrNew(['no_sampel' => $data->no_sampel]);
+                    $ws = new WsValueAir();
+                    $ws->no_sampel = $data->no_sampel;
                     $ws->id_colorimetri = $header->id;
                     $ws->hasil = $status;
                     $ws->save();
