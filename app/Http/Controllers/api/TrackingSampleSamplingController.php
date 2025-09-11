@@ -23,9 +23,6 @@ class TrackingSampleSamplingController extends Controller
             ->orderBy('created_at', 'desc');
 
         return Datatables::of($data)
-            ->editColumn('status', function ($row) {
-                return $row->status == 3 ? 'Done' : 'On-Going';
-            })
             ->filterColumn('status', function($query, $keyword) {
                 if (strtolower($keyword) === 'done') {
                     $query->where('status', 3);
