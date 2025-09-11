@@ -111,12 +111,16 @@ class HasilPengujianController extends Controller
                             : (($lhps->created_at ?? null)
                                 ? 'Direct'
                                 : ($item->tanggal_terima ? 'Sampling' : null)));
-
+                    $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
-                    if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
+                    if(in_array($item->kategori_3, $kategori_validation)){ 
+                       $steps['analisa']['date'] = $tglSampling;
+                    } else {
+                        if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
+                    }
 
                     $steps['drafting']['date'] = $lhps->created_at ?? null;
 
