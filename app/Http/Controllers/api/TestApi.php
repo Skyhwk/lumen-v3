@@ -53,8 +53,8 @@ class TestApi extends Controller
                 'mode' => 'utf-8',
                 'format' => 'A4',
                 'margin_header' => 0,
-                'margin_bottom' => 17,
-                'margin_footer' => 8,
+                'margin_bottom' => 12,
+                'margin_footer' => 2,
                 // 'margin_top' => 23.5,
                 'margin_top' => 10,
                 'margin_left' => 10,
@@ -805,22 +805,23 @@ class TestApi extends Controller
                             </td>
                         </table>';
 
-            $footerHtml = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
-                                <tr>
-                                    <td width="15%" style="vertical-align: bottom;">
-                                    <div style="font-size:8px;">PT Inti Surya laboratirum</div>
-                                    <div style="font-size:8px;">Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
-                                    <div style="font-size:8px;">021-5089-8988/89 contact@intilab.com</div>
-                                    </td>
-                                    <td width="59%" style="font-size:8px; vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
-                                    Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
-                                        <br>Halaman {PAGENO} - {nbpg}
-                                    </td>
-                                    <td width="23%" style="text-align: right;">
-                                        <img src="'.public_path('qr_documents/ISL_STPS_25-VIII_5054.svg').'" width="30px" height="30px" class="signature-qr" alt="QR Code" />
-                                    </td>
-                                </tr>
-                            </table>';
+            $footerHtml = '
+                <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
+                    <tr>
+                        <td width="30%" style="vertical-align: top; font-size: 6px; line-height: 1.1; padding: 0; text-align: left; border:none;">
+                            PT Inti Surya Laboratorium<br>
+                            Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341<br>
+                            021-5089-8988/89 contact@intilab.com
+                        </td>
+                        <td width="45%" style="font-size: 6px; vertical-align: top; text-align: center; line-height: 1.1; padding: 0; border:none">
+                            Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.<br>
+                            <b>Halaman {PAGENO} dari {nbpg}</b>
+                        </td>
+                        <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">
+                            <img src="'.public_path('qr_documents/ISL_STPS_25-VIII_5054.svg').'" width="25" height="25" alt="QR Code" />
+                        </td>
+                    </tr>
+                </table>';
             $pdf->SetHeader($header);
             $pdf->SetFooter($footerHtml);
             $pdf->setAutoBottomMargin = 'stretch';

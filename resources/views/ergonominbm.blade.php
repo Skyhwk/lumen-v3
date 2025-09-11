@@ -158,6 +158,7 @@
 
         /* Fixed Layout - Tidak Responsif */
         .left-section {
+            padding:0;
             width: 60%;
             float: left;
             box-sizing: border-box;
@@ -354,9 +355,9 @@
             </td>
         </tr>
     </table>
-    <div class="content-container clearfix">
+    <div class="content-container clearfix" >
         <div class="left-section">
-            <div class="section-title">A. KELUHAN SISTEM MUSCULOSKETAL</div>
+            
             <table>
                 <thead>
                     <tr>
