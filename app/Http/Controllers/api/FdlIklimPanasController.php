@@ -208,6 +208,7 @@ class FdlIklimPanasController extends Controller
                     $headUdara->id_parameter = $parameter->id;
                     $headUdara->parameter = $parameter->nama_lab;
                     $headUdara->is_approve = true;
+                    $headUdara->lhps = true;
                     $headUdara->approved_by = $this->karyawan;
                     $headUdara->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $headUdara->created_by = $this->karyawan;
