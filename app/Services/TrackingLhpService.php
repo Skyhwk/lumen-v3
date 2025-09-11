@@ -159,7 +159,11 @@ class TrackingLhpService
             } else {
                 $udara = WsValueUdara::where('no_sampel', $noSampel)->first();
                 if($udara) {
-                    $dataAnalyst = $udara->getDataAnalyst();
+                    if($udara->id_kebisingan_header || $udara->id_pencahayaan_header || $udara->id_getaran_header || $udara->id_iklim_header){
+                        $dataAnalyst = $this->sampling->date;
+                    } else {
+                        $dataAnalyst = $udara->getDataAnalyst();
+                    }
                 }
             }
 
