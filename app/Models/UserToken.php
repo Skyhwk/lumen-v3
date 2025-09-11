@@ -9,7 +9,7 @@ class UserToken extends Sector
     protected $table = 'user_token';
 
     public $timestamps = false;
-    
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -22,7 +22,7 @@ class UserToken extends Sector
 
     public function akses()
     {
-        return $this->hasOne(AksesMenu::class, 'user_id', 'user_id');
+        return $this->hasOne(AksesMenu::class, 'user_id', 'user_id')->where('is_active', true);
     }
 
     public function webphone()

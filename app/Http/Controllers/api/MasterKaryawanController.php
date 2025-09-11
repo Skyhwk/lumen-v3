@@ -13,6 +13,8 @@ use App\Models\MasterPelanggan;
 use App\Services\GetAtasan;
 use Validator;
 use App\Http\Controllers\Controller;
+use App\Models\AksesMenu;
+use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -389,12 +391,18 @@ class MasterKaryawanController extends Controller
             ];
             $karyawan->update($dataKaryawan);
 
+            $akses = AksesMenu::where('user_id', $karyawan->user_id)->where('is_active', true)->first();
+            if(!is_null($akses)){
+                $akses->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+                $akses->is_active = false;
+                $akses->save();
+            }
             // kondisi jika sales maka pindahkan semua customer ke atasan langsung
 
             if($karyawan->id_jabatan == 24){ //staff sales
                 //pindahkan customer ke manager
                 $cekAtasan = GetAtasan::where('id', $karyawan->id)->get();
-                
+
                 if(!empty($cekAtasan)) {
                     $atasan = $cekAtasan->where('grade', 'SUPERVISOR')->first();
                     if(!$atasan) {
@@ -406,10 +414,10 @@ class MasterKaryawanController extends Controller
                 } else {
                     $atasan = MasterKaryawan::where('id_jabatan', 15)->where('is_active', true)->first();
                 }
-                
+
                 // dd($cekAtasan, $karyawan->atasan_langsung);
                 // $executive = GetAtasan::where('id', $atasan->id)->where('grade', 'EXECUTIVE')->first();
-                
+
                 $customer = MasterPelanggan::where('sales_id', $request->id)->update([
                     'sales_penanggung_jawab' => $atasan->nama_lengkap,
                     'sales_id' => $atasan->id,
