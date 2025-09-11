@@ -173,7 +173,7 @@ class FdlDirectLainController extends Controller
                 }
 
                 $data_kalkulasi = AnalystFormula::where('function', $function)
-                    ->where('data', (object)$dataLapangan)
+                    ->where('data', $dataLapangan)
                     ->where('id_parameter', $parameter->id)
                     ->process();
 
