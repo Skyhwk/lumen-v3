@@ -13,7 +13,7 @@ use Yajra\Datatables\Datatables;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 
-class TrackingSampleSamplingController extends Controller
+class TrackingSampleRekapController extends Controller
 {
     public function index()
     {
