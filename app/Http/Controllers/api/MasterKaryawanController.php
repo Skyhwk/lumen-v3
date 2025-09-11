@@ -14,6 +14,7 @@ use App\Services\GetAtasan;
 use Validator;
 use App\Http\Controllers\Controller;
 use App\Models\AksesMenu;
+use App\Models\HistoryPerubahanSales;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
@@ -397,33 +398,72 @@ class MasterKaryawanController extends Controller
                 $akses->is_active = false;
                 $akses->save();
             }
-            // kondisi jika sales maka pindahkan semua customer ke atasan langsung
+            // // kondisi jika sales maka pindahkan semua customer ke atasan langsung
 
-            if($karyawan->id_jabatan == 24){ //staff sales
-                //pindahkan customer ke manager
-                $cekAtasan = GetAtasan::where('id', $karyawan->id)->get();
+            // if($karyawan->id_jabatan == 24){ //staff sales
+            //     //pindahkan customer ke manager
+            //     $cekAtasan = GetAtasan::where('id', $karyawan->id)->get();
 
-                if(!empty($cekAtasan)) {
-                    $atasan = $cekAtasan->where('grade', 'SUPERVISOR')->first();
-                    if(!$atasan) {
-                        $atasan = $cekAtasan->where('id', $karyawan->id)->where('grade', 'MANAGER')->first();
-                        if(!$atasan) {
-                            $atasan = MasterKaryawan::where('id_jabatan', 15)->where('is_active', true)->first();
-                        }
-                    }
-                } else {
-                    $atasan = MasterKaryawan::where('id_jabatan', 15)->where('is_active', true)->first();
+            //     if(!empty($cekAtasan)) {
+            //         $atasan = $cekAtasan->where('grade', 'SUPERVISOR')->first();
+            //         if(!$atasan) {
+            //             $atasan = $cekAtasan->where('id', $karyawan->id)->where('grade', 'MANAGER')->first();
+            //             if(!$atasan) {
+            //                 $atasan = MasterKaryawan::where('id_jabatan', 15)->where('is_active', true)->first();
+            //             }
+            //         }
+            //     } else {
+            //         $atasan = MasterKaryawan::where('id_jabatan', 15)->where('is_active', true)->first();
+            //     }
+
+            //     // dd($cekAtasan, $karyawan->atasan_langsung);
+            //     // $executive = GetAtasan::where('id', $atasan->id)->where('grade', 'EXECUTIVE')->first();
+
+            //     $customer = MasterPelanggan::where('sales_id', $request->id)->update([
+            //         'sales_penanggung_jawab' => $atasan->nama_lengkap,
+            //         'sales_id' => $atasan->id,
+            //     ]);
+            // }
+            
+            // Reassign customer ke sales lain =================
+            if($karyawan->id_jabatan == 24) { // Staff sales
+                $activeSalesStaff = MasterKaryawan::where('id_jabatan', 24)
+                    ->where('is_active', true)
+                    ->where('id', '!=', 41) // Novva Novita Ayu Putri Rukmana
+                    ->get()
+                    ->shuffle()
+                    ->values();
+
+                if ($activeSalesStaff->isEmpty()) {
+                    return response()->json(['message' => 'Tidak ada sales staff aktif lainnya untuk menerima customer. Proses dibatalkan'], 404);
                 }
+                
+                $salesCount = $activeSalesStaff->count();
+                $salesIndex = 0;
 
-                // dd($cekAtasan, $karyawan->atasan_langsung);
-                // $executive = GetAtasan::where('id', $atasan->id)->where('grade', 'EXECUTIVE')->first();
+                MasterPelanggan::where('sales_id', $karyawan->id)->orWhere('sales_penanggung_jawab', $karyawan->nama_lengkap)
+                    ->where('is_active', true)
+                    ->chunkById(100, function ($customers) use ($activeSalesStaff, &$salesIndex, $salesCount, $karyawan) {
+                        foreach ($customers as $customer) {
+                            $newSales = $activeSalesStaff[$salesIndex];
 
-                $customer = MasterPelanggan::where('sales_id', $request->id)->update([
-                    'sales_penanggung_jawab' => $atasan->nama_lengkap,
-                    'sales_id' => $atasan->id,
-                ]);
-            }
+                            $historySales = new HistoryPerubahanSales();
+                            $historySales->id_pelanggan = $customer->id_pelanggan;
+                            $historySales->id_sales_lama = $karyawan->id;
+                            $historySales->id_sales_baru = $newSales->id;
+                            $historySales->tanggal_rotasi = Carbon::now();
+                            $historySales->save();
 
+                            MasterPelanggan::where('id_pelanggan', $customer->id_pelanggan)->update([
+                                'sales_id' => $newSales->id,
+                                'sales_penanggung_jawab' => $newSales->nama_lengkap,
+                            ]);
+
+                            $salesIndex = ($salesIndex + 1) % $salesCount;
+                        }
+                    });
+                }
+                    
             DB::commit();
             return response()->json([
                 'message' => 'Non Active Karyawan Success.!'
