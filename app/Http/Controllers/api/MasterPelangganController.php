@@ -292,34 +292,14 @@ class MasterPelangganController extends Controller
 
                 $dataPelanggan['id_pelanggan'] = $idPelanggan;
 
-                $clearNamaPelanggan = preg_replace('/(,?\s*\.?\s*(PT|CV|UD|PD|KOPERASI|PERUM|PERSERO|BUMD|YAYASAN))\s*$/i', '', $namaPelangganUpper);
-
-                // Format nomor telepon: hilangkan karakter non-angka, ubah +62/62 di depan menjadi 0
-                $ArrayNoTlp = array_map(function($noTlp) {
-                    $noTlp = preg_replace("/[^0-9]/", "", $noTlp); // hilangkan karakter non-angka
-                    if (substr($noTlp, 0, 2) === "62") {
-                        $noTlp = "0" . substr($noTlp, 2);
-                    } elseif (substr($noTlp, 0, 3) === "620") { // handle kasus 6208xxxx
-                        $noTlp = "0" . substr($noTlp, 3);
-                    }
-                    return $noTlp;
-                }, $request->kontak_pelanggan['no_tlp_perusahaan'] ?? []);
-
                 // Check for existing customer
-                // Cek pelanggan existing berdasarkan nama, nomor telepon, email, atau alamat
-                $existingPelanggan = MasterPelanggan::whereRaw("REPLACE(REPLACE(REPLACE(UPPER(nama_pelanggan), ' ', ''), '\t', ''), ',', '') LIKE ?", ['%' . $clearNamaPelanggan . '%'])
-                    ->orWhereHas('kontak_pelanggan', function ($query) use ($ArrayNoTlp, $request) {
-                        if (!empty($ArrayNoTlp)) {
-                            $query->whereIn('no_tlp_perusahaan', $ArrayNoTlp);
-                        }
-                        if (!empty($request->kontak_pelanggan['email_perusahaan'] ?? [])) {
-                            $query->orWhereIn('email_perusahaan', $request->kontak_pelanggan['email_perusahaan']);
-                        }
+                $existingPelanggan = MasterPelanggan::where('nama_pelanggan', $dataPelanggan['nama_pelanggan'])
+                    ->whereHas('kontak_pelanggan', function ($query) use ($request) {
+                        $query->whereIn('no_tlp_perusahaan', $request->kontak_pelanggan['no_tlp_perusahaan'])
+                            ->whereIn('email_perusahaan', $request->kontak_pelanggan['email_perusahaan']);
                     })
-                    ->orWhereHas('alamat_pelanggan', function ($query) use ($request) {
-                        if (!empty($request->alamat_pelanggan['alamat'] ?? [])) {
-                            $query->whereIn('alamat', $request->alamat_pelanggan['alamat']);
-                        }
+                    ->whereHas('alamat_pelanggan', function ($query) use ($request) {
+                        $query->whereIn('alamat', $request->alamat_pelanggan['alamat']);
                     })
                     ->first();
 
@@ -327,7 +307,6 @@ class MasterPelangganController extends Controller
                     DB::rollback();
                     return response()->json(['message' => 'Pelanggan dengan data yang sama sudah ada'], 400);
                 }
-
                 if ($request->kategori_pelanggan != '')
                     $dataPelanggan['kategori_pelanggan'] = $request->kategori_pelanggan;
                 $dataPelanggan['id_cabang'] = $this->idcabang;
