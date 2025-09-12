@@ -3,13 +3,6 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsMedanLMHeader;
 
 use App\Models\LhpsIklimHeader;
 use App\Models\LhpsIklimHeaderHistory;
@@ -25,12 +18,10 @@ use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\IklimHeader;
 
-use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
-use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
