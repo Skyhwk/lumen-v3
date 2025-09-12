@@ -348,6 +348,7 @@ class FdlGetaranController extends Controller
                 $headGet->id_parameter = $param->id;
                 $headGet->parameter = $param->nama_lab;
                 $headGet->is_approve = 1;
+                $headGet->lhps = 1;
                 $headGet->approved_by = $this->karyawan;
                 $headGet->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $headGet->created_by = $this->karyawan;

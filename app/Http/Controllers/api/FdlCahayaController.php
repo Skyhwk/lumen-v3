@@ -192,6 +192,7 @@ class FdlCahayaController extends Controller
                 $headCaha->id_parameter = $parameter->id;
                 $headCaha->parameter = $parameter->nama_lab;
                 $headCaha->is_approved = 1;
+                $headCaha->lhps = 1;
                 $headCaha->approved_by = $this->karyawan;
                 $headCaha->approved_at = Carbon::now();
                 $headCaha->created_by = $this->karyawan;

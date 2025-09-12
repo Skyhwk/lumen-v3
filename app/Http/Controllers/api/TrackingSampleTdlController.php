@@ -13,20 +13,25 @@ use Yajra\Datatables\Datatables;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 
-class TrackingSampleSamplingController extends Controller
+class TrackingSampleTdlController extends Controller
 {
     public function index()
     {
-        // if($this->department == 9) {
-        //     $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
-        //     $data = OrderHeader::where('is_active', true)->whereIn('created_by', $getBawahan)->orderBy('created_at', 'desc');
-        // } else {
-        //     $data = OrderHeader::where('is_active', true)->orderBy('created_at', 'desc');
-        // };
+        $data = OrderDetail::with('orderHeader')
+            ->where('is_active', true)
+            ->where('status', '!=',  3)
+            ->where('kategori_1', '!=', 'SD')
+            ->orderBy('created_at', 'desc');
 
-        $data = OrderDetail::with('orderHeader')->where('is_active', true)->where('kategori_1', '!=', 'SD')->orderBy('created_at', 'desc');
-
-        return Datatables::of($data)->make(true);
+        return Datatables::of($data)
+            ->filterColumn('status', function($query, $keyword) {
+                if (strtolower($keyword) === 'done') {
+                    $query->where('status', 3);
+                } elseif (strtolower($keyword) === 'on-going' || strtolower($keyword) === 'ongoing') {
+                    $query->where('status', '!=', 3);
+                }
+            })
+            ->make(true);
     }
 
     public function getDetails(Request $request) {

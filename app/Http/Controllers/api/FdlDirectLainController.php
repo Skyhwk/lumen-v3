@@ -173,7 +173,7 @@ class FdlDirectLainController extends Controller
                 }
 
                 $data_kalkulasi = AnalystFormula::where('function', $function)
-                    ->where('data', (object)$dataLapangan)
+                    ->where('data', $dataLapangan)
                     ->where('id_parameter', $parameter->id)
                     ->process();
 
@@ -185,6 +185,7 @@ class FdlDirectLainController extends Controller
                 $header->fill([
                     'id_parameter' => $parameter->id,
                     'is_approve' => 1,
+                    'lhps' => 1,
                     'approved_by' => $this->karyawan,
                     'approved_at' => Carbon::now(),
                     'created_by' => $header->exists ? $header->created_by : $this->karyawan,
