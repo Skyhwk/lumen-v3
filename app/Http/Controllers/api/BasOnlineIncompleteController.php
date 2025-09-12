@@ -18,6 +18,7 @@ use App\Models\OrderDetail;
 use App\Models\PersiapanSampelHeader;
 use Carbon\Carbon;
 use Mpdf\Mpdf;
+
 use App\Models\DataLapanganAir;
 use App\Models\DataLapanganKebisingan;
 use App\Models\DataLapanganKebisinganPersonal;
@@ -37,10 +38,10 @@ use App\Models\DataLapanganDirectLain;
 use App\Models\DataLapanganSwab;
 use App\Models\DataLapanganEmisiCerobong;
 use App\Models\DataLapanganErgonomi;
-
 use App\Models\DataLapanganIsokinetikHasil;
 use App\Models\DataLapanganDebuPersonal;
 use App\Models\DataLapanganPsikologi;
+
 use App\Models\DetailLingkunganHidup;
 use App\Models\DetailLingkunganKerja;
 use App\Models\DetailMicrobiologi;
@@ -57,25 +58,51 @@ class BasOnlineIncompleteController extends Controller
             $periode_awal = Carbon::parse($request->periode_awal); // format dari frontend YYYY-MM
             $periode_akhir = Carbon::parse($request->periode_akhir)->endOfMonth(); // mengambil tanggal terakhir dari bulan terpilih
 
-            $data = OrderDetail::with([
-                'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
-                'orderHeader.samplingPlan',
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
-                    $q->select(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')])
+                $data = OrderDetail::with([
+                    'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
+                    'orderHeader.samplingPlan',
+                    'orderHeader.samplingPlan.jadwal' => function ($q) {
+                        $q->select([
+                            'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai',
+                            DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
+                        ])
                         ->where('is_active', true)
                         ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai']);
-                }
-            ])
+                    }
+                ])
                 ->leftJoin('persiapan_sampel_header', 'order_detail.no_order', '=', 'persiapan_sampel_header.no_order')
-                ->select(['id_order_header', 'order_detail.no_order', 'kategori_2', 'kategori_3', 'order_detail.periode', 'order_detail.tanggal_sampling', DB::raw('MAX(persiapan_sampel_header.detail_bas_documents) as detail_bas_documents')])
+                ->select([
+                    'order_detail.id_order_header',
+                    'order_detail.no_order',
+                    'order_detail.kategori_2',
+                    'order_detail.kategori_3',
+                    'order_detail.periode',
+                    'order_detail.tanggal_sampling',
+                    DB::raw('MAX(persiapan_sampel_header.detail_bas_documents) as detail_bas_documents'),
+                    DB::raw('GROUP_CONCAT(order_detail.no_sampel SEPARATOR ", ") as no_sampel')
+                    //  DB::raw('
+                    //     JSON_ARRAYAGG(
+                    //         JSON_OBJECT(
+                    //             "no_sampel", order_detail.no_sampel,
+                    //             "parameter", order_detail.parameter
+                    //         )
+                    //     ) as no_sampel
+                    // ')
+                ])
                 ->where('order_detail.is_active', true)
                 ->whereBetween('order_detail.tanggal_sampling', [
                     $periode_awal->format('Y-m-01'),
                     $periode_akhir->format('Y-m-t')
                 ])
                 ->whereNotNull('persiapan_sampel_header.detail_bas_documents')
-                ->where('persiapan_sampel_header.is_emailed', 0)
-                ->groupBy(['id_order_header', 'order_detail.no_order', 'kategori_2', 'kategori_3', 'order_detail.periode', 'order_detail.tanggal_sampling']);
+                ->groupBy([
+                    'order_detail.id_order_header',
+                    'order_detail.no_order',
+                    'order_detail.kategori_2',
+                    'order_detail.kategori_3',
+                    'order_detail.periode',
+                    'order_detail.tanggal_sampling'
+                ]);
 
             $data = $data->get()->toArray();
             $formattedData = array_reduce($data, function ($carry, $item) {
@@ -115,6 +142,8 @@ class BasOnlineIncompleteController extends Controller
                             'no_order' => $item['no_order'] ?? '',
                             'alamat_sampling' => $item['order_header']['alamat_sampling'] ?? '',
                             'konsultan' => $item['order_header']['konsultan'] ?? '',
+                            'no_sampel' => $item['no_sampel'] ?? '', 
+                            'kategori_3' => $item['kategori_3'] ?? '', 
                             'info_pendukung' => json_encode([
                                 'nama_pic_order' => $item['order_header']['nama_pic_order'],
                                 'nama_pic_sampling' => $item['order_header']['nama_pic_sampling'],
@@ -126,7 +155,6 @@ class BasOnlineIncompleteController extends Controller
                                 'id_request' => $targetPlan['quotation_id'],
                                 'status_quotation' => $targetPlan['status_quotation'],
                                 'id_sp' => $targetPlan['id'],
-
                             ]),
                             'is_revisi' => $item['order_header']['is_revisi']
                         ];
@@ -166,6 +194,8 @@ class BasOnlineIncompleteController extends Controller
                         'no_order' => $item['no_order'],
                         'alamat_sampling' => $item['alamat_sampling'],
                         'konsultan' => $item['konsultan'],
+                        'no_sampel' => $item['no_sampel'],
+                        'kategori_3' => $item['kategori_3'],
                         'info_pendukung' => $item['info_pendukung'],
                         'jadwal_jam_mulai' => $item['jadwal_jam_mulai'],
                         'jadwal_jam_selesai' => $item['jadwal_jam_selesai'],
@@ -174,13 +204,46 @@ class BasOnlineIncompleteController extends Controller
                     ];
                 } else {
                     $groupedData[$key]['sampler'] .= ',' . $item['sampler'];
+                    $groupedData[$key]['no_sampel'] .= ',' . $item['no_sampel']; // 👈 gabungkan kalau duplicate
                 }
+
 
                 $uniqueSampler = explode(',', $groupedData[$key]['sampler']);
                 $uniqueSampler = array_unique($uniqueSampler);
                 $groupedData[$key]['sampler'] = implode(',', $uniqueSampler);
             }
             $finalResult = array_values($groupedData);
+            foreach ($finalResult as $key => $value) {
+                $finalResult[$key]['no_sampel'] = array_map('trim', explode(',',$value['no_sampel']));
+            }
+            foreach ($finalResult as &$row) {
+                    $kategori = null;
+
+                    // ambil kode kategori dari "kategori_3", misalnya "2-Air Limbah Domestik"
+                    if (!empty($row['kategori_3'])) {
+                        $parts = explode('-', $row['kategori_3']);
+                        $kategori = intval($parts[0]); // ambil angka depannya
+                    }
+
+                    $status = "lengkap";
+
+                    if (!empty($row['no_sampel']) && is_array($row['no_sampel'])) {
+                        foreach ($row['no_sampel'] as $noSampel) {
+                            $dataLapangan = $this->findDataLapangan($noSampel, $kategori);
+                            if (!$dataLapangan) {
+                                $status = "belum_lengkap";
+                                break;
+                            }
+                        }
+                    }
+
+                    $row['status_lapangan'] = $status;
+                }
+                unset($row); // good practice
+
+                $finalResult = array_values(array_filter($finalResult, function ($item) {
+                    return $item['status_lapangan'] !== 'lengkap';
+                }));
 
             return DataTables::of(collect($finalResult))
                 // Global search
@@ -252,6 +315,79 @@ class BasOnlineIncompleteController extends Controller
             ], 500);
         }
     }
+private function findDataLapangan($noSampel, $kategori)
+{
+    switch ($kategori) {
+        case 1 || 2 || 3 || 4 || 5 || 6 || 51:
+            return DataLapanganAir::where('no_sampel', $noSampel)->first();
+
+        case 23||25:
+            return DataLapanganKebisingan::where('no_sampel', $noSampel)->first();
+
+        case 24:
+            return DataLapanganKebisinganPersonal::where('no_sampel', $noSampel)->first();
+
+        case 28:
+            return DataLapanganCahaya::where('no_sampel', $noSampel)->first();
+
+        case 30||31||32:
+            return DataLapanganEmisiKendaraan::where('no_sampel', $noSampel)->first();
+
+        case 13||14||15||16||18||19:
+            return DataLapanganGetaran::where('no_sampel', $noSampel)->first();
+
+        case 17||20:
+            return DataLapanganGetaranPersonal::where('no_sampel', $noSampel)->first();
+
+        case 21:
+            return DataLapanganIklimPanas::where('no_sampel', $noSampel)->first();
+
+        // case 21:
+        //     return DataLapanganIklimDingin::where('no_sampel', $noSampel)->first();
+
+        // case 27: // pm 10 || pm 2,5
+        //     return DataLapanganPartikulatMeter::where('no_sampel', $noSampel)->first();
+
+        case 11:
+            return DataLapanganLingkunganHidup::where('no_sampel', $noSampel)->first();
+
+        case 27:
+            return DataLapanganLingkunganKerja::where('no_sampel', $noSampel)->first();
+
+        case 33:
+            return DataLapanganMicrobiologi::where('no_sampel', $noSampel)->first();
+
+        // case 27:
+        //     return DataLapanganMedanLM::where('no_sampel', $noSampel)->first();
+
+        // case 27:
+        //     return DataLapanganSinarUv::where('no_sampel', $noSampel)->first();
+
+        // case 46:
+        //     return DataLapanganDirectLain::where('no_sampel', $noSampel)->first();
+
+        case 46:
+            return DataLapanganSwab::where('no_sampel', $noSampel)->first();
+
+        case 34:
+            return DataLapanganEmisiCerobong::where('no_sampel', $noSampel)->first();
+
+        case 53:
+            return DataLapanganErgonomi::where('no_sampel', $noSampel)->first();
+
+        // case 21:
+        //     return DataLapanganIsokinetikHasil::where('no_sampel', $noSampel)->first();
+
+        // case 22:
+        //     return DataLapanganDebuPersonal::where('no_sampel', $noSampel)->first();
+
+        case 58 || 118:
+            return DataLapanganPsikologi::where('no_sampel', $noSampel)->first();
+
+        default:
+            return null;
+    }
+}
 
     public function preview(Request $request)
     {
