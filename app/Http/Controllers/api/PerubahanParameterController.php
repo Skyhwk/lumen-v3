@@ -33,7 +33,7 @@ class PerubahanParameterController extends Controller
 
     public function getParameter(Request $request)
     {
-        $data = Parameter::where('is_active', 1)->where('id_kategori', $request->id_kategori)->orderBy('id', 'desc')->get();
+        $data = Parameter::whereHas('hargaParameter')->where('is_active', 1)->where('id_kategori', $request->id_kategori)->orderBy('id', 'desc')->get();
         return response()->json([
             'status' => 'success',
             'data' => $data
