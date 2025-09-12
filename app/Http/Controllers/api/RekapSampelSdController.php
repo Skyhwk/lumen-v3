@@ -107,7 +107,8 @@ class RekapSampelSdController extends Controller
 
     public function getParameter(Request $request)
     {
-        $data = Parameter::where('id_kategori', $request->id_kategori)
+        $data = Parameter::whereHas('hargaParameter')
+            ->where('id_kategori', $request->id_kategori)
             ->where('is_active', 1)
             ->get();
         return response()->json($data);
