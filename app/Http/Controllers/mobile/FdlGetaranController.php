@@ -45,6 +45,13 @@ class FdlGetaranController extends Controller
                 '19-Getaran (Mesin)', '20-Getaran (Seluruh Tubuh)'])
                 ->where('is_active', 1)->first();
 
+            $fdl = DataLapanganGetaran::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+            if ($fdl) {
+                return response()->json([
+                    'message' => 'No Sample sudah diinput!.'
+                ], 401);
+            }
+
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample ini tidak ditemukan di fdl getaran'
@@ -75,7 +82,7 @@ class FdlGetaranController extends Controller
     {
         DB::beginTransaction();
         try{
-            $fdl = DataLapanganGetaran::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $fdl = DataLapanganGetaran::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
             if ($fdl) {
                 return response()->json([
                     'message' => 'No Sample sudah diinput!.'
@@ -165,9 +172,9 @@ class FdlGetaranController extends Controller
 
                     if ($request->satuan_kecepatan != '') $data->satuan_kecepatan                   = $request->satuan_kecepatan;
                     if ($request->satuan_percepatan != '') $data->satuan_percepatan                   = $request->satuan_percepatan;
-                    if ($request->nama_pekerja != '') $data->nama_pekerja                   = $request->nama_pekerja;
-                    if ($request->jenis_pekerja != '') $data->jenis_pekerja                   = $request->jenis_pekerja;
-                    if ($request->lokasi_unit != '') $data->lokasi_unit                   = $request->lokasi_unit;
+                    // if ($request->nama_pekerja != '') $data->nama_pekerja                   = $request->nama_pekerja;
+                    // if ($request->jenis_pekerja != '') $data->jenis_pekerja                   = $request->jenis_pekerja;
+                    // if ($request->lokasi_unit != '') $data->lokasi_unit                   = $request->lokasi_unit;
                     $data->nilai_pengukuran            = json_encode($nilai_pengukuran);
 
                     if ($request->permission != '') $data->permission                    = $request->permission;

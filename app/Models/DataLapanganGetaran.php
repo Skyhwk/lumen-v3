@@ -16,4 +16,9 @@ class DataLapanganGetaran extends Sector
         return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel')
         ->where('is_active', true);
     }
+    
+    public function sub_kategori(){
+        return $this->belongsTo(MasterSubKategori::class, 'kategori_3', 'id') // kiri current kanan target
+        ->where('is_active', true);
+    }
 }
