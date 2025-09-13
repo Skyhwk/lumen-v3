@@ -157,7 +157,7 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => null,
+                "periode_analisis" => null,
             ];
             // dd($pengukuran,$sebelumKerja,$setelahKerja,$personal);
             //total sebelum kiri/kanan
@@ -202,7 +202,7 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => null,
+                "periode_analisis" => null,
             ];
             
             $pdf = new PDF($mpdfConfig);
@@ -357,6 +357,8 @@ class TemplateLhpErgonomi
                 "periode_analisis" => '-',
                 "nama_pekerja" => $dataRosa->nama_pekerja,
                 "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
+                "usia" => $dataRosa->usia,
+                "lama_kerja" => json_decode($dataRosa->lama_kerja),
             ];
             
             $pdf = new PDF($mpdfConfig);
@@ -392,6 +394,7 @@ class TemplateLhpErgonomi
 
     public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='')
     {
+       
         try {
             $mpdfConfig = [
                 'mode' => 'utf-8',
@@ -422,9 +425,13 @@ class TemplateLhpErgonomi
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
     
-            $pengukuran = json_decode($dataRwl->pengukuran);
-            // dd($pengukuran);
-            $html = View::make('ergonompotensibahaya',compact('cssGlobal'))->render();
+            $pengukuran = json_decode($dataRwl->pengukuran,true);
+            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran['Tubuh_Bagian_Atas']);
+            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran['Tubuh_Bagian_Bawah']);
+            $groupedAtas  = $this->groupByKategori($dataAtas);
+            $groupedBawah  = $this->groupByKategori($dataBawah);
+            // dd($personal);
+            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -501,7 +508,7 @@ class TemplateLhpErgonomi
             throw $th;
         }
     }
-
+    
     private function hitungResiko($skor, $case = null)
     {
         if ($case == 'nbm') {
@@ -518,4 +525,71 @@ class TemplateLhpErgonomi
             }
         }
     }
+    
+    private function flattenPengukuran($sectionName, $data)
+    {
+        $result = [];
+
+        foreach ($data as $kategori => $subdata) {
+            if (is_iterable($subdata)) {
+                foreach ($subdata as $potensi => $value) {
+                    
+                    // kalau value langsung string
+                    if (is_string($value)) {
+                        $result[] = [
+                            'section'  => $sectionName,
+                            'kategori' => $kategori,
+                            'potensi'  => $potensi,
+                            'skor'     => $value,
+                        ];
+                    }
+
+                    // kalau value array/object
+                    elseif (is_iterable($value)) {
+                        foreach ($value as $subpotensi => $subval) {
+                            
+                            if (is_string($subval)) {
+                                $result[] = [
+                                    'section'  => $sectionName,
+                                    'kategori' => $kategori,
+                                    'potensi'  => $potensi . ' - ' . $subpotensi,
+                                    'skor'     => $subval,
+                                ];
+                            }
+
+                            // kalau masih nested lagi
+                            elseif (is_iterable($subval)) {
+                                foreach ($subval as $detailKey => $detailVal) {
+                                    $result[] = [
+                                        'section'  => $sectionName,
+                                        'kategori' => $kategori,
+                                        'potensi'  => $potensi . ' - ' . $subpotensi . ' - ' . $detailKey,
+                                        'skor'     => $detailVal,
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+    
+    private function groupByKategori($data)
+    {
+       
+        $grouped = [];
+        foreach ($data as $row) {
+            $kategori = $row['kategori'];
+            if (!isset($grouped[$kategori])) {
+                $grouped[$kategori] = [];
+            }
+            $grouped[$kategori][] = $row;
+        }
+        return $grouped;
+    }
+
+
 }

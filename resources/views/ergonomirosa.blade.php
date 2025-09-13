@@ -1,14 +1,11 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Laporan ROSA</title>
     <style>
         @page {
-            margin-top: 10mm;
-            margin-bottom: 10mm;
-            margin-left: 10mm;
-            margin-right: 10mm;
+            size: A4 landscape;
+            margin: 10mm 10mm 12mm 10mm;
         }
         
         body {
@@ -17,27 +14,65 @@
             margin: 0;
             padding: 0;
             line-height: 1.2;
+            width: 277mm; /* A4 landscape width minus margins */
+            max-width: 277mm;
         }
 
         /* Layout Container */
         .main-container {
             width: 100%;
             display: flex;
-            gap: 10px;
-            min-height: 100vh;
+            gap: 8px;
+            min-height: 190mm; /* A4 landscape height minus margins */
         }
 
         .left-section {
-            flex: 0 0 60%;
-            width: 60%;
+            flex: 0 0 65%;
+            width: 65%;
         }
 
         .right-section {
-            flex: 0 0 35%;
-            width: 35%;
+            flex: 0 0 33%;
+            width: 33%;
+            padding-left: 8px;
         }
 
         /* Header */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+        }
+
+        .header-table td {
+            border: none;
+            padding: 8px;
+            vertical-align: middle;
+            height: 50px;
+        }
+
+        .header-table .left-cell {
+            width: 33.33%;
+            text-align: left;
+        }
+
+        .header-table .center-cell {
+            width: 33.33%;
+            text-align: center;
+        }
+
+        .header-table .right-cell {
+            width: 33.33%;
+            text-align: right;
+        }
+
+        .header-logo {
+            height: 45px;
+            width: auto;
+            display: block;
+        }
+
         .main-header {
             text-align: center;
             font-weight: bold;
@@ -57,26 +92,25 @@
         
         .skor-table {
             width: 100%;
-            margin-bottom: 3px;
-            font-size: 6pt;
+            margin-bottom: 4px;
         }
         
         .skor-table td, .skor-table th {
             font-size: 8pt;
-            padding: 2px 3px;
+            padding: 3px 4px;
             border: 1px solid #000;
         }
         
         .info-table {
-            width: 100%;
-            margin-bottom: 5px;
-            font-size: 6pt;
+            border: 0;
+            margin-bottom: 6px;
         }
-        
-        .info-table td, .info-table th {
+
+        .info-table td {
+            border: 0;
+            padding: 0px 2px;
             font-size: 8pt;
-            padding: 2px 3px;
-            border: 1px solid #000;
+            vertical-align: top;
         }
         
         /* Utility Classes */
@@ -101,119 +135,53 @@
         }
         
         .kesimpulan-cell {
-            height: 120px;
+            height: 100px;
             vertical-align: top;
             text-align: justify;
-            padding: 3px;
+            padding: 8px;
         }
         
         .no-border {
             border: 0;
         }
-        
-        .spacer {
-            height: 2px;
-            margin: 2px 0;
+
+        /* Compact table styling */
+        .compact-table {
+            margin-bottom: 6px;
+            font-size: 7pt;
         }
 
-        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
-        .signature-section {
-            width: 100%;
-            margin-top: 8px;
-            clear: both;
+        .compact-table td, .compact-table th {
+            font-size: 7pt;
+            padding: 2px 3px;
         }
 
-        .signature-table {
-            width: 100%;
-            border: none !important;
-            font-family: Arial, sans-serif;
-            font-size: 8px;
-            table-layout: fixed;
+        .section-header {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: left;
+            font-size: 7pt;
         }
 
-        .signature-table td {
-            border: none !important;
-            padding: 2px;
-            vertical-align: top;
-        }
-
-        .signature-left {
-            width: 65%;
-        }
-
-        .signature-right {
-            width: 35%;
-            text-align: center;
-        }
-
-        .signature-date {
-            margin-bottom: 8px;
-            font-size: 8px;
-        }
-
-        .signature-qr {
-            width: 60px;
-            height: 60px;
-            margin: 5px auto;
-            display: block;
-        }
-
-        .signature-text {
-            margin-top: 3px;
-            font-size: 7px;
-        }
-
-        /* Responsive fallback for older PDF generators */
+        /* Responsive fallback */
         @media print {
+            body {
+                width: 277mm;
+            }
+            
             .main-container {
                 display: block;
             }
             
             .left-section {
                 float: left;
-                width: 60%;
+                width: 65%;
             }
             
             .right-section {
                 float: right;
-                width: 40%;
+                width: 33%;
             }
-        }
-        /* header */
-        .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-            table-layout: fixed;
-        }
-
-        .header-table td {
-            border: none;
-            padding: 10px;
-            vertical-align: middle;
-            height: 60px;
-        }
-
-        .header-table .left-cell {
-            width: 33.33%;
-            text-align: left;
-            padding-left: 20px;
-        }
-
-        .header-table .center-cell {
-            width: 33.33%;
-            text-align: center;
-        }
-
-        .header-table .right-cell {
-            width: 33.33%;
-            text-align: right;
-            padding-right: 50px;
-        }
-        .header-logo {
-            height: 50px;
-            width: auto;
-            display: block;
         }
     </style>
 </head>
@@ -225,15 +193,14 @@
                 <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
             </td>
             <td class="center-cell">
-                <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                <div class="main-header">LAPORAN HASIL PENGUJIAN</div>
             </td>
             <td class="right-cell">
                 <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
             </td>
         </tr>
     </table>
-    <div class="spacer"></div>
-    
+
     <!-- Main Content Container -->
     <div class="main-container">
         <!-- Left Section -->
@@ -241,21 +208,22 @@
             <!-- Section A -->
             <table class="skor-table">
                 <tr>
-                    <th rowspan="2" width="5%">No</th>
-                    <th rowspan="2" width="25%">Jenis Skoring</th>
-                    <th colspan="4" width="70%">Skor Section A</th>
+                    <th rowspan="2" width="8%">No</th>
+                    <th rowspan="2" width="30%">Jenis Skoring</th>
+                    <th colspan="4" width="62%">Skor Section A</th>
                 </tr>
                 <tr>
-                    <td colspan="2" class="text-center">Section A</td>
+                    <td class="text-center">Section A</td>
                     <td class="text-center">Durasi</td>
                     <td class="text-center">Total (Section A + Durasi)</td>
+                    <td class="text-center">Skor Section A</td>
                 </tr>
                 <tr>
                     <td class="text-center">1.</td>
                     <td>Tinggi Kursi & Lebar Kursi</td>
                     <td class="text-center">3</td>
                     <td rowspan="2" class="text-center">2</td>
-                    <td rowspan="2" class="text-center">&nbsp;</td>
+                    <td rowspan="2" class="text-center">5</td>
                     <td rowspan="2" class="text-center">5</td>
                 </tr>
                 <tr>
@@ -268,9 +236,9 @@
             <!-- Section B -->
             <table class="skor-table">
                 <tr>
-                    <th rowspan="2" width="5%">No</th>
-                    <th rowspan="2" width="25%">Jenis Skoring</th>
-                    <th colspan="4" width="70%">Skor Section B</th>
+                    <th rowspan="2" width="8%">No</th>
+                    <th rowspan="2" width="30%">Jenis Skoring</th>
+                    <th colspan="4" width="62%">Skor Section B</th>
                 </tr>
                 <tr>
                     <td class="text-center">Section B</td>
@@ -298,9 +266,9 @@
             <!-- Section C -->
             <table class="skor-table">
                 <tr>
-                    <th rowspan="2" width="5%">No</th>
-                    <th rowspan="2" width="25%">Jenis Skoring</th>
-                    <th colspan="4" width="70%">Skor Section C</th>
+                    <th rowspan="2" width="8%">No</th>
+                    <th rowspan="2" width="30%">Jenis Skoring</th>
+                    <th colspan="4" width="62%">Skor Section C</th>
                 </tr>
                 <tr>
                     <td class="text-center">Section C</td>
@@ -328,24 +296,27 @@
             <!-- Final Score -->
             <table class="skor-table">
                 <tr>
-                    <td width="33%" class="text-center font-bold">Skor Section A (Section B & Section C)</td>
-                    <td width="5%" rowspan="2" class="no-border">&nbsp;</td>
+                    <td width="40%" class="text-center font-bold">Skor Section A (Section B & Section C)</td>
+                    <td width="8%" class="no-border text-center" style="font-size: 14pt;">→</td>
                     <td width="27%" class="text-center font-bold">Skor ROSA</td>
-                    <td width="5%" rowspan="2" class="no-border text-center" style="font-size: 14pt;">&rarr;</td>
-                    <td width="30%" rowspan="2" class="text-center">4</td>
+                    <td width="8%" class="no-border text-center" style="font-size: 14pt;">→</td>
+                    <td width="17%" class="text-center font-bold" style="font-size: 12pt;">4</td>
                 </tr>
                 <tr>
                     <td class="text-center">5</td>
+                    <td class="no-border"></td>
                     <td class="text-center font-bold">Skoring Section A & Section D</td>
+                    <td class="no-border"></td>
+                    <td class="no-border"></td>
                 </tr>
             </table>
 
             <!-- Risk Categories -->
             <table class="skor-table">
                 <tr>
-                    <td width="27%" class="text-center">Skor Akhir</td>
-                    <td class="text-center">Kategori Risiko</td>
-                    <td width="51%" class="text-center">Tindakan</td>
+                    <th width="20%" class="text-center">Skor Akhir</th>
+                    <th width="25%" class="text-center">Kategori Risiko</th>
+                    <th width="55%" class="text-center">Tindakan</th>
                 </tr>
                 <tr>
                     <td class="text-center">1 - 2</td>
@@ -377,115 +348,105 @@
         
         <!-- Right Section -->
         <div class="right-section">
-            <!-- LHP Info -->
-            <table class="info-table">
-                <tr>
-                    <th width="30%" class="text-center">No. LHP</th>
-                    <th width="30%" class="text-center">No. Sampel</th>
-                    <th width="40%" class="text-center">Jenis Sampel</th>
-                </tr>
-                <tr>
-                    <td class="text-center">LHP/001/2025</td>
-                    <td class="text-center">S001</td>
-                    <td class="text-center">Ergonomi</td>
-                </tr>
-            </table>
+            <table cellpadding="3" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>NO. LHP</th>
+                            <th>NO. SAMPEL</th>
+                            <th>#JNS SAMPEL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ $personal->no_lhp }}</td>
+                            <td>{{ $personal->no_sampel }}</td>
+                            <td>{{ $personal->jenis_sampel }}</td>
+                        </tr>
+                    </tbody>
+                </table>
 
-            <div class="spacer"></div>
+                <div style="padding: 4px;">
+                    <div class="info-header">Informasi Pelanggan</div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                        </tr>
+                    </table>
 
-            <!-- Customer Info -->
-            <table class="info-table">
-                <tr>
-                    <th colspan="3" class="text-left font-bold"><u>Informasi Pelanggan</u></th>
-                </tr>
-                <tr>
-                    <td width="35%" class="text-left">Nama Pelanggan</td>
-                    <td width="5%" class="text-center">:</td>
-                    <td width="60%" class="text-left">PT. Contoh Perusahaan</td>
-                </tr>
-                <tr>
-                    <td class="text-left vertical-top">Alamat / Lokasi Sampling</td>
-                    <td class="text-center vertical-top">:</td>
-                    <td class="text-left vertical-top">Jakarta Selatan, DKI Jakarta</td>
-                </tr>
-            </table>
+                    <div class="info-header">Informasi Sampling</div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
+                        </tr>
+                        <tr>
+                            <td>Periode Analisis</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
+                        </tr>
+                    </table>
 
-            <div class="spacer"></div>
+                    <div class="info-header">Data Individu/Pekerja yang Diukur</div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Usia</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                        </tr>
+                    </table>
+                    <div style="margin-bottom: 2px; font-size: 9pt;">
+                        <span class="info-label">Jenis Analisa</span>
+                        <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
+                    </div>
 
-            <!-- Sampling Info -->
-            <table class="info-table">
-                <tr>
-                    <th colspan="3" class="text-left font-bold"><u>Informasi Sampling</u></th>
-                </tr>
-                <tr>
-                    <td width="35%" class="text-left">Tanggal Sampling</td>
-                    <td width="5%" class="text-center">:</td>
-                    <td width="60%" class="text-left">01 September 2025</td>
-                </tr>
-                <tr>
-                    <td class="text-left">Periode Analisis</td>
-                    <td class="text-center">:</td>
-                    <td class="text-left">01-03 September 2025</td>
-                </tr>
-                <tr>
-                    <td class="text-left">Jenis Analisis</td>
-                    <td class="text-center">:</td>
-                    <td class="text-left">Pengumpulan Data (Pengukuran & Skoring)</td>
-                </tr>
-                <tr>
-                    <td class="text-left vertical-top">Metode Analisis<sup style="font-size: 5pt;">*</sup></td>
-                    <td class="text-center vertical-top">:</td>
-                    <td class="text-left vertical-top">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
-                </tr>
-            </table>
+                    <div style="margin-bottom: 2px; font-size: 9pt;">
+                        <span class="info-label">Metode Analisa*</span>
+                        <span>: Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</span>
+                    </div>
 
-            <div class="spacer"></div>
-
-            <!-- Worker Info -->
-            <table class="info-table">
-                <tr>
-                    <th colspan="3" class="text-left font-bold"><u>Data Individu/Pekerja yang Diukur</u></th>
-                </tr>
-                <tr>
-                    <td width="35%" class="text-left">Nama Pekerja</td>
-                    <td width="5%" class="text-center">:</td>
-                    <td class="text-left">John Doe</td>
-                </tr>
-                <tr>
-                    <td class="text-left vertical-top">Jenis Pekerja</td>
-                    <td class="text-center vertical-top">:</td>
-                    <td class="text-left vertical-top">Operator Komputer</td>
-                </tr>
-            </table>
-
-            <div class="spacer"></div>
+                    <div class="info-note">
+                        * Metode Analisa Mengacu kepada Jenis Metode yang Direkomendasikan pada
+                        Pedoman Teknis Pemeriksaan K3 Pengelolaan Tambahan Peraturan Menteri
+                        Ketenagakerjaan RI No.5 Tahun 2018.<br>
+                        ** Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and Ergonomic
+                    </div>
+                </div>
 
             <!-- Notes -->
-            <table class="info-table">
-                <tr>
-                    <td width="5%" class="text-right vertical-top"><sup style="font-size: 5pt;">*</sup></td>
-                    <td width="95%" class="text-left" style="font-size: 5pt;">
-                        Metode Analisis Mengacu kepada Development and Evaluation of an Office
-                        Ergonomic Risk Checklist: The Rapid Office Strain Assessment (ROSA)
-                        by Michael Sonne, Dino L. Villalta, and M. Andrews, 2012.
-                    </td>
-                </tr>
-            </table>
+            <div class="notes-section">
+                <strong>*</strong> Metode Analisis Mengacu kepada Development and Evaluation of an Office Ergonomic Risk Checklist: The Rapid Office Strain Assessment (ROSA) by Michael Sonne, Dino L. Villalta, and M. Andrews, 2012.
+            </div>
 
             <!-- Signature Section -->
             <div class="signature-section">
-                <table class="signature-table">
-                    <tr>
-                        <td class="signature-left"></td>
-                        <td class="signature-right">
-                            <div class="signature-date">
-                                Jakarta, 04 September 2025
-                            </div><br>
-                            
-                            <div class="signature-text">(Tanda Tangan Digital)</div>
-                        </td>
-                    </tr>
-                </table>
+                <div class="signature-container">
+                    <div class="signature-date">Jakarta, 04 September 2025</div>
+                    <div class="signature-line"></div>
+                    <div class="signature-text">(Tanda Tangan Digital)</div>
+                </div>
             </div>
         </div>
     </div>

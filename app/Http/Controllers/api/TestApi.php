@@ -72,13 +72,10 @@ class TestApi extends Controller
                     font-family: Arial, sans-serif;
                     margin: 15px;
                     font-size: 9px;
-                    background-color: #f9f9f9;
                 }
 
                 .page-container {
                     width: 100%;
-                    background-color: #fff;
-                    border: 1px solid #ccc;
                     text-align: center; /* opsional kalau mau text di dalam rata tengah */
                 }
 
@@ -113,13 +110,11 @@ class TestApi extends Controller
                 .section {
                     border: 1px solid #000;
                     padding: 6px;
-                    background-color: #fff;
                     margin-bottom: 10px;
                 }
 
                 .section-title {
                     font-weight: bold;
-                    background-color: #e0e0e0;
                     padding: 3px 6px;
                     margin: -6px -6px 6px -6px;
                     border-bottom: 1px solid #000;
@@ -140,17 +135,15 @@ class TestApi extends Controller
                 }
 
                 th {
-                    background-color: #f2f2f2;
                     font-weight: bold;
                     text-align: center;
                 }
 
                 .text-input-space {
                     width: 100%;
-                    border: 1px solid #ccc;
+                    
                     padding: 2px;
                     min-height: 1.5em;
-                    background-color: #fff;
                 }
 
                 .multi-line-input {
@@ -158,13 +151,12 @@ class TestApi extends Controller
                     border: 1px solid #000;
                     padding: 4px;
                     min-height: 40px;
-                    background-color: #fff;
                 }
 
                 .footer-text {
                     font-size: 0.85em;
                     margin-top: 15px;
-                    border-top: 1px solid #ccc;
+                    
                     padding-top: 8px;
                     display: flex;
                     justify-content: space-between;
@@ -269,6 +261,97 @@ class TestApi extends Controller
                     text-align: center;
                     font-size: 7pt;
                     padding: 2px;
+                }
+                .signature-section {
+                    width: 100%;
+                    margin-top: 8px;
+                    clear: both;
+                }
+
+                .signature-table {
+                    width: 100%;
+                    border: none !important;
+                    font-family: Arial, sans-serif;
+                    font-size: 8px;
+                    table-layout: fixed;
+                }
+
+                .signature-table td {
+                    border: none !important;
+                    padding: 2px;
+                    vertical-align: top;
+                }
+
+                .signature-left {
+                    width: 65%;
+                }
+
+                .signature-right {
+                    width: 35%;
+                    text-align: center;
+                }
+
+                .signature-date {
+                    margin-bottom: 8px;
+                    font-size: 8px;
+                }
+
+                .signature-qr {
+                    width: 60px;
+                    height: 60px;
+                    margin: 5px auto;
+                    display: block;
+                }
+
+                .signature-text {
+                    margin-top: 3px;
+                    font-size: 7px;
+                }
+                .header-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 10px;
+                    table-layout: fixed;
+                }
+
+                .header-table td {
+                    border: none;
+                    padding: 10px;
+                    vertical-align: middle;
+                    height: 60px;
+                }
+
+                .header-table .left-cell {
+                    width: 33.33%;
+                    text-align: left;
+                    padding-left: 20px;
+                }
+
+                .header-table .center-cell {
+                    width: 33.33%;
+                    text-align: center;
+                }
+
+                .header-table .right-cell {
+                    width: 33.33%;
+                    text-align: right;
+                    padding-right: 50px;
+                }
+                .header-logo {
+                    height: 50px;
+                    width: auto;
+                    display: block;
+                }
+                .info-table {
+                    border: 0;
+                    margin-bottom: 6px;
+                }
+
+                .info-table td {
+                    border: 0;
+                    padding: 0px 2px;
+                    font-size: 8pt;
+                    vertical-align: top;
                 }
             ';
             $templateSpecificCssNbm='

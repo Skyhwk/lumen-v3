@@ -339,6 +339,17 @@
             width: auto;
             display: block;
         }
+        .info-table {
+            border: 0;
+            margin-bottom: 6px;
+        }
+
+        .info-table td {
+            border: 0;
+            padding: 0px 2px;
+            font-size: 8pt;
+            vertical-align: top;
+        }
     </style>
 </head>
 <body>
@@ -623,34 +634,56 @@
             </div>
             <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Nama Pelanggan</span>
-                        <span>: {{$personal->nama_pelanggan}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Alamat / Lokasi Sampling</span>
-                        <span>: {{$personal->alamat_pelanggan}} </span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                        </tr>
+                    </table>
 
                     <div class="info-header">Informasi Sampling</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Tanggal Sampling</span>
-                        <span>: {{$personal->tanggal_sampling}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Periode Analisa</span>
-                        <span>: {{$personal->periode_analis}} </span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
+                        </tr>
+                        <tr>
+                            <td>Periode Analisis</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
+                        </tr>
+                    </table>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Nama Pekerja</span>
-                        <span>: {{$personal->nama_pekerja}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Jenis Pekerjaan</span>
-                        <span>: </span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Usia</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                        </tr>
+                    </table>
                     <div style="margin-bottom: 3px;">
                         <span class="info-label">Jenis Analisa</span>
                         <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
