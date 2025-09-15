@@ -1584,7 +1584,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = ['kharina@intilab.com', 'abidah@intilab.com', 'sucita@intilab.com'];
+            $excludes_bcc = [ 'sucita@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
@@ -2441,7 +2441,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = ['kharina@intilab.com', 'abidah@intilab.com', 'sucita@intilab.com'];
+            $excludes_bcc = [ 'sucita@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
