@@ -119,6 +119,7 @@ class WsFinalUdaraIklimKerjaController extends Controller
 			], 401);
 		}
 	}
+	
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
@@ -782,57 +783,6 @@ class WsFinalUdaraIklimKerjaController extends Controller
 		}
 	}
 
-	// 	public function AddSubKontrak(Request $request)
-	// 	{
-	// 		DB::beginTransaction();
-	// 		try {
-	// 			$data = new Subkontrak();
-	// 			$data->no_sampel = $request->no_sampel;
-	// 			$data->category_id = $request->category;
-	// 			$data->parameter = $request->parameter;
-	// 			$data->jenis_pengujian = $request->jenis_pengujian;
-	// 			$data->is_active = true;
-	// 			$data->is_approve = 1;
-	// 			$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-	// 			$data->approved_by = $this->karyawan;
-	// 			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-	// 			$data->created_by = $this->karyawan;
-	// 			$data->save();
-	// 			// dd($data);
-	// 			if ($request->category == 1) {
-	// 				$ws = new WsValueAir();
-	// 				$ws->no_sampel = $request->no_sampel;
-	// 				$ws->id_subkontrak = $data->id;
-	// 				$ws->hasil = $request->hasil;
-	// 				$ws->is_active = true;
-	// 				$ws->status = 0;
-	// 				$ws->save();
-	// 			}
-
-	// 			DB::commit();
-	// 			return response()->json([
-	// 				'message' => 'Data Berhasil Disimpan',
-	// 				'status' => 200,
-	// 				'success' => true
-	// 			], 200);
-	// 		} catch (exception $e) {
-	// 			DB::rollback();
-	// 			return response()->json([
-	// 				'message' => $e->getMessage(),
-	// 				'status' => 500,
-	// 				'line' => $e->getLine()
-	// 			], 500);
-	// 		}
-	// 	}
-	// }
-
-
-
-
-
-
-
-
 
 
 	public function handleReject(Request $request)
@@ -871,6 +821,11 @@ class WsFinalUdaraIklimKerjaController extends Controller
 	{
 		OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
 
+		
+		IklimHeader::whereIn('no_sampel', $request->no_sampel_list)
+			->update([
+				'lhps' => 1,
+			]);
 		return response()->json([
 			'message' => 'Data berhasil diapprove.',
 			'success' => true,

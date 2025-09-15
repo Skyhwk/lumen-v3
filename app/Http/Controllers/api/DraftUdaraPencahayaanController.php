@@ -4,45 +4,29 @@ namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
 use App\Models\MasterRegulasi;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsGetaranDetail;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsMedanLMHeader;
-use App\Models\LhpsMedanLMDetail;
 
-use App\Models\LhpsKebisinganHeaderHistory;
-use App\Models\LhpsKebisinganDetailHistory;
-use App\Models\LhpsGetaranHeaderHistory;
-use App\Models\LhpsGetaranDetailHistory;
+use App\Models\LhpsPencahayaanHeader;
+
+use App\Models\LhpsPencahayaanDetail;
+
+
+
 use App\Models\LhpsPencahayaanHeaderHistory;
 use App\Models\LhpsPencahayaanDetailHistory;
-use App\Models\LhpsMedanLMHeaderHistory;
-use App\Models\LhpsMedanLMDetailHistory;
-use App\Models\LhpSinarUVHeaderHistory;
-use App\Models\LhpsLingHeaderHistory;
-use App\Models\LhpsLingDetailHistory;
+
 
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\QrDocument;
 use App\Models\PencahayaanHeader;
-use App\Models\KebisinganHeader;
-use App\Models\MedanLMHeader;
 
-use App\Models\Parameter;
+
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
 use App\Services\GenerateQrDocumentLhp;
-use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
