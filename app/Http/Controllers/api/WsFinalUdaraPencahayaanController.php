@@ -788,11 +788,11 @@ class WsFinalUdaraPencahayaanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $dataLapangan = DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
+          DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
                 'is_approve' => 0,
             ]);
 
-            $cahayaHeader = PencahayaanHeader::where('no_sampel', $request->no_sampel)
+           PencahayaanHeader::where('no_sampel', $request->no_sampel)
                 ->update([
                     'is_approved' => 0,
                 ]);
@@ -818,11 +818,15 @@ class WsFinalUdaraPencahayaanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+           OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
                 ->update([
                     'status' => 1,
                 ]);
 
+            PencahayaanHeader::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'lhps' => 1,
+                ]);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',

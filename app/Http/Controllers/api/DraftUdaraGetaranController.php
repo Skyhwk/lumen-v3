@@ -12,7 +12,6 @@ use App\Models\LhpsGetaranDetail;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
-
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
@@ -82,59 +81,58 @@ class DraftUdaraGetaranController extends Controller
         ], 201);
     }
 
-     public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
+      public function handleMetodeSampling(Request $request)
+        {
+            try {
+                $subKategori = explode('-', $request->kategori_3);
 
-            $header = LhpsGetaranHeader::where('id', $request->id_lhp)->first();
-            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                // Data utama
+                $data = MetodeSampling::where('kategori', '4-UDARA')
+                    ->where('sub_kategori', strtoupper($subKategori[1]))
+                    ->get();
 
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+                $result = $data->toArray();
 
-            // konversi collection ke array biar bisa diubah
-            $result = $data->toArray();
+                if ($request->filled('id_lhp')) {
+                    $header = LhpsGetaranHeader::find($request->id_lhp);
 
-            foreach ($data as $key => $value) {
-                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                    if ($header) {
+                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                $missing = array_diff($headerMetode, $valueMetode);
+                        foreach ($data as $key => $value) {
+                            $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                if (!empty($missing)) {
-                    foreach ($missing as $miss) {
-                        $result[] = [
-                            'id' => null, 
-                            'metode_sampling' => $miss,
-                            'kategori' => $value->kategori,
-                            'sub_kategori' => $value->sub_kategori,
-                        ];
+                            $missing = array_diff($headerMetode, $valueMetode);
+
+                            if (!empty($missing)) {
+                                foreach ($missing as $miss) {
+                                    $result[] = [
+                                        'id' => null,
+                                        'metode_sampling' => $miss,
+                                        'kategori' => $value->kategori,
+                                        'sub_kategori' => $value->sub_kategori,
+                                    ];
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            if (!empty($result)) {
                 return response()->json([
                     'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $result
+                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                    'data' => $result,
                 ], 200);
-            } else {
+
+            } catch (\Exception $e) {
                 return response()->json([
-                    'status' => true,
-                    'message' => 'Belum ada method',
-                    'data' => []
-                ], 200);
+                    'status' => false,
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                    'line' => $e->getLine(),
+                ], 500);
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
-    }
+
 
 
    public function store(Request $request)

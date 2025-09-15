@@ -3,13 +3,6 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsMedanLMHeader;
 
 use App\Models\LhpsIklimHeader;
 use App\Models\LhpsIklimHeaderHistory;
@@ -25,12 +18,10 @@ use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\IklimHeader;
 
-use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
-use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -107,34 +98,86 @@ class DraftUdaraIklimKerjaController extends Controller
         ], 201);
     }
 
-    // Tidak digunakan sekarang, gatau nanti
-    public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
+    // // Tidak digunakan sekarang, gatau nanti
+    // public function handleMetodeSampling(Request $request)
+    // {
+    //     try {
+    //         $subKategori = explode('-', $request->kategori_3);
+    //         $data = MetodeSampling::where('kategori', '4-UDARA')
+    //             ->where('sub_kategori', strtoupper($subKategori[1]))->get();
+    //         if ($data->isNotEmpty()) {
+    //             return response()->json([
+    //                 'status' => true,
+    //                 'message' => 'Available data retrieved successfully',
+    //                 'data' => $data
+    //             ], 200);
+    //         } else {
+    //             return response()->json([
+    //                 'status' => true,
+    //                 'message' => 'Belom ada method',
+    //                 'data' => []
+    //             ], 200);
+    //         }
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+    //             'line' => $e->getLine()
+    //         ], 500);
+    //     }
+    // }
+          public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
+
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
+
+        $result = $data->toArray();
+
+        if ($request->filled('id_lhp')) {
+            $header = LhpsIklimHeader::find($request->id_lhp);
+
+            if ($header) {
+                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+                    $missing = array_diff($headerMetode, $valueMetode);
+
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
+                        }
+                    }
+                }
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
+
 
     public function store(Request $request)
     {
@@ -385,91 +428,91 @@ class DraftUdaraIklimKerjaController extends Controller
                     ->groupBy('page')
                     ->toArray();
 
-            $existingSamples = $detail->pluck('no_sampel')->toArray();
-            $data = [];
-            $data1 = [];
-            $hasil = [];
+                $existingSamples = $detail->pluck('no_sampel')->toArray();
+                    $data = [];
+                    $data1 = [];
+                    $hasil = [];
 
-            $orders = OrderDetail::where('cfr', $request->cfr)
-                ->where('is_approve', 0)
-                ->where('is_active', true)
-                ->where('kategori_2', '4-Udara')
-                ->where('kategori_3', $request->kategori_3)
-                ->where('status', 2)
-                ->pluck('no_sampel');
+                $orders = OrderDetail::where('cfr', $request->cfr)
+                    ->where('is_approve', 0)
+                    ->where('is_active', true)
+                    ->where('kategori_2', '4-Udara')
+                    ->where('kategori_3', $request->kategori_3)
+                    ->where('status', 2)
+                    ->pluck('no_sampel');
 
-            $data = IklimHeader::with('ws_udara', 'iklim_panas', 'iklim_dingin')
-                ->whereIn('no_sampel', $orders)
-                ->where('is_approve', 1)
-                ->where('is_active', true)
-                ->where('lhps', 1)
-                ->get();
+                $data = IklimHeader::with('ws_udara', 'iklim_panas', 'iklim_dingin')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approve', 1)
+                    ->where('is_active', true)
+                    ->where('lhps', 1)
+                    ->get();
 
-            $i = 0;
-            if ($data->isNotEmpty()) {
-                foreach ($data as $key => $val) {
-                    $data1[$i]['id'] = $val->id;
-                    $data1[$i]['no_sampel'] = $val->no_sampel;
-                    $data1[$i]['hasil'] = round($val->ws_udara->hasil1, 1);
-                    $data1[$i]['standar_min'] = $val->ws_udara->nab;
-                    $data1[$i]['indeks_suhu_basah'] = $val->ws_udara->hasil1;
-                    $data1[$i]['kecepatan_angin'] = $val->rata_kecepatan_angin;
-                    $data1[$i]['suhu_temperatur'] = $val->rata_suhu;
+                $i = 0;
+                if ($data->isNotEmpty()) {
+                    foreach ($data as $key => $val) {
+                        $data1[$i]['id'] = $val->id;
+                        $data1[$i]['no_sampel'] = $val->no_sampel;
+                        $data1[$i]['hasil'] = round($val->ws_udara->hasil1, 1);
+                        $data1[$i]['standar_min'] = $val->ws_udara->nab;
+                        $data1[$i]['indeks_suhu_basah'] = $val->ws_udara->hasil1;
+                        $data1[$i]['kecepatan_angin'] = $val->rata_kecepatan_angin;
+                        $data1[$i]['suhu_temperatur'] = $val->rata_suhu;
 
-                    if ($val->parameter == "IKD (CS)") {
-                        $data1[$i]['keterangan'] = $val->iklim_dingin->keterangan;
-                        $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_dingin->aktifitas_kerja;
-                        $data1[$i]['kondisi'] = $val->ws_udara->interpretasi;
-                    } else if ($val->parameter == "ISBB" || $val->parameter == "ISBB (8 jam)") {
-                        $data1[$i]['keterangan'] = $val->iklim_panas->keterangan;
-                        $data1[$i]['indeks_suhu_basah'] = $val->iklim_panas->keterangan;
-                        $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_panas->aktifitas;
-                        $data1[$i]['durasi_paparan'] = $val->iklim_panas->akumulasi_waktu_paparan;
+                        if ($val->parameter == "IKD (CS)") {
+                            $data1[$i]['keterangan'] = $val->iklim_dingin->keterangan;
+                            $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_dingin->aktifitas_kerja;
+                            $data1[$i]['kondisi'] = $val->ws_udara->interpretasi;
+                        } else if ($val->parameter == "ISBB" || $val->parameter == "ISBB (8 jam)") {
+                            $data1[$i]['keterangan'] = $val->iklim_panas->keterangan;
+                            $data1[$i]['indeks_suhu_basah'] = $val->iklim_panas->keterangan;
+                            $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_panas->aktifitas;
+                            $data1[$i]['durasi_paparan'] = $val->iklim_panas->akumulasi_waktu_paparan;
+                        }
+
+                        $data1[$i]['parameter'] = $val->parameter;
+
+                        $i++;
                     }
-
-                    $data1[$i]['parameter'] = $val->parameter;
-
-                    $i++;
+                    $hasil[] = $data1;
                 }
-                $hasil[] = $data1;
-            }
 
-            $data_all = [];
-            $a = 0;
-            foreach ($hasil as $key => $value) {
-                foreach ($value as $row => $col) {
-                    if (!in_array($col['no_sampel'], $existingSamples)) {
-                        $col['status'] = 'belom_diadjust';
-                        $data_all[$a] = $col;
-                        $a++;
+                $data_all = [];
+                $a = 0;
+                foreach ($hasil as $key => $value) {
+                    foreach ($value as $row => $col) {
+                        if (!in_array($col['no_sampel'], $existingSamples)) {
+                            $col['status'] = 'belom_diadjust';
+                            $data_all[$a] = $col;
+                            $a++;
+                        }
                     }
                 }
-            }
 
-            // gabungkan dengan detail
-            foreach ($data_all as $key => $value) {
-                $detail[] = $value;
-            }
-
-            foreach ($custom as $idx => $cstm) {
+                // gabungkan dengan detail
                 foreach ($data_all as $key => $value) {
-                    $value['page'] = $idx;
-                    $custom[$idx][] = $value;
+                    $detail[] = $value;
                 }
-            }
 
-            if(count($custom) < $jumlah_custom) {
-                $custom[] = $detail;
-            }
+                foreach ($custom as $idx => $cstm) {
+                    foreach ($data_all as $key => $value) {
+                        $value['page'] = $idx;
+                        $custom[$idx][] = $value;
+                    }
+                }
 
-            return response()->json([
-                'data' => $cekLhp,
-                'detail' => $detail,
-                'custom' => $custom,
-                'success' => true,
-                'status' => 200,
-                'message' => 'Data berhasil diambil'
-            ], 201);  
+                if(count($custom) < $jumlah_custom) {
+                    $custom[] = $detail;
+                }
+
+                return response()->json([
+                    'data' => $cekLhp,
+                    'detail' => $detail,
+                    'custom' => $custom,
+                    'success' => true,
+                    'status' => 200,
+                    'message' => 'Data berhasil diambil'
+                ], 201);  
             } else {
                 $custom = array();
                 $data = array();
@@ -484,7 +527,7 @@ class DraftUdaraIklimKerjaController extends Controller
                     ->pluck('no_sampel');
                 $data = IklimHeader::with('ws_udara', 'iklim_panas', 'iklim_dingin')
                     ->whereIn('no_sampel', $orders)
-                    ->where('is_approve', 1)
+                    ->where('is_approve', 1) 
                     ->where('is_active', true)
                     ->where('lhps', 1)
                     ->get();
