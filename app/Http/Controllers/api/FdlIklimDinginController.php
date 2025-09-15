@@ -209,7 +209,7 @@ class FdlIklimDinginController extends Controller
                     $headUdara->id_parameter = $parameter->id;
                     $headUdara->parameter = $parameter->nama_lab;
                     $headUdara->is_approve = true;
-                    $headUdara->lhps = true;
+                    // $headUdara->lhps = true;
                     $headUdara->rata_suhu = $data_kalkulasi['rataSuhu'];
                     $headUdara->rata_kecepatan_angin = $data_kalkulasi['rataAngin'];
                     $headUdara->approved_by = $this->karyawan;

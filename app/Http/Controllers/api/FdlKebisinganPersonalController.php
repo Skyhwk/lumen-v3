@@ -138,9 +138,14 @@ class FdlKebisinganPersonalController extends Controller
 
     public function approve(Request $request){
         if (isset($request->id) && $request->id != null) {
-
             $data = DataLapanganKebisinganPersonal::where('id', $request->id)->first();
-            // $no_sample = $data->no_sample;
+            $order = OrderDetail::select('parameter')->where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
+            $parameterArray = json_decode($order->parameter, true);
+            // ambil item pertama (karena isinya array)
+            $firstItem = $parameterArray[0]; // "271;Kebisingan (P8J)"
+
+            // pecah berdasarkan tanda ;
+            list($id, $nama) = explode(";", $firstItem);
             
             $data->is_approve  = true;
             $data->approved_by = $this->karyawan;
@@ -148,6 +153,22 @@ class FdlKebisinganPersonalController extends Controller
             $data->rejected_at = null;
             $data->rejected_by = null;
             $data->save();
+
+            $header = KebisinganHeader::where('no_sampel', $data->no_sampel)->where('id_parameter', $id)->where('is_active', true)->first();
+            if(!$header){
+                $header = new KebisinganHeader;
+            }
+            $header->no_sampel = $data->no_sampel;
+            $header->no_sampel_lama = $data->no_sampel_lama;
+            $header->id_parameter = $id;
+            $header->parameter = $nama;
+            $header->created_by = $this->karyawan;
+            $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $header->is_approved = true;
+            $header->is_personal = true;
+            $header->approved_by = $this->karyawan;
+            $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+            $header->save();
 
             app(NotificationFdlService::class)->sendApproveNotification('Kebisingan Personal', $data->no_sampel, $this->karyawan, $data->created_by);
 
