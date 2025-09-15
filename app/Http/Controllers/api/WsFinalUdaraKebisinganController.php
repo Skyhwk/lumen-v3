@@ -866,7 +866,11 @@ class WsFinalUdaraKebisinganController extends Controller
 	public function handleApproveSelected(Request $request)
 	{
 		OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
-
+		
+		KebisinganHeader::whereIn('no_sampel', $request->no_sampel_list)
+			->update([
+				'lhps' => 1,
+			]);
 		return response()->json([
 			'message' => 'Data berhasil diapprove.',
 			'success' => true,

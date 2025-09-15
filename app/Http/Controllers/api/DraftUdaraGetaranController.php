@@ -12,7 +12,6 @@ use App\Models\LhpsGetaranDetail;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
-
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
@@ -83,56 +82,56 @@ class DraftUdaraGetaranController extends Controller
     }
 
       public function handleMetodeSampling(Request $request)
-{
-    try {
-        $subKategori = explode('-', $request->kategori_3);
+        {
+            try {
+                $subKategori = explode('-', $request->kategori_3);
 
-        // Data utama
-        $data = MetodeSampling::where('kategori', '4-UDARA')
-            ->where('sub_kategori', strtoupper($subKategori[1]))
-            ->get();
+                // Data utama
+                $data = MetodeSampling::where('kategori', '4-UDARA')
+                    ->where('sub_kategori', strtoupper($subKategori[1]))
+                    ->get();
 
-        $result = $data->toArray();
+                $result = $data->toArray();
 
-        if ($request->filled('id_lhp')) {
-            $header = LhpsGetaranHeader::find($request->id_lhp);
+                if ($request->filled('id_lhp')) {
+                    $header = LhpsGetaranHeader::find($request->id_lhp);
 
-            if ($header) {
-                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                    if ($header) {
+                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                foreach ($data as $key => $value) {
-                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                        foreach ($data as $key => $value) {
+                            $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                    $missing = array_diff($headerMetode, $valueMetode);
+                            $missing = array_diff($headerMetode, $valueMetode);
 
-                    if (!empty($missing)) {
-                        foreach ($missing as $miss) {
-                            $result[] = [
-                                'id' => null,
-                                'metode_sampling' => $miss,
-                                'kategori' => $value->kategori,
-                                'sub_kategori' => $value->sub_kategori,
-                            ];
+                            if (!empty($missing)) {
+                                foreach ($missing as $miss) {
+                                    $result[] = [
+                                        'id' => null,
+                                        'metode_sampling' => $miss,
+                                        'kategori' => $value->kategori,
+                                        'sub_kategori' => $value->sub_kategori,
+                                    ];
+                                }
+                            }
                         }
                     }
                 }
+
+                return response()->json([
+                    'status' => true,
+                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                    'data' => $result,
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                    'line' => $e->getLine(),
+                ], 500);
             }
         }
-
-        return response()->json([
-            'status' => true,
-            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-            'data' => $result,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            'line' => $e->getLine(),
-        ], 500);
-    }
-}
 
 
 
