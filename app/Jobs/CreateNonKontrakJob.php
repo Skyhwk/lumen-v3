@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 use App\Models\QuotationNonKontrak;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
-use App\Models\Sales;
 
 class CreateNonKontrakJob extends Job
 {
