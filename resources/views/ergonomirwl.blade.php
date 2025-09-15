@@ -8,7 +8,7 @@
         /* --- CSS Anda --- */
         body {
             font-family: Arial, sans-serif;
-            font-size: 11pt;
+            font-size: 10px;
         }
 
         .container {
@@ -27,7 +27,7 @@
         }
 
         .header-text {
-            font-size: 10pt;
+            font-size: 10px;
             text-align: left;
             margin-bottom: 10px;
         }
@@ -48,7 +48,7 @@
         td {
             padding: 4px;
             text-align: center;
-            font-size: 10pt;
+            font-size: 10px;
             vertical-align: middle;
         }
 
@@ -60,7 +60,7 @@
             text-align: left;
             font-weight: bold;
             padding: 4px;
-            font-size: 11pt;
+            font-size: 11px;
             background-color: #f0f0f0;
             margin-top: 5px;
             margin-bottom: 0;
@@ -115,7 +115,7 @@
             font-weight: bold;
             margin-top: 8px;
             margin-bottom: 3px;
-            font-size: 10pt;
+            font-size: 10px;
             clear: both;
         }
 
@@ -123,17 +123,17 @@
             font-weight: normal;
             width: 120px;
             float: left;
-            font-size: 10pt;
+            font-size: 10px;
         }
 
         .info-note {
-            font-size: 10pt;
+            font-size: 10px;
             margin-top: 5px;
             line-height: 1.2;
         }
 
         .footer-note {
-            font-size: 9pt;
+            font-size: 9px;
             margin-top: 15px;
             font-style: italic;
             clear: both;
@@ -163,7 +163,7 @@
         /* Perbaikan kecil untuk spasi info (dari revisi sebelumnya) */
         .info-line {
             margin-bottom: 3px;
-            font-size: 10pt;
+            font-size: 10px;
             min-height: 1.2em;
         }
 
@@ -269,7 +269,7 @@
 
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIAN</h1>
+        <h1>LAPORAN HASIL PENGUJIANas</h1>
 
         <div class="content-layout clearfix">
             <div class="column-left">
@@ -540,14 +540,14 @@
                             <tr>
                                 <td>&lt;1</td>
                                 <td>Rendah</td>
-                                <td class="text-left" style="font-size: 9pt;">Nilai ini masih dalam kategori selamat
+                                <td class="text-left" style="font-size: 9px;">Nilai ini masih dalam kategori selamat
                                     bagi sebagian besar pekerja, sehingga tidak perlu ada tindakan perbaikan pekerjaan.
                                     Namun pekerja dengan keterbatasan perlu mendapat perhatian khusus.</td>
                             </tr>
                             <tr>
                                 <td>1 &lt; SI &lt; 3</td>
                                 <td>Sedang</td>
-                                <td class="text-left" style="font-size: 9pt;">Nilai ini tentunya akan meningkatkan
+                                <td class="text-left" style="font-size: 9px;">Nilai ini tentunya akan meningkatkan
                                     risiko terhadap sebagian pekerja. Sehingga perlu dilakukan perbaikan atau
                                     perancangan kembali pada penanganan material yang membutuhkan material handling
                                     dengan LI antara 1 dan 3.</td>
@@ -555,7 +555,7 @@
                             <tr>
                                 <td>&gt;3</td>
                                 <td>Tinggi</td>
-                                <td class="text-left" style="font-size: 9pt;">Pekerjaan berisiko pada sebagian besar
+                                <td class="text-left" style="font-size: 9px;">Pekerjaan berisiko pada sebagian besar
                                     pekerja. Sebagian besar operator tidak dapat melakukan pekerjaan dengan aman bila
                                     nilai LI melebihi 3. Dalam hal ini perbaikan secara administratif saja tidak cukup,
                                     namun solusi yang terbaik adalah dengan mendesain ulang sistem kerja.</td>

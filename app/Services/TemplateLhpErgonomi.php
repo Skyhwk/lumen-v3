@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 class TemplateLhpErgonomi
 {
-    public function ergonomiRula($data = null)
+    public function ergonomiRula($data = null,$cssGlobal='',$spesifik='',$mode='')
     {
         try {
             $mpdfConfig = [
@@ -84,7 +84,7 @@ class TemplateLhpErgonomi
         }
     }
     
-    public function ergonomiRwl($data = null)
+    public function ergonomiRwl($data = null,$cssGlobal='',$spesifik='',$mode='')
     {
         $mpdfConfig = [
             'mode' => 'utf-8',
@@ -125,7 +125,7 @@ class TemplateLhpErgonomi
         return $html;
     }
 
-    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='')
+    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$mode='')
     { 
         
         try {
@@ -215,7 +215,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='')
+    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='',$mode='')
     {   
         try {
             $mpdfConfig = [
@@ -299,7 +299,7 @@ class TemplateLhpErgonomi
         
     }
 
-    public function ergonomiRosa($data = null)
+    public function ergonomiRosa($data = null,$cssGlobal='',$spesifik='',$mode='')
     {   
         try {
             $mpdfConfig = [
@@ -371,7 +371,7 @@ class TemplateLhpErgonomi
         }
     }
     
-    public function ergonomiBrief($data = null)
+    public function ergonomiBrief($data = null,$cssGlobal='',$spesifik='',$mode='')
     {   
         try {
             $mpdfConfig = [
@@ -392,7 +392,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='')
+    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='',$mode='')
     {
        
         try {
@@ -440,7 +440,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='' )
+    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='',$mode='')
     {   
         
         try {

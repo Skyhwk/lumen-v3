@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian</title>
     <style>
-        /* CSS dengan font size yang konsisten - Layout Fixed */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -353,19 +352,6 @@
     </style>
 </head>
 <body>
-     <table class="header-table">
-        <tr>
-            <td class="left-cell">
-                <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
-            </td>
-            <td class="center-cell">
-                <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
-            </td>
-            <td class="right-cell">
-                <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
-            </td>
-        </tr>
-    </table>
     <div class="content-container clearfix" >
         <div class="left-section">
             
