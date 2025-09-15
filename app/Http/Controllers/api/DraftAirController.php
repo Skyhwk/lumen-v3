@@ -303,6 +303,11 @@ class DraftAirController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
                 ->render();
+            
+            if($dataHeader->file_lhp != $fileName){
+                // ada perubahan nomor lhp yang artinya di token harus di update
+                GenerateLink::where('id_quotation', $dataHeader->id_token)->update(['fileName_pdf' => $fileName]);
+            }
 
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
@@ -695,6 +700,7 @@ class DraftAirController extends Controller
                         // update link agar id di berikan yang original
                         $link = GenerateLink::where('id', $history->id_token)->update([
                             'id_quotation' => $header->id,
+                            'fileName_pdf' => $header->file_lhp
                         ]);
 
                     } else {
