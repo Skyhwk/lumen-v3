@@ -363,7 +363,25 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganPartikulatMeter::class, 'no_sampel', 'no_sampel');
     }
+    public function pencahayaanHeader()
+    {
+        return $this->belongsTo(PencahayaanHeader::class, 'no_sampel', 'no_sampel');
+    }
+    public function GetaranHeader()
+    {
+        return $this->belongsTo(GetaranHeader::class, 'no_sampel', 'no_sampel');
+    }
 
+    public function getAnyHeaderUdara()
+    {
+        if ($this->pencahayaanHeader()->exists()) {
+            return $this->pencahayaanHeader;
+        }
+        if ($this->GetaranHeader()->exists()) {
+            return $this->GetaranHeader;
+        }
+        return null;
+    }
     public function getAnyDataLapanganUdara()
     {
         if ($this->dataLapanganLingkunganHidup()->exists()) {

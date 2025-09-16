@@ -151,7 +151,7 @@ class VerifikasiBotolController extends Controller
                     $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
 
                     if (isset($parameters->emisi)) {
-                        if(in_array($type, $paramExplane)){
+                        if (in_array($type, $paramExplane)) {
                             unset($dataDisplay[$key]);
                         }
                     }
@@ -167,6 +167,7 @@ class VerifikasiBotolController extends Controller
                         }
                     } else if (isset($parameters->emisi->$type)) {
 
+
                         $item->disiapkan = $parameters->emisi->$type->disiapkan;
                         if ($item->koding == $request->no_sampel) {
                             $item->scanned = 1;
@@ -174,6 +175,7 @@ class VerifikasiBotolController extends Controller
                     } else {
                         $item->disiapkan = null;
                     }
+
                 }
             }
 
@@ -273,7 +275,7 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = 'lengkap' ;
+                    $scanSampelTc->status = 'lengkap';
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -286,7 +288,7 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status =  'lengkap';
+                    $scanSampelTc->status = 'lengkap';
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -304,7 +306,7 @@ class VerifikasiBotolController extends Controller
                 if ($request->tipe == 'botol') {
 
                     $no_sampel = OrderDetail::whereNotNull('persiapan')
-                        ->whereJsonContains('persiapan', ['koding' =>  $request->no_koding[0]])
+                        ->whereJsonContains('persiapan', ['koding' => $request->no_koding[0]])
                         ->first()->no_sampel;
                 }
 
@@ -341,14 +343,14 @@ class VerifikasiBotolController extends Controller
                 }
 
                 $ftc->save();
-                
+
 
                 $scanSampelTc = ScanSampelTc::where('no_sampel', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
                 if ($scanSampelTc) {
                     $scanSampelTc->no_sampel = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
                     $scanSampelTc->kategori = $request->kategori;
                     $scanSampelTc->data_detail = json_encode($request->data_detail);
-                    $scanSampelTc->status = 'lengkap' ;
+                    $scanSampelTc->status = 'lengkap';
                     $scanSampelTc->keterangan = $request->keterangan ?? null;
                     $scanSampelTc->kondisi_sampel = $kondisi_sampel ?? null;
                     $scanSampelTc->dokumentasi_lainya = $dokumentasi_lainya ?? null;
@@ -373,7 +375,7 @@ class VerifikasiBotolController extends Controller
             }
 
             DB::commit();
-            
+
             return response()->json(["message" => "Berhasil disimpan", "code" => 200], 200);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -430,11 +432,8 @@ class VerifikasiBotolController extends Controller
                 ];
             }
 
-            // Save file
 
-            $service = new SaveFileServices();
-
-            $bytesWritten = $service->saveFile($path,  $fileName, $fileName, $decodedContent);
+            $bytesWritten = file_put_contents($fullPath, $decodedContent);
 
             if ($bytesWritten === false) {
                 return [

@@ -221,6 +221,10 @@ class WsFinalUdaraGetaranController extends Controller
 			->get()
 			->where('status', 0)
 			->map(function ($item) {
+				$item->getAnyHeaderUdara();
+				return $item;
+            })
+			->map(function ($item) {
 				$item->getAnyDataLapanganUdara();
 				return $item;
 			})->values();
@@ -230,57 +234,6 @@ class WsFinalUdaraGetaranController extends Controller
 			'message' => 'Data retrieved successfully',
 		], 200);
 	}
-
-	// public function detailLapangan(Request $request)
-	// {
-	// 	$parameterNames = [];
-
-
-	// 	$noOrder = explode('/', $request->no_sampel)[0] ?? null;
-	// 	$Lapangan = OrderDetail::where('no_order', $noOrder)->get();
-	// 	$lapangan2 = $Lapangan->map(function ($item) {
-	// 		return $item->no_sampel;
-	// 	})->unique()->sortBy(function ($item) {
-	// 		return (int) explode('/', $item)[1];
-	// 	})->values();
-	// 	$totLapangan = $lapangan2->count();
-	// 	if ($request->no_sampel) {
-	// 		$detailOrder = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
-	// 		if (str_contains($detailOrder->parameter, 'Getaran (LK) TL') || (str_contains($detailOrder->parameter, "Getaran (LK) ST"))) {
-	// 			try {
-	// 				$data = DataLapanganGetaranPersonal::where('no_sampel', $request->no_sampel)->first();
-
-
-	// 				$urutan = $lapangan2->search($data->no_sampel);
-	// 				$urutanDisplay = $urutan + 1;
-	// 				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-	// 				if ($data) {
-	// 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-	// 				}
-	// 			} catch (\Exception $ex) {
-	// 				dd($ex);
-	// 			}
-	// 		} else {
-	// 			try {
-
-	// 				$data = DataLapanganGetaran::where('no_sampel', $request->no_sampel)->first();
-	// 				$urutan = $lapangan2->search($data->no_sampel); // cari posisi index di lapangan2
-	// 				$urutanDisplay = $urutan + 1;
-	// 				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
-	// 				if ($data) {
-	// 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-	// 				}
-	// 			} catch (\Exception $ex) {
-	// 				dd($ex);
-	// 			}
-	// 		}
-	// 	} else {
-	// 		return response()->json(['message' => 'Data tidak ditemukan', 'success' => false, 'status' => 401]);
-	// 	}
-
-
-
-	// }
 
 
 	public function detailLapangan(Request $request)
