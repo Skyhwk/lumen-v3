@@ -170,9 +170,14 @@ class WsFinalUdaraController extends Controller
 					return $item;
 				});
 
-				foreach ($processedData as $item) {
-					$item->ws_udara->parsed_hasil = json_decode($item->ws_udara->hasil1);
-				}
+				$processedData = $combinedData->map(function ($item) {
+					if ($item->ws_udara) {
+						$item->ws_udara = collect($item->ws_udara)->merge([
+							'parsed_hasil' => json_decode($item->ws_udara->hasil1)
+						]);
+					}
+					return $item;
+				});
 
 				return Datatables::of($processedData)->make(true);
 			} else if (in_array($request->kategori, $this->categoryLingkunganHidup)) {

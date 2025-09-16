@@ -7,8 +7,12 @@ use Illuminate\Support\Facades\DB;
 use App\Models\QuotationNonKontrak;
 use App\Models\Parameter;
 use App\Models\HargaParameter;
+use App\Models\RequestQr;
+use App\Services\Notification;
+use App\Services\GetAtasan;
+use App\Services\GetBawahan;
 
-class CreateNonKontrakJob extends Job
+class ForwardNonKontrakJob extends Job
 {
     protected $data;
     protected $idcabang;
@@ -32,8 +36,8 @@ class CreateNonKontrakJob extends Job
         DB::beginTransaction();
 
         try {
-            $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
-            $bulan_chek = date('m', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit bulan (misal: 01)
+            $tahun_chek = date('y', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit tahun (misal: 25)
+            $bulan_chek = date('m', strtotime($payload->informasi_pelanggan['tgl_penawaran']));  // 2 digit bulan (misal: 01)
             $bulan_chek = self::romawi($bulan_chek);
 
             $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
@@ -62,30 +66,31 @@ class CreateNonKontrakJob extends Job
             // Format nomor dokumen menjadi 8 digit
             $no_quotation = sprintf('%06d', $no_);
             $no_document = 'ISL/QT/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
-            
+
             $data = new QuotationNonKontrak;
 
             $data->no_quotation = $no_quotation;
             $data->no_document = $no_document;
-            $data->pelanggan_ID = $payload->informasi_pelanggan->pelanggan_ID;
+            $data->pelanggan_ID = $payload->informasi_pelanggan['pelanggan_ID'];
             $data->id_cabang = $this->idcabang;
 
-            $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan->nama_perusahaan));
-            $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
-            $data->konsultan = strtoupper(trim($payload->informasi_pelanggan->konsultan));
-            $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
-            $data->no_tlp_perusahaan = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
-            $data->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
-            $data->jabatan_pic_order = $payload->informasi_pelanggan->jabatan_pic_order;
-            $data->no_pic_order = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_pic_order);
-            $data->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
-            $data->email_cc = isset($payload->informasi_pelanggan->email_cc) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
-            $data->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
-            $data->no_tlp_sampling = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $data->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
-            $data->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
-            $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
+            $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan['nama_perusahaan']));
+            $data->tanggal_penawaran = $payload->informasi_pelanggan['tgl_penawaran'];
+            $data->konsultan = strtoupper(trim($payload->informasi_pelanggan['konsultan']));
+            $data->alamat_kantor = $payload->informasi_pelanggan['alamat_kantor'];
+            $data->no_tlp_perusahaan = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan['no_tlp_perusahaan']);
+            $data->nama_pic_order = ucwords($payload->informasi_pelanggan['nama_pic_order']);
+            $data->jabatan_pic_order = $payload->informasi_pelanggan['jabatan_pic_order'];
+            $data->no_pic_order = str_replace(["-", "_"], "", $payload->informasi_pelanggan['no_pic_order']);
+            $data->email_pic_order = $payload->informasi_pelanggan['email_pic_order'];
+            $data->email_cc = isset($payload->informasi_pelanggan['email_cc']) ? json_encode($payload->informasi_pelanggan['email_cc']) : null;
+            $data->status_sampling = $payload->informasi_pelanggan['status_sampling'];
+            $data->alamat_sampling = $payload->informasi_pelanggan['alamat_sampling'];
+            $data->no_tlp_sampling = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan['no_tlp_pic_sampling']);
+            $data->nama_pic_sampling = ucwords($payload->informasi_pelanggan['nama_pic_sampling']);
+            $data->jabatan_pic_sampling = $payload->informasi_pelanggan['jabatan_pic_sampling'];
+            $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan['no_tlp_pic_sampling']);
+            $data->email_pic_sampling = $payload->informasi_pelanggan['email_pic_sampling'];
 
             $data_sampling = [];
             $harga_total = 0;
@@ -101,20 +106,16 @@ class CreateNonKontrakJob extends Job
 
             if (isset($payload->data_pendukung)) {
                 foreach ($payload->data_pendukung as $i => $item) {
-                    // dd($item);
-                    $param = $item->parameter;
-                    $exp = explode("-", $item->kategori_1);
+                    $param = $item['parameter'];
+                    $exp = explode("-", $item['kategori_1']);
                     $kategori = $exp[0];
                     $vol = 0;
 
                     $parameter = [];
                     foreach ($param as $par) {
                         $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        // dd();
-                        // dump($cek_par->nama_lab);
                         array_push($parameter, $cek_par->nama_lab);
                     }
-                    // dd($param);
 
                     $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
                         ->where('is_active', true)
@@ -126,13 +127,13 @@ class CreateNonKontrakJob extends Job
                         $vol += floatval($harga_pertitik->volume);
                     }
 
-                    $titik = $item->jumlah_titik;
+                    $titik = $item['jumlah_titik'];
 
                     $data_sampling[$i] = [
-                        'kategori_1' => $item->kategori_1,
-                        'kategori_2' => $item->kategori_2,
-                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
-                        'penamaan_titik' => $item->penamaan_titik,
+                        'kategori_1' => $item['kategori_1'],
+                        'kategori_2' => $item['kategori_2'],
+                        'regulasi' => isset($item['regulasi']) ? $item['regulasi'] : '',
+                        'penamaan_titik' => isset($item['penamaan_titik']) ? $item['penamaan_titik'] : '',
                         'parameter' => $param,
                         'jumlah_titik' => $titik,
                         'total_parameter' => count($param),
@@ -170,7 +171,7 @@ class CreateNonKontrakJob extends Job
             }
 
             $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
-            $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
+            $data->data_pendukung_sampling = json_encode(array_values($data_sampling));
 
             $data->harga_air = $harga_air;
             $data->harga_udara = $harga_udara;
@@ -186,12 +187,36 @@ class CreateNonKontrakJob extends Job
             $data->created_at = DATE('Y-m-d H:i:s');
             $data->save();
 
+            $data_request = RequestQr::where('id', $payload->informasi_pelanggan['id'])->first();
+            $data_request->is_active = 0;
+            $data_request->save();
+
+            if($this->karyawan == $data_request->created_by){ // JIka yang membuat request qr itu sendiri maka kirim ke atasan juga
+                $message = 'Request QR telah diexport ke request quotation';
+                
+                $getAtasan = GetAtasan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+
+                Notification::whereIn('id', $getAtasan)
+                    ->title('Request QR telah diexport ke request quotation')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('quote-request')
+                    ->send();
+            }else { // JIka yang membuat quotation itu bukan yang membuat request qr maka kirim ke yang membuat request qr
+                $message = 'Request QR telah diexport ke request quotation';
+                Notification::where('nama_lengkap', $data->created_by)
+                    ->title('Request QR telah diexport ke request quotation')
+                    ->message($message . ' Oleh ' . $this->karyawan)
+                    ->url('quote-request')
+                    ->send();
+            }
+
             DB::commit();
             
-            Log::channel('quotation')->info('CreateNonKontrakJob:  Penawaran berhasil dibuat dengan nomor dokumen ' . $data->no_document);
+            Log::channel('quotation')->info('ForwardNonKontrakJob: Penawaran berhasil dibuat dengan nomor dokumen ' . $data->no_document);
+
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::channel('quotation')->info('CreateNonKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
+            Log::channel('quotation')->info('ForwardNonKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
         }
     }
 
