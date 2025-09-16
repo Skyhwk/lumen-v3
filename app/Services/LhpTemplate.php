@@ -402,6 +402,13 @@ class LhpTemplate
                             font-size: 9px;
                             font-weight: bold;
                         }
+                        .bordered{
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            border-top: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .right {
                             float: right;
                             width: 40%;
