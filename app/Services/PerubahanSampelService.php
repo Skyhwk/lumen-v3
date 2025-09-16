@@ -69,6 +69,9 @@ class PerubahanSampelService
         foreach ($perubahanSampel as $jsonString) {
             foreach (json_decode($jsonString, true) as $item) {
                 $oldDetail = OrderDetail::where('no_sampel', $item['old'])->first();
+                if ($oldDetail->status >= 2) {
+                    continue;
+                }
                 OrderDetail::where('no_sampel', $item['new'])->update(['tanggal_terima' => $oldDetail->tanggal_terima, 'keterangan_1' => $oldDetail->keterangan_1]);
 
                 $oldFtc = Ftc::where('no_sample', $item['old'])->first();
