@@ -89,7 +89,7 @@ class DraftUlkSinarUvController extends Controller
                 $resultx = $data->toArray();
                 foreach ($resultx as $key => $value) {
                     $result[$key]['id'] = $value['id'];
-                    $result[$key]['metode_sampling'] = $value['method'];
+                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
                     $result[$key]['kategori'] = $value['nama_kategori'];
                     $result[$key]['sub_kategori'] = $subKategori[1];
                 }
@@ -111,7 +111,7 @@ class DraftUlkSinarUvController extends Controller
                                 foreach ($missing as $miss) {
                                     $result[] = [
                                         'id' => null,
-                                        'metode_sampling' => $miss,
+                                        'metode_sampling' => $miss ?? '',
                                         'kategori' => $value->kategori,
                                         'sub_kategori' => $value->sub_kategori,
                                     ];
@@ -189,7 +189,7 @@ class DraftUlkSinarUvController extends Controller
                 'no_lhp'          => $request->no_lhp ?: null,
                 'no_qt'           => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
-                'tanggal_sampling'=> $request->tanggal_sampling ?: null,
+                // 'tanggal_sampling'=> $request->tanggal_sampling ?: null,
                 'tanggal_terima'  => $request->tanggal_terima ?: null,
                 'parameter_uji'   => json_encode($parameter_uji),
                 'nama_pelanggan'  => $request->nama_perusahaan ?: null,
@@ -234,6 +234,7 @@ class DraftUlkSinarUvController extends Controller
                     'mata'       => $request->mata[$key] ?? '',
                     'siku'       => $request->siku[$key] ?? '',
                     'betis'       => $request->betis[$key] ?? '',
+                    'tanggal_sampling'       => $request->tanggal_sampling[$key] ?? '',
                 ]);
             }
 
@@ -256,6 +257,7 @@ class DraftUlkSinarUvController extends Controller
                             'mata'     => $request->custom_mata[$page][$sampel] ?? null,
                             'siku'     => $request->custom_siku[$page][$sampel] ?? null,
                             'betis'     => $request->custom_betis[$page][$sampel] ?? null,
+                            'tanggal_sampling'     => $request->custom_tanggal_sampling[$page][$sampel] ?? null,
                         ]);
                     }
                 }
@@ -321,7 +323,6 @@ class DraftUlkSinarUvController extends Controller
                 $data_entry = array();
                 $data_custom = array();
                 $cek_regulasi = array();
-
                 foreach ($cek_lhp->lhpsSinaruvDetail->toArray() as $key => $val) {
                     $data_entry[$key] = [
                         'id' => $val['id'],
@@ -335,6 +336,7 @@ class DraftUlkSinarUvController extends Controller
                         'siku' => $val['siku'],
                         'betis' => $val['betis'],
                         'nab' => $val['nab'],
+                        'tanggal_sampling' => $val['tanggal_sampling'],
                     ];
                 }
 
@@ -391,6 +393,7 @@ class DraftUlkSinarUvController extends Controller
                                     'siku' => $val['siku'],
                                     'betis' => $val['betis'],
                                     'nab' => $val['nab'],
+                                    'tanggal_sampling' => $val['tanggal_sampling'],
                                 ];
                             }
                         }

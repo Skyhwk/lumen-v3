@@ -9,6 +9,8 @@
                     <th width="15%" class="pd-5-solid-top-center">STANDART</th>
                     <th width="10%" class="pd-5-solid-top-center" rowspan="2">SUMBER PENCAHAYAAN</th>
                     <th width="10%" class="pd-5-solid-top-center" rowspan="2">JENIS PENGUKURAN</th>
+                    <th width="10%" class="pd-5-solid-top-center" rowspan="2">TANGGAL SAMPLING</th>
+
                 </tr>
                 <tr>
                     <th class="pd-5-solid-top-center" colspan="2">Satuan = LUX</th>
@@ -31,7 +33,7 @@
                         $jenis_pengukuran = isset($v['jenis_pengukuran']) ? $v['jenis_pengukuran'] : '';
                         $nab = isset($v['nab']) ? $v['nab'] : '';
                         $sumber_cahaya = isset($v['sumber_cahaya']) ? $v['sumber_cahaya'] : '';
-
+                        $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                     @endphp
                     <tr>
                         <td class="pd-5-solid-center">
@@ -47,6 +49,8 @@
                             {{ $sumber_cahaya }}</td>
                         <td class="pd-5-solid-center">
                             {{ $jenis_pengukuran }}</td>
+                        <td class="pd-5-solid-center">
+                            {{ $tanggal_sampling }}</td>
                     </tr>
                 @endforeach
 

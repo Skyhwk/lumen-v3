@@ -72,7 +72,7 @@
                     </tr>
 
                 {{-- Tanggal Sampling / Terima --}}
-                <tr>
+                <!-- <tr>
                     <td class="custom5" width="120">
                         @if ($header->status_sampling == 'SD') 
                             Tanggal Terima 
@@ -87,7 +87,7 @@
                             : $header->tanggal_sampling;
                     @endphp
                     <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                </tr>
+                </tr> -->
             </table>
 
                 {{-- Regulasi --}}

@@ -8,6 +8,8 @@
                 <th width="15%" class="pd-5-solid-top-center">STANDART</th>
                 <th width="10%" class="pd-5-solid-top-center" rowspan="2">SUMBER PENCAHAYAAN</th>
                 <th width="10%" class="pd-5-solid-top-center" rowspan="2">JENIS PENGUKURAN</th>
+                <th width="10%" class="pd-5-solid-top-center" rowspan="2">TANGGAL SAMPLING</th>
+
             </tr>
             <tr>
                 <th class="pd-5-solid-top-center" colspan="2">Satuan = LUX</th>
@@ -28,6 +30,7 @@
                     <td class="pd-5-solid-center">{{ $yy['nab'] }}</td>
                     <td class="pd-5-solid-center">{{ $yy['sumber_cahaya'] }}</td>
                     <td class="pd-5-solid-center">{{ $yy['jenis_pengukuran'] }}</td>
+                    <td class="pd-5-solid-center">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                 </tr>
             @endforeach
         </tbody>

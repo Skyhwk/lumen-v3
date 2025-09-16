@@ -71,7 +71,7 @@
                             </table>
                         </td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
@@ -80,7 +80,7 @@
                             $periode = explode(' - ', $header['periode_analisa']);
                             $periode1 = $periode[0] ?? '';
                             $periode2 = $periode[1] ?? '';
-                        @endphp
+                        @endphp -->
                       <!-- <tr>
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>

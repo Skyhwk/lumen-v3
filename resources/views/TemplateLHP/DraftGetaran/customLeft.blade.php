@@ -7,6 +7,7 @@
                     <th width="40%"  class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
                     <th width="21%"  class="custom" colspan="2">HASIL UJI (dBA)</th>
                     <th width="21%" class="custom" rowspan="2">JUMLAH JAM PEMAPARAN PER HARI</th>
+                    <th width="21%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>
                  <tr>
                     <td class="pd-5-solid-center" >KECEPATAN</td> 
@@ -25,6 +26,7 @@
                         $kecepatan = isset($v['kecepatan']) ? str_replace('.', ',', $v['kecepatan']) : '';
                         $percepatan = isset($v['percepatan']) ? $v['percepatan'] : '';
                         $w_paparan = isset($v['w_paparan']) ? $v['w_paparan'] : '';
+                        $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                       
                     @endphp
                     <tr>
@@ -33,6 +35,8 @@
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $kecepatan }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $percepatan }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{{ $w_paparan }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $tanggal_sampling }}</td>
+
                     </tr>
                 @endforeach
 
