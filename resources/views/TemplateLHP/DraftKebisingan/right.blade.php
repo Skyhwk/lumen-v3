@@ -49,7 +49,7 @@
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            {{ $header->metode_sampling[0] }}
+                            {{ $header->metode_sampling[0] ?? '-' }}
                         </td>
                     </tr>
                 </table>
