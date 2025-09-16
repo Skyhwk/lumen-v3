@@ -53,7 +53,7 @@ class AksesMenuController extends Controller
         $userId = $this->user_id;
         
         if ($userId == 1 || $userId == 127) {
-            $data = MasterKaryawan::where('is_active', true)
+            $data = MasterKaryawan::where('master_karyawan.is_active', true)
                 ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
                 ->whereNull('akses_menu.user_id')
                 ->select('master_karyawan.id', 'master_karyawan.user_id', 'master_karyawan.nama_lengkap')
