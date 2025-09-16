@@ -131,7 +131,7 @@ class VerifikasiBotolController extends Controller
                     ->first();
 
                 if (!$data) {
-                    return response()->json(["message" => "Data Lapangan tidak ditemukan", "code" => 404], 404);
+                    return response()->json(["message" => "Koding botol tidak ditemukan di Order Detail", "code" => 404], 404);
                 }
                 // dd($data);
                 $lapangan = DataLapanganAir::where('no_sampel', $data->no_sampel)->first();
@@ -147,36 +147,35 @@ class VerifikasiBotolController extends Controller
                         $type = $item->type_botol;
                     }
 
-                $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
+                    $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
 
-                if (isset($parameters->emisi)) {
-                    if(in_array($type, $paramExplane)){
-                        unset($dataDisplay[$key]);
+                    if (isset($parameters->emisi)) {
+                        if(in_array($type, $paramExplane)){
+                            unset($dataDisplay[$key]);
+                        }
                     }
-                }
-                if (isset($parameters->air->$type)) {
-                    $item->disiapkan = $parameters->air->$type->disiapkan;
-                    if ($item->koding == $request->no_sampel) {
-                        $item->scanned = 1;
-                    }
-                } else if (isset($parameters->udara->$type)) {
-                    $item->disiapkan = $parameters->udara->$type->disiapkan;
-                    if ($item->koding == $request->no_sampel) {
-                        $item->scanned = 1;
-                    }
-                } else if (isset($parameters->emisi->$type)) {
+                    if (isset($parameters->air->$type)) {
+                        $item->disiapkan = $parameters->air->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->scanned = 1;
+                        }
+                    } else if (isset($parameters->udara->$type)) {
+                        $item->disiapkan = $parameters->udara->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->scanned = 1;
+                        }
+                    } else if (isset($parameters->emisi->$type)) {
 
-
-                    $item->disiapkan = $parameters->emisi->$type->disiapkan;
-                    if ($item->koding == $request->no_sampel) {
-                        $item->scanned = 1;
+                        $item->disiapkan = $parameters->emisi->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->scanned = 1;
+                        }
+                    } else {
+                        $item->disiapkan = null;
                     }
-                } else {
-                    $item->disiapkan = null;
-                }
-
                 }
             }
+            
             foreach ($dataDisplay as $item) {
                 if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
                     $item->disiapkan = '1';

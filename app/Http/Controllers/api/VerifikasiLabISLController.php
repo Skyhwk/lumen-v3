@@ -116,7 +116,7 @@ class VerifikasiLabISLController extends Controller
                     ->first();
 
                 if (!$data) {
-                    return response()->json(["message" => "Data Lapangan tidak ditemukan", "code" => 404], 404);
+                    return response()->json(["message" => "Botol Belum di SCAN di TC", "code" => 404], 404);
                 }
                 
                 $dataDisplay = json_decode($data->data_detail); 
@@ -135,19 +135,19 @@ class VerifikasiLabISLController extends Controller
                     }
 
                     
-                //     // if (isset($parameters->air->$type)) {
-                //     //     $item->disiapkan = $parameters->air->$type->disiapkan;
-                //     //     if ($item->koding == $request->no_sampel) {
-                //     //         $item->add = 1;
-                //     //     }
-                //     // } else if (isset($parameters->udara->$type)) {
-                //     //     $item->disiapkan = $parameters->udara->$type->disiapkan;
-                //     //     if ($item->koding == $request->no_sampel) {
-                //     //         $item->add = 1;
-                //     //     }
-                //     // } else {
-                //     //     $item->disiapkan = null;
-                //     // }
+                    // if (isset($parameters->air->$type)) {
+                    //     $item->disiapkan = $parameters->air->$type->disiapkan;
+                    //     if ($item->koding == $request->no_sampel) {
+                    //         $item->add = 1;
+                    //     }
+                    // } else if (isset($parameters->udara->$type)) {
+                    //     $item->disiapkan = $parameters->udara->$type->disiapkan;
+                    //     if ($item->koding == $request->no_sampel) {
+                    //         $item->add = 1;
+                    //     }
+                    // } else {
+                    //     $item->disiapkan = null;
+                    // }
                 }
 
 
@@ -173,10 +173,6 @@ class VerifikasiLabISLController extends Controller
             }
 
             $dataDisplay = array_values($dataDisplay);
-
-           
-
-
 
             DB::commit();
             return response()->json([
