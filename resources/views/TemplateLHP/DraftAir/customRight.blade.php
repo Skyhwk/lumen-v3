@@ -70,7 +70,11 @@
                             }, $dataArray);
 
                             foreach ($result as $index => $item) {
-                                $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                if (trim($item) == '-') {
+                                    $methode_sampling .= "<span><span>-</span></span><br>";
+                                } else {
+                                    $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                }
                             }
 
                             if($header->status_sampling == 'SD') {
@@ -84,7 +88,7 @@
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{$methode_sampling }}</td>
+                        <td class="custom5">{!! $methode_sampling !!}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
