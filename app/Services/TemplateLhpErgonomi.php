@@ -426,8 +426,11 @@ class TemplateLhpErgonomi
             ];
     
             $pengukuran = json_decode($dataRwl->pengukuran,true);
+            
             $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran['Tubuh_Bagian_Atas']);
+            
             $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran['Tubuh_Bagian_Bawah']);
+            
             $groupedAtas  = $this->groupByKategori($dataAtas);
             $groupedBawah  = $this->groupByKategori($dataBawah);
             // dd($personal);
@@ -527,52 +530,65 @@ class TemplateLhpErgonomi
     }
     
     private function flattenPengukuran($sectionName, $data)
-    {
+    { 
         $result = [];
-
-        foreach ($data as $kategori => $subdata) {
-            if (is_iterable($subdata)) {
-                foreach ($subdata as $potensi => $value) {
-                    
-                    // kalau value langsung string
-                    if (is_string($value)) {
-                        $result[] = [
-                            'section'  => $sectionName,
-                            'kategori' => $kategori,
-                            'potensi'  => $potensi,
-                            'skor'     => $value,
-                        ];
-                    }
-
-                    // kalau value array/object
-                    elseif (is_iterable($value)) {
-                        foreach ($value as $subpotensi => $subval) {
-                            
-                            if (is_string($subval)) {
-                                $result[] = [
-                                    'section'  => $sectionName,
-                                    'kategori' => $kategori,
-                                    'potensi'  => $potensi . ' - ' . $subpotensi,
-                                    'skor'     => $subval,
-                                ];
-                            }
-
-                            // kalau masih nested lagi
-                            elseif (is_iterable($subval)) {
-                                foreach ($subval as $detailKey => $detailVal) {
+        if($data != null){
+            foreach ($data as $kategori => $subdata) {
+                
+                if (is_iterable($subdata)) {
+                    foreach ($subdata as $potensi => $value) {
+                        
+                        // kalau langsung string
+                        if (is_string($value)) {
+                            $result[] = [
+                                'section'  => $sectionName,
+                                'kategori' => $kategori,
+                                'potensi'  => $potensi,
+                                'skor'     => $value,
+                            ];
+                        }
+    
+                        // kalau array/object
+                        elseif (is_iterable($value)) {
+                            foreach ($value as $subpotensi => $subval) {
+                                
+                                if (is_string($subval)) {
                                     $result[] = [
                                         'section'  => $sectionName,
                                         'kategori' => $kategori,
-                                        'potensi'  => $potensi . ' - ' . $subpotensi . ' - ' . $detailKey,
-                                        'skor'     => $detailVal,
+                                        'potensi'  => $potensi . ' - ' . $subpotensi,
+                                        'skor'     => $subval,
                                     ];
+                                }
+    
+                                elseif (is_iterable($subval)) {
+                                    foreach ($subval as $detailKey => $detailVal) {
+                                        $result[] = [
+                                            'section'  => $sectionName,
+                                            'kategori' => $kategori,
+                                            'potensi'  => $potensi . ' - ' . $subpotensi . ' - ' . $detailKey,
+                                            'skor'     => $detailVal,
+                                        ];
+                                    }
                                 }
                             }
                         }
                     }
+                } 
+                // kalau $subdata langsung string (kayak "Faktor Tidak Dapat Di Kontrol")
+                elseif (is_string($subdata)) {
+                    $result[] = [
+                        'section'  => $sectionName,
+                        'kategori' => $kategori,
+                        'potensi'  => $kategori, // bisa juga kosong
+                        'skor'     => $subdata,
+                    ];
                 }
+                
             }
         }
+      
+
 
         return $result;
     }

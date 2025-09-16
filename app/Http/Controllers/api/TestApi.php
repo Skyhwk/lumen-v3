@@ -9,7 +9,8 @@ use App\Services\{
     GetAtasan,
     Notification,
     Printing,
-    TemplateLhpErgonomi
+    TemplateLhpErgonomi,
+    GenerateQrDocumentLhp
 };
 use App\Models\{
     DataLapanganErgonomi,
@@ -997,7 +998,45 @@ class TestApi extends Controller
             Carbon::setLocale('id');
             $render = new TemplateLhpErgonomi();
             $noSampel = $request->no_sampel; // Ambil no_sampel dari request frontend $request->no_sampel
+            
+            /* prepare data pengesahan */
+            $tanggalLhp = date('Y-m-d H:i:s');
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $tanggalLhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
 
+            /* save file */
+            $saveFilePDF = new DraftErgonomiFile;
+            $pdfFile = $saveFilePDF::where('no_sampel',$noSampel)->first();
+            
+            if ($pdfFile === null) {
+                $pdfFile = new $saveFilePDF(); // bikin object baru
+            }
+            $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+            $pdfFile->no_sampel = $noSampel;
+            $pdfFile->create_at = Carbon::now('Asia/Jakarta');
+            $pdfFile->nama_karyawan = $nama_perilis;
+            $pdfFile->jabatan_karyawan = $jabatan_perilis;
+            $pdfFile->create_by =$this->karyawan;
+            $pdfFile->save();
+            /* prepare Qr Document */
+            $file_qr = new GenerateQrDocumentLhp();
+            $dataLHP = DataLapanganErgonomi::with(['detail'])
+                    ->where('no_sampel', $noSampel)->first();
+            $dataQr =(object)[
+                'id_document' => $saveFilePDF->id,
+                'Nomor_LHP' => $dataLHP->detail->cfr,
+                'Nama_Pelanggan' => $dataLHP->detail->nama_perusahaan,
+                'Pelanggan_ID' => substr($dataLHP->detail->no_order, 0, 6),
+                'Tanggal_Pengesahan' => Carbon::parse($tanggalLhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                'Disahkan_Oleh' => $pengesahan->nama_karyawan,
+                'Jabatan' => $pengesahan->jabatan_karyawan
+            ];
+            $file_qr = new GenerateQrDocumentLhp();
+            $pathQr = $file_qr->insert('LHP_ERGONOMI', $header, $this->karyawan);
+            $pdfFile->file_qr = $pathQr;
+            
             // Definisikan metode yang ingin digabungkan dan ID methodnya
             $methodsToCombine = [
                 'nbm' => 1,  //✅
@@ -1867,25 +1906,47 @@ class TestApi extends Controller
                 
                 // Setup header yang sama untuk semua versi
                 /* width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; */
-                
-                
-                $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
-                        <tr>
-                        
-                            <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
-                                <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
-                            </td>
-                            <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
-                                <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
-                            </td>
-                            <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
-                                <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
-                            </td>
-                        </tr>
-                    </table>';
-            
-            $pdf->SetHeader($header);
-
+                switch($type) {
+                    case 'draft':
+                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                <tr>
+                                    <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                    </td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                    </td>
+                                <tr>
+                                </table>';
+                            break;
+                    case 'lhp':
+                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                <tr>
+                                    <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                    </td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                    </td>
+                                <tr>
+                                </table>';
+                            break;
+                    case 'lhp_digital':
+                        $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                <tr>
+                                
+                                    <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                        <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
+                                    </td>
+                                    <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
+                                        <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                    </td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                        <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
+                                    </td>
+                                </tr>
+                                 </table>';
+                            break;
+                }
+               $pdf->SetHeader($header);
                 // Setup watermark dan footer berdasarkan tipe
                 switch($type) {
                     case 'draft':
@@ -1968,10 +2029,8 @@ class TestApi extends Controller
                             </table>';
                         break;
                 }
-                
                 $pdf->SetHTMLFooter($footerHtml,'0');
                 $pdf->setAutoBottomMargin = 'stretch';
-                
                 // Tulis semua konten HTML
                 $firstPage = true;
                 foreach ($allHtmlContent as $htmlContent) {
@@ -1983,10 +2042,9 @@ class TestApi extends Controller
                 }
                 
                 // Simpan file
-                $namaFile = 'ERGONOMI_'.str_replace('/', '_', $noSampel).'.pdf';
+                $namaFile = 'LHP_Ergonomi_'.str_replace('/', '_', $noSampel).'.pdf';
                 $pathFile = $dir.'/'.$type.'/'.$namaFile;
                 $pdf->Output($pathFile, 'F');
-                
                 return $pdf;
             };
 
@@ -1994,8 +2052,8 @@ class TestApi extends Controller
             $pdfDraft = $createPDF('draft');
             $pdfLhp = $createPDF('lhp'); 
             $pdfLhpDigital = $createPDF('lhp_digital');
-
-            // Return salah satu PDF (misalnya draft) sebagai response
+            $pdfFile->name_file = $namaFile;
+            $pdfFile->save();
             return response($pdfDraft->Output('laporan.pdf', 'S'), 200, [
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',

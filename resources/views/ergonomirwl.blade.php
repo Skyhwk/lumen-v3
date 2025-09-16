@@ -85,7 +85,6 @@
             width: 39%;
             float: right;
             box-sizing: border-box;
-            margin-top: 20px;
             /* Margin atas asli dari kolom kanan */
         }
 
@@ -264,16 +263,25 @@
             width: auto;
             display: block;
         }
+        /* info bio */
+        .info-table {
+            border: 0;
+            margin-bottom: 6px;
+        }
+
+        .info-table td {
+            border: 0;
+            padding: 0px 2px;
+            font-size: 8pt;
+            vertical-align: top;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>LAPORAN HASIL PENGUJIANas</h1>
-
         <div class="content-layout clearfix">
             <div class="column-left">
-                <div class="table-title">DATA VARIABEL PENGUKURAN U</div>
                 <table cellpadding="4" cellspacing="0">
                     <thead>
                         <tr>
@@ -484,48 +492,47 @@
 
                 <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <div class="info-line">
-                        <span class="info-label">Nama Pelanggan</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-label">{{$personal->nama_pelanggan}}</span>
-                    </div>
-                    <div class="info-line">
-                        <span class="info-label">Alamat / Lokasi</span>
-                        <span class="info-separator">:</span>
-                        <span class="">{{$personal->alamat_pelanggan}}</span>
-                    </div>
-                    <div class="info-line">
-                        <span class="info-label">Sampling</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-label"></span>
-                    </div>
-
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                        </tr>
+                    </table>
                     <div class="info-header">Informasi Sampling</div>
-                    <div class="info-line">
-                        <span class="info-label">Tanggal Sampling</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-label">{{$personal->tanggal_sampling}}</span>
-                    </div>
-                    <div class="info-line">
-                        <span class="info-label">Periode Analisa</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-value"></span>
-                    </div>
-
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{$personal->tanggal_sampling}}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Periode Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;"></td>
+                        </tr>
+                    </table>
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <div class="info-line">
-                        <span class="info-label">Nama Pekerja</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-value">{{ $personal->nama_pekerja }}</span>
-                    </div>
-                    <div class="info-line">
-                        <span class="info-label">Jenis Pekerjaan</span>
-                        <span class="info-separator">:</span>
-                        <span class="info-value">{{ $personal->divisi}}</span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pekerja</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{ $personal->nama_pekerja }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->divisi}}</td>
+                        </tr>
+                    </table>
                 </div>
 
-                <div style="margin-bottom: 10px; margin-top:20px;">
+                <div style="margin-bottom: 10px; margin-top:8px;">
                     <div style="text-align: center; font-weight: bold; padding: 3px;">Tabel Klasifikasi Tingkat Risiko
                         Berdasarkan Nilai LI**</div>
                     <table style="margin-bottom: 0;">

@@ -15,19 +15,6 @@
 <body>
     <div class="page-container">
         <!-- DIV main-header-title LAPORAN HASIL PENGUJIAN -->
-        <table class="header-table">
-            <tr>
-                <td class="left-cell">
-                    <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
-                </td>
-                <td class="center-cell">
-                    <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
-                </td>
-                <td class="right-cell">
-                    <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
-                </td>
-            </tr>
-        </table>
         <div class="two-column-layout">
             <!-- KIRI -->
             <div class="column column-left">

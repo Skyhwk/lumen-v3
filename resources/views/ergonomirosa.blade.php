@@ -187,20 +187,6 @@
 </head>
 <body>
     <!-- Header -->
-    <table class="header-table">
-        <tr>
-            <td class="left-cell">
-                <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
-            </td>
-            <td class="center-cell">
-                <div class="main-header">LAPORAN HASIL PENGUJIAN</div>
-            </td>
-            <td class="right-cell">
-                <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
-            </td>
-        </tr>
-    </table>
-
     <!-- Main Content Container -->
     <div class="main-container">
         <!-- Left Section -->

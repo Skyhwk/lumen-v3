@@ -1,11 +1,5 @@
 <table class="body" width="100%" style="vertical-align: top;">
-    <tr class="mt-2 mb-4">
-        <th colspan="3" style="text-align:center; font-family:Arial, sans-serif; font-size:large;">
-            <u>
-                LAPORAN HASIL PENGUJIAN
-            </u>
-        </th>
-    </tr>
+    
     <tr>
         <td width="30%" style="padding-right: 5px;">
             <table class="skor-a-1" width="100%" border="1"

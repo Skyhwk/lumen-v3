@@ -271,20 +271,6 @@
 <body>
     <div class="container">
         <!-- Header -->
-        <table class="header-table">
-            <tr>
-                <td class="left-cell">
-                    <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
-                </td>
-                <td class="center-cell">
-                    <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
-                </td>
-                <td class="right-cell">
-                    <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
-                </td>
-            </tr>
-        </table>
-        
         <!-- Main Content -->
         <div class="main-content">
             <!-- Column 1: Skor A (30%) -->
