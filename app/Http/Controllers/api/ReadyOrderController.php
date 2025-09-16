@@ -1517,7 +1517,7 @@ class ReadyOrderController extends Controller
                     ]);
                     return response()->json([
                         'status' => 'failed',
-                        'message' => 'Terdapat entri jadwal sampling yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
+                        'message' => 'Terdapat kategori ' . implode(", ", $mark) . ' yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
                     ], 401);
                 }
             }
@@ -1584,7 +1584,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = [ 'sucita@intilab.com'];
+            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com', 'kharina@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
@@ -2374,7 +2374,7 @@ class ReadyOrderController extends Controller
                     ]);
                     return response()->json([
                         'status' => 'failed',
-                        'message' => 'Terdapat entri jadwal sampling yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
+                        'message' => 'Terdapat kategori ' . implode(", ", $mark) . ' yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
                     ], 401);
                 }
             }
@@ -2441,7 +2441,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = [ 'sucita@intilab.com'];
+            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com', 'kharina@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
