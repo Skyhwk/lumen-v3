@@ -7,6 +7,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Models\MasterSubKategori;
+use App\Models\PersiapanSampelHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
@@ -675,6 +676,54 @@ class JadwalServices
                     }
                 }
             }
+
+            // LOGIC UPDATE PSHEADER
+            try {
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
+                
+                if ($orderh && !empty($dataUpdate->kategori)) {
+                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                    $array_no_samples = [];
+                    foreach ($dataUpdate->kategori as $kategori) {
+                        $pra_no_sample = explode(" - ", $kategori)[1];
+                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                    }
+
+                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    $psh = PersiapanSampelHeader::where('is_active', 1)
+                        ->where(function($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                            }
+                        })
+                        ->first();
+
+                    if ($psh) {
+                        // 3. Siapin data sampler yang baru
+                        $newSamplers = [];
+                        foreach ($dataUpdate->sampler as $s) {
+                            // Ambil namanya aja, sesuai format 'id,nama'
+                            $newSamplers[] = explode(',', $s)[1]; 
+                        }
+
+                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
+                        $oldSamplers = explode(',', $psh->sampler_jadwal);
+                        $diff = array_diff($oldSamplers, $newSamplers);
+                        // 4. Update field sampler_jadwal dan save
+                        if (count($diff) > 0) {
+                            $psh->no_sampel = json_encode($array_no_samples);
+                            $psh->sampler_jadwal = implode(',', $newSamplers);
+                            $psh->updated_by = $dataUpdate->karyawan;
+                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                            $psh->save();
+                        }
+                    }
+                }
+            } catch (\Throwable $th) {
+                DB::rollBack();
+                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+            }
+
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -1006,6 +1055,54 @@ class JadwalServices
                     }
                 }
             }
+
+            // LOGIC UPDATE PSHEADER
+            try {
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
+                
+                if ($orderh && !empty($dataUpdate->kategori)) {
+                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                    $array_no_samples = [];
+                    foreach ($dataUpdate->kategori as $kategori) {
+                        $pra_no_sample = explode(" - ", $kategori)[1];
+                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                    }
+
+                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    $psh = PersiapanSampelHeader::where('is_active', 1)
+                        ->where(function($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                            }
+                        })
+                        ->first();
+
+                    if ($psh) {
+                        // 3. Siapin data sampler yang baru
+                        $newSamplers = [];
+                        foreach ($dataUpdate->sampler as $s) {
+                            // Ambil namanya aja, sesuai format 'id,nama'
+                            $newSamplers[] = explode(',', $s)[1]; 
+                        }
+
+                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
+                        $oldSamplers = explode(',', $psh->sampler_jadwal);
+                        $diff = array_diff($oldSamplers, $newSamplers);
+                        // 4. Update field sampler_jadwal dan save
+                        if (count($diff) > 0) {
+                            $psh->no_sampel = json_encode($array_no_samples);
+                            $psh->sampler_jadwal = implode(',', $newSamplers);
+                            $psh->updated_by = $dataUpdate->karyawan;
+                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                            $psh->save();
+                        }
+                    }
+                }
+            } catch (\Throwable $th) {
+                DB::rollBack();
+                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+            }
+
             DB::commit();
             return true;
         } catch (Exception $ex) {

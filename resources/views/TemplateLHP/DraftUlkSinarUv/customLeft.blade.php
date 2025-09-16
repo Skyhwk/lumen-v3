@@ -8,6 +8,7 @@
                     <th width="30%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
                     <th width="16%" rowspan="2" class="custom">NAB (mW/cm²)**</th>
                     <th width="16%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
+                    <th width="16%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th class="custom">MATA</th>
@@ -29,6 +30,7 @@
                         $betis = isset($v['betis']) ? $v['betis'] : '';
                         $waktu_pemaparan = isset($v['waktu_pemaparan']) ? \App\Helpers\Helper::waktuPemaparan($v['waktu_pemaparan']) : '';
                         $nab = isset($v['nab']) ? $v['nab'] : '';
+                        $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                         
                       
                     @endphp
@@ -40,6 +42,7 @@
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $betis }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $nab }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $waktu_pemaparan }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $tanggal_sampling }}</td>
                     </tr>
                 @endforeach
 
