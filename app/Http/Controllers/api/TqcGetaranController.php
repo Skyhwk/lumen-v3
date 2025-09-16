@@ -5,10 +5,8 @@ namespace App\Http\Controllers\api;
 use App\Models\HistoryAppReject;
 use App\Models\LhpsGetaranDetail;
 use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsPencahayaanHeader;
+
 use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
 use App\Models\DetailLingkunganHidup;
 use App\Models\DataLapanganIklimPanas;
 use App\Models\DataLapanganIklimDingin;
@@ -30,8 +28,7 @@ use App\Models\Subkontrak;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsKebisinganHeader;
+
 use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -56,7 +53,7 @@ class TqcGetaranController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
+            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 
@@ -168,12 +165,7 @@ class TqcGetaranController extends Controller
                     ->addSelect(DB::raw("'subkontrak' as data_type"))
                     ->get();
 
-                // $psikologi = PsikologiHeader::with(['data_lapangan'])
-                //     ->where('no_sampel', $request->no_sampel)
-                //     ->where('is_approve', 1)
-                //     ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'is_active')
-                //     ->addSelect(DB::raw("'psikologi' as data_type"))
-                //     ->get();
+          
 
                 $combinedData = $lingkunganData->merge($directData)->merge($subkontrak);
 
