@@ -102,13 +102,13 @@ class VerifikasiBotolController extends Controller
                 $scan = ScanBotol::where('no_sampel', $request->no_sampel)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
+
                 foreach ($dataDisplay as $item) {
                     if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
                         $type = $item->parameter;
                     } else {
                         $type = $item->type_botol;
                     }
-
 
                     if (isset($parameters->air->$type)) {
                         $item->disiapkan = $parameters->air->$type->disiapkan;
@@ -124,6 +124,7 @@ class VerifikasiBotolController extends Controller
                         $item->disiapkan = null;
                     }
                 }
+                
             } else {
 
                 $data = OrderDetail::whereNotNull('persiapan')
@@ -133,7 +134,7 @@ class VerifikasiBotolController extends Controller
                 if (!$data) {
                     return response()->json(["message" => "Koding botol tidak ditemukan di Order Detail", "code" => 404], 404);
                 }
-                // dd($data);
+                
                 $lapangan = DataLapanganAir::where('no_sampel', $data->no_sampel)->first();
                 $scan = ScanSampelTc::where('no_sampel', $data->no_sampel)->first();
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
@@ -175,7 +176,7 @@ class VerifikasiBotolController extends Controller
                     }
                 }
             }
-            
+
             foreach ($dataDisplay as $item) {
                 if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
                     $item->disiapkan = '1';
@@ -188,7 +189,6 @@ class VerifikasiBotolController extends Controller
                 $scan->filename = json_decode($scan->filename);
             }
 
-
             if ($data->kategori_2 == '4-Udara') {
                 $categoris = "udara";
             } else if ($data->kategori_2 == '1-Air') {
@@ -196,6 +196,7 @@ class VerifikasiBotolController extends Controller
             } else {
                 $categoris = "emisi";
             }
+
             return response()->json([
                 'message' => 'Data berhasil didapatkan',
                 'data' => $dataDisplay,
@@ -205,6 +206,7 @@ class VerifikasiBotolController extends Controller
                 'no_sampel' => $request->no_sampel,
                 'kategori' => $categoris
             ], 200);
+
         } catch (\Exception $th) {
             return response()->json([
                 "message" => $th->getMessage(),
