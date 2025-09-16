@@ -19,6 +19,7 @@ use App\Models\MasterKaryawan;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\KebisinganHeader;
+use App\Models\Parameter;
 
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
@@ -74,22 +75,21 @@ class DraftUdaraKebisinganController extends Controller
     public function handleMetodeSampling(Request $request)
     {
         try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
-            }
+            $id_parameter = array_map(fn($item) => explode(';', $item)[0], $request->parameter);
+            
+            $method = Parameter::where('id', $id_parameter)
+                ->pluck('method')
+                ->map(function($item) {
+                    return $item === null ? '-' : $item;
+                })
+                ->toArray();
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Available data retrieved successfully',
+                'data' => $method
+            ], 200);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -178,6 +178,7 @@ class DraftUdaraKebisinganController extends Controller
             $cleaned_hasil_uji  = $this->cleanArrayKeys($request->hasil_uji ?? []);
             $cleaned_ls         = $this->cleanArrayKeys($request->ls ?? []);
             $cleaned_lm         = $this->cleanArrayKeys($request->lm ?? []);
+            $cleaned_tanggal_sampling = $this->cleanArrayKeys($request->tanggal_sampling ?? []);
             $cleaned_nama_pekerja = [];
             $cleaned_nab        = [];
 
@@ -194,6 +195,7 @@ class DraftUdaraKebisinganController extends Controller
                     $detail->no_sampel = $cleaned_noSampel[$val];
                     $detail->param = $cleaned_param[$val];
                     $detail->lokasi_keterangan = $cleaned_lokasi[$val];
+                    $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val];
                     $detail->min = $cleaned_min[$val] ?? null;
                     $detail->max = $cleaned_max[$val] ?? null;
                     $detail->leq_ls = $cleaned_ls[$val] ?? null;
@@ -219,6 +221,7 @@ class DraftUdaraKebisinganController extends Controller
                     $custom_cleaned_lokasi     = $this->cleanArrayKeys($request->custom_lokasi[$key]);
                     $custom_cleaned_noSampel   = $this->cleanArrayKeys($request->custom_no_sampel[$key]);
                     $custom_cleaned_hasil_uji  = $this->cleanArrayKeys($request->custom_hasil_uji[$key] ?? []);
+                    $custom_cleaned_tanggal_sampling  = $this->cleanArrayKeys($request->custom_tanggal_sampling[$key] ?? []);
                     $custom_cleaned_ls         = $this->cleanArrayKeys($request->custom_ls[$key] ?? []);
                     $custom_cleaned_lm         = $this->cleanArrayKeys($request->custom_lm[$key] ?? []);
                     $custom_cleaned_nama_pekerja = [];
@@ -239,6 +242,7 @@ class DraftUdaraKebisinganController extends Controller
                             $custom->no_sampel = $custom_cleaned_noSampel[$val];
                             $custom->param = $custom_cleaned_param[$val];
                             $custom->lokasi_keterangan = $custom_cleaned_lokasi[$val];
+                            $custom->tanggal_sampling = $custom_cleaned_tanggal_sampling[$val];
                             $custom->min = $custom_cleaned_min[$val] ?? null;
                             $custom->max = $custom_cleaned_max[$val] ?? null;
                             $custom->leq_ls = $custom_cleaned_ls[$val] ?? null;
@@ -312,84 +316,131 @@ class DraftUdaraKebisinganController extends Controller
         return array_combine($cleanedKeys, array_values($arr));
     }
 
-         public function updateTanggalLhp(Request $request)
-            {
-                DB::beginTransaction();
-                try {
-                    $dataHeader = LhpsKebisinganHeader::find($request->id);
+    public function updateTanggalLhp(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dataHeader = LhpsKebisinganHeader::find($request->id);
 
-                    if (!$dataHeader) {
-                        return response()->json([
-                            'status' => false,
-                            'message' => 'Data tidak ditemukan, harap adjust data terlebih dahulu'
-                        ], 404);
-                    }
-
-                    $dataHeader->tanggal_lhp = $request->value;
-
-                    $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
-                        ->orderByDesc('berlaku_mulai')
-                        ->first();
-
-                    $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
-                    $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-
-                    // Update QR Document jika ada
-                    $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
-                    if ($qr) {
-                        $dataQr = json_decode($qr->data, true);
-                        $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
-                        $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
-                        $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
-                        $qr->data = json_encode($dataQr);
-                        $qr->save();
-                    }
-
-                    // Render ulang file LHP
-                    $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
-                    if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
-                        $fileName = LhpTemplate::setDataDetail($detail)
-                            ->setDataHeader($dataHeader)
-                            ->whereView('DraftKebisinganPersonal')
-                            ->render();
-                    } else {
-                        $fileName = LhpTemplate::setDataDetail($detail)
-                            ->setDataHeader($dataHeader)
-                            ->whereView('DraftKebisingan')
-                            ->render();
-                    }
-
-                
-                    $dataHeader->file_lhp = $fileName;
-                    $dataHeader->save();
-
-                    DB::commit();
-                    return response()->json([
-                        'status' => true,
-                        'message' => 'Tanggal LHP berhasil diubah',
-                        'data' => $dataHeader
-                    ], 200);
-                } catch (\Throwable $th) {
-                    DB::rollBack();
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Terjadi kesalahan: ' . $th->getMessage()
-                    ], 500);
-                }
+            if (!$dataHeader) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan, harap adjust data terlebih dahulu'
+                ], 404);
             }
+
+            $dataHeader->tanggal_lhp = $request->value;
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
+            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+            // Update QR Document jika ada
+            $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+            if ($qr) {
+                $dataQr = json_decode($qr->data, true);
+                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                $qr->data = json_encode($dataQr);
+                $qr->save();
+            }
+
+            // Render ulang file LHP
+            $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
+            if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
+                $fileName = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($dataHeader)
+                    ->whereView('DraftKebisinganPersonal')
+                    ->render();
+            } else {
+                $fileName = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($dataHeader)
+                    ->whereView('DraftKebisingan')
+                    ->render();
+            }
+
+        
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Tanggal LHP berhasil diubah',
+                'data' => $dataHeader
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
+    }
 
     //Amang
     public function handleDatadetail(Request $request)
     {
-         $id_category = explode('-', $request->kategori_3)[0];
+        $id_category = explode('-', $request->kategori_3)[0];
+
         try {
-             $cekLhp = LhpsKebisinganHeader::where('no_lhp', $request->cfr)
+            // Ambil LHP yang sudah ada
+            $cekLhp = LhpsKebisinganHeader::where('no_lhp', $request->cfr)
                 ->where('id_kategori_3', $id_category)
                 ->where('is_active', true)
                 ->first();
+
+            // Ambil list no_sampel dari order yang memenuhi syarat
+            $orders = OrderDetail::where('cfr', $request->cfr)
+                ->where('is_approve', 0)
+                ->where('is_active', true)
+                ->where('kategori_2', '4-Udara')
+                ->where('kategori_3', $request->kategori_3)
+                ->where('status', 2)
+                ->pluck('no_sampel');
+
+            // Ambil data KebisinganHeader + relasinya
+            $kebisinganData = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
+                ->whereIn('no_sampel', $orders)
+                ->where('is_approved', 1)
+                ->where('is_active', 1)
+                ->where('lhps', 1)
+                ->get();
             
+            // Mapping data ke array associative
+            $mappedData = $kebisinganData->map(function ($val) {
+                $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_terima;
+                return [
+                    'lokasi_keterangan' => $val->data_lapangan->lokasi_titik_sampling
+                        ?? $val->data_lapangan->keterangan
+                        ?? $val->data_lapangan_personal->keterangan
+                        ?? null,
+                    'paparan'          => $val->data_lapangan->jam_pemaparan
+                        ?? $val->data_lapangan_personal->waktu_pengukuran
+                        ?? null,
+                    'titik_koordinat'  => $val->data_lapangan->titik_koordinat
+                        ?? $val->data_lapangan_personal->titik_koordinat
+                        ?? null,
+                    'nama_pekerja'     => $val->data_lapangan_personal->created_by ?? null,
+                    'id'              => $val->id,
+                    'no_sampel'       => $val->no_sampel,
+                    'param'           => $val->parameter,
+                    'min'             => $val->min,
+                    'max'             => $val->max,
+                    'hasil_uji'       => $val->ws_udara->hasil1 ?? null,
+                    'nab'             => $val->ws_udara->nab ?? null,
+                    'tanggal_sampling'=> Carbon::parse($tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY')
+                ];
+            })->values()->toArray();
+
             $jumlah_custom = count($request->regulasi) - 1;
-            if($cekLhp) {
+
+            // Jika ada LHP yang sudah tersimpan
+            if ($cekLhp) {
                 $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
                 $custom = LhpsKebisinganCustom::where('id_header', $cekLhp->id)
                     ->get()
@@ -398,156 +449,68 @@ class DraftUdaraKebisinganController extends Controller
 
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
-                $data = [];
-                $data1 = [];
-                $hasil = [];
+                // Filter data yang belum ada di detail
+                $data_all = collect($mappedData)
+                    ->reject(fn($item) => in_array($item['no_sampel'], $existingSamples))
+                    ->map(fn($item) => array_merge($item, ['status' => 'belom_diadjust']))
+                    ->values()
+                    ->toArray();
 
-                $orders = OrderDetail::where('cfr', $request->cfr)
-                    ->where('is_approve', 0)
-                    ->where('is_active', true)
-                    ->where('kategori_2', '4-Udara')
-                    ->where('kategori_3', $request->kategori_3)
-                    ->where('status', 2)
-                    ->pluck('no_sampel');
+                // Gabungkan dengan detail lama
+                $detail = $detail->toArray();
+                $detail = array_merge($detail, $data_all);
 
-                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
-                    ->whereIn('no_sampel', $orders)
-                    ->where('is_approved', 1)
-                    ->where('is_active', 1)
-                    ->where('lhps', 1)
-                    ->get();
-
-                $i = 0;
-                if ($data->isNotEmpty()) {
-                    foreach ($data as $val) {
-                        $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling 
-                            ?? $val->data_lapangan->keterangan 
-                            ?? $val->data_lapangan_personal->keterangan 
-                            ?? null;
-                        $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan 
-                            ?? $val->data_lapangan_personal->waktu_pengukuran 
-                            ?? null;
-                        $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat 
-                            ?? $val->data_lapangan_personal->titik_koordinat 
-                            ?? null;
-                        $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
-                        $data1[$i]['id'] = $val->id;
-                        $data1[$i]['no_sampel'] = $val->no_sampel;
-                        $data1[$i]['param'] = $val->parameter;
-                        $data1[$i]['min'] = $val->min;
-                        $data1[$i]['max'] = $val->max;
-                        $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
-                        $data1[$i]['nab'] = $val->ws_udara->nab;
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
-
-                $data_all = [];
-                $a = 0;
-                foreach ($hasil as $key => $value) {
-                    foreach ($value as $row => $col) {
-                        if (!in_array($col['no_sampel'], $existingSamples)) {
-                            $col['status'] = 'belom_diadjust';
-                            $data_all[$a] = $col;
-                            $a++;
-                        }
-                    }
-                }
-
-                // gabungkan dengan detail
-                foreach ($data_all as $key => $value) {
-                    $detail[] = $value;
-                }
-
+                // Tambahkan data ke custom sesuai page
                 foreach ($custom as $idx => $cstm) {
-                    foreach ($data_all as $key => $value) {
+                    foreach ($data_all as $value) {
                         $value['page'] = $idx;
                         $custom[$idx][] = $value;
                     }
                 }
-                if(count($custom) < $jumlah_custom) {
+
+                // Jika jumlah custom kurang dari jumlah regulasi, tambahkan satu halaman lagi
+                if (count($custom) < $jumlah_custom) {
                     $custom[] = $detail;
                 }
-                return response()->json([
-                    'data' => $cekLhp,
-                    'detail' => $detail,
-                    'custom' => $custom,
-                    'success' => true,
-                    'status' => 200,
-                    'message' => 'Data berhasil diambil'
-                ], 201);  
-            } else {
-                $custom = array();
-                $data = array();
-                $data1 = array();
-                $hasil = [];
-                $orders = OrderDetail::where('cfr', $request->cfr)
-                    ->where('is_approve', 0)
-                    ->where('is_active', true)
-                    ->where('kategori_2', '4-Udara')
-                    ->where('kategori_3', $request->kategori_3)
-                    ->where('status', 2)
-                    ->pluck('no_sampel');
-                $data = KebisinganHeader::with('ws_udara', 'data_lapangan', 'data_lapangan_personal')
-                    ->whereIn('no_sampel', $orders)
-                    ->where('is_approved', 1)
-                    ->where('is_active', 1)
-                    ->where('lhps', 1)
-                    ->get();
-                $i = 0;
-                if ($data->isNotEmpty()) {
-                    foreach ($data as  $val) {
-                        $data1[$i]['lokasi_keterangan'] = $val->data_lapangan->lokasi_titik_sampling ?? $val->data_lapangan->keterangan ?? $val->data_lapangan_personal->keterangan ?? null;
-                        $data1[$i]['paparan'] = $val->data_lapangan->jam_pemaparan ?? $val->data_lapangan_personal->waktu_pengukuran ?? null;
-                        $data1[$i]['titik_koordinat'] = $val->data_lapangan->titik_koordinat ?? $val->data_lapangan_personal->titik_koordinat ?? null;
-                        $data1[$i]['nama_pekerja'] = $val->data_lapangan_personal->created_by ?? null;
-                        $data1[$i]['id'] = $val->id;
-                        $data1[$i]['no_sampel'] = $val->no_sampel;
-                        $data1[$i]['param'] = $val->parameter;
-                        $data1[$i]['min'] = $val->min;
-                        $data1[$i]['max'] = $val->max;
-                        $data1[$i]['hasil_uji'] = $val->ws_udara->hasil1;
-                        $data1[$i]['nab'] = $val->ws_udara->nab;
-                        $i++;
-                    }
-                    $hasil[] = $data1;
-                }
 
-                $data_all = array();
-                $a = 0;
-                foreach ($hasil as $key => $value) {
-                    foreach ($value as $row => $col) {
-                        $data_all[$a] = $col;
-                        $a++;
-                    }
-                }
-
-                if($jumlah_custom > 0) {
-                    for ($i = 0; $i < $jumlah_custom; $i++) {
-                        $custom[$i + 1] = $data_all;
-                    }
-                }
                 return response()->json([
-                    'data' => [],
-                    'detail' => $data_all,
-                    'custom' => $custom,
-                    'status' => 200,
+                    'data'    => $cekLhp,
+                    'detail'  => $detail,
+                    'custom'  => $custom,
                     'success' => true,
+                    'status'  => 200,
                     'message' => 'Data berhasil diambil'
                 ], 201);
             }
+
+            // Jika belum ada LHP -> buat custom baru jika perlu
+            $custom = [];
+            if ($jumlah_custom > 0) {
+                for ($i = 0; $i < $jumlah_custom; $i++) {
+                    $custom[$i + 1] = $mappedData;
+                }
+            }
+
+            return response()->json([
+                'data'    => [],
+                'detail'  => $mappedData,
+                'custom'  => $custom,
+                'status'  => 200,
+                'success' => true,
+                'message' => 'Data berhasil diambil !'
+            ], 201);
+
         } catch (\Exception $e) {
             DB::rollBack();
-            dd($e);
             return response()->json([
-                'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $e->getMessage(),
+                'status'  => 'error',
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
                 'getLine' => $e->getLine(),
                 'getFile' => $e->getFile()
-            ]);
+            ], 500);
         }
     }
+
 
     public function handleDetailEdit(Request $request)
     {
@@ -577,71 +540,71 @@ class DraftUdaraKebisinganController extends Controller
     }
     public function handleApprove(Request $request)
     {
-            try {
-                $data = LhpsKebisinganHeader::where('id', $request->id)
-                    ->where('is_active', true)
-                    ->first();
-                $noSampel = array_map('trim', explode(',', $request->no_sampel));
-                $no_lhp = $data->no_lhp;
-            
-                $qr = QrDocument::where('id_document', $data->id)
-                    ->where('type_document', 'LHP_KEBISINGAN')
-                    ->where('is_active', 1)
-                    ->where('file', $data->file_qr)
-                    ->orderBy('id', 'desc')
-                    ->first();
+        try {
+            $data = LhpsKebisinganHeader::where('id', $request->id)
+                ->where('is_active', true)
+                ->first();
+            $noSampel = array_map('trim', explode(',', $request->no_sampel));
+            $no_lhp = $data->no_lhp;
+        
+            $qr = QrDocument::where('id_document', $data->id)
+                ->where('type_document', 'LHP_KEBISINGAN')
+                ->where('is_active', 1)
+                ->where('file', $data->file_qr)
+                ->orderBy('id', 'desc')
+                ->first();
 
-                if ($data != null) {
-                    OrderDetail::where('cfr', $data->no_lhp)
-                    ->whereIn('no_sampel', $noSampel)
-                    ->where('is_active', true)
-                    ->update([
-                        'is_approve' => 1,
-                        'status' => 3,
-                        'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'approved_by' => $this->karyawan
-                    ]);
-                  
-                    $data->is_approve = 1;
-                    $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data->approved_by = $this->karyawan;
-                    $data->nama_karyawan = $this->karyawan;
-                    $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-                    $data->save();
-                    HistoryAppReject::insert([
-                        'no_lhp' => $data->no_lhp,
-                        'no_sampel' => $request->no_sampel,
-                        'kategori_2' => $data->id_kategori_2,
-                        'kategori_3' => $data->id_kategori_3,
-                        'menu' => 'Draft Udara',
-                        'status' => 'approved',
-                        'approved_at' => Carbon::now(),
-                        'approved_by' => $this->karyawan
-                    ]);
-                    if ($qr != null) {
-                        $dataQr = json_decode($qr->data);
-                        $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                        $dataQr->Disahkan_Oleh = $this->karyawan;
-                        $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-                        $qr->data = json_encode($dataQr);
-                        $qr->save();
-                    }
+            if ($data != null) {
+                OrderDetail::where('cfr', $data->no_lhp)
+                ->whereIn('no_sampel', $noSampel)
+                ->where('is_active', true)
+                ->update([
+                    'is_approve' => 1,
+                    'status' => 3,
+                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'approved_by' => $this->karyawan
+                ]);
+                
+                $data->is_approve = 1;
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_by = $this->karyawan;
+                $data->nama_karyawan = $this->karyawan;
+                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp' => $data->no_lhp,
+                    'no_sampel' => $request->no_sampel,
+                    'kategori_2' => $data->id_kategori_2,
+                    'kategori_3' => $data->id_kategori_3,
+                    'menu' => 'Draft Udara',
+                    'status' => 'approved',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
+                if ($qr != null) {
+                    $dataQr = json_decode($qr->data);
+                    $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
+                    $dataQr->Disahkan_Oleh = $this->karyawan;
+                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
                 }
-
-                DB::commit();
-                return response()->json([
-                    'data' => $data,
-                    'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
-                ], 201);
-            } catch (\Exception $th) {
-                DB::rollBack();
-                dd($th);
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'status' => false
-                ], 500);
             }
+
+            DB::commit();
+            return response()->json([
+                'data' => $data,
+                'status' => true,
+                'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            dd($th);
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'status' => false
+            ], 500);
+        }
     }
 
     // Amang
@@ -650,11 +613,9 @@ class DraftUdaraKebisinganController extends Controller
         DB::beginTransaction();
         try {
 
-            
             $lhps = LhpsKebisinganHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
-            $no_lhp = $lhps->no_lhp;
 
             if ($lhps) {
                 HistoryAppReject::insert([
@@ -692,25 +653,28 @@ class DraftUdaraKebisinganController extends Controller
 
                 $lhps->delete();
             }
+
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+            OrderDetail::where('cfr', $request->no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1
                     ]);
 
-
             DB::commit();
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . $no_lhp . ' berhasil direject'
-            ]);
+                'message' => 'Data draft no sample ' . $request->no_lhp . ' berhasil direject'
+            ], 201);
+
         } catch (\Exception $th) {
             DB::rollBack();
+            // dd($th);
             return response()->json([
                 'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage()
-            ]);
+                'message' => 'Terjadi kesalahan ' . $th->getMessage() . ' On line ' . $th->getLine() . ' On File ' . $th->getFile()
+            ], 401);
         }
     }
 
@@ -860,8 +824,6 @@ class DraftUdaraKebisinganController extends Controller
             ], 500);
         }
     }
-
-
 
     // Amang
     public function encrypt($data)

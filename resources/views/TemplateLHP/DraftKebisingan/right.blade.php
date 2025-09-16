@@ -41,52 +41,17 @@
                 {{-- Informasi Sampling --}}
                 <table style="padding-top: 10px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120">
+                        <td class="custom5" width="120" colspan="3">
                             <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
                     </tr>
                     <tr>
-                        <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
+                        <td class="custom5" width="120">Metode Sampling</td>
+                        <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @if(!empty($header->metode_sampling))
-                                    @foreach($header->metode_sampling as $index => $item)
-                                        <tr>
-                                            @if (count($header->metode_sampling) > 1)
-                                                <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                                <td class="custom5">{{ $item ?? '-' }}</td>
-                                            @else
-                                                <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                            @endif
-                                        </tr>
-                                    @endforeach
-                                @else
-                                    <tr>
-                                        <td class="custom5" colspan="2">-</td>
-                                    </tr>
-                                @endif
-                            </table>
+                            {{ $header->metode_sampling[0] }}
                         </td>
                     </tr>
-                    <tr>
-                        <td class="custom5">Tanggal Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>
-                    @php
-                        $periode = explode(' - ', $header['periode_analisa']);
-                        $periode1 = $periode[0] ?? '';
-                        $periode2 = $periode[1] ?? '';
-                    @endphp
-                    <!-- <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - 
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
-                        </td>
-                    </tr> -->
                 </table>
 
                 {{-- Regulasi --}}
@@ -94,7 +59,7 @@
                     <table style="padding-top: 10px;" width="100%">
                         @foreach (json_decode($header->regulasi) as $y)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
                             </tr>
                         @endforeach
                     </table>
