@@ -251,6 +251,7 @@ class DraftUdaraGetaranController extends Controller
                     'percepatan'  => $request->percepatan[$val] ?? null,
                     'kecepatan'   => $request->kecepatan[$val] ?? null,
                     'tipe_getaran'=> $request->tipe_getaran[$val] ?? null,
+                    'tanggal_sampling'  => $request->tanggal_sampling[$val] ?? null,
                 ]);
                 $detail->save();
             }
@@ -305,6 +306,7 @@ class DraftUdaraGetaranController extends Controller
                             ->whereView('DraftGetaran')
                             ->render();
             }
+
          
             $header->file_lhp = $fileName;
             $header->save();
@@ -490,6 +492,63 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
+                  $mainData         = [];
+            $otherRegulations = [];
+
+               $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_approve', 1)
+                    ->where('is_active', true)
+                    ->where('lhps', 1)
+                    ->get();
+
+            foreach ($data as $val) {
+                $entry     = $this->formatEntry($val);
+                $mainData[] = $entry;
+
+                if ($request->other_regulasi) {
+                    foreach ($request->other_regulasi as $id_regulasi) {
+                        $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
+                    }
+                }
+            }
+
+            // Sort mainData
+            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+
+            // Sort otherRegulations
+            foreach ($otherRegulations as $id => $regulations) {
+                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+            }
+
+            // ==============================
+            // Sinkronisasi data_entry dengan mainData
+            // ==============================
+            $dataEntrySamples = array_column($data_entry, 'no_sampel');
+
+            foreach ($mainData as $main) {
+                if (!in_array($main['no_sampel'], $dataEntrySamples)) {
+                    $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
+                }
+            }
+
+            // ==============================
+            // Sinkronisasi data_custom dengan otherRegulations
+            // ==============================
+            $dataCustomSamples = [];
+            foreach ($data_custom as $group) {
+                foreach ($group as $row) {
+                    $dataCustomSamples[] = $row['no_sampel'];
+                }
+            }
+
+            foreach ($otherRegulations as $id_regulasi => $entries) {
+                foreach ($entries as $other) {
+                    if (!in_array($other['no_sampel'], $dataCustomSamples)) {
+                        $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                    }
+                }
+            }
 
                 return response()->json([
                     'status' => true,
@@ -499,27 +558,20 @@ class DraftUdaraGetaranController extends Controller
             } else {
                 $mainData = [];
                 $otherRegulations = [];
-                $models = [
-                    GetaranHeader::class,
-                ];
 
-                foreach ($models as $model) {
-                    $approveField =  'is_approve';
-                    $data = $model::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
-                        ->whereIn('no_sampel', $noSampel)
-                        ->where($approveField, 1)
-                        ->where('is_active', true)
-                        ->where('lhps', 1)
-                        ->get();
-// dd($request->regulasi);
-                    foreach ($data as $val) {
-                        $entry = $this->formatEntry($val);
-                        $mainData[] = $entry;
+                $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_approve', 1)
+                    ->where('is_active', true)
+                    ->where('lhps', 1)
+                    ->get();
+                foreach ($data as $val) {
+                    $entry = $this->formatEntry($val);
+                    $mainData[] = $entry;
 
-                        if ($request->other_regulasi) {
-                            foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
-                            }
+                    if ($request->other_regulasi) {
+                        foreach ($request->other_regulasi as $id_regulasi) {
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
                         }
                     }
                 }
