@@ -11,6 +11,7 @@
                     <th width="40%"  class="custom">LOKASI / KETERANGAN SAMPEL</th>
                     <th width="21%"  class="custom">HASIL UJI (dBA)</th>
                     <th width="21%" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
+                    <th width="21%" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                
             </thead>
@@ -25,6 +26,7 @@
                         </td>
                         <td class="pd-5-solid-center">{{ $yy['hasil_uji'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['paparan'] }}</td>
+                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
                     </tr>
                 @endforeach
             </tbody>
