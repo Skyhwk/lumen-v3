@@ -182,209 +182,6 @@ class FdlMedanLMController extends Controller
                 // Cek di Tabel Parameter
                 $parameter = Parameter::where('nama_lab', $parameterValue)->first();
 
-                // if ($data->parameter == "Power Density") {
-                //     $magnet_3 = json_decode($data->magnet_3);
-                //     $magnet_30 = json_decode($data->magnet_30);
-                //     $magnet_100 = json_decode($data->magnet_100);
-                //     $listrik_3 = json_decode($data->listrik_3);
-                //     $listrik_30 = json_decode($data->listrik_30);
-                //     $listrik_100 = json_decode($data->listrik_100);
-
-                //     $totmagnet_3 = count(array_keys($magnet_3));
-                //     $totmagnet_30 = count(array_keys($magnet_30));
-                //     $totmagnet_100 = count(array_keys($magnet_100));
-                //     $totlistrik_3 = count(array_keys($listrik_3));
-                //     $totlistrik_30 = count(array_keys($listrik_30));
-                //     $totlistrik_100 = count(array_keys($listrik_100));
-
-                //     $nilmagnet_3 = 0;
-                //     $nilmagnet_30 = 0;
-                //     $nilmagnet_100 = 0;
-                //     $nillistrik_3 = 0;
-                //     $nillistrik_30 = 0;
-                //     $nillistrik_100 = 0;
-
-                //     foreach ($magnet_3 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_3 += $v;
-                //         }
-                //     }
-                //     foreach ($magnet_30 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_30 += $v;
-                //         }
-                //     }
-                //     foreach ($magnet_100 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_100 += $v;
-                //         }
-                //     }
-                //     foreach ($listrik_3 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_3 += $v;
-                //         }
-                //     }
-                //     foreach ($listrik_30 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_30 += $v;
-                //         }
-                //     }
-                //     foreach ($listrik_100 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_100 += $v;
-                //         }
-                //     }
-
-
-                //     $nilmagnet_3_ = $nilmagnet_3 / $totmagnet_3;
-                //     $nilmagnet_30_ = $nilmagnet_30 / $totmagnet_30;
-                //     $nilmagnet_100_ = $nilmagnet_100 / $totmagnet_100;
-
-                //     // Menghitung total nilai magnet
-                //     $totalNilaiMagnet = $nilmagnet_3_ + $nilmagnet_30_ + $nilmagnet_100_;
-
-                //     // Menghitung jumlah elemen
-                //     $jumlahNilai = 3; // Karena ada 3 nilai
-
-                //     // Menghitung rata-rata Magnet
-                //     $rataRataMagnet = $totalNilaiMagnet / $jumlahNilai;
-
-                //     $nillistrik_3_ = $nillistrik_3 / $totlistrik_3;
-                //     $nillistrik_30_ = $nillistrik_30 / $totlistrik_30;
-                //     $nillistrik_100_ = $nillistrik_100 / $totlistrik_100;
-
-                //     // Menjumlahkan hasil
-                //     $total_nillistrik = $nillistrik_3_ + $nillistrik_30_ + $nillistrik_100_;
-
-                //     // Menghitung rata-rata
-                //     $rata_rata_nillistrik = $total_nillistrik / 3;
-
-                //     // HASIL KESELURUHAN
-                //     $MagnitTesla = $rataRataMagnet / 1000000;
-
-
-                //     $medanMagnitAm = $MagnitTesla * 797700;
-                //     // Menampilkan hasil
-
-                //     // Menghitung Hasil Watt
-                //     $HasilWatt = $rata_rata_nillistrik * $medanMagnitAm;
-
-                //     // Pastikan hasil akhir tidak dibulatkan
-                //     $hasilmWat = $HasilWatt / 10;
-
-                //     $formattedHasilmWat = number_format($hasilmWat, 4);
-                //     $formattedHasilWat = number_format($HasilWatt, 4);
-                //     $formattedHasilmagnet = number_format($medanMagnitAm, 4);
-
-                //     // $hasil = json_encode(["Magnet_3" => $nilmagnet_3_, "Magnet_30" => $nilmagnet_30_, "Magnet_100" =>$nilmagnet_100_, "Listrik_3" => $nillistrik_3_, "Listrik_30" => $nillistrik_30_, "Listrik_100" =>$nillistrik_100_]);
-                //     $hasil = json_encode([
-                //         "medan_magnet_am" => $formattedHasilmagnet, 
-                //         "hasil_watt" => $formattedHasilWat, 
-                //         "hasil_mwatt" => $formattedHasilmWat
-                //     ]);
-                //     $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
-                //     $hasil = AnalystFormula::where('function', $function)
-                //         ->where('data', $data)
-                //         ->where('id_parameter', $parameter->id)
-                //         ->process();
-                // } else if ($data->parameter == "Medan Magnit Statis") {
-                //     $magnet_3 = json_decode($data->magnet_3);
-                //     $magnet_30 = json_decode($data->magnet_30);
-                //     $magnet_100 = json_decode($data->magnet_100);
-
-                //     $totmagnet_3 = count(array_keys($magnet_3));
-                //     $totmagnet_30 = count(array_keys($magnet_30));
-                //     $totmagnet_100 = count(array_keys($magnet_100));
-
-                //     $nilmagnet_3 = 0;
-                //     $nilmagnet_30 = 0;
-                //     $nilmagnet_100 = 0;
-
-                //     foreach ($magnet_3 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_3 += $v;
-                //         }
-                //     }
-                //     foreach ($magnet_30 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_30 += $v;
-                //         }
-                //     }
-                //     foreach ($magnet_100 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nilmagnet_100 += $v;
-                //         }
-                //     }
-
-
-
-                //     $nilmagnet_3_ = number_format($nilmagnet_3 / $totmagnet_3, 4);
-                //     $nilmagnet_30_ = number_format($nilmagnet_30 / $totmagnet_30, 4);
-                //     $nilmagnet_100_ = number_format($nilmagnet_100 / $totmagnet_100, 4);
-
-                //     // Menghitung total nilai magnet
-                //     $totalNilaiMagnet = $nilmagnet_3_ + $nilmagnet_30_ + $nilmagnet_100_;
-
-                //     // Menghitung jumlah elemen
-                //     $jumlahNilai = 3; // Karena ada 3 nilai
-
-                //     // Menghitung rata-rata
-                //     $rataRataMagnet = number_format($totalNilaiMagnet / $jumlahNilai, 4);
-
-                //     // $hasil = json_encode(["Magnet_3" => $nilmagnet_3_, "Magnet_30" => $nilmagnet_30_, "Magnet_100" =>$nilmagnet_100_]);
-                //     $hasil = json_encode([
-                //         'medan_magnet' => $rataRataMagnet
-                //     ]);
-                //     $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
-                //     $hasil = AnalystFormula::where('function', $function)
-                //         ->where('data', $data)
-                //         ->where('id_parameter', $parameter->id)
-                //         ->process();
-                // } else if ($data->parameter == "Medan Listrik") {
-                //     $listrik_3 = json_decode($data->listrik_3);
-                //     $listrik_30 = json_decode($data->listrik_30);
-                //     $listrik_100 = json_decode($data->listrik_100);
-                //     $totlistrik_3 = count(array_keys($listrik_3));
-                //     $totlistrik_30 = count(array_keys($listrik_30));
-                //     $totlistrik_100 = count(array_keys($listrik_100));
-
-                //     $nillistrik_3 = 0;
-                //     $nillistrik_30 = 0;
-                //     $nillistrik_100 = 0;
-
-                //     foreach ($listrik_3 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_3 += $v;
-                //         }
-                //     }
-                //     foreach ($listrik_30 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_30 += $v;
-                //         }
-                //     }
-                //     foreach ($listrik_100 as $idx => $val) {
-                //         foreach ($val as $k => $v) {
-                //             $nillistrik_100 += $v;
-                //         }
-                //     }
-
-                //     $nillistrik_3_ = number_format($nillistrik_3 / $totlistrik_3, 4);
-                //     $nillistrik_30_ = number_format($nillistrik_30 / $totlistrik_30, 4);
-                //     $nillistrik_100_ = number_format($nillistrik_100 / $totlistrik_100, 4);
-
-                //     // Menjumlahkan hasil
-                //     $total_nillistrik = $nillistrik_3_ + $nillistrik_30_ + $nillistrik_100_;
-                //     // Menghitung rata-rata
-                //     $rata_rata_nillistrik = $total_nillistrik / 3;
-                //     // Format rata-rata
-                //     $rata_rata_nillistrik = number_format($rata_rata_nillistrik, 4);
-
-                //     // $hasil = json_encode(["Listrik_3" => $nillistrik_3_, "Listrik_30" => $nillistrik_30_, "Listrik_100" =>$nillistrik_100_]);
-                //     $hasil = json_encode([
-                //         'medan_listrik' => $rata_rata_nillistrik
-                //     ]);
-                // }
-
                 $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
                 $data_parsing = $request->all();
                 $data_parsing = (object) $data_parsing;
@@ -410,6 +207,7 @@ class FdlMedanLMController extends Controller
                 $headuv->id_parameter = $parameter->id;
                 $headuv->parameter = $parameter->nama_lab;
                 $headuv->is_approve = true;
+                // $headuv->lhps = true;
                 $headuv->approved_by = $this->karyawan;
                 $headuv->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $headuv->created_by = $this->karyawan;
@@ -419,7 +217,13 @@ class FdlMedanLMController extends Controller
                 $ws->id_medan_lm_header = $headuv->id;
                 $ws->no_sampel = $no_sample;
                 $ws->id_po = $po->id;
-                $ws->hasil1 = json_encode($hasil);
+                if($parameter->nama_lab == 'Power Density'){
+                    // $ws->hasil1 = $hasil['hasil_mwatt'];
+                    $ws->hasil1 = json_encode($hasil);
+                    $ws->satuan = 'mWatt/Cm²';
+                }else{
+                    $ws->hasil1 = json_encode($hasil);
+                }
                 $ws->save();
 
                 $dataL->is_approve = true;

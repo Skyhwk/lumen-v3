@@ -12,18 +12,17 @@ use App\Models\LhpsGetaranDetail;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
-
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 
 use App\Models\GetaranHeader;
 
-use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
@@ -82,59 +81,66 @@ class DraftUdaraGetaranController extends Controller
         ], 201);
     }
 
-     public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
+      public function handleMetodeSampling(Request $request)
+        {
+            try {
+                $subKategori = explode('-', $request->kategori_3);
+                $param = explode(';', (json_decode($request->parameter)[0]))[0];
+                $result = [];
+                // Data utama
+                $data = Parameter::where('id_kategori', '4')
+                    ->where('id', $param)
+                    ->get();
+                $resultx = $data->toArray();
+                foreach ($resultx as $key => $value) {
+                    $result[$key]['id'] = $value['id'];
+                    $result[$key]['metode_sampling'] = $value['method'];
+                    $result[$key]['kategori'] = $value['nama_kategori'];
+                    $result[$key]['sub_kategori'] = $subKategori[1];
+                }
 
-            $header = LhpsGetaranHeader::where('id', $request->id_lhp)->first();
-            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                // $result = $resultx;
 
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+                if ($request->filled('id_lhp')) {
+                    $header = LhpsGetaranHeader::find($request->id_lhp);
 
-            // konversi collection ke array biar bisa diubah
-            $result = $data->toArray();
+                    if ($header) {
+                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-            foreach ($data as $key => $value) {
-                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                        foreach ($data as $key => $value) {
+                            $valueMetode = array_map('trim', explode(',', $value->method));
 
-                $missing = array_diff($headerMetode, $valueMetode);
+                            $missing = array_diff($headerMetode, $valueMetode);
 
-                if (!empty($missing)) {
-                    foreach ($missing as $miss) {
-                        $result[] = [
-                            'id' => null, 
-                            'metode_sampling' => $miss,
-                            'kategori' => $value->kategori,
-                            'sub_kategori' => $value->sub_kategori,
-                        ];
+                            if (!empty($missing)) {
+                                foreach ($missing as $miss) {
+                                    $result[] = [
+                                        'id' => null,
+                                        'metode_sampling' => $miss,
+                                        'kategori' => $value->kategori,
+                                        'sub_kategori' => $value->sub_kategori,
+                                    ];
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            if (!empty($result)) {
                 return response()->json([
                     'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $result
+                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                    'data' => $result,
                 ], 200);
-            } else {
+
+            } catch (\Exception $e) {
                 return response()->json([
-                    'status' => true,
-                    'message' => 'Belum ada method',
-                    'data' => []
-                ], 200);
+                    'status' => false,
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                    'line' => $e->getLine(),
+                ], 500);
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
-    }
+
 
 
    public function store(Request $request)
@@ -501,7 +507,7 @@ class DraftUdaraGetaranController extends Controller
                         ->where('is_active', true)
                         ->where('lhps', 1)
                         ->get();
-
+// dd($request->regulasi);
                     foreach ($data as $val) {
                         $entry = $this->formatEntry($val);
                         $mainData[] = $entry;
@@ -522,7 +528,7 @@ class DraftUdaraGetaranController extends Controller
                     $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
                         return mb_strtolower($item['param']);
                     })->values()->toArray();
-                }
+                }   
            
                 return response()->json([
                     'status' => true,
