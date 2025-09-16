@@ -184,7 +184,7 @@ class FdlKebisinganController extends Controller
                         $data_header->suhu_udara = $reratasuhu;
                         $data_header->kelembapan_udara = $reratakelemb;
                         $data_header->is_approved = true;
-                        $data_header->lhps = 1;
+                        // $data_header->lhps = 1;
                         $data_header->approved_by = $this->karyawan;
                         $data_header->approved_at = Carbon::now();
                         $data_header->created_by = $this->karyawan;

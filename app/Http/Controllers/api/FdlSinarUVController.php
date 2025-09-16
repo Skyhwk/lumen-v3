@@ -189,7 +189,7 @@ class FdlSinarUVController extends Controller
                 $headuv->id_parameter = $parameter->id;
                 $headuv->parameter = $parameter->nama_lab;
                 $headuv->is_approved = true;
-                $headuv->lhps = true;
+                // $headuv->lhps = true;
                 $headuv->approved_by = $this->karyawan;
                 $headuv->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $headuv->created_by = $this->karyawan;
