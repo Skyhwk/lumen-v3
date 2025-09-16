@@ -123,6 +123,18 @@ class FollowUpController extends Controller
             ], 401);
         }
 
+        $cekCalling = DFUS::where('kontak', 'like', '%' . $no_tlp_perusahaan . '%')->orderBy('tanggal', 'desc')->first();
+
+        if ($cekCalling) {
+            if($cekCalling->sales_penanggung_jawab != $this->karyawan) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
+                ], 401);
+            }
+        }
+        
+
         $followUp = new MasterPelanggan;
 
         $followUp->id_cabang = 1;
@@ -312,8 +324,19 @@ class FollowUpController extends Controller
                     }
 
                     if (!empty($data)) {
-                        DFUS::insert($data);
-                        $message = 'Data berhasil disimpan.';
+                        $cekCalling = DFUS::where('kontak', 'like', '%' . $data[0]['kontak'] . '%')->orderBy('tanggal', 'desc')->first();
+
+                        if ($cekCalling) {
+                            if($cekCalling->sales_penanggung_jawab != $data[0]['sales_penanggung_jawab']) {
+                                return response()->json([
+                                    'status' => 'error',
+                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
+                                ], 401);
+                            }
+                        } else {
+                            DFUS::insert($data);
+                            $message = 'Data berhasil disimpan.';
+                        }
                     } else {
                         $message = 'Tidak ada data valid untuk disimpan.';
                     }
@@ -321,6 +344,18 @@ class FollowUpController extends Controller
                     if (!$request->id_pelanggan || !$request->kontak || !$request->sales_penanggung_jawab || !$request->tanggal || !$request->jam) {
                         $message = 'Data tidak lengkap.';
                     } else {
+
+                        $cekCalling = DFUS::where('kontak', 'like', '%' . $request->kontak . '%')->orderBy('tanggal', 'desc')->first();
+
+                        if ($cekCalling) {
+                            if($cekCalling->sales_penanggung_jawab != $request->sales_penanggung_jawab) {
+                                return response()->json([
+                                    'status' => 'error',
+                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
+                                ], 401);
+                            }
+                        } 
+                        
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
                         $dfus->kontak = $request->kontak;
@@ -331,6 +366,7 @@ class FollowUpController extends Controller
                         $dfus->save();
 
                         $message = 'Data berhasil disimpan.';
+                        
                     }
                 }
                 break;
