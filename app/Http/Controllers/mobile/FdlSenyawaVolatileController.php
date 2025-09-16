@@ -491,8 +491,8 @@ class FdlSenyawaVolatileController extends Controller
                 if ($request->keterangan_4 != '') $fdlvalue->keterangan            = $request->keterangan_4;
                 if ($request->keterangan_2 != '') $fdlvalue->keterangan_2          = $request->keterangan_2;
                 if ($request->koordinat != '') $fdlvalue->titik_koordinat             = $request->koordinat;
-                if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitudeitude;
-                if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitudetude;
+                if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitude;
+                if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitude;
                 if ($request->lok != '') $fdlvalue->lokasi                         = $request->lok;
                 $fdlvalue->parameter                                               = $a;
 
