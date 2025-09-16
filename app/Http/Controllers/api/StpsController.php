@@ -889,7 +889,8 @@ class StpsController extends Controller
 
             $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                 ->where('no_order', $dataOrder->no_order)
-                ->where('tanggal_sampling', $request->jadwal);
+                ->where('tanggal_sampling', $request->jadwal)
+                ->where('sampler_jadwal', $request->sampler);
             // ->whereJsonContains('no_sampel', $pra_no_sample);
 
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
@@ -915,7 +916,7 @@ class StpsController extends Controller
                     }
                 }
 
-                if (!$isMustPrepared) {
+                if ($isMustPrepared) {
                     return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
                 } else {
                     $requestPsData = new Request([
@@ -924,6 +925,7 @@ class StpsController extends Controller
                         'tanggal_sampling' => $request->jadwal,
                         'nama_perusahaan' => $request->nama_perusahaan,
                         'kategori_jadwal' => $request->kategori,
+                        'sampler_jadwal' => $request->sampler,
                         'periode' => $request->periode,
                         'analis_berangkat' => null,
                         'sampler_berangkat' => null,
@@ -961,6 +963,7 @@ class StpsController extends Controller
                     $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                         ->where('no_order', $dataOrder->no_order)
                         ->where('tanggal_sampling', $request->jadwal)
+                        ->where('sampler_jadwal', $request->sampler)
                         // ->whereJsonContains('no_sampel', $pra_no_sample)
                         ->first();
                 }
