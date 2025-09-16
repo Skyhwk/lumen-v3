@@ -1241,11 +1241,11 @@ class WSFinalUdaraMedanMagnetController extends Controller
     {
         DB::beginTransaction();
         try {
-            $dataLapangan = DataLapanganMedanLM::where('no_sampel', $request->no_sampel)->update([
+            DataLapanganMedanLM::where('no_sampel', $request->no_sampel)->update([
                 'is_approve' => 0,
             ]);
 
-            $magnetHeader = MedanLmHeader::where('no_sampel', $request->no_sampel)
+            MedanLmHeader::where('no_sampel', $request->no_sampel)
                 ->update([
                     'is_approve' => 0,
                 ]);
@@ -1271,11 +1271,15 @@ class WSFinalUdaraMedanMagnetController extends Controller
     {
         DB::beginTransaction();
         try {
-            $orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+           OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
                 ->update([
                     'status' => 1,
                 ]);
 
+            MedanLmHeader::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'lhps' => 1,
+                ]);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',

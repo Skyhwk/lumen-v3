@@ -1259,11 +1259,15 @@ class WSFinalUdaraSinarUvController extends Controller
     {
         DB::beginTransaction();
         try {
-            $orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
                 ->update([
                     'status' => 1,
                 ]);
-
+                
+            SinarUvHeader::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'lhps' => 1,
+                ]);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',
