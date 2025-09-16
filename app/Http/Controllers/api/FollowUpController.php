@@ -90,9 +90,28 @@ class FollowUpController extends Controller
             $no_tlp_perusahaan = "0" . substr($no_tlp_perusahaan, 2);
         }
 
+        // Menghapus PT, CV, UD, PD, Koperasi, Perum, Persero, BUMD, Yayasan (beserta variasi di belakang nama pelanggan)
+        $clearNamaPelanggan = preg_replace('/(,?\s*\.?\s*(PT|CV|UD|PD|KOPERASI|PERUM|PERSERO|BUMD|YAYASAN))\s*$/i', '', $request->nama_pelanggan);
+
         // Cek duplikasi berdasarkan nama pelanggan dan no kontak
-        $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
-            ->orWhere('id_pelanggan', $idPelanggan)
+        // $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
+        //     ->orWhere('id_pelanggan', $idPelanggan)
+        //     ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
+        //         $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+        //     })->first();
+
+        $existingData = MasterPelanggan::whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
+            $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+        })->first();
+
+        if ($existingData) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pelanggan dengan nama dan atau nomor kontak sudah ada.'
+            ], 401);
+        }
+
+        $existingData = MasterPelanggan::where('nama_pelanggan', 'like', '%' . $clearNamaPelanggan . '%')
             ->orWhereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
                 $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
             })->first();
@@ -126,16 +145,18 @@ class FollowUpController extends Controller
 
     public function dfus(Request $request)
     {
-        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-        switch ($jabatan) {
+        $dfus = DFUS::select('dfus.*')
+            ->addSelect('p.id_pelanggan as idPelanggan', 'p.nama_pelanggan as namaPelanggan')
+            ->join('master_pelanggan as p', function ($join) {
+                $join->on('p.id_pelanggan', '=', 'dfus.id_pelanggan')->where('p.is_active', true);
+            })
+            ->where('dfus.tanggal', $request->tanggal ?: date('Y-m-d'))
+            ->orderBy('dfus.tanggal', 'desc')
+            ->orderBy('dfus.jam', 'desc');
+
+        switch ($request->attributes->get('user')->karyawan->id_jabatan) {
             case 24: // Sales Staff
-                $dfus = DFUS::select('dfus.*')
-                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
-                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
-                    ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
-                    ->orderBy('dfus.tanggal', 'desc')
-                    ->orderBy('dfus.jam', 'desc')
-                    ->where('dfus.sales_penanggung_jawab', $this->karyawan);
+                $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
                 break;
 
             case 21: // Sales Supervisor
@@ -144,34 +165,20 @@ class FollowUpController extends Controller
                     ->toArray();
                 array_push($bawahan, $this->karyawan);
 
-                $dfus = DFUS::select('dfus.*')
-                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
-                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
-                    ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
-                    ->orderBy('dfus.tanggal', 'desc')
-                    ->orderBy('dfus.jam', 'desc')
-                    ->whereIn('dfus.sales_penanggung_jawab', $bawahan);
-                break;
-
-            default:
-                $dfus = DFUS::select('dfus.*')
-                    ->with('pelanggan:id_pelanggan,nama_pelanggan')
-                    // ->whereHas('pelanggan', fn($q) => $q->where('is_active', true))
-                    ->where('tanggal', $request->tanggal ?: date('Y-m-d'))
-                    ->orderBy('dfus.tanggal', 'desc')
-                    ->orderBy('dfus.jam', 'desc');
-
+                $dfus->whereIn('dfus.sales_penanggung_jawab', $bawahan);
                 break;
         }
 
         return DataTables::of($dfus)
-            // ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
-            //     $query->whereHas('pelanggan', function ($q) use ($keyword) {
-            //         $q->where('nama_pelanggan', 'like', "%{$keyword}%");
-            //     });
-            // })
+            ->editColumn('pelanggan', fn($row) => [
+                'id_pelanggan'  => $row->idPelanggan,
+                'nama_pelanggan' => $row->namaPelanggan,
+            ])
+            ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
+                $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
+            })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
-            ->addColumn('status_order', fn($row) => "Coming Soon")
+            ->addColumn('status_order', fn() => "Coming Soon")
             ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
             ->make(true);
     }

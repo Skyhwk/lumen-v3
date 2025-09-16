@@ -1040,7 +1040,6 @@ class RenderNonKontrakCopy
             }
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
             return $fileName;
         } catch (\Exception $e) {
             dd($e);

@@ -159,7 +159,11 @@ class TrackingLhpService
             } else {
                 $udara = WsValueUdara::where('no_sampel', $noSampel)->first();
                 if($udara) {
-                    $dataAnalyst = $udara->getDataAnalyst();
+                    if($udara->id_kebisingan_header || $udara->id_pencahayaan_header || $udara->id_getaran_header || $udara->id_iklim_header){
+                        return $this->sampling->date;
+                    } else {
+                        $dataAnalyst = $udara->getDataAnalyst();
+                    }
                 }
             }
 
@@ -253,66 +257,68 @@ class TrackingLhpService
             
             $date = null;
 
-            if ($kategori === 'AIR') {
-                $air = LhpsAirHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                if($air){
-                    $date = $air->generated_at;
-                }
-            } else {
-                $sub_kategori = explode('-', $this->orderDetail->kategori_3)[1];
+            if($this->orderDetail->status === 3) {
+                if ($kategori === 'AIR') {
+                    $air = LhpsAirHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                    if($air){
+                        $date = $air->generated_at;
+                    }
+                } else {
+                    $sub_kategori = explode('-', $this->orderDetail->kategori_3)[1];
 
-                if (str_contains(strtolower($sub_kategori), 'emisi ')) {
-                    if($sub_kategori === 'Emisi Sumber Tidak Bergerak' ){
-                        $emisi = LhpsEmisiCHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    } else {
-                        $emisi = LhpsEmisiHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    }
-                    if($emisi) {
-                        $date = $emisi->generated_at;
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'ergonomi')) {
-                    $ergonomi = LhpsErgonomiHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($ergonomi) {
-                        $date = $ergonomi->generated_at;
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'getaran ')) {
-                    $getaran = LhpsGetaranHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($getaran) {
-                        $date = $getaran->generated_at;
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'iklim ')){
-                    $iklim = LhpsIklimHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($iklim) {
-                        $date = $iklim->generated_at;
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'kebisingan ')){
-                    $kebisingan = LhpsKebisinganHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($kebisingan) {
-                        $date = $kebisingan->generated_at;
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'udara ambient') || str_contains(strtolower($sub_kategori), 'udara lingkungan kerja')){
-                    $lingkungan = LhpsLingHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($lingkungan) {
-                        $date = $lingkungan->generated_at;
-                    } else {
-                        $sinarUv = LhpsSinarUVHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                        if($sinarUv) {
-                            $date = $sinarUv->generated_at;
+                    if (str_contains(strtolower($sub_kategori), 'emisi ')) {
+                        if($sub_kategori === 'Emisi Sumber Tidak Bergerak' ){
+                            $emisi = LhpsEmisiCHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
                         } else {
-                            $medanLm = LhpsMedanLMHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                            if($medanLm) {
-                                $date = $medanLm->generated_at;
+                            $emisi = LhpsEmisiHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        }
+                        if($emisi) {
+                            $date = $emisi->generated_at;
+                        }
+                    } else if(str_contains(strtolower($sub_kategori), 'ergonomi')) {
+                        $ergonomi = LhpsErgonomiHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($ergonomi) {
+                            $date = $ergonomi->generated_at;
+                        }
+                    } else if(str_contains(strtolower($sub_kategori), 'getaran ')) {
+                        $getaran = LhpsGetaranHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($getaran) {
+                            $date = $getaran->generated_at;
+                        }
+                    } else if(str_contains(strtolower($sub_kategori), 'iklim ')){
+                        $iklim = LhpsIklimHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($iklim) {
+                            $date = $iklim->generated_at;
+                        }
+                    } else if(str_contains(strtolower($sub_kategori), 'kebisingan ')){
+                        $kebisingan = LhpsKebisinganHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($kebisingan) {
+                            $date = $kebisingan->generated_at;
+                        }
+                    } else if(str_contains(strtolower($sub_kategori), 'udara ambient') || str_contains(strtolower($sub_kategori), 'udara lingkungan kerja')){
+                        $lingkungan = LhpsLingHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($lingkungan) {
+                            $date = $lingkungan->generated_at;
+                        } else {
+                            $sinarUv = LhpsSinarUVHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                            if($sinarUv) {
+                                $date = $sinarUv->generated_at;
+                            } else {
+                                $medanLm = LhpsMedanLMHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                                if($medanLm) {
+                                    $date = $medanLm->generated_at;
+                                }
                             }
                         }
-                    }
-                } else if(str_contains(strtolower($sub_kategori), 'pencahayaan')){
-                    $pencahayaan = LhpsPencahayaanHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
-                    if($pencahayaan) {
-                        $date = $pencahayaan->generated_at;
+                    } else if(str_contains(strtolower($sub_kategori), 'pencahayaan')){
+                        $pencahayaan = LhpsPencahayaanHeader::where('no_sampel', $noSampel)->where('is_active', true)->first();
+                        if($pencahayaan) {
+                            $date = $pencahayaan->generated_at;
+                        }
                     }
                 }
             }
-
+            
             return $date;
         } catch (\Exception $th) {
             dd($th);

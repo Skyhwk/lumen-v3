@@ -53,7 +53,7 @@ class FdlMedanListrikDanMagnetController extends Controller
             ->where('kategori_3', '27-Udara lingkungan Kerja')
             ->where(function($q) use ($parameterList) {
                 foreach ($parameterList as $param) {
-                    $q->orWhere('parameter', 'like', "%;$param%");
+                    $q->orWhere('parameter', 'like', "%$param%");
                 }
             })
             ->first();

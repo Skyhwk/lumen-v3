@@ -38,33 +38,58 @@
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
-                    <tr>
-                        <td class="custom5" width="120" colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr> 
+           {{-- Informasi Sampling --}}
+            <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <tr>
+                    <td class="custom5" width="120" colspan="3">
+                        <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                    </td>
+                </tr> 
+
+                @php
+                    $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : '-';
+                @endphp
+
+                {{-- Metode Sampling --}}
+                <tr>
+                    <td class="custom5" width="120">Metode Sampling</td>
+                    <td class="custom5" width="12">:</td>
+                    <td class="custom5">
+                        <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                            @foreach($methode_sampling as $index => $item)
+                                <tr>
+                                    @if (count($methode_sampling) > 1)
+                                        <td class="custom5" width="20">{{ $index + 1 }}.</td>
+                                        <td class="custom5">{{ $item ?? '-' }}</td>
+                                    @else
+                                        <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
+                                    @endif
+                                </tr>
+                            @endforeach
+                        </table>
+                    </td>
+
+                </tr>
+
+                {{-- Tanggal Sampling / Terima --}}
+                <tr>
+                    <td class="custom5" width="120">
+                        @if ($header->status_sampling == 'SD') 
+                            Tanggal Terima 
+                        @else 
+                            Tanggal Sampling 
+                        @endif
+                    </td>
+                    <td class="custom5" width="12">:</td>
                     @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
+                        $tanggal_ = $header->status_sampling == 'SD'
+                            ? $header->tanggal_terima
+                            : $header->tanggal_sampling;
                     @endphp
-                    <tr>
-                         <tr>
-                         <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{!! $methode_sampling !!}</td>
-                    </tr>
-                    </tr>
-                    <tr>
-                        <td class="custom5" width="120">@if ($header->status_sampling == 'SD') Tanggal Terima @else Tanggal Sampling @endif</td>
-                        <td class="custom5" width="12">:</td>
-                        @php
-                            if($header->status_sampling == 'SD'){ 
-                                $tanggal_ = $header->tanggal_terima ;
-                            } else { 
-                                $tanggal_ = $header->tanggal_sampling;
-                            }
-                        @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                    </tr>
-                </table>
+                    <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
+                </tr>
+            </table>
+
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi))

@@ -490,7 +490,6 @@ class RenderSamplingPlan
             $filePath = $dir . '/' . $fileName;
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
 
             $updatedSP = SamplingPlan::where('id', $sampling_plan->id)->first();
             $updatedSP->filename = $fileName;
@@ -1007,7 +1006,6 @@ class RenderSamplingPlan
             $filePath = $dir . '/' . $fileName;
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            chmod($filePath, 0777);
 
             $updatedSP = SamplingPlan::where('id', $sampling_plan->id)->first();
             $updatedSP->filename = $fileName;

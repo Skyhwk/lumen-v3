@@ -2,28 +2,11 @@
 
 namespace App\Http\Controllers\api;
 use App\Models\HistoryAppReject;
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
+
 use App\Models\LhpsLingCustom;
 use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
-use App\Models\LhpsPencahayaanHeader;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsGetaranDetail;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsMedanLMHeader;
-use App\Models\LhpsMedanLMDetail;
 
-use App\Models\LhpsKebisinganHeaderHistory;
-use App\Models\LhpsKebisinganDetailHistory;
-use App\Models\LhpsGetaranHeaderHistory;
-use App\Models\LhpsGetaranDetailHistory;
-use App\Models\LhpsPencahayaanHeaderHistory;
-use App\Models\LhpsPencahayaanDetailHistory;
-use App\Models\LhpsMedanLMHeaderHistory;
-use App\Models\LhpsMedanLMDetailHistory;
-use App\Models\LhpSinarUVHeaderHistory;
-use App\Models\LhpsSinarUVDetailHistory;
 use App\Models\LhpsLingHeaderHistory;
 use App\Models\LhpsLingDetailHistory;
 
@@ -36,21 +19,14 @@ use App\Models\MasterKaryawan;
 use App\Models\LingkunganHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
-use App\Models\PencahayaanHeader;
-use App\Models\KebisinganHeader;
+
 use App\Models\Subkontrak;
-use App\Models\MedanLMHeader;
-use App\Models\SinarUVHeader;
-use App\Models\GetaranHeader;
-use App\Models\DataLapanganErgonomi;
+
 use App\Models\Parameter;
-use App\Models\DirectLainHeader;
 use App\Models\GenerateLink;
 use App\Services\LhpTemplate;
 use App\Services\SendEmail;
-use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
-use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -86,6 +62,12 @@ class DraftUlkController extends Controller
             ->where('status', 2)
             ->get();
 
+            foreach ($data as $key => $value) {
+                if(isset($value->lhps_ling) && $value->lhps_ling->metode_sampling != null ){
+                    $data[$key]->lhps_ling->metode_sampling = json_decode($value->lhps_ling->metode_sampling);
+                }
+            }
+
         return Datatables::of($data)->make(true);
     }
 
@@ -103,33 +85,59 @@ class DraftUlkController extends Controller
         ], 201);
     }
 
-     public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
+  public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
+
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
+
+        $result = $data->toArray();
+
+        // Jika ada id_lhp, lakukan perbandingan array
+        if ($request->filled('id_lhp')) {
+            $header = LhpsLingHeader::find($request->id_lhp);
+
+            if ($header) {
+                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+                    $missing = array_diff($headerMetode, $valueMetode);
+
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
+                        }
+                    }
+                }
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
+
 
 
    public function store(Request $request)

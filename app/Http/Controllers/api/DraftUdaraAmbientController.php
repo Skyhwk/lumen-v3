@@ -54,6 +54,12 @@ class DraftUdaraAmbientController extends Controller
             ->where('status', 2)
             ->get();
 
+            foreach ($data as $key => $value) {
+                if(isset($value->lhps_ling) && $value->lhps_ling->methode_sampling != null ){
+                    $data[$key]->lhps_ling->methode_sampling = json_decode($value->lhps_ling->methode_sampling);
+                }
+            }
+
         return Datatables::of($data)->make(true);
     }
 
@@ -71,33 +77,58 @@ class DraftUdaraAmbientController extends Controller
         ], 201);
     }
 
-   public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))->get();
-            if ($data->isNotEmpty()) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $data
-                ], 200);
-            } else {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Belom ada method',
-                    'data' => []
-                ], 200);
+  public function handleMetodeSampling(Request $request)
+{
+    try {
+        $subKategori = explode('-', $request->kategori_3);
+
+        // Data utama
+        $data = MetodeSampling::where('kategori', '4-UDARA')
+            ->where('sub_kategori', strtoupper($subKategori[1]))
+            ->get();
+
+        $result = $data->toArray();
+
+        // Jika ada id_lhp, lakukan perbandingan array
+        if ($request->filled('id_lhp')) {
+            $header = LhpsLingHeader::find($request->id_lhp);
+
+            if ($header) {
+                $headerMetode = json_decode($header->methode_sampling, true) ?? [];
+
+                foreach ($data as $key => $value) {
+                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+
+                    $missing = array_diff($headerMetode, $valueMetode);
+
+                    if (!empty($missing)) {
+                        foreach ($missing as $miss) {
+                            $result[] = [
+                                'id' => null,
+                                'metode_sampling' => $miss,
+                                'kategori' => $value->kategori,
+                                'sub_kategori' => $value->sub_kategori,
+                            ];
+                        }
+                    }
+                }
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
+
+        return response()->json([
+            'status' => true,
+            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+            'data' => $result,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            'line' => $e->getLine(),
+        ], 500);
     }
+}
 
    public function store(Request $request)
     {
@@ -142,7 +173,6 @@ class DraftUdaraAmbientController extends Controller
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                 return ['page' => (int)$page, 'regulasi' => $item];
             })->values()->toArray();
-
             // === 4. Simpan / update header ===
             $header->fill([
                 'no_order'        => $request->no_order ?: null,

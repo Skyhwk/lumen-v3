@@ -3388,7 +3388,7 @@ class RequestQuotationController extends Controller
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
                                         // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             $matchedOldPenamaan = $oldSampling['penamaan_titik'] ?? [];
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
@@ -3442,7 +3442,7 @@ class RequestQuotationController extends Controller
                                     //     $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                     //     $regulasiSame = $oldSampling['regulasi'] === $xyz->regulasi;
 
-                                    //     if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                    //     if ($kategori1Same  && $regulasiSame) {
                                     //         if (in_array($oldSampling, $tempUsedOldData, true)) {
                                     //             continue;
                                     //         }
@@ -3469,7 +3469,7 @@ class RequestQuotationController extends Controller
                                         $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
                                         $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        if ($kategori1Same  && $regulasiSame) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
                                             }
@@ -4953,10 +4953,12 @@ class RequestQuotationController extends Controller
                 $id_order_header = null;
                 $oldPeriod = $allDetailQuotOld->pluck('periode_kontrak')->toArray();
                 $alreadyOrdered = false;
+                $no_order = null;
                 if ($dataOld->data_lama !== null) {
                     $dataLamaDecoded = json_decode($dataOld->data_lama, true);
                     if (isset($dataLamaDecoded['id_order'])) {
                         $id_order_header = $dataLamaDecoded['id_order'];
+                        $no_order = $dataLamaDecoded['no_order'];
                         $alreadyOrdered = true;
                     }
                 }
@@ -4990,6 +4992,7 @@ class RequestQuotationController extends Controller
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 foreach ($period as $k => $per) {
                     // dump($per);
+                    $lower_per = (int) substr($per, 0, 4) . substr($per, 5, 2) < (int) date('Ym');
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -5217,20 +5220,25 @@ class RequestQuotationController extends Controller
                                     $oldSamplingList = reset($oldData)['data_sampling'] ?? [];
                                     // dump($oldSamplingList);
                                     foreach ($oldSamplingList as $oldSampling) {
-                                        $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
-                                        $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
-                                        // dump($oldSampling['kategori_1'], $oldSampling['regulasi']);
+                                        $coreData = [
+                                            'kategori_1' => $oldSampling['kategori_1'] ?? null,
+                                            'kategori_2' => $oldSampling['kategori_2'] ?? null,
+                                            'regulasi'   => $oldSampling['regulasi'] ?? null,
+                                            'parameter'  => $oldSampling['parameter'] ?? null,
+                                        ];
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+                                        if ($fingerprint === $xyz->fingerprint) {
+                                            // match ketemu
                                             $matchedOldPenamaan = $oldSampling['penamaan_titik'] ?? [];
+                                            
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
                                             }
                                             $tempUsedOldData[] = $oldSampling;
 
                                             $foundFromOldRemaining = $oldDetail->periode_kontrak;
-                                        } 
+                                        }
                                     }
                                 }
                                 if ($matchedOldPenamaan !== null) {
@@ -5269,36 +5277,65 @@ class RequestQuotationController extends Controller
                             } else {
                                 // kalau ada data lama yang sama periodenya
                                 $foundOldPenamaanTitik = null;
+                                $keysOldFoundPenamaanTitik = [];
+
                                 if($checkOldQt){
                                     $dataSamplingOld = json_decode($checkOldQt->data_pendukung_sampling, true);
                                     foreach (reset($dataSamplingOld)['data_sampling'] as $oldSampling) {
-                                        $kategori1Same = $oldSampling['kategori_1'] === $xyz->kategori_1;
-                                        $kategori2Same = $oldSampling['kategori_2'] === $xyz->kategori_2;
-                                        $regulasiSame = $this->sameRegulasi($oldSampling['regulasi'], $xyz->regulasi);
+                                        $coreData = [
+                                            'kategori_1' => $oldSampling['kategori_1'] ?? null,
+                                            'kategori_2' => $oldSampling['kategori_2'] ?? null,
+                                            'regulasi'   => $oldSampling['regulasi'] ?? null,
+                                            'parameter'  => $oldSampling['parameter'] ?? null,
+                                        ];
 
-                                        if ($kategori1Same && $kategori2Same && $regulasiSame) {
+                                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+
+                                        if ($fingerprint === $xyz->fingerprint) {
                                             if (in_array($oldSampling, $tempUsedOldData, true)) {
                                                 continue;
                                             }
-
-                                            $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
+                                            if($lower_per){
+                                                $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
+                                                if($foundOldPenamaanTitik !== null){
+                                                    foreach ($foundOldPenamaanTitik as $item) {
+                                                        $keysOldFoundPenamaanTitik = array_merge(
+                                                            $keysOldFoundPenamaanTitik,
+                                                            array_keys($item)
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                if($oldSampling['kategori_1'] !== $xyz->kategori_1){
+                                                    continue;
+                                                } else {
+                                                    $foundOldPenamaanTitik = $oldSampling['penamaan_titik'] ?? [];
+                                                    if($foundOldPenamaanTitik !== null){
+                                                        foreach ($foundOldPenamaanTitik as $item) {
+                                                            $keysOldFoundPenamaanTitik = array_merge(
+                                                                $keysOldFoundPenamaanTitik,
+                                                                array_keys($item)
+                                                            );
+                                                        }
+                                                        if ($alreadyOrdered) {
+                                                            foreach ($keysOldFoundPenamaanTitik as $key => $value) {
+                                                                $cek_temp = $OrderDetails->where('no_sampel', "$no_order/$value")->first();
+                                                                
+                                                                if ($cek_temp && $cek_temp->tanggal_terima !== null) {
+                                                                    $sample_dipertahankan[] = $value;
+                                                                }
+                                                            }
+                                                            $keysOldFoundPenamaanTitik = $sample_dipertahankan ?? [];
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             $tempUsedOldData[] = $oldSampling;
                                             break;
-                                        } 
+                                        }
                                     }
                                 }
 
-                                $keysOldFoundPenamaanTitik = [];
-                                
-                                if($foundOldPenamaanTitik !== null){
-                                    foreach ($foundOldPenamaanTitik as $item) {
-                                        $keysOldFoundPenamaanTitik = array_merge(
-                                            $keysOldFoundPenamaanTitik,
-                                            array_keys($item)
-                                        );
-                                    }
-                                }
-                                
                                 foreach ($xyz->penamaan_titik as $i => $pt) {
                                     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                     if($alreadyOrdered && $foundOldPenamaanTitik !== null){
@@ -5318,49 +5355,6 @@ class RequestQuotationController extends Controller
                                 }
                             }
                             
-
-                            // foreach ($xyz->penamaan_titik as $i => $pt) {
-                            //     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                            //     if($alreadyOrdered){
-                            //         if (in_array($namaTitik, $oldNumberMappingForGroup) && $namaTitik != "") {
-                            //             // dump($oldNumberMappingForGroup);
-                            //             $nomor = array_search($namaTitik, $oldNumberMappingForGroup);
-                            //             $penamaan_titik_fixed[] = (object) [$nomor => $namaTitik];
-                            //         } else {
-                            //             $nomorLama = null;
-
-                            //             foreach ($titikGroupMapping as $key => $map) {
-                            //                 if (strpos($key, $fallbackGroupKey) !== false && in_array($namaTitik, $map)) {
-                            //                     $nomorLama = array_search($namaTitik, $map);
-                            //                     if (!array_key_exists($nomorLama, $penamaan_titik_fixed)) {
-                            //                         $nomorLama = null;
-                            //                     }
-                            //                     break;
-                            //                 }
-                            //             }
-                            //             // dump($nomorLama);
-
-                            //             if ($nomorLama) {
-                            //                 $penamaan_titik_fixed[] = (object) [$nomorLama => $namaTitik];
-
-                            //                 // Daftarin ke current group juga biar ke-cache
-                            //                 $titikGroupMapping[$fullGroupKey][$nomorLama] = $namaTitik;
-                            //             } else {
-                            //                 $nomorBaru = sprintf('%03d', $globalTitikCounter);
-                            //                 $penamaan_titik_fixed[] = (object) [$nomorBaru => $namaTitik];
-
-                            //                 $titikGroupMapping[$fullGroupKey][$nomorBaru] = $namaTitik;
-                            //                 $globalTitikCounter++;
-                            //             }
-                            //         }
-                                    
-                            //     } else {
-                            //         $penamaan_titik_fixed[] = (object) [$biggestNumberOfSampel => $namaTitik];
-                            //         $biggestNumberOfSampel++;
-                            //     }
-                            // }
-
-                            // dump($penamaan_titik_fixed);
 
                             $data_sampling[$n++] = [
                                 'kategori_1' => $xyz->kategori_1,
@@ -5407,170 +5401,7 @@ class RequestQuotationController extends Controller
                         }
                     }
 
-
                     // dump($data_sampling);
-                    // foreach ($data_sampling as $index => $newItem) {
-                    //     $checkOldQt = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)->where('periode_kontrak', $per)->first();
-                    //     $first = [];
-                    //     $isMutated = false;
-                    //     if ($checkOldQt) {
-                    //         // dump('ada old data sesuai periode', $per);
-                    //         $oldData = json_decode($checkOldQt->data_pendukung_sampling, true);
-                    //         $first = reset($oldData)['data_sampling'];
-                    //     } else {
-                    //         if ($alreadyOrdered) {
-                    //             $checkOldQtRemaining = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)
-                    //                 ->whereIn('periode_kontrak', $diffOldPeriod)
-                    //                 ->get();
-                    //             // dump('masuk else periode', $per);
-
-                    //             if (count($checkOldQtRemaining) > 0) {
-                    //                 // dump('ada data diff periode', $per);
-
-                    //                 $foundFromOldRemaining = false;
-                    //                 $matchedOldPenamaan = null;
-                    //                 foreach ($checkOldQtRemaining as $oldDetail) {
-                    //                     $oldData = json_decode($oldDetail->data_pendukung_sampling, true);
-                    //                     $oldSamplingList = reset($oldData)['data_sampling'] ?? [];
-                    //                     foreach ($oldSamplingList as $oldSampling) {
-                    //                         if (
-                    //                             ($oldSampling['kategori_1'] ?? null) === ($newItem['kategori_1'] ?? null) &&
-                    //                             ($oldSampling['kategori_2'] ?? null) === ($newItem['kategori_2'] ?? null)
-                    //                         ) {
-                    //                             // Match found
-                    //                             $matchedOldPenamaan = $oldSampling['penamaan_titik'] ?? [];
-                    //                             $foundFromOldRemaining = $oldDetail->periode_kontrak;
-                    //                             // dump('Pengecekan match lama');
-                    //                             // dump($matchedOldPenamaan, $foundFromOldRemaining);
-                    //                             break 2;
-                    //                         }
-                    //                     }
-                    //                 }
-
-                    //                 if ($matchedOldPenamaan !== null) {
-                    //                     // Langsung assign titik dari match lama
-                    //                     $data_sampling[$index]['penamaan_titik'] = $matchedOldPenamaan;
-
-                    //                     $isMutated = true;
-                    //                     // Buang periode yang udah kepake dari diffOldPeriod
-                    //                     $diffOldPeriod = array_filter($diffOldPeriod, function ($periode) use ($foundFromOldRemaining) {
-                    //                         return $periode !== $foundFromOldRemaining;
-                    //                     });
-
-                    //                     // Skip ke iterasi berikutnya (ga pake logic bawah)
-                    //                     continue;
-                    //                 }
-
-                    //             }
-                    //         }
-                    //     }
-
-                    //     if (!$isMutated) {
-                    //         // dump('tidak mutated');
-                    //         $diffRegulasi = false;
-                    //         $diffKategori = false;
-                    //         $diffSubKategori = false;
-                    //         $diffParameter = false;
-                    //         $oldItem = $first[$index] ?? [];
-
-                    //         // Cek kategori_1
-                    //         if ((isset($oldItem['kategori_1']) && $newItem['kategori_1'] !== $oldItem['kategori_1'] ?? null)) {
-                    //             $diffKategori = true;
-                    //         }
-
-                    //         // Cek kategori_2
-                    //         if ((isset($oldItem['kategori_2']) && $newItem['kategori_2'] !== $oldItem['kategori_2'] ?? null)) {
-                    //             $diffSubKategori = true;
-                    //         }
-
-                    //         // Cek regulasi
-                    //         if ((isset($oldItem['regulasi']) && json_encode($newItem['regulasi']) !== json_encode($oldItem['regulasi'] ?? []))) {
-                    //             $diffRegulasi = true;
-                    //         }
-
-                    //         // Cek parameter (urutan juga dibandingkan)
-                    //         if ((isset($oldItem['parameter']) && json_encode($newItem['parameter']) !== json_encode($oldItem['parameter'] ?? []))) {
-                    //             $diffParameter = true;
-                    //         }
-
-                    //         $penamaanBaru = array_map(function ($obj) {
-                    //             return (array) $obj;
-                    //         }, $newItem['penamaan_titik']);
-
-                    //         $penamaanLama = $oldItem['penamaan_titik'] ?? [];
-
-                    //         if (!$alreadyOrdered) {
-
-                    //             // dump('tidak pernah Order');
-                    //             $penamaanFix = [];
-
-                    //             foreach ($penamaanBaru as $titikBaru) {
-                    //                 $valBaru = array_values($titikBaru)[0];
-
-                    //                 $biggestNumberOfSampel++;
-                    //                 $newKey = str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT);
-                    //                 $penamaanFix[] = [$newKey => $valBaru];
-                    //             }
-
-                    //             $data_sampling[$index]['penamaan_titik'] = $penamaanFix;
-                    //         } else {
-                    //             // dump('sudah pernah Order');
-                    //             if ($diffKategori) {
-                    //                 $penamaanFix = [];
-
-                    //                 foreach ($penamaanBaru as $titikBaru) {
-                    //                     $valBaru = array_values($titikBaru)[0];
-
-                    //                     // Selalu generate nomor baru
-                    //                     $biggestNumberOfSampel++;
-                    //                     $newKey = str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT);
-                    //                     $penamaanFix[] = [$newKey => $valBaru];
-                    //                 }
-
-                    //                 $data_sampling[$index]['penamaan_titik'] = $penamaanFix;
-                    //             } else {
-                    //                 $penamaanFix = [];
-                    //                 $used = [];
-
-                    //                 // Loop data baru
-                    //                 foreach ($penamaanBaru as $titikBaru) {
-                    //                     $valBaru = array_values($titikBaru)[0];
-                    //                     $found = false;
-
-                    //                     // Coba cari val yang sama di penamaan lama
-                    //                     foreach ($penamaanLama as $titikLama) {
-                    //                         $keyLama = array_key_first($titikLama);
-                    //                         $valLama = array_values($titikLama)[0];
-
-                    //                         if ((string) $valBaru === (string) $valLama && !in_array($keyLama, $used)) {
-                    //                             $penamaanFix[] = [$keyLama => $valBaru];
-                    //                             $used[] = $keyLama;
-                    //                             $found = true;
-                    //                             break;
-                    //                         }
-                    //                     }
-
-                    //                     // Kalau tidak ditemukan di data lama, pakai nomor baru
-                    //                     if (!$found) {
-                    //                         $biggestNumberOfSampel++;
-                    //                         $newKey = str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT);
-                    //                         $penamaanFix[] = [$newKey => $valBaru];
-                    //                         $used[] = $newKey;
-                    //                     }
-                    //                 }
-
-                    //                 // Set hasil akhirnya
-                    //                 $data_sampling[$index]['penamaan_titik'] = $penamaanFix;
-                    //             }
-                    //         }
-                    //     }
-                    // }
-                    // dump($data_sampling);
-                    // if($per == '2026-06' || $per == '2026-07'){
-                    //         dump('setelah');
-                    //         dump($data_sampling);
-                    //     }
-
                     $datas[$j] = [
                         'periode_kontrak' => $per,
                         'data_sampling' => array_values($data_sampling)

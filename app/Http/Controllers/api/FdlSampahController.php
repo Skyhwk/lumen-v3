@@ -156,7 +156,7 @@ class FdlSampahController extends Controller
                     $data->arah_barat_laut,
                     $data->arah_timur_laut,
                 ];
-            
+
                 // Konversi setiap nilai arah ke angka
                 $nilaiArah = array_map(function ($arah) {
                     $arah = strtolower(trim($arah));
@@ -165,12 +165,13 @@ class FdlSampahController extends Controller
                     }
                     return 1; // termasuk "Ada" dan lainnya
                 }, $arahList);
-            
+
                 $totalNilai = array_sum($nilaiArah);
                 $status = $totalNilai > 0 ? 'ADA' : 'NIHIL';
-            
+
                 if ($status) {
-                    $header = Colorimetri::firstOrNew(['no_sampel' => $data->no_sampel]);
+                    $header = new Colorimetri();
+                    $header->no_sampel = $data->no_sampel;
                     $header->parameter = $sampah;
                     $header->created_by = $this->karyawan;
                     $header->created_at = Carbon::now();
@@ -179,12 +180,13 @@ class FdlSampahController extends Controller
                     $header->approved_by = $this->karyawan;
                     $header->approved_at = Carbon::now();
                     $header->save();
-            
-                    $ws = WsValueAir::firstOrNew(['no_sampel' => $data->no_sampel]);
+
+                    $ws = new WsValueAir();
+                    $ws->no_sampel = $data->no_sampel;
                     $ws->id_colorimetri = $header->id;
                     $ws->hasil = $status;
                     $ws->save();
-            
+
                     $data->is_approve = 1;
                     $data->approved_by = $this->karyawan;
                     $data->approved_at = Carbon::now();
@@ -325,7 +327,7 @@ class FdlSampahController extends Controller
             $data->save();
 
             app(NotificationFdlService::class)->sendRejectNotification("Observasi Sampah", $request->no_sampel, $request->reason, $this->karyawan, $data->created_by);
-            
+
             return response()->json([
                 'message' => 'Data no sample ' . $data->no_sampel . ' telah di reject'
             ], 201);

@@ -1626,7 +1626,6 @@ class RenderInvoice
             ');
                 $filePath = public_path('invoice/' . $fileName);
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                // chmod($filePath, 0777);
                 return $fileName;
             
         } catch (\Exception $e) {
@@ -1939,7 +1938,6 @@ class RenderInvoice
                         
                 $filePath = public_path('invoice/' . $fileName);
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                // chmod($filePath, 0777);
                 return $fileName;
             
         } catch (\Exception $e) {

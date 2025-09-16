@@ -44,7 +44,7 @@ class FdlLingkunganKerjaController extends Controller
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
-                    $q->orWhere('parameter', 'like', '%' . $keyword . '%');
+                    $q->orWhere('parameter', 'like', "%$keyword%");
                 }
             })
             ->where('is_active', 1)->first();

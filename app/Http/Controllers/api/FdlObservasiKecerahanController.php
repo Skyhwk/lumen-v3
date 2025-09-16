@@ -153,7 +153,8 @@ class FdlObservasiKecerahanController extends Controller
             }
             
             if ($data) {
-                $header = Colorimetri::firstOrNew(['no_sampel' => $data->no_sampel]);
+                $header = new Colorimetri();
+                $header->no_sampel = $data->no_sampel;
                 $header->parameter = $data->parameter;
                 $header->created_by = $this->karyawan;
                 $header->created_at = Carbon::now();
@@ -162,8 +163,9 @@ class FdlObservasiKecerahanController extends Controller
                 $header->approved_by = $this->karyawan;
                 $header->approved_at = Carbon::now();
                 $header->save();
-        
-                $ws = WsValueAir::firstOrNew(['no_sampel' => $data->no_sampel]);
+
+                $ws = new WsValueAir();
+                $ws->no_sampel = $data->no_sampel;
                 $ws->id_colorimetri = $header->id;
                 $ws->hasil = $data->nilai_kecerahan;
                 $ws->save();
