@@ -8,10 +8,11 @@
             <thead>
                 <tr>
                     <th width="8%" class="custom">NO</th>
-                    <th width="30%" class="custom">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="20%"  class="custom">INDEX SUHU BASAH DAN BOLA (°C)</th>
-                    <th width="21%" class="custom">AKTIVITAS PEKERJAAN</th>
-                    <th width="21%" class="custom">DURASI PAPARAN TERHADAP PEKERJAAN PER JAM</th>
+                    <th width="25%" class="custom">LOKASI / KETERANGAN SAMPEL</th>
+                    <th width="15%"  class="custom">INDEX SUHU BASAH DAN BOLA (°C)</th>
+                    <th width="16%" class="custom">AKTIVITAS PEKERJAAN</th>
+                    <th width="16%" class="custom">DURASI PAPARAN TERHADAP PEKERJAAN PER JAM</th>
+                    <th width="20%" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                
             </thead>
@@ -27,6 +28,7 @@
                         <td class="pd-5-solid-center">{{ $yy['hasil'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['aktivitas_pekerjaan'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['durasi_paparan'] }} Jam</td>
+                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
                       
                     </tr>
                 @endforeach
