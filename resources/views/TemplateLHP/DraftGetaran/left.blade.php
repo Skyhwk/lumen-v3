@@ -8,7 +8,7 @@
             <thead>
                 <tr>
                     <th width="8%" class="custom" rowspan="2">NO</th>
-                    <th width="40%"  class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
+                    <th width="40%"  class="custom" rowspan="2" colspan="2">LOKASI / KETERANGAN SAMPEL</th>
                     <th width="21%"  class="custom" colspan="2">HASIL UJI (dBA)</th>
                     <th width="21%" class="custom" rowspan="2">JUMLAH JAM PEMAPARAN PER HARI</th>
                     <th width="21%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
@@ -20,12 +20,13 @@
             </thead>
             <tbody>
                 @foreach ($detail as $k => $yy)
-       
                     <tr>
                         <td class="pd-5-solid-center">{{ $k + 1 }}</td>
-                        <td class="pd-5-solid-left">
-                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
-                          {{ $yy['keterangan'] }}
+                        <td class="pd-5-solid-center" width="8%" style="text-align: right; border-right: none;"> 
+                             <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
+                        </td>
+                        <td class="pd-5-solid-left" width="32%" style="border-left: none; text-align: left;"> 
+                            {{ $yy['keterangan'] }}
                         </td>
                         <td class="pd-5-solid-center">{{ $yy['kecepatan'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['percepatan'] }}</td>
