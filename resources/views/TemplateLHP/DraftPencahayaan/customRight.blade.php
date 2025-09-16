@@ -44,7 +44,7 @@
                         <td class="custom5" width="120" colspan="3"><span
                                 style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
-                    @php
+                    <!-- @php
                         if ($header->metode_sampling != null) {
                             $metode_sampling = '';
                             $dataArray = json_decode($header->metode_sampling ?? []);
@@ -74,8 +74,8 @@
                         } else {
                             $metode_sampling = '-';
                         }
-                    @endphp
-                    <tr>
+                    @endphp -->
+                    <!-- <tr>
                         <td class="custom5" width="120">
                             @if ($header->status_sampling == 'SD')
                                 Tanggal Terima
@@ -92,7 +92,7 @@
                             }
                         @endphp
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                    </tr>
+                    </tr> -->
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>

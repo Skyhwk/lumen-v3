@@ -11,6 +11,7 @@
                     <th width="40%"  class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
                     <th width="21%"  class="custom" colspan="2">HASIL UJI (dBA)</th>
                     <th width="21%" class="custom" rowspan="2">JUMLAH JAM PEMAPARAN PER HARI</th>
+                    <th width="21%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>
                  <tr>
                     <td class="pd-5-solid-center" >KECEPATAN</td> 
@@ -29,6 +30,8 @@
                         <td class="pd-5-solid-center">{{ $yy['kecepatan'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['percepatan'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['paparan'] }}</td>
+                        <td class="pd-5-solid-center">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+
                     </tr>
                 @endforeach
             </tbody>

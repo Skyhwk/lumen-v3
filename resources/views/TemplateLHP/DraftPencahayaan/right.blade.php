@@ -85,11 +85,11 @@
                         <td class="custom5" width="120"><span
                                 style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>
+                    </tr> -->
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>

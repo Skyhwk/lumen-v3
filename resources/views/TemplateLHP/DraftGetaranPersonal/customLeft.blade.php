@@ -9,6 +9,7 @@
                     <th width="183" class="pd-5-solid-top-center" rowspan="2">DUARSI JAM PEMAPARAN PER HARI</th>
                     <th width="100" class="pd-5-solid-top-center">HASIL UJI (m/s<sup>2</sup>)</th>
                     <th width="100" class="pd-5-solid-top-center">NAB <sup>**</sup></th>
+                    <th width="100" class="pd-5-solid-top-center" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <td class="pd-5-solid-center" colspan="2">(m/det<sup>2</sup>)</td>
@@ -27,6 +28,7 @@
                         $sumber_get = isset($v['sumber_get']) ? $v['sumber_get'] : '';
                         $hasil = isset($v['hasil']) ? $v['hasil'] : '';
                         $nab = isset($v['nab']) ? $v['nab'] : '';
+                        $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                       
                     @endphp
                     <tr>
@@ -36,6 +38,8 @@
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $w_paparan }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $hasil }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $nab }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $tanggal_sampling }}</td>
+
                     </tr>
                 @endforeach
 

@@ -96,7 +96,7 @@ class DraftUdaraPencahayaanController extends Controller
                 $resultx = $data->toArray();
                 foreach ($resultx as $key => $value) {
                     $result[$key]['id'] = $value['id'];
-                    $result[$key]['metode_sampling'] = $value['method'];
+                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
                     $result[$key]['kategori'] = $value['nama_kategori'];
                     $result[$key]['sub_kategori'] = $subKategori[1];
                 }
@@ -118,7 +118,7 @@ class DraftUdaraPencahayaanController extends Controller
                                 foreach ($missing as $miss) {
                                     $result[] = [
                                         'id' => null,
-                                        'metode_sampling' => $miss,
+                                        'metode_sampling' => $miss ?? '',
                                         'kategori' => $value->kategori,
                                         'sub_kategori' => $value->sub_kategori,
                                     ];
@@ -245,6 +245,8 @@ class DraftUdaraPencahayaanController extends Controller
                 $cleaned_jenis_pengukuran = array_combine($cleaned_key_jenis_pengukuran, array_values($request->jenis_pengukuran));
                 $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
                 $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
+                $cleaned_key_tanggal_sampling = array_map(fn($k) => trim($k, " '\""), array_keys($request->tanggal_sampling));
+                $cleaned_tanggal_sampling = array_combine($cleaned_key_tanggal_sampling, array_values($request->tanggal_sampling));
                 if (array_key_exists($val, $cleaned_noSampel)) {
                     $detail                     = new LhpsPencahayaanDetail;
                     $detail->id_header          = $header->id;
@@ -255,6 +257,7 @@ class DraftUdaraPencahayaanController extends Controller
                     $detail->sumber_cahaya      = $cleaned_sumber_cahaya[$val];
                     $detail->jenis_pengukuran   = $cleaned_jenis_pengukuran[$val];
                     $detail->nab                = $cleaned_nab[$val];
+                    $detail->tanggal_sampling                = $cleaned_tanggal_sampling[$val];
                     $detail->save();
                 }
             }
@@ -274,7 +277,8 @@ class DraftUdaraPencahayaanController extends Controller
                             'sumber_cahaya'         => $request->custom_sumber_cahaya[$page][$sampel] ?? null,
                             'jenis_pengukuran'      => $request->custom_jenis_pengukuran[$page][$sampel] ?? null,
                             'hasil_uji'             => $request->custom_hasil_uji[$page][$sampel] ?? null,
-                            'nab'                   => $request->custom_nab[$page][$sampel] ?? null
+                            'nab'                   => $request->custom_nab[$page][$sampel] ?? null,
+                            'tanggal_sampling'      => $request->custom_tanggal_sampling[$page][$sampel] ?? null
                         ]);
                     }
                 }
@@ -360,7 +364,8 @@ class DraftUdaraPencahayaanController extends Controller
                         'hasil_uji'         => $val['hasil_uji'],
                         'sumber_cahaya'     => $val['sumber_cahaya'],
                         'jenis_pengukuran'  => $val['jenis_pengukuran'],
-                        'nab'               => $val['nab']
+                        'nab'               => $val['nab'],
+                        'tanggal_sampling'               => $val['tanggal_sampling']
                     ];
                 }
 
@@ -419,7 +424,8 @@ class DraftUdaraPencahayaanController extends Controller
                                     'hasil_uji'         => $val['hasil_uji'],
                                     'sumber_cahaya'     => $val['sumber_cahaya'],
                                     'jenis_pengukuran'  => $val['kategori'] == 'Pencahayaan Umum' ? 'Umum' : 'Lokal',
-                                    'nab'               => $val['nab']
+                                    'nab'               => $val['nab'],
+                                    'tanggal_sampling'               => $val['tanggal_sampling']
                                 ];
                             }
                         }
