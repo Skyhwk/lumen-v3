@@ -63,22 +63,27 @@
                             $dataArray = json_decode($header->methode_sampling ?? []);
                             
                             $result = array_map(function ($item) {
-                                $parts = explode(';', $item);
-                                $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
-                                $sni = $parts[1] ?? '-';
-                                return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                if (strpos($item, ';') !== false) {
+                                    $parts = explode(';', $item);
+                                    $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                    $sni = $parts[1] ?? '-';
+                                    return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                } else {
+                                    // Jika tidak ada ';', langsung tampilkan itemnya saja
+                                    return $item;
+                                }
                             }, $dataArray);
 
                             foreach ($result as $index => $item) {
-                                if (trim($item) == '-') {
-                                    $methode_sampling .= "<span><span>-</span></span><br>";
+                                if (trim($item) == '-' || trim($item) == '******') {
+                                    $methode_sampling .= "<span><span>" . $item . "</span></span><br>";
                                 } else {
                                     $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
                                 }
                             }
 
                             if($header->status_sampling == 'SD') {
-                                $methode_sampling = $dataArray[0] ?? '-';
+                                $methode_sampling = $methode_sampling ?? '-';
                             }
                         } else {
                             $methode_sampling = "-";

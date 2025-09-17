@@ -1436,8 +1436,8 @@ class AppsBasController extends Controller
 
                 $requestedSampelsSorted = $requestedSampels;
                 sort($requestedSampelsSorted);
-
-                if ($detailNoSampelSorted === $requestedSampelsSorted) {
+                
+                if (empty(array_diff($detailNoSampelSorted, $requestedSampelsSorted))) {
                     $selectedDetail = $detail;
                     break;
                 }
