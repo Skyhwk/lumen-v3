@@ -20,7 +20,14 @@ class TabelRegulasiController extends Controller
     {
         $tabelRegulasi = TabelRegulasi::where('is_active', 1)
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($item) {
+                $regulasi = MasterRegulasi::whereIn('id', json_decode($item->id_regulasi, true))
+                    ->pluck('peraturan')
+                    ->toArray();
+                $item->regulasi = json_encode($regulasi);
+                return $item;
+            });
 
         return DataTables::of($tabelRegulasi)->make(true);
     }
@@ -31,84 +38,92 @@ class TabelRegulasiController extends Controller
             ->latest()
             ->get()
             ->map(fn($item) => [
-                'id' => $item->id . '-' . $item->peraturan,
-                'text' => $item->id . '-' . $item->peraturan,
+                'id' => $item->id,
+                'text' => $item->peraturan,
             ]);
 
         return response()->json($masterRegulasi, 200);
     }
 
-    public function checkRegulasi(Request $request)
-    {
-        $ids = $request->ids;
-        $matrixPayload = null;
+    // public function checkRegulasi(Request $request)
+    // {
+    //     $ids = $request->ids;
+    //     $matrixPayload = null;
 
-        $query = TabelRegulasi::query();
-        foreach ($ids as $id) {
-            $query->whereJsonContains('id_regulasi', (string) $id);
-        }
-        $record = $query->first();
+    //     $query = TabelRegulasi::query();
+    //     foreach ($ids as $id) {
+    //         $query->whereJsonContains('id_regulasi', (string) $id);
+    //     }
+    //     $record = $query->first();
 
-        if ($record) {
-            $flatMatrix = json_decode($record->matrix, true);
-            $maxRow = 0;
-            $maxCol = 0;
+    //     if ($record) {
+    //         $flatMatrix = json_decode($record->matrix, true);
+    //         $maxRow = 0;
+    //         $maxCol = 0;
 
-            // ... (looping preg_match buat cari maxRow & maxCol) ...
-            foreach ($flatMatrix as $key => $value) {
-                if (preg_match('/([A-Z]+)(\d+)/i', $key, $matches)) {
-                    $colStr = $matches[1];
-                    $rowNum = (int)$matches[2];
-                    $colIndex = $this->colLetterToIndex($colStr);
-                    if ($rowNum > $maxRow) $maxRow = $rowNum;
-                    if ($colIndex + 1 > $maxCol) $maxCol = $colIndex + 1;
-                }
-            }
+    //         // ... (looping preg_match buat cari maxRow & maxCol) ...
+    //         foreach ($flatMatrix as $key => $value) {
+    //             if (preg_match('/([A-Z]+)(\d+)/i', $key, $matches)) {
+    //                 $colStr = $matches[1];
+    //                 $rowNum = (int)$matches[2];
+    //                 $colIndex = $this->colLetterToIndex($colStr);
+    //                 if ($rowNum > $maxRow) $maxRow = $rowNum;
+    //                 if ($colIndex + 1 > $maxCol) $maxCol = $colIndex + 1;
+    //             }
+    //         }
 
-            $reconstructedMatrix = array_fill(0, $maxRow, array_fill(0, $maxCol, ""));
-            // ... (looping kedua buat isi $reconstructedMatrix) ...
-            foreach ($flatMatrix as $key => $value) {
-                if (preg_match('/([A-Z]+)(\d+)/i', $key, $matches)) {
-                    $colStr = $matches[1];
-                    $rowNum = (int)$matches[2];
-                    $rowIndex = $rowNum - 1;
-                    $colIndex = $this->colLetterToIndex($colStr);
-                    if ($rowIndex >= 0 && $colIndex >= 0) {
-                        $reconstructedMatrix[$rowIndex][$colIndex] = $value;
-                    }
-                }
-            }
+    //         $reconstructedMatrix = array_fill(0, $maxRow, array_fill(0, $maxCol, ""));
+    //         // ... (looping kedua buat isi $reconstructedMatrix) ...
+    //         foreach ($flatMatrix as $key => $value) {
+    //             if (preg_match('/([A-Z]+)(\d+)/i', $key, $matches)) {
+    //                 $colStr = $matches[1];
+    //                 $rowNum = (int)$matches[2];
+    //                 $rowIndex = $rowNum - 1;
+    //                 $colIndex = $this->colLetterToIndex($colStr);
+    //                 if ($rowIndex >= 0 && $colIndex >= 0) {
+    //                     $reconstructedMatrix[$rowIndex][$colIndex] = $value;
+    //                 }
+    //             }
+    //         }
 
-            $matrixPayload = [
-                'rows' => $maxRow,
-                'cols' => $maxCol,
-                'matrix_data' => $reconstructedMatrix
-            ];
-        }
+    //         $matrixPayload = [
+    //             'rows' => $maxRow,
+    //             'cols' => $maxCol,
+    //             'matrix_data' => $reconstructedMatrix
+    //         ];
+    //     }
 
-        return response()->json(['matrix_payload' => $matrixPayload], 200);
-    }
+    //     return response()->json(['matrix_payload' => $matrixPayload], 200);
+    // }
 
-    private function colLetterToIndex($colStr)
-    {
-        $colStr = strtoupper($colStr);
-        $index = 0;
-        $len = strlen($colStr);
-        for ($i = 0; $i < $len; $i++) {
-            $index = ($index * 26) + (ord($colStr[$i]) - ord('A') + 1);
-        }
-        return $index - 1;
-    }
+    // private function colLetterToIndex($colStr)
+    // {
+    //     $colStr = strtoupper($colStr);
+    //     $index = 0;
+    //     $len = strlen($colStr);
+    //     for ($i = 0; $i < $len; $i++) {
+    //         $index = ($index * 26) + (ord($colStr[$i]) - ord('A') + 1);
+    //     }
+    //     return $index - 1;
+    // }
 
     public function saveTabelRegulasi(Request $request)
     {
-        $tabelRegulasi = new TabelRegulasi();
+        if ($request->id) {
+            $tabelRegulasi = TabelRegulasi::find($request->id);
+
+            $tabelRegulasi->updated_by = $this->karyawan;
+            $tabelRegulasi->updated_at = Carbon::now();
+        } else {
+            $tabelRegulasi = new TabelRegulasi();
+
+            $tabelRegulasi->created_by = $this->karyawan;
+            $tabelRegulasi->created_at = Carbon::now();
+        }
 
         $tabelRegulasi->id_regulasi = json_encode($request->id_regulasi);
-        $tabelRegulasi->matrix = json_encode([]);
+        // $tabelRegulasi->matrix = json_encode([]);
         $tabelRegulasi->konten = $request->content;
-        $tabelRegulasi->created_by = $this->karyawan;
-        $tabelRegulasi->created_at = Carbon::now();
 
         $tabelRegulasi->save();
 

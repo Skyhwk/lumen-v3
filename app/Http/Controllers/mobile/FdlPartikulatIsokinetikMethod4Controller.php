@@ -168,7 +168,7 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
 
         $query = DataLapanganIsokinetikKadarAir::with('detail')
             ->where('created_by', $this->karyawan)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
