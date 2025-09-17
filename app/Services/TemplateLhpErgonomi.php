@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 class TemplateLhpErgonomi
 {
-    public function ergonomiRula($data = null,$cssGlobal='',$spesifik='',$mode='')
+    public function ergonomiRula($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {
         try {
             $mpdfConfig = [
@@ -84,7 +84,7 @@ class TemplateLhpErgonomi
         }
     }
     
-    public function ergonomiRwl($data = null,$cssGlobal='',$spesifik='',$mode='')
+    public function ergonomiRwl($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {
         $mpdfConfig = [
             'mode' => 'utf-8',
@@ -125,7 +125,7 @@ class TemplateLhpErgonomi
         return $html;
     }
 
-    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$mode='')
+    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     { 
         
         try {
@@ -215,7 +215,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='',$mode='')
+    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -299,7 +299,7 @@ class TemplateLhpErgonomi
         
     }
 
-    public function ergonomiRosa($data = null,$cssGlobal='',$spesifik='',$mode='')
+    public function ergonomiRosa($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -371,7 +371,7 @@ class TemplateLhpErgonomi
         }
     }
     
-    public function ergonomiBrief($data = null,$cssGlobal='',$spesifik='',$mode='')
+    public function ergonomiBrief($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -392,7 +392,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='',$mode='')
+    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {
        
         try {
@@ -443,7 +443,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='',$mode='')
+    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {   
         
         try {
