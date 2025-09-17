@@ -112,13 +112,13 @@ class TabelRegulasiController extends Controller
         if ($request->id) {
             $tabelRegulasi = TabelRegulasi::find($request->id);
 
-            $tabelRegulasi->created_by = $this->karyawan;
-            $tabelRegulasi->created_at = Carbon::now();
+            $tabelRegulasi->updated_by = $this->karyawan;
+            $tabelRegulasi->updated_at = Carbon::now();
         } else {
             $tabelRegulasi = new TabelRegulasi();
 
-            $tabelRegulasi->updated_by = $this->karyawan;
-            $tabelRegulasi->updated_at = Carbon::now();
+            $tabelRegulasi->created_by = $this->karyawan;
+            $tabelRegulasi->created_at = Carbon::now();
         }
 
         $tabelRegulasi->id_regulasi = json_encode($request->id_regulasi);
