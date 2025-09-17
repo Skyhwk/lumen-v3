@@ -109,13 +109,21 @@ class TabelRegulasiController extends Controller
 
     public function saveTabelRegulasi(Request $request)
     {
-        $tabelRegulasi = $request->id ? TabelRegulasi::find($request->id) : new TabelRegulasi();
+        if ($request->id) {
+            $tabelRegulasi = TabelRegulasi::find($request->id);
+
+            $tabelRegulasi->created_by = $this->karyawan;
+            $tabelRegulasi->created_at = Carbon::now();
+        } else {
+            $tabelRegulasi = new TabelRegulasi();
+
+            $tabelRegulasi->updated_by = $this->karyawan;
+            $tabelRegulasi->updated_at = Carbon::now();
+        }
 
         $tabelRegulasi->id_regulasi = json_encode($request->id_regulasi);
-        $tabelRegulasi->matrix = json_encode([]);
+        // $tabelRegulasi->matrix = json_encode([]);
         $tabelRegulasi->konten = $request->content;
-        $tabelRegulasi->created_by = $this->karyawan;
-        $tabelRegulasi->created_at = Carbon::now();
 
         $tabelRegulasi->save();
 
