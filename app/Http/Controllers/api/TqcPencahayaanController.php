@@ -321,23 +321,21 @@ class TqcPencahayaanController extends Controller
             ->where('status', 1)
             ->where('is_active', 1)
             ->get();
-
-        $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->first();
         $data = [];
         foreach ($orderDetails as $orderDetail) {
-
+            $header = PencahayaanHeader::where('no_sampel', $orderDetail->no_sampel)->first();
             $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
+            // dd($lhpsPencahayaanHeader);
             $lhpsPencahayaanDetail = LhpsPencahayaanDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
                 ->pluck('hasil_uji')
                 ->toArray();
-
             $data[] = [
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
                 'history' => $lhpsPencahayaanDetail,
                 'hasil' => WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1 ?? '-',
-                'analyst' => optional($lhpsPencahayaanHeader)->created_by,
-                'approved_by' => optional($lhpsPencahayaanHeader)->approved_by
+                'analyst' => optional($header)->created_by,
+                'approved_by' => optional($header)->approved_by
             ];
         }
 

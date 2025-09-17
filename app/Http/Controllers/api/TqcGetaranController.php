@@ -209,18 +209,7 @@ class TqcGetaranController extends Controller
         }
     }
 
-    public function detailPsikologi(Request $request)
-    {
-        $data = PsikologiHeader::with('data_lapangan')
-            ->where('no_sampel', $request->no_sampel)
-            ->where('is_approve', true)
-            ->where('is_active', true)
-            ->select('*')
-            ->addSelect(DB::raw("'psikologi' as data_type"))
-            ->first();
-        $data->data_lapangan->hasil = json_decode($data->data_lapangan->hasil);
-        return response()->json($data, 200);
-    }
+   
 
     public function detailLapangan(Request $request)
     {
@@ -316,14 +305,13 @@ class TqcGetaranController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsGetaranHeader = LhpsGetaranHeader::where('no_lhp', $request->cfr)->first();
         $data = [];
         foreach ($orderDetails as $orderDetail) {
+            $header = GetaranHeader::where('no_sampel', $orderDetail->no_sampel)->first();
             $lhpsGetaranHeader = LhpsGetaranHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
             $lhpsGetaranDetail = LhpsGetaranDetail::where('keterangan', $orderDetail->keterangan_1)
                 ->pluck('hasil')
                 ->toArray();
-
 
             $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)
                 ->orderByDesc('id')
@@ -339,8 +327,8 @@ class TqcGetaranController extends Controller
                     'titik' => $orderDetail->keterangan_1,
                     'history' => $lhpsGetaranDetail,
                     'hasil' => json_decode($hasil),
-                    'analyst' => optional($lhpsGetaranHeader)->created_by,
-                    'approved_by' => optional($lhpsGetaranHeader)->approved_by
+                    'analyst' => optional($header)->created_by,
+                    'approved_by' => optional($header)->approved_by
                 ];
 
             } else {
@@ -349,8 +337,8 @@ class TqcGetaranController extends Controller
                     'titik' => $orderDetail->keterangan_1,
                     'history' => $lhpsGetaranDetail,
                     'hasil' => $hasil,
-                    'analyst' => optional($lhpsGetaranHeader)->created_by,
-                    'approved_by' => optional($lhpsGetaranHeader)->approved_by
+                    'analyst' => optional($header)->created_by,
+                    'approved_by' => optional($header)->approved_by
                 ];
             }
         }

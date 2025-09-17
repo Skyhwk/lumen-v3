@@ -75,7 +75,11 @@
                             }, $dataArray);
 
                             foreach ($result as $index => $item) {
-                                $methode_sampling .= '<span><span>' . ($index + 1) . '. ' . $item . '</span></span><br>';
+                                if (trim($item) == '-') {
+                                    $methode_sampling .= "<span><span>-</span></span><br>";
+                                } else {
+                                    $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                }
                             }
 
                             if ($header->status_sampling == 'SD') {
@@ -89,11 +93,7 @@
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>
-                        @if ($header->status_sampling == 'SD')
-                            <td class="custom5">****** {!! str_replace('-', '', $methode_sampling) !!}</td>
-                        @else
-                            <td class="custom5">{!! $methode_sampling !!}</td>
-                        @endif
+                        <td class="custom5">{!! $methode_sampling !!}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -175,7 +175,7 @@
                                 @endif
                             @endforeach
                         @endforeach
-                        @if ($header->status_sampling == 'SD')
+                        @if ($header->status_sampling == 'SD' && $methode_sampling == '******')
                             <tr>
                                 <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
                             </tr>

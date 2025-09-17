@@ -478,8 +478,8 @@ class AppsSenyawaVolatileController extends Controller
                 if ($request->keterangan_4 != '') $fdlvalue->keterangan            = $request->keterangan_4;
                 if ($request->keterangan_2 != '') $fdlvalue->keterangan_2          = $request->keterangan_2;
                 if ($request->posisi != '') $fdlvalue->titik_koordinat             = $request->posisi;
-                if ($request->lat != '') $fdlvalue->latitude                            = $request->latitude;
-                if ($request->longi != '') $fdlvalue->longitude                        = $request->longitude;
+                if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitude;
+                if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitude;
                 if ($request->lok != '') $fdlvalue->lokasi                         = $request->lok;
                 $fdlvalue->parameter                                               = $a;
 
