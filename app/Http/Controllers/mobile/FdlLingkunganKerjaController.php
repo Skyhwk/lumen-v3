@@ -199,13 +199,6 @@ class FdlLingkunganKerjaController extends Controller
     public function getShift(Request $request)
     {
         try {
-            // $importantKeyword = [
-            // "As", "Asam Asetat", "Asbestos", "Carbon Dust", "Ba", "Cl-", "Cl2", "Co", "Cr",
-            // "Cu", "Cd", "Fe", "H2S", "H2SO4", "HCl", "HF", "Hg", "Kelembaban", "Laju Ventilasi",
-            // "Mn", "NH3", "Ni", "NO2", "NOx", "O3", "Oil Mist", "Ox", "Passive NO2", "Passive SO2",
-            // "Pb", "Sb", "Se", "Sn", "SO2", "Suhu", "TSP", "Zn", "Pertukaran Udara",
-            // "Aluminium", "Silica Crystaline 8 Jam", "Ortho Cresol", "Dustfall"
-            // ];
 
             $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lk')->first();
 
@@ -284,8 +277,6 @@ class FdlLingkunganKerjaController extends Controller
             } else if ($pp2 !== "") {
                 $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
             }
-
-            
             
             // Hapus parameter yang ada di $existing_parameters
             $filtered_param = array_values(array_diff($nilai_param2, $lk_parameter));
