@@ -883,11 +883,8 @@ class WsFinalUdaraKebisinganController extends Controller
 
 	public function getTableRegulasi(Request $request)
 	{
-		$regulasi = MasterRegulasi::where('id', $request->id)->first();
-		$value = $regulasi->id .'-'.$regulasi->peraturan;
-		
 		$data = DB::table('tabel_regulasi')
-			->whereJsonContains('id_regulasi', $value)
+			->whereJsonContains('id_regulasi', (string)$request->id)
 			->first();
 
 		return response()->json([
