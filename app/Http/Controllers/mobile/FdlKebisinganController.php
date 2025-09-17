@@ -112,12 +112,12 @@ class FdlKebisinganController extends Controller
             }
 
 
-            if ($request->lat) {
-                $data->latitude = $request->lat;
+            if ($request->latitude) {
+                $data->latitude = $request->latitude;
             }
 
-            if ($request->longi) {
-                $data->longitude = $request->longi;
+            if ($request->longitude) {
+                $data->longitude = $request->longitude;
             }
 
             if ($request->jenis_frekuensi) {
