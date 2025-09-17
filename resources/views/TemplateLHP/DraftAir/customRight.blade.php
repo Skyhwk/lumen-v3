@@ -83,7 +83,7 @@
                             }
 
                             if($header->status_sampling == 'SD') {
-                                $methode_sampling = $methode_sampling ?? '-';
+                                $methode_sampling = str_replace('<span><span>******</span></span><br>', '******', $methode_sampling ?? '-');
                             }
                         } else {
                             $methode_sampling = "-";
