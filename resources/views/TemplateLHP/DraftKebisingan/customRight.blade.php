@@ -1,3 +1,7 @@
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -57,60 +61,29 @@
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi_custom))
+                @foreach (json_decode($header->regulasi_custom) as $key => $y)
                     <table style="padding-top: 10px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
                         @if($key + 1 == $page)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
                             </tr>
                         @endif
-                        @endforeach
                     </table>
+                     @php
+                        // pastikan $header ada nilainya
+                        $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
+                        $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first()->konten;
+                    @endphp
+                 {!! preg_replace(
+                        '/<table(\s|>)/i',
+                        '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
+                        $table
+                    ) !!}
+
+                    @endforeach
                 @endif
 
-                {{-- Tabel Kebisingan --}}
-                <table border="1" cellspacing="0" cellpadding="2" width="100%" style="margin-top: 10px;">
-                    <thead>
-                        <tr>
-                            <th>Durasi Pajanan Kebisingan per Hari</th>
-                            <th>Level Kebisingan (dBA)</th>
-                            <th>Durasi Pajanan Kebisingan per Hari</th>
-                            <th>Level Kebisingan (dBA)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @php
-                            $dataKebisingan = [
-                                ['24 Jam', '80', '28,12 Detik', '115'],
-                                ['16', '82', '14,06', '118'],
-                                ['8', '85', '7,03', '121'],
-                                ['4', '88', '3,52', '124'],
-                                ['2', '91', '1,76', '127'],
-                                ['1', '94', '0,88', '130'],
-                                ['30 Menit', '97', '0,44', '133'],
-                                ['15', '100', '0,22', '136'],
-                                ['7,5', '103', '0,11', '139'],
-                                ['3,75', '106', '', ''],
-                                ['1,88', '109', '', ''],
-                                ['0,94', '112', '', ''],
-                            ];
-                        @endphp
-
-                        @foreach ($dataKebisingan as $row)
-                            <tr>
-                                @foreach ($row as $cell)
-                                    <td style="text-align: center; vertical-align: middle;">{{ $cell }}</td>
-                                @endforeach
-                            </tr>
-                        @endforeach
-
-                        <tr>
-                            <td colspan="4" style="text-align: center; vertical-align: middle;">
-                                <em>Catatan: Pajanan bising tidak boleh melebihi level 140 dBA walaupun hanya sesaat</em>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+              
 
             </td>
         </tr>
