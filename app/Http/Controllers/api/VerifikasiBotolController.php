@@ -18,19 +18,11 @@ class VerifikasiBotolController extends Controller
     {
         $date = Carbon::parse($request->date);
 
-        $data = QcLapangan::where('is_active', $request->is_active)
-            ->whereMonth('created_at', $date->month)
+        $data = ScanSampelTc::whereMonth('created_at', $date->month)
             ->whereYear('created_at', $date->year)
             ->orderBy('id', 'desc');
 
         return Datatables::of($data)
-            ->filterColumn('status_jenis', function ($query, $keyword) {
-                if (strtolower($keyword) === 'jenis sample sesuai') {
-                    $query->where('status_jenis', 1);
-                } elseif ($keyword === '-') {
-                    $query->where('status_jenis', 0);
-                }
-            })
             ->make(true);
     }
 
