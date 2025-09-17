@@ -191,15 +191,15 @@ class AppsFdlController extends Controller
                         'param' => json_encode($nilai_param2)
                     ], 200);
                 } else if ($lingh !== NULL) {
-                    if ($vallingh && $this->karyawan != $vallingh->created_by) {
-                        $user = MasterKaryawan::where('nama_lengkap', $vallingh->created_by)->first();
-                        $samplerName = $user ? $user->nama_lengkap : "Unknown";
+                    // if ($vallingh && $this->karyawan != $vallingh->created_by) {
+                    //     $user = MasterKaryawan::where('nama_lengkap', $vallingh->created_by)->first();
+                    //     $samplerName = $user ? $user->nama_lengkap : "Unknown";
 
-                        return response()->json([
-                            'message' => "No Sample $request->no_sample harus di input oleh sampler $samplerName"
-                        ], 401);
-                    }
-                    else {
+                    //     return response()->json([
+                    //         'message' => "No Sample $request->no_sample harus di input oleh sampler $samplerName"
+                    //     ], 401);
+                    // }
+                    // else {
                         \DB::statement("SET SQL_MODE=''");
                         $param = DetailLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sample)))->groupBy('parameter')->get();
                         $parNonSes = array();
@@ -270,7 +270,7 @@ class AppsFdlController extends Controller
                             'id_ket' => explode('-', $data->kategori_3)[0],
                             'param' => $param_fin
                         ], 200);
-                    }
+                    // }
                 } else if ($lingk !== NULL) {
                     // if ($this->karyawan != $vallingk->created_by) {
                     //     $user = MasterKaryawan::where('nama_lengkap', $vallingk->created_by)->first();

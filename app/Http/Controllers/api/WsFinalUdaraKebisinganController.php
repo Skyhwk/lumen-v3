@@ -21,6 +21,7 @@ use App\Models\HistoryAppReject;
 use App\Models\WsValueLingkungan;
 use App\Models\DataLapanganKebisingan;
 use App\Models\DataLapanganKebisinganPersonal;
+use App\Models\MasterRegulasi;
 
 
 class WsFinalUdaraKebisinganController extends Controller
@@ -54,6 +55,7 @@ class WsFinalUdaraKebisinganController extends Controller
 
 		return Datatables::of($data)->make(true);
 	}
+
 	public function getDetailCfr(Request $request)
 	{
 		$data = OrderDetail::where('cfr', $request->cfr)
@@ -70,6 +72,7 @@ class WsFinalUdaraKebisinganController extends Controller
 			'message' => 'Data retrieved successfully',
 		], 200);
 	}
+
 	public function convertHourToMinute($hour)
 	{
 		if ($hour == null || $hour == "")
@@ -77,6 +80,7 @@ class WsFinalUdaraKebisinganController extends Controller
 		$minutes = $hour * 60;
 		return $minutes;
 	}
+
 	private function getNabKebisingan($menit)
 	{
 		if ($menit >= 0.94 && $menit < 1.88) {
@@ -162,9 +166,14 @@ class WsFinalUdaraKebisinganController extends Controller
 			], 401);
 		}
 	}
+
 	public function detailLapangan(Request $request)
 	{
 		$parameterNames = [];
+
+		if(!isset($request->parameter) || $request->parameter == null || $request->parameter == '') {
+			return response()->json(['message' => 'Parameter tidak ditemukan'], 401);
+		}
 
 		if (is_array($request->parameter)) {
 			foreach ($request->parameter as $param) {
@@ -201,12 +210,7 @@ class WsFinalUdaraKebisinganController extends Controller
 				$urutanDisplay = $urutan + 1;
 				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
 				$data['parameter'] = $parameterNames[0];
-				// dd([
-				// 	'no_order' => $noOrder,
-				// 	'total_lapangan' => $totLapangan,
-				// 	'lapangan' => $lapangan2,
-				// 	'data' => $data,
-				// ]);
+				
 
 				if ($data) {
 					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
@@ -218,6 +222,7 @@ class WsFinalUdaraKebisinganController extends Controller
 			$data = [];
 		}
 	}
+	
 	public function rejectAnalys(Request $request)
 	{
 		try {
@@ -416,8 +421,6 @@ class WsFinalUdaraKebisinganController extends Controller
 			throw $e;
 		}
 	}
-
-
 
 	public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
 	{
@@ -818,15 +821,6 @@ class WsFinalUdaraKebisinganController extends Controller
 		}
 	}
 
-
-
-
-
-
-
-
-
-
 	public function handleReject(Request $request)
 	{
 		DB::beginTransaction();
@@ -874,6 +868,30 @@ class WsFinalUdaraKebisinganController extends Controller
 		return response()->json([
 			'message' => 'Data berhasil diapprove.',
 			'success' => true,
+		], 200);
+	}
+
+	public function getRegulasi(Request $request)
+	{
+		$data = MasterRegulasi::where('id_kategori', 4)
+			->where('is_active', true)
+			->get();
+		return response()->json([
+			'data' => $data
+		], 200);
+	}
+
+	public function getTableRegulasi(Request $request)
+	{
+		$regulasi = MasterRegulasi::where('id', $request->id)->first();
+		$value = $regulasi->id .'-'.$regulasi->peraturan;
+		
+		$data = DB::table('tabel_regulasi')
+			->whereJsonContains('id_regulasi', $value)
+			->first();
+
+		return response()->json([
+			'data' => $data
 		], 200);
 	}
 }
