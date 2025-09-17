@@ -158,8 +158,9 @@ class FdlPartikulatIsokinetikMethod3Controller extends Controller
         $search = $request->input('search');
 
         $query = DataLapanganIsokinetikBeratMolekul::with('detail', 'survei')
+            ->whereIn('is_rejected', [0, 1])
             ->where('created_by', $this->karyawan)
-            ->whereDate('created_at', '>=', Carbon::now()->subDays(3));
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
