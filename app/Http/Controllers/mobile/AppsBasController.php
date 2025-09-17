@@ -94,8 +94,7 @@ class AppsBasController extends Controller
                 ->where('kategori_1', '!=', 'SD');
             if ($isProgrammer) {
                 $orderDetail->whereBetween('tanggal_sampling', [
-                    Carbon::now()->subDays(20)->toDateString(),
-                    Carbon::now()->toDateString()
+                    '2025-08-19', '2025-08-20'
                 ]);
             } else {
                 $orderDetail->whereBetween('tanggal_sampling', [
@@ -482,16 +481,9 @@ class AppsBasController extends Controller
                 ->where('no_order', $request->no_order)
                 ->where('kategori_1', '!=', 'SD');
             if ($isProgrammer) {
-                $orderDetail->whereBetween('tanggal_sampling', [
-                    Carbon::now()->subDays(20)->toDateString(),
-                    Carbon::now()->toDateString()
-                ]);
+                $orderDetail->where('tanggal_sampling', $request->tanggal_sampling);
             } else {
-                $orderDetail->whereBetween('tanggal_sampling', [
-                    // "2025-04-31",
-                    Carbon::now()->subDays(8)->toDateString(),
-                    Carbon::now()->toDateString()
-                ]);
+                $orderDetail->where('tanggal_sampling', $request->tanggal_sampling);
             }
             $orderDetail->groupBy(['id_order_header', 'no_order', 'kategori_2', 'periode', 'tanggal_sampling', 'parameter', 'no_sampel', 'keterangan_1']);
 
@@ -788,7 +780,7 @@ class AppsBasController extends Controller
             if (count($filteredResult) === 0) {
                 return response()->json([
                     'message' => 'Data tidak ditemukan untuk sampler yang sesuai dengan karyawan.'
-                ], 200);
+                ], 401);
             }
 
             // filter tanggal sampling sesuai durasi jadwal
@@ -1122,16 +1114,20 @@ class AppsBasController extends Controller
                     'data' => [],
                 ], 200);
             }
-
+            
             $jsonDecode = html_entity_decode($request->info_sampling);
 
             $infoSampling = json_decode($jsonDecode, true);
-
+            
             $tipe = explode("/", $request->no_document);
             $request->kategori = explode(",", $request->kategori);
 
             // Get No Sample
-            $noSample = $request->no_sampel;
+            $noSample = [];
+            foreach ($request->kategori as $item) {
+                $parts = explode(" - ", $item);
+                array_push($noSample, $request->no_order . '/' . $parts[1]);
+            }
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
                 ->where('quotation_id', $infoSampling['id_request'])
@@ -1166,17 +1162,6 @@ class AppsBasController extends Controller
                     'message' => 'Data jadwal tidak ditemukan.!',
                 ], 401);
             }
-
-            // $samplerJadwal = Jadwal::where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get()->pluck('sampler');
-
-            // $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
-            //     ->where('id_sampling', $sp->id)
-            //     ->where('tanggal', $request->tanggal_sampling)
-            //     ->where('is_active', true)
-            //     ->get();
 
             $samplerJadwal = Jadwal::select(['sampler', 'kategori'])
                 ->where([
@@ -1226,15 +1211,12 @@ class AppsBasController extends Controller
                 return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
             });
 
-
-            // dd($persiapanHeader);
-
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
                 $orderH->detail_bas_documents = json_encode([]);
             }
-
+            
             // Ambil data order detail beserta relasi codingSampling
             $orderD = OrderDetail::with(['codingSampling'])
                 ->where('id_order_header', $orderH->id)
@@ -1243,7 +1225,6 @@ class AppsBasController extends Controller
                 ->whereIn('tanggal_sampling', $jadwal)
                 ->where('is_active', true)
                 ->get();
-            // dd($orderD); 
 
             $tipe = explode("/", $request->no_document);
             $tahun = "20" . explode("-", $tipe[2])[0];
@@ -1258,7 +1239,7 @@ class AppsBasController extends Controller
                     ->where('no_document', $request->no_document)
                     ->first();
             }
-
+            
             $data_sampling = [];
             $dat_param = [];
 
