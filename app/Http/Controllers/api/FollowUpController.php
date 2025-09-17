@@ -22,6 +22,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use Yajra\DataTables\DataTables as DataTables;
+use Illuminate\Support\Facades\DB;
 
 class FollowUpController extends Controller
 {
@@ -123,13 +124,18 @@ class FollowUpController extends Controller
             ], 401);
         }
 
-        $cekCalling = DFUS::where('kontak', 'like', '%' . $no_tlp_perusahaan . '%')->orderBy('tanggal', 'desc')->first();
+        $cekLog = DB::table('log_webphone')
+        ->join('master_karyawan', 'master_karyawan.id', '=', 'log_webphone.karyawan_id')
+        ->where('log_webphone.number', 'like', '%' . preg_replace(['/[^0-9]/', '/^(\+62|62)/'], ['', '0'], $no_tlp_perusahaan . '%'))
+        ->select('master_karyawan.nama_lengkap', 'log_webphone.created_at', 'log_webphone.number')
+        ->orderBy('log_webphone.created_at', 'desc')
+        ->first();
 
-        if ($cekCalling) {
-            if($cekCalling->sales_penanggung_jawab != $this->karyawan) {
+        if ($cekLog) {
+            if($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
+                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
                 ], 401);
             }
         }
@@ -313,6 +319,23 @@ class FollowUpController extends Controller
                             continue;
                         }
 
+                        $cekLog = DB::table('log_webphone')
+                        ->join('master_karyawan', 'master_karyawan.id', '=', 'log_webphone.karyawan_id')
+                        ->where('log_webphone.number', 'like', '%' . preg_replace(['/[^0-9]/', '/^(\+62|62)/'], ['', '0'], $item['kontak_pelanggan'] . '%'))
+                        ->select('master_karyawan.nama_lengkap', 'log_webphone.created_at', 'log_webphone.number')
+                        ->orderBy('log_webphone.created_at', 'desc')
+                        ->first();
+                        // dd('stop');
+                        if ($cekLog) {
+                            if($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+                                
+                                return response()->json([
+                                    'status' => 'error',
+                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
+                                ], 401);
+                            }
+                        }
+
                         $data[] = [
                             'id_pelanggan' => $item['id_pelanggan'],
                             'kontak' => 'Perusahaan - ' . preg_replace(['/[^0-9]/', '/^(\+62|62)/'], ['', '0'], $item['kontak_pelanggan']),
@@ -320,23 +343,15 @@ class FollowUpController extends Controller
                             'tanggal' => Carbon::now()->format('Y-m-d'),
                             'jam' => Carbon::now()->format('H:i:s'),
                             'created_by' => $this->karyawan,
+                            'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         ];
                     }
 
                     if (!empty($data)) {
-                        $cekCalling = DFUS::where('kontak', 'like', '%' . $data[0]['kontak'] . '%')->orderBy('tanggal', 'desc')->first();
-
-                        if ($cekCalling) {
-                            if($cekCalling->sales_penanggung_jawab != $data[0]['sales_penanggung_jawab']) {
-                                return response()->json([
-                                    'status' => 'error',
-                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
-                                ], 401);
-                            }
-                        } else {
+                        
                             DFUS::insert($data);
                             $message = 'Data berhasil disimpan.';
-                        }
+                        
                     } else {
                         $message = 'Tidak ada data valid untuk disimpan.';
                     }
@@ -345,16 +360,21 @@ class FollowUpController extends Controller
                         $message = 'Data tidak lengkap.';
                     } else {
 
-                        $cekCalling = DFUS::where('kontak', 'like', '%' . $request->kontak . '%')->orderBy('tanggal', 'desc')->first();
-
-                        if ($cekCalling) {
-                            if($cekCalling->sales_penanggung_jawab != $request->sales_penanggung_jawab) {
+                        $cekLog = DB::table('log_webphone')
+                        ->join('master_karyawan', 'master_karyawan.id', '=', 'log_webphone.karyawan_id')
+                        ->where('log_webphone.number', 'like', '%' . preg_replace(['/[^0-9]/', '/^(\+62|62)/'], ['', '0'], \explode(' - ', $request->kontak)[1] . '%'))
+                        ->select('master_karyawan.nama_lengkap', 'log_webphone.created_at', 'log_webphone.number')
+                        ->orderBy('log_webphone.created_at', 'desc')
+                        ->first();
+                        // dd($cekLog, $request->sales_penanggung_jawab, 'stop');
+                        if ($cekLog) {
+                            if($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                                 return response()->json([
                                     'status' => 'error',
-                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekCalling->tanggal . ' ' . $cekCalling->jam . ' oleh ' . $cekCalling->sales_penanggung_jawab . '.'
+                                    'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
                                 ], 401);
                             }
-                        } 
+                        }
                         
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
