@@ -786,7 +786,7 @@ class FdlLingkunganKerjaController extends Controller
                                 'Flow' => $request->awal[$in],
                             ];
                         }
-                    } else if (str_contains($a, 'O3')) {
+                    } else if ($a == 'O3 (8 Jam)' || $a == 'O3') {
                         $pengukuran = [
                             'Flow Awal' => $request->awal[$in],
                             'Flow Tengah' => $request->tengah[$in],
