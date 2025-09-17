@@ -747,13 +747,13 @@ class FdlEmisiCerobongController extends Controller
 
     public function deleteByType(Request $request)
     {
-        if (!isset($request->id) || $request->id === null) {
+        if (!isset($request->no_sampel) || $request->no_sampel === null) {
             return response()->json([
                 'message' => 'Gagal Delete'
             ], 401);
         }
 
-        $data = DataLapanganEmisiCerobong::find($request->id);
+        $data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
 
         if (!$data) {
             return response()->json([
@@ -783,10 +783,10 @@ class FdlEmisiCerobongController extends Controller
                 'kelembapan' => null,
                 'tekanan_udara' => null,
                 'kapasitas' => null,
-                'HCl' => null,
+                'HCI' => null,
                 'H2S' => null,
                 'NH3' => null,
-                'Cl2' => null,
+                'CI2' => null,
                 'HF' => null,
                 'permission_1' => 0,
                 'foto_lokasi_sampel' => null,
