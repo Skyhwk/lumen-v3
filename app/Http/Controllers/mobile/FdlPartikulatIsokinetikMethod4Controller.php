@@ -41,11 +41,11 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
             $check = DataLapanganIsokinetikKadarAir::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
             if ($data2) {
-                if ($check) {
-                    return response()->json([
-                        'message' => 'No. Sample sudah di input.'
-                    ], 401);
-                } else {
+                // if ($check) {
+                //     return response()->json([
+                //         'message' => 'No. Sample sudah di input.'
+                //     ], 401);
+                // } else {
                     return response()->json([
                         'id' => $data2->id_lapangan,
                         'diameter' => $data2->diameter,
@@ -56,7 +56,7 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                         'dP' => $data->dP,
                         'Ps' => $data->Ps,
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json([
                     'message' => 'Tidak ada data di Method 3 berdasarkan No. Sample tersebut.'
@@ -67,7 +67,7 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
     public function store(Request $request)
     {
 
-        // dd($request->all());
+        dd($request->all());
         if ($request->jam_pengambilan == '') {
             return response()->json([
                 'message' => 'Waktu Pengambilan tidak boleh kosong.'
@@ -125,8 +125,11 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                 if ($request->nilvwc != '') $data->vwc = $request->nilvwc;
                 if ($request->nilvmstd != '') $data->vmstd = $request->nilvmstd;
                 if ($request->nilvwsg != '') $data->vwsg = $request->nilvwsg;
+                if ($request->bws != '') $data->bws = $request->bws;
                 if ($request->nil_p_bws != '') $data->bws = $request->nil_p_bws;
+                if ($request->ms != '') $data->ms = $request->ms ;
                 if ($request->msMole != '') $data->ms = $request->msMole;
+                if ($request->vs != '') $data->vs = $request->vs;
                 if ($request->nil_vs != '') $data->vs = $request->nil_vs;
                 if ($request->d_cerobong != '') $data->diameter_cerobong = $request->d_cerobong;
                 if ($request->foto_lokasi_sampel != '') $data->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
@@ -134,8 +137,8 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
                     $data->foto_kondisi_sampel = self::convertImg($request->foto_sampel, 2, $this->user_id);
                 if ($request->foto_lain != '')
                     $data->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
-                if ($request->permis != '')
-                    $data->permission = $request->permis;
+                if ($request->permission != '')
+                    $data->permission = $request->permission;
                 $data->created_by = $this->karyawan;
                 $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
