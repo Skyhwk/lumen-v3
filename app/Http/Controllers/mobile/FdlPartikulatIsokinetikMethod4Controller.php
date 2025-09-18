@@ -541,170 +541,36 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
     public function delete(Request $request)
     {
         try {
-            if ($request->method == 1) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    DataLapanganIsokinetikPenentuanKecepatanLinier::where('id_lapangan', $cek->id)->delete();
-                    DataLapanganIsokinetikBeratMolekul::where('id_lapangan', $cek->id)->delete();
-                    DataLapanganIsokinetikKadarAir::where('id_lapangan', $cek->id)->delete();
-                    DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id)->delete();
-                    DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id)->delete();
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
+            if (isset($request->id) && $request->id != null) {
+                $cek = DataLapanganIsokinetikKadarAir::where('id', $request->id)->first();
+                $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
+                $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
+                $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
+                if (is_file($foto_lok)) {
+                    unlink($foto_lok);
                 }
-            } else if ($request->method == 2) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikPenentuanKecepatanLinier::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    DataLapanganIsokinetikBeratMolekul::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikKadarAir::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
-                    return response()->json([
-                        'message' => 'Data has ben Delete',
-                        'cat' => 1
-                    ], 201);
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
+                if (is_file($foto_kon)) {
+                    unlink($foto_kon);
                 }
-            } else if ($request->method == 3) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikBeratMolekul::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    DataLapanganIsokinetikKadarAir::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
-                    return response()->json([
-                        'message' => 'Data has ben Delete',
-                        'cat' => 1
-                    ], 201);
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
+                if (is_file($foto_lain)) {
+                    unlink($foto_lain);
                 }
-            } else if ($request->method == 4) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikKadarAir::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id_lapangan)->delete();
-                    DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
-                    return response()->json([
-                        'message' => 'Data has ben Delete',
-                        'cat' => 1
-                    ], 201);
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
-                }
-            } else if ($request->method == 5) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikPenentuanPartikulat::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
-                    return response()->json([
-                        'message' => 'Data has ben Delete',
-                        'cat' => 1
-                    ], 201);
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
-                }
-            } else if ($request->method == 6) {
-                if (isset($request->id) && $request->id != null) {
-                    $cek = DataLapanganIsokinetikHasil::where('id', $request->id)->first();
-                    $foto_lok = public_path() . '/dokumentasi/sampling/' . $cek->foto_lokasi_sampel;
-                    $foto_kon = public_path() . '/dokumentasi/sampling/' . $cek->foto_kondisi_sampel;
-                    $foto_lain = public_path() . '/dokumentasi/sampling/' . $cek->foto_lain;
-                    if (is_file($foto_lok)) {
-                        unlink($foto_lok);
-                    }
-                    if (is_file($foto_kon)) {
-                        unlink($foto_kon);
-                    }
-                    if (is_file($foto_lain)) {
-                        unlink($foto_lain);
-                    }
-                    $cek->delete();
-                    return response()->json([
-                        'message' => 'Data has ben Delete',
-                        'cat' => 1
-                    ], 201);
-                } else {
-                    return response()->json([
-                        'message' => 'Gagal Delete'
-                    ], 401);
-                }
+                $cek->delete();
+                DataLapanganIsokinetikPenentuanPartikulat::where('id_lapangan', $cek->id_lapangan)->delete();
+                DataLapanganIsokinetikHasil::where('id_lapangan', $cek->id_lapangan)->delete();
+                return response()->json([
+                    'message' => 'Data has ben Delete',
+                    'cat' => 1
+                ], 201);
+            } else {
+                return response()->json([
+                    'message' => 'Gagal Delete'
+                ], 401);
             }
         } catch (Exception $e) {
-            dd($e);
+            return response()->json([
+                'message' => $e->getMessage()
+            ], 401);
         }
     }
 
