@@ -1258,24 +1258,47 @@ class StpsController extends Controller
                     $regulasiText = implode(', ', $value->regulasi);
                 }
                 // dd($value);
-                $pdf->WriteHTML(
-                    '<tr>
-                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                            <td style="font-size: 12px; padding: 5px;">
-                                <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
-                                <b style="font-size: 12px;">' .
-                        (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
-                        $value->total_parameter . ' Parameter ' . $value->persiapan .
-                        '</b>'
-                );
-                foreach ($value->parameter as $keys => $parameter) {
-                    // dd($parameter);
-                    $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
-                }
+                if (count($value->no_sampel) > 100) {
+                    # code...
+                    $pdf->WriteHTML(
+                        '<tr>
+                                <td style="vertical-align: middle; text-align:center;font-size: 13px; width: 5%;">' . $i . '</td>
+                                <td style="font-size: 12px; padding: 5px; width: 45%;">
+                                    <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
+                                    <b style="font-size: 12px;">' .
+                            (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
+                            $value->total_parameter . ' Parameter ' . $value->persiapan .
+                            '</b>'
+                    );
+                    foreach ($value->parameter as $keys => $parameter) {
+                        // dd($parameter);
+                        $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
+                    }
 
-                $pdf->WriteHTML(
-                    '<td style="font-size: 13px; padding: 5px;text-align:center;">' . implode('<br />', $value->no_sampel) . '</td></tr>'
-                );
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 13px; padding: 5px;text-align:center; width: 50%;">' . implode('; ', $value->no_sampel) . '</td></tr>'
+                    );
+                } else {
+
+                    $pdf->WriteHTML(
+                        '<tr>
+                                <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
+                                <td style="font-size: 12px; padding: 5px;">
+                                    <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
+                                    <b style="font-size: 12px;">' .
+                            (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
+                            $value->total_parameter . ' Parameter ' . $value->persiapan .
+                            '</b>'
+                    );
+                    foreach ($value->parameter as $keys => $parameter) {
+                        // dd($parameter);
+                        $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
+                    }
+
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 13px; padding: 5px;text-align:center;">' . implode('; ', $value->no_sampel) . '</td></tr>'
+                    );
+                }
                 $i++;
                 $pe++;
             }
