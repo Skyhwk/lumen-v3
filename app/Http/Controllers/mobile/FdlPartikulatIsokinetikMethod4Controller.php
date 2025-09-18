@@ -67,7 +67,6 @@ class FdlPartikulatIsokinetikMethod4Controller extends Controller
     public function store(Request $request)
     {
 
-        dd($request->all());
         if ($request->jam_pengambilan == '') {
             return response()->json([
                 'message' => 'Waktu Pengambilan tidak boleh kosong.'
