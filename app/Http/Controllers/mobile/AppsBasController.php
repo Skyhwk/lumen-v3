@@ -2305,6 +2305,9 @@ class AppsBasController extends Controller
 
 
         $parameters = array_filter($parameters, function ($param) {
+            if($param['category'] == '6-Padatan'){
+                return is_array($param);
+            }
             return is_array($param) && isset($param['model']);
         });
 
@@ -2312,6 +2315,9 @@ class AppsBasController extends Controller
         $status = 'selesai';
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
+                 if($parameter['category'] == '6-Padatan'){
+                    continue; // Skip Padatan
+                }
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
@@ -2503,7 +2509,7 @@ class AppsBasController extends Controller
     private function getRequiredParameters()
     {
         // gini aja lah pake sub kategori mlh ngawur mls bgt
-        return [
+        $data_parameters = [
             [
                 "parameter" => "Air",
                 "requiredCount" => 1,
@@ -4285,5 +4291,17 @@ class AppsBasController extends Controller
                 "model2" => null
             ]
         ];
+
+        $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];
+        foreach ($padatanParam as $key => $value) {
+            $data_parameters[] = [
+                "parameter" => $value,
+                "requiredCount" => 1,
+                "category" => "6-Padatan",
+                "model" => null,
+                "model2" => null
+            ];
+        }
+        return $data_parameters;
     }
 }
