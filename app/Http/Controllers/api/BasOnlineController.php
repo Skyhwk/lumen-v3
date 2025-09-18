@@ -2138,7 +2138,7 @@ class BasOnlineController extends Controller
     private function getRequiredParameters()
     {
         // gini aja lah pake sub kategori mlh ngawur mls bgt
-        $data_parameters [
+        $data_parameters = [
             [
                 "parameter" => "Air",
                 "requiredCount" => 1,
