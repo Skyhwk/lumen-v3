@@ -133,15 +133,16 @@ class DraftAirController extends Controller
                 'alamat_sampling' => $request->alamat_sampling ?: null,
                 'sub_kategori'    => $request->jenis_sampel ?: null,
                 'deskripsi_titik' => $request->penamaan_titik ?: null,
-                'methode_sampling' => $request->metode_sampling ? json_encode(
-                    array_map(function($item) {
-                        if (strpos($item, 'custom;') === 0) {
-                            $parts = explode(';', $item, 2);
-                            return isset($parts[1]) ? $parts[1] : '';
-                        }
-                        return $item;
-                    }, $request->metode_sampling)
-                ) : null,
+                'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
+                // 'methode_sampling' => $request->metode_sampling ? json_encode(
+                //     array_map(function($item) {
+                //         if (strpos($item, 'custom;') === 0) {
+                //             $parts = explode(';', $item, 2);
+                //             return isset($parts[1]) ? $parts[1] : '';
+                //         }
+                //         return $item;
+                //     }, $request->metode_sampling)
+                // ) : null,
                 'titik_koordinat' => $request->titik_koordinat ?: null,
                 'tanggal_sampling'=> $request->tanggal_terima ?: null,
                 'periode_analisa' => $request->periode_analisa ?: null,

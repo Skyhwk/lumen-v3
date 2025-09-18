@@ -194,13 +194,8 @@ class FdlIklimPanasController extends Controller
 
         $query = DataLapanganIklimPanas::with('detail')
             ->where('created_by', $this->karyawan)
-            ->where(function ($q) {
-                $q->where('is_rejected', 1)
-                ->orWhere(function ($q2) {
-                    $q2->where('is_rejected', 0)
-                        ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                });
-            });
+            ->whereIn('is_rejected', [0, 1])
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {
