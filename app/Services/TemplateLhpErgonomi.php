@@ -68,16 +68,9 @@ class TemplateLhpErgonomi
             ];
            
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomirula',compact('pengukuran', 'personal'))->render();
+            $html = View::make('ergonomirula',compact('pengukuran', 'personal','ttd'))->render();
             
             return $html;
-            $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
-            $pdf->setAutoBottomMargin = 'stretch';
-            // Add mPDF watermark
-            $pdf->SetWatermarkText('DRAFT');
-            $pdf->showWatermarkText = true;
-            $pdf->watermarkTextAlpha = 0.1;
-            $pdf->WriteHTML($html);
             return $pdf->Output('laporan.pdf', 'I');
         } catch (\Exception $ex) {
             throw $ex;
@@ -98,6 +91,7 @@ class TemplateLhpErgonomi
             ->where('method', 5)
             ->first();
         $pengukuran = json_decode($dataRula->pengukuran);
+        
         $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
         $pengukuran->frekuensi = $avrageFrequesi;
         $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
@@ -121,7 +115,7 @@ class TemplateLhpErgonomi
             ];
        
         $pdf = new PDF($mpdfConfig);
-        $html = View::make('ergonomirwl',compact('pengukuran','personal'))->render();
+        $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
         return $html;
     }
 
@@ -206,7 +200,7 @@ class TemplateLhpErgonomi
             ];
             
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonominbm', compact('pengukuran', 'personal','spesifik'))->render();
+            $html = View::make('ergonominbm', compact('pengukuran', 'personal','spesifik','ttd'))->render();
             return $html;  
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -289,7 +283,7 @@ class TemplateLhpErgonomi
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur
             ];
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomireba', compact('pengukuran', 'personal','cssGlobal','spesifik'))->render();
+            $html = View::make('ergonomireba', compact('pengukuran', 'personal','cssGlobal','spesifik','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -362,7 +356,7 @@ class TemplateLhpErgonomi
             ];
             
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomirosa', compact('pengukuran', 'personal'))->render();
+            $html = View::make('ergonomirosa', compact('pengukuran', 'personal','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -434,7 +428,7 @@ class TemplateLhpErgonomi
             $groupedAtas  = $this->groupByKategori($dataAtas);
             $groupedBawah  = $this->groupByKategori($dataBawah);
             // dd($personal);
-            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal'))->render();
+            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -503,7 +497,7 @@ class TemplateLhpErgonomi
             $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
             $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
             
-            $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik'))->render();
+            $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -606,6 +600,4 @@ class TemplateLhpErgonomi
         }
         return $grouped;
     }
-
-
 }

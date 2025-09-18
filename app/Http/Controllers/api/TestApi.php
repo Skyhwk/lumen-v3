@@ -1192,7 +1192,7 @@ class TestApi extends Controller
                 'reba' => 2, //✅
                 'rula' => 3, //✅
                 'rosa' => 4, //✅
-                'rwl' => 5,
+                'rwl' => 5,  
                 'brief' => 6,
                 'sni_gotrak' => 7,
                 'sni_bahaya_ergonomi' =>8,
@@ -1236,7 +1236,7 @@ class TestApi extends Controller
                 $pdf = new PDF($mpdfConfig);
                 $render = new TemplateLhpErgonomi();
 
-                // CSS definitions (keeping your existing CSS)
+            // CSS definitions (keeping your existing CSS)
             $globalCssContent = '
                 * {
                     box-sizing: border-box;
@@ -2165,7 +2165,7 @@ class TestApi extends Controller
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();
-                
+                   
                     if ($dataMethod) {
                         $ttdData = null;
                         switch($type) {
@@ -2179,7 +2179,7 @@ class TestApi extends Controller
                                     'nama_karyawan' => $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah',
                                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor',
                                     'tanggal' => Carbon::now('Asia/Jakarta')->locale('id')->isoFormat('DD MMMM YYYY'),
-                                    'qr_path' => public_path('qr_documents/' . $pdfFile->file_qr . '.svg')
+                                    'qr_path' => null
                                 ];
                                 break;
                             case 'lhp_digital':
@@ -2189,7 +2189,7 @@ class TestApi extends Controller
                                     'nama_karyawan' => $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah',
                                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor',
                                     'tanggal' => Carbon::now('Asia/Jakarta')->locale('id')->isoFormat('DD MMMM YYYY'),
-                                    'qr_path' => null
+                                    'qr_path' => public_path('qr_documents/' . $pdfFile->file_qr . '.svg')
                                 ];
                                 break;
                         }
@@ -2215,6 +2215,7 @@ class TestApi extends Controller
                                 $htmlContent = $render->ergonomiBrief($dataMethod,'','',$ttdData);
                                 break;
                             case 'sni_gotrak':
+                                 
                                 $htmlContent = $render->ergonomiGontrak($dataMethod,$globalCssContent,$templateSpecificCss,$ttdData);
                                 break;
                             case 'sni_bahaya_ergonomi':
@@ -2228,10 +2229,8 @@ class TestApi extends Controller
                         }
 
                     }
-                    if (empty($allHtmlContent)) {
-                        return response()->json(["message"=>"Tidak ada data laporan yang ditemukan untuk sampel ini."],404);
-                    }
                 }
+                
                 $firstPage = true;
                 foreach ($allHtmlContent as $htmlContent) {
                     if (!$firstPage) {

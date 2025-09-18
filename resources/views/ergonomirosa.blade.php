@@ -163,6 +163,52 @@
             font-size: 7pt;
         }
 
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
+        }
+
         /* Responsive fallback */
         @media print {
             body {
@@ -428,11 +474,38 @@
 
             <!-- Signature Section -->
             <div class="signature-section">
-                <div class="signature-container">
-                    <div class="signature-date">Jakarta, 04 September 2025</div>
-                    <div class="signature-line"></div>
-                    <div class="signature-text">(Tanda Tangan Digital)</div>
-                </div>
+                @if($ttd != null)
+                    @if($ttd->qr_path != null)
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right">
+                                    <div class="signature-date">
+                                        {{ $ttd->tanggal }}
+                                    </div><br>
+                                    <div class="signature-text">
+                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @else
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right" style="text-align: center;">
+                                    <div class="signature-date">
+                                        Tangerang, 13 Agustus 2025
+                                    </div><br><br><br>
+                                    <div class="signature-text">
+                                        <strong>(Abidah Walfathiyyah)</strong><br>
+                                        <span>Technical Control Supervisor</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @endif
+                @endif
             </div>
         </div>
     </div>

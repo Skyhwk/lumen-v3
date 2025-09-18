@@ -488,9 +488,9 @@
                 <div class="section-header">Informasi Pelanggan</div>
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Nama Pelanggan</td>
-                        <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                     </tr>
                     <tr>
                         <td>Alamat / Lokasi Sampling</td>
@@ -501,43 +501,43 @@
                 <!-- Informasi Sampling -->
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Tanggal Sampling</td>
+                        <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                         <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ $personal->tanggal_sampling }}</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                     </tr>
                     <tr>
-                        <td>Periode Analisis</td>
-                        <td>:</td>
-                        <td>{{ $personal->periode_analisis }}</td>
+                        <td style="width: 25%; text-align:start;">Periode Analisis</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->periode_analisis }}</td>
                     </tr>
                     <tr>
-                        <td>Jenis Analisis</td>
-                        <td>:</td>
-                        <td>Rapid Assessment (Form Penilaian Cepat)</td>
+                        <td style="width: 25%; text-align:start;">Jenis Analisis</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">Rapid Assessment (Form Penilaian Cepat)</td>
                     </tr>
                     <tr>
-                        <td>Metode Analisis*</td>
-                        <td>:</td>
-                        <td>Pengamatan Langsung - Rapid Entire Body Assessment</td>
+                        <td style="width: 25%; text-align:start;">Metode Analisis*</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">Pengamatan Langsung - Rapid Entire Body Assessment</td>
                     </tr>
                 </table>
                 <!-- Data Individu -->
                 <div class="section-header">Data Individu/Pekerja yang Diukur</div>
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Nama</td>
-                        <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ $personal->nama_pekerja }}</td>
+                        <td style="width: 25%; text-align:start;">Nama</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->nama_pekerja }}</td>
                     </tr>
                     <tr>
-                        <td>Usia</td>
-                        <td>:</td>
-                        <td>{{ $personal->usia }} Tahun</td>
+                        <td style="width: 25%; text-align:start;">Usia</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->usia }} Tahun</td>
                     </tr>
                     <tr>
-                        <td>Lama Bekerja</td>
-                        <td>:</td>
-                        <td>{{ $personal->lama_kerja }} Tahun</td>
+                        <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
                     </tr>
                 </table>
                 <!-- Tabel Acuan -->
@@ -616,18 +616,38 @@
                 </table>
             </div>
             <div class="bottom-right">
-                <table class="signature-table">
-                    <tr>
-                        <td class="signature-left"></td>
-                        <td class="signature-right">
-                            <div class="signature-date">
-                                Jakarta, 04 September 2025
-                            </div><br>
-                            
-                            <div class="signature-text">(Tanda Tangan Digital)</div>
-                        </td>
-                    </tr>
-                </table>
+                @if($ttd != null)
+                    @if($ttd->qr_path != null)
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right">
+                                    <div class="signature-date">
+                                        {{ $ttd->tanggal }}
+                                    </div><br>
+                                    <div class="signature-text">
+                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @else
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right" style="text-align: center;">
+                                    <div class="signature-date">
+                                        Tangerang, 13 Agustus 2025
+                                    </div><br><br><br>
+                                    <div class="signature-text">
+                                        <strong>(Abidah Walfathiyyah)</strong><br>
+                                        <span>Technical Control Supervisor</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @endif
+                @endif
             </div>
         </div>
     </div>

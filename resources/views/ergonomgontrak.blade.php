@@ -267,18 +267,38 @@
                         Tahun 2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
                     </div>
                     <div class="signature-section">
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right">
-                                    <div class="signature-date">
-                                        Jakarta, 04 September 2025
-                                    </div><br>
-                                    
-                                    <div class="signature-text">(Tanda Tangan Digital)</div>
-                                </td>
-                            </tr>
-                        </table>
+                        @if($ttd != null)
+                            @if($ttd->qr_path != null)
+                                <table class="signature-table">
+                                    <tr>
+                                        <td class="signature-left"></td>
+                                        <td class="signature-right">
+                                            <div class="signature-date">
+                                                {{ $ttd->tanggal }}
+                                            </div><br>
+                                            <div class="signature-text">
+                                                    <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            @else
+                                <table class="signature-table">
+                                    <tr>
+                                        <td class="signature-left"></td>
+                                        <td class="signature-right" style="text-align: center;">
+                                            <div class="signature-date">
+                                                Tangerang, 13 Agustus 2025
+                                            </div><br><br><br>
+                                            <div class="signature-text">
+                                                <strong>(Abidah Walfathiyyah)</strong><br>
+                                                <span>Technical Control Supervisor</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            @endif
+                        @endif
                     </div>
                 </div>
             </div>
