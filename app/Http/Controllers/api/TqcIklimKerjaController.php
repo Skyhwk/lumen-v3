@@ -69,12 +69,12 @@ class TqcIklimKerjaController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsIklimKerjaHeader = LhpsIklimHeader::where('no_lhp', $request->cfr)->first();
+        // $lhpsIklimKerjaHeader = LhpsIklimHeader::where('no_lhp', $request->cfr)->first();
 
         $data = [];
         foreach ($orderDetails as $orderDetail) {
             // $iklimkerjaHeader = IklimHeader::where('no_sampel', $orderDetail->no_sampel)->first();
-
+            $header = IklimHeader::where('no_sampel', $orderDetail->no_sampel)->first();
             $lhpsIklimKerjaHeader = LhpsIklimHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
             $lhpsIklimKerjaDetail = LhpsIklimDetail::where('keterangan', $orderDetail->keterangan_1)
                 ->pluck('hasil')
@@ -87,8 +87,8 @@ class TqcIklimKerjaController extends Controller
                 'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil1,
                 // 'min' => optional($iklimkerjaHeader)->min,
                 // 'max' => optional($iklimkerjaHeader)->max,
-                'analyst' => optional($lhpsIklimKerjaHeader)->created_by,
-                'approved_by' => optional($lhpsIklimKerjaHeader)->approved_by
+                'analyst' => optional($header)->created_by,
+                'approved_by' => optional($header)->approved_by
             ];
         }
 

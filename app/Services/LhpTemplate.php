@@ -3,6 +3,8 @@
 namespace App\Services;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
+use App\Models\LhpsAirHeader;
+use App\Models\LhpsAirDetail;
 
 class LhpTemplate
 {
@@ -17,7 +19,9 @@ class LhpTemplate
     private $filename;
     private $custom;
     private $prefix ='LHP';
+
     private $stylesheet;
+    private $lampiran = false;
     private static $instance;
 
     public static function set($field, $value)
@@ -40,6 +44,10 @@ class LhpTemplate
                 break;
             case 'filename':
                 self::$instance->filename = $value;
+                break;
+
+            case 'lampiran':
+                self::$instance->lampiran = $value;
                 break;
         }
 
@@ -66,6 +74,15 @@ class LhpTemplate
             self::$instance = new self();
         }
         self::$instance->header = $value;
+        return self::$instance;
+    }
+    public static function useLampiran($value)
+    {
+        // dd($value, 'asd');
+        if (!self::$instance) {
+            self::$instance = new self();
+        }
+        self::$instance->lampiran = $value;
         return self::$instance;
     }
 
@@ -142,20 +159,20 @@ class LhpTemplate
         if (!$value) {
             $resultName = '';
             foreach ($modes as $mode) { 
-                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode);
+                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $this->lampiran);
             }
 
             self::$instance = null;
             return $resultName;
         }
         
-        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value);
+        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $this->lampiran);
 
         self::$instance = null;
         return $resultName;
     }
 
-    private function execute($header, $detail, $prefix, $view, $customs, $mode)
+    private function execute($header, $detail, $prefix, $view, $customs, $mode, $lampiran)
     {   
         $namaFile = '';
         if ($this->filename) {
@@ -194,6 +211,27 @@ class LhpTemplate
             }
             
         }
+
+        // dd($lampiran);
+       if ($lampiran) {
+    $pdfLampiran = view($view . '.lampiran', [
+        'header' => $header,
+        'custom' => false,
+        'page'   => null
+    ])->render();
+
+    $lampiranHeader = view($this->directoryDefault . '.lampiranHeader', compact('header', 'showKan', 'mode'))->render();
+
+    if (!empty($customs)) {
+        foreach ($customs as $page => $custom) {
+            $pdfLampiranCustom[$page] = view($view . '.lampiran', [
+                'header' => $header,
+                'custom' => true,
+                'page'   => $page
+            ])->render();
+        }
+    }
+}
 
         $mpdf = new \Mpdf\Mpdf([
             'mode' => 'utf-8',
@@ -236,6 +274,17 @@ class LhpTemplate
             }
         }
 
+        if(isset($pdfLampiran) && isset($lampiranHeader)) {
+            $mpdf->SetHTMLHeader($lampiranHeader);
+            $mpdf->WriteHTML($pdfLampiran);
+            $mpdf->SetHTMLFooter($htmlFooter);
+            if(isset($pdfLampiranCustom)) {
+                foreach ($pdfLampiranCustom as $page => $custom) {
+                    $mpdf->WriteHTML($pdfLampiranCustom[$page]);
+                }
+            }
+        }
+
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);
         return $filename;
     }
@@ -255,8 +304,41 @@ class LhpTemplate
 
         return $paths[$mode];
     }
+    //    private function cekAkreditasi( $no_lhp)
+    // {
 
-    private function cekAkreditasi( $no_lhp)
+    //     $parameterAkreditasi = 0;
+    //     $parameterNonAkreditasi = 0;
+        
+    //     $orderDetail = OrderDetail::where('cfr', $no_lhp)->get();
+
+    //     foreach ($orderDetail as  $value) {
+    //         $kategori = explode('-', $value->kategori_2)[0];
+    //         $dataDecode = json_decode($value->parameter);
+    //     foreach ($dataDecode as $key => $val) {
+    //         $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
+    //         if ($parameter->status == 'AKREDITASI') {
+    //             $parameterAkreditasi++;
+    //         } else {
+    //             $parameterNonAkreditasi++;
+    //         }
+
+    //     }
+
+            
+    //     }
+    //     if ($parameterAkreditasi == 0) {
+    //         return false;
+    //     }
+
+    //     if(($parameterAkreditasi + $parameterNonAkreditasi) / $parameterAkreditasi >= 0.6) {
+    //         return true;
+    //     } else {
+    //         return false;
+    //     }
+    // }
+
+    private function cekAkreditasi($no_lhp)
     {
 
         $parameterAkreditasi = 0;
@@ -267,16 +349,29 @@ class LhpTemplate
         foreach ($orderDetail as  $value) {
             $kategori = explode('-', $value->kategori_2)[0];
             $dataDecode = json_decode($value->parameter);
-        foreach ($dataDecode as $key => $val) {
-            $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
-            if ($parameter->status == 'AKREDITASI') {
-                $parameterAkreditasi++;
+            if($kategori == 1) {
+                $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+                
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
             } else {
-                $parameterNonAkreditasi++;
+                foreach ($dataDecode as $val) {
+                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
+                    if ($parameter->status == 'AKREDITASI') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+
+                }
             }
-
-        }
-
+      
             
         }
         if ($parameterAkreditasi == 0) {

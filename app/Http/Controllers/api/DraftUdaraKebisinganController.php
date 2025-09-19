@@ -279,6 +279,7 @@ class DraftUdaraKebisinganController extends Controller
                 $fileName = LhpTemplate::setDataDetail($details)
                     ->setDataHeader($header)
                     ->setDataCustom($custom)
+                    ->useLampiran(true)
                     ->whereView('DraftKebisinganPersonal')
                     ->render();
 
@@ -286,6 +287,7 @@ class DraftUdaraKebisinganController extends Controller
                     $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)  
                         ->setDataCustom($custom)
+                        ->useLampiran(true)
                         ->whereView('DraftKebisingan')
                         ->render();
                 }

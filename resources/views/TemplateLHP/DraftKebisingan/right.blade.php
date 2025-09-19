@@ -1,10 +1,10 @@
+
 @php
-use App\Models\TabelRegulasi;
-use App\Models\MasterRegulasi;
-
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
 @endphp
-
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
+<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"></div> -->
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
@@ -69,7 +69,8 @@ use App\Models\MasterRegulasi;
                             <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
                         </tr>
                     </table>
-                    @php
+                   
+                    <!-- @php
                         // pastikan $header ada nilainya
                         $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
                         $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first()->konten;
@@ -78,7 +79,7 @@ use App\Models\MasterRegulasi;
                         '/<table(\s|>)/i',
                         '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
                         $table
-                    ) !!}
+                    ) !!} -->
 
                         @endforeach
                     

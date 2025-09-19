@@ -1,3 +1,7 @@
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -107,7 +111,7 @@
                 </table>
 
                 {{-- Regulasi --}}
-                @php
+                <!-- @php
                     $bintang = '**';
                 @endphp
                 @if (!empty($header->regulasi))
@@ -132,6 +136,36 @@
                             </tr>
                         @endforeach
                     </table>
+                @endif -->
+                @if (!empty($header->regulasi))
+        
+                    @foreach (json_decode($header->regulasi) as $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            <tr>
+                                @php
+                                
+                                @endphp
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                            </tr>
+                        </table>
+                        @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                                if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                    {!! preg_replace(
+                            '/<table(\s|>)/i',
+                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
+                            $table
+                        ) !!}
+
+                    @endforeach
+                    
                 @endif
             </td>
         </tr>
