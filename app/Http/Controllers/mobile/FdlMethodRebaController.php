@@ -34,7 +34,7 @@ class FdlMethodRebaController extends Controller
     public function getSample(Request $request)
     {
         // dd($request->all());
-        $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 1)->first();
+        $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
         if(!$fdl){
             return response()->json(['message' => 'Tidak ada data berdasarkan No. Sample tersebut.'], 401);
