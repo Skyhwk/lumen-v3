@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian</title>
     <style>
+        /* CSS dengan font size yang konsisten - Layout Fixed */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -346,12 +347,25 @@
         .info-table td {
             border: 0;
             padding: 0px 2px;
-            font-size: 8pt;
+            font-size: 8px;
             vertical-align: top;
         }
     </style>
 </head>
 <body>
+     <table class="header-table">
+        <tr>
+            <td class="left-cell">
+                <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
+            </td>
+            <td class="center-cell">
+                <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+            </td>
+            <td class="right-cell">
+                <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
+            </td>
+        </tr>
+    </table>
     <div class="content-container clearfix" >
         <div class="left-section">
             
@@ -670,6 +684,29 @@
                             <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
                         </tr>
                     </table>
+                    <div style="margin-bottom: 3px;">
+                        <span class="info-label">Jenis Analisa</span>
+                        <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
+                    </div>
+
+                    <div style="margin-bottom: 3px;">
+                        <span class="info-label">Metode Analisa*</span>
+                        <span>: Kuesioner Nordic Body Map</span>
+                    </div>
+
+                    <div class="info-header">Informasi Data Individu/Pekerja yang Diukur</div>
+                    <div style="margin-bottom: 3px;">
+                        <span class="info-label">Nama</span>
+                        <span>: {{$personal->nama_pekerja}} </span>
+                    </div>
+                    <div style="margin-bottom: 3px;">
+                        <span class="info-label">Usia</span>
+                        <span>: {{$personal->usia}}</span>
+                    </div>
+                    <div style="margin-bottom: 3px;">
+                        <span class="info-label">Lama Bekerja</span>
+                        <span>: {{$personal->lama_kerja}}</span>
+                    </div>
             </div>
             <div class="risk-table">
                 <p>**Tabel Acuan Skor Risiko dan Tindakan Perbaikan</p>
@@ -712,38 +749,18 @@
             </div>
             <!-- Signature Section yang disesuaikan -->
             <div class="signature-section">
-                @if($ttd != null)
-                    @if($ttd->qr_path != null)
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right">
-                                    <div class="signature-date">
-                                        {{ $ttd->tanggal }}
-                                    </div><br>
-                                    <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @else
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right" style="text-align: center;">
-                                    <div class="signature-date">
-                                        Tangerang, 13 Agustus 2025
-                                    </div><br><br><br>
-                                    <div class="signature-text">
-                                        <strong>(Abidah Walfathiyyah)</strong><br>
-                                        <span>Technical Control Supervisor</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @endif
-                @endif
+                <table class="signature-table">
+                    <tr>
+                        <td class="signature-left"></td>
+                        <td class="signature-right">
+                            <div class="signature-date">
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            
+                            <div class="signature-text">(Tanda Tangan Digital)</div>
+                        </td>
+                    </tr>
+                </table>
             </div>
         </div>
     </div>

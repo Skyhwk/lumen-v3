@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian REBA</title>
+    <title>Laporan Hasil Pengujian</title>
     <style>
         * { 
             box-sizing: border-box; 
@@ -27,7 +27,7 @@
         .main-header {
             text-align: center;
             font-weight: bold;
-            font-size: 12pt;
+            font-size: 12px;
             text-decoration: underline;
             margin-bottom: 8px;
             padding: 5px 0;
@@ -184,15 +184,93 @@
             text-align: left;
             font-size: 7pt;
         }
+        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
+        }
+        /* header */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+        }
+
+        .header-table td {
+            border: none;
+            padding: 10px;
+            vertical-align: middle;
+            height: 60px;
+        }
+
+        .header-table .left-cell {
+            width: 33.33%;
+            text-align: left;
+            padding-left: 20px;
+        }
+
+        .header-table .center-cell {
+            width: 33.33%;
+            text-align: center;
+        }
+
+        .header-table .right-cell {
+            width: 33.33%;
+            text-align: right;
+            padding-right: 50px;
+        }
+        .header-logo {
+            height: 50px;
+            width: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
-        <div class="main-header">
-            LAPORAN HASIL PENGUJIAN
-        </div>
-        
         <!-- Main Content -->
         <div class="main-content">
             <!-- Column 1: Skor A (30%) -->
@@ -410,9 +488,9 @@
                 <div class="section-header">Informasi Pelanggan</div>
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Nama Pelanggan</td>
-                        <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                     </tr>
                     <tr>
                         <td>Alamat / Lokasi Sampling</td>
@@ -420,51 +498,48 @@
                         <td>{{ $personal->alamat_pelanggan }}</td>
                     </tr>
                 </table>
-                
                 <!-- Informasi Sampling -->
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Tanggal Sampling</td>
+                        <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                         <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ $personal->tanggal_sampling }}</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                     </tr>
                     <tr>
-                        <td>Periode Analisis</td>
-                        <td>:</td>
-                        <td>{{ $personal->periode_analisis }}</td>
+                        <td style="width: 25%; text-align:start;">Periode Analisis</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->periode_analisis }}</td>
                     </tr>
                     <tr>
-                        <td>Jenis Analisis</td>
-                        <td>:</td>
-                        <td>Rapid Assessment (Form Penilaian Cepat)</td>
+                        <td style="width: 25%; text-align:start;">Jenis Analisis</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">Rapid Assessment (Form Penilaian Cepat)</td>
                     </tr>
                     <tr>
-                        <td>Metode Analisis*</td>
-                        <td>:</td>
-                        <td>Pengamatan Langsung - Rapid Entire Body Assessment</td>
+                        <td style="width: 25%; text-align:start;">Metode Analisis*</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">Pengamatan Langsung - Rapid Entire Body Assessment</td>
                     </tr>
                 </table>
-                
                 <!-- Data Individu -->
                 <div class="section-header">Data Individu/Pekerja yang Diukur</div>
                 <table class="info-table">
                     <tr>
-                        <td style="width: 25%;">Nama</td>
-                        <td style="width: 3%;">:</td>
-                        <td style="width: 72%;">{{ $personal->nama_pekerja }}</td>
+                        <td style="width: 25%; text-align:start;">Nama</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->nama_pekerja }}</td>
                     </tr>
                     <tr>
-                        <td>Usia</td>
-                        <td>:</td>
-                        <td>{{ $personal->usia }} Tahun</td>
+                        <td style="width: 25%; text-align:start;">Usia</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->usia }} Tahun</td>
                     </tr>
                     <tr>
-                        <td>Lama Bekerja</td>
-                        <td>:</td>
-                        <td>{{ $personal->lama_kerja }} Tahun</td>
+                        <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                        <td style="width: 3% ;text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
                     </tr>
                 </table>
-                
                 <!-- Tabel Acuan -->
                 <div class="section-header">Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</div>
                 <table class="reference-table">
@@ -505,6 +580,16 @@
                         <td style="font-size: 7pt;">Diperlukan tindakan sesegera mungkin</td>
                     </tr>
                 </table>
+                <!-- Footer Notes -->
+                <ul style="font-family: Arial, sans-serif; font-size: 10px; text-align: left; list-style-type: none; padding-left: 10px; margin: 0;">
+                    <li>
+                        <sup>*</sup>Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
+                    </li>
+                    <li>
+                        <sup>**</sup> Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and<br>
+                        Ergonomics Methods</i> by Neville Stanton et al, 2005.
+                    </li>
+                </ul>
             </div>
         </div>
         
@@ -530,23 +615,39 @@
                     </tr>
                 </table>
             </div>
-            
             <div class="bottom-right">
-                <!-- Footer Notes -->
-                <table class="footer-notes" style="margin-top: 20px;">
-                    <tr>
-                        <td>*</td>
-                        <td>
-                            Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>**</td>
-                        <td>
-                            Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and by Neville Stanton et al, 2005.
-                        </td>
-                    </tr>
-                </table>
+                @if($ttd != null)
+                    @if($ttd->qr_path != null)
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right">
+                                    <div class="signature-date">
+                                        {{ $ttd->tanggal }}
+                                    </div><br>
+                                    <div class="signature-text">
+                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @else
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right" style="text-align: center;">
+                                    <div class="signature-date">
+                                        Tangerang, 13 Agustus 2025
+                                    </div><br><br><br>
+                                    <div class="signature-text">
+                                        <strong>(Abidah Walfathiyyah)</strong><br>
+                                        <span>Technical Control Supervisor</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @endif
+                @endif
             </div>
         </div>
     </div>

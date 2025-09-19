@@ -5,7 +5,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 10pt; /* Reduced from 11pt */
+            font-size: 10px; /* Reduced from 11pt */
             background-color: white;
             margin: 0;
             padding: 0;
@@ -46,7 +46,7 @@
         th, td {
             padding: 3px; /* Reduced from 4px */
             text-align: center;
-            font-size: 9pt; /* Reduced from 10pt */
+            font-size: 9px; /* Reduced from 10pt */
         }
 
         .text-left {
@@ -57,7 +57,7 @@
             text-align: center;
             font-weight: bold;
             padding: 3px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .table-secondary {
@@ -91,31 +91,31 @@
             font-weight: normal;
             width: 110px; /* Reduced from 120px */
             float: left;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-value {
             margin-left: 110px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-header {
             font-weight: bold;
             margin-top: 6px; /* Reduced from 8px */
             margin-bottom: 2px; /* Reduced from 3px */
-            font-size: 9pt;
+            font-size: 9px;
             clear: both;
         }
 
         .info-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             margin-top: 4px;
             line-height: 1.1;
         }
 
         .arrow {
             text-align: center;
-            font-size: 16pt; /* Reduced from 18pt */
+            font-size: 16px; /* Reduced from 18pt */
             margin: 4px 0;
             display: inline-block;
             vertical-align: middle;
@@ -125,7 +125,7 @@
             border: 1px solid #000;
             padding: 6px; /* Reduced from 8px */
             margin-top: 8px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .watermark {
@@ -138,7 +138,7 @@
             z-index: -1;
             pointer-events: none;
             transform: rotate(-45deg);
-            font-size: 100pt; /* Reduced from 120pt */
+            font-size: 100px; /* Reduced from 120pt */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -165,7 +165,7 @@
         }
 
         .footer-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             text-align: center;
             margin-top: 8px;
             font-style: italic;
@@ -231,6 +231,7 @@
 </head>
 <body>
     <div class="container">
+        <h1>LAPORAN HASIL PENGUJIAN</h1>
         <!-- Main layout with table and information -->
         <div class="table-layout">
             <!-- Left side - Tables -->
@@ -321,7 +322,7 @@
                         </tr>
                     </table>
                 </div>
-                <div style="width: 10%; float: left; text-align: center;font-size: 16pt;">→</div>
+                <div style="width: 10%; float: left; text-align: center;font-size: 16px;">→</div>
                 <div style="
                     width: 55px;
                     height: 25px;
@@ -403,65 +404,44 @@
 
                 <div style="padding: 4px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <table class="info-table">
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
-                        </tr>
-                    </table>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Nama Pelanggan</span>
+                        <span>: {{$personal->nama_pelanggan}} </span>
+                    </div>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Alamat / Lokasi Sampling</span>
+                        <span>: {{$personal->alamat_pelanggan}} </span>
+                    </div>
+
                     <div class="info-header">Informasi Sampling</div>
-                    <table class="info-table">
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Tanggal</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
-                        </tr>
-                        <tr>
-                            <td>Periode Analisis</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
-                        </tr>
-                    </table>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Tanggal Sampling</span>
+                        <span>: {{$personal->tanggal_sampling}} </span>
+                    </div>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Periode Analisa</span>
+                        <span>: </span>
+                    </div>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <table class="info-table">
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Nama</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Usia</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Lama Bekerja</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengamatan Langsung - RULA</td>
-                        </tr>
-                    </table>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Nama Pekerja</span>
+                        <span>: {{$personal->nama_pekerja}} </span>
+                    </div>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Jenis Pekerjaan</span>
+                        <span>: {{$personal->aktivitas_ukur}}</span>
+                    </div>
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Jenis Analisa</span>
+                        <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
+                    </div>
+
+                    <div style="margin-bottom: 2px; font-size: 9px;">
+                        <span class="info-label">Metode Analisa*</span>
+                        <span>: Pengamatan Langsung - RULA</span>
+                    </div>
+
                     <div class="info-note">
                         * Metode Analisa Mengacu kepada Jenis Metode yang Direkomendasikan pada
                         Pedoman Teknis Pemeriksaan K3 Pengelolaan Tambahan Peraturan Menteri
@@ -472,38 +452,18 @@
             </div>
 
             <div class="signature-section">
-                @if($ttd != null)
-                    @if($ttd->qr_path != null)
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right">
-                                    <div class="signature-date">
-                                        {{ $ttd->tanggal }}
-                                    </div><br>
-                                    <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @else
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right" style="text-align: center;">
-                                    <div class="signature-date">
-                                        Tangerang, 13 Agustus 2025
-                                    </div><br><br><br>
-                                    <div class="signature-text">
-                                        <strong>(Abidah Walfathiyyah)</strong><br>
-                                        <span>Technical Control Supervisor</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @endif
-                @endif
+                <table class="signature-table">
+                    <tr>
+                        <td class="signature-left"></td>
+                        <td class="signature-right">
+                            <div class="signature-date">
+                                Jakarta, 04 September 2025
+                            </div><br>
+                            
+                            <div class="signature-text">(Tanda Tangan Digital)</div>
+                        </td>
+                    </tr>
+                </table>
             </div>
             <div style="clear: both;"></div>
         </div>

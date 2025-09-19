@@ -359,6 +359,7 @@ class PersiapanSampleController extends Controller
             $psHeader = PersiapanSampelHeader::with(['psDetail' => fn($q) => $q->whereIn('no_sampel', (array)$request->no_sampel)])
                 ->where('no_quotation', $request->no_document)
                 ->where('no_order', $request->no_order)
+               
                 ->where('is_active', 1)
                 ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', (array)$request->no_sampel))
                 ->first();
@@ -391,7 +392,7 @@ class PersiapanSampleController extends Controller
 
                 }
             }
-
+            
             return response()->json([
                 'masker' => $perdiem->perdiem_jumlah_orang,
                 'air' => $grouped['air'],
@@ -496,7 +497,6 @@ class PersiapanSampleController extends Controller
             $psh = null;
             $noSampel = isset($request->all_category) && !empty($request->all_category) ? $request->all_category : (isset($request->detail) && !empty($request->detail) ? array_keys($request->detail) : []);
             $modeUpdate = false;
-
             $existingPsd = PersiapanSampelHeader::where([
                 ['is_active', 1],
                 ['no_quotation', $request->no_quotation],
@@ -505,8 +505,8 @@ class PersiapanSampleController extends Controller
             ])->pluck('id')
             ->unique()
             ->toArray();
-
             $jumlahHeader = count($existingPsd);
+            
 
             if ($jumlahHeader == 1) {
                 // Jika hanya ada 1 header aktif, update detail yang tidak ada dalam request
@@ -594,6 +594,7 @@ class PersiapanSampleController extends Controller
             $psh->no_sampel = json_encode($noSampel, JSON_UNESCAPED_SLASHES);
             $psh->periode = $request->periode ?? $psh->periode;
             $psh->is_active = 1;
+           
             if($modeUpdate){
                 $psh->sampler_jadwal = $request->sampler_jadwal ?? $psh->sampler_jadwal;
                 $psh->updated_by = $this->karyawan;
@@ -601,7 +602,6 @@ class PersiapanSampleController extends Controller
             }
 
             $psh->save();
-
             return $psh;
         } catch (\Throwable $th) {
             new Exception($th);
@@ -854,6 +854,7 @@ class PersiapanSampleController extends Controller
 
         try {
             $psh = $this->saveHeader($request);
+            
             $this->saveDetail($request, $psh);
             $this->saveQrDocument($psh);
 
