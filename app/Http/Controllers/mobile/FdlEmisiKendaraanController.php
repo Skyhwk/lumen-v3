@@ -243,12 +243,6 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->created_at    = Carbon::now()->format('Y-m-d H:i:s');
                         $data_fdl->save();
 
-                        if($kendaraan){
-                            $kendaraan->updated_by          = $this->karyawan;
-                            $kendaraan->updated_at          = Carbon::now()->format('Y-m-d H:i:s');
-                            $kendaraan->save();
-                        }
-
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
                         $data_order->no_sampel            = strtoupper($request->no_sampel);

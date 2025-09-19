@@ -885,7 +885,7 @@ class AppsBasController extends Controller
                     // dd($item);
 
                     $item['expectedNoSampel'] = array_map(function ($kode) use ($item) {
-                        return $kode;
+                        return $item['no_order'] . '/' . $kode;
                     }, $item['no_sampel']);
                     // dd(json_encode($item['no_sampel'], JSON_UNESCAPED_SLASHES), $item['no_sampel']);
                     // Kode lama sebelum diubah menggunakan no_order
@@ -906,7 +906,7 @@ class AppsBasController extends Controller
 
                     if ($header) {
                         $detailData = [
-                            'catatan' => $item['catatan'] ?? $header->catatan,
+                            'catatan' => $item['catatan'] ?? '',
                             'informasi_teknis' => $item['informasi_teknis'] ?? $header->informasi_teknis,
                             'waktu_mulai' => $item['waktu_mulai'] ?? $header->waktu_mulai,
                             'waktu_selesai' => $item['waktu_selesai'] ?? $header->waktu_selesai,

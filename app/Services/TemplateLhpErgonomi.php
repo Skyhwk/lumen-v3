@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 class TemplateLhpErgonomi
 {
-    public function ergonomiRula($data = null)
+    public function ergonomiRula($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {
         try {
             $mpdfConfig = [
@@ -66,24 +66,18 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analis" => null,
             ];
+           
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomirula',compact('pengukuran', 'personal'))->render();
+            $html = View::make('ergonomirula',compact('pengukuran', 'personal','ttd'))->render();
             
             return $html;
-            $pdf->SetFooter('Laporan Ergonomi Hal. {PAGENO}');
-            $pdf->setAutoBottomMargin = 'stretch';
-            // Add mPDF watermark
-            $pdf->SetWatermarkText('DRAFT');
-            $pdf->showWatermarkText = true;
-            $pdf->watermarkTextAlpha = 0.1;
-            $pdf->WriteHTML($html);
             return $pdf->Output('laporan.pdf', 'I');
         } catch (\Exception $ex) {
             throw $ex;
         }
     }
     
-    public function ergonomiRwl($data = null)
+    public function ergonomiRwl($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {
         $mpdfConfig = [
             'mode' => 'utf-8',
@@ -93,12 +87,39 @@ class TemplateLhpErgonomi
             'margin_top' => 5,
             'margin_bottom' => 15,
         ];
+        $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            ->where('method', 5)
+            ->first();
+        $pengukuran = json_decode($dataRula->pengukuran);
+        
+        $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
+        $pengukuran->frekuensi = $avrageFrequesi;
+        $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
+        $pengukuran->jarak_vertikal = $dataRula->jarak_vertikal;
+        $pengukuran->kopling_tangan = $dataRula->kopling_tangan;
+        $pengukuran->durasi_jam_kerja = $dataRula->durasi_jam_kerja;
+        $pengukuran->berat_beban = $dataRula->berat_beban;
+        $personal = (object) [
+                "no_sampel" => $dataRula->no_sampel,
+                "nama_pekerja" => $dataRula->nama_pekerja,
+                "usia" => $dataRula->usia,
+                "lama_kerja" => $dataRula->lama_kerja,
+                "divisi" => $dataRula->divisi,
+                "jenis_kelamin" => $dataRula->jenis_kelamin,
+                "aktivitas_ukur" => $dataRula->aktivitas_ukur,
+                "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
+                "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
+                "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
+                "periode_analis" => null,
+            ];
+       
         $pdf = new PDF($mpdfConfig);
-        $html = View::make('ergonomirwl')->render();
+        $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
         return $html;
     }
 
-    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='')
+    public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     { 
         
         try {
@@ -130,7 +151,7 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => null,
+                "periode_analisis" => null,
             ];
             // dd($pengukuran,$sebelumKerja,$setelahKerja,$personal);
             //total sebelum kiri/kanan
@@ -175,11 +196,11 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => null,
+                "periode_analisis" => null,
             ];
             
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonominbm', compact('pengukuran', 'personal','spesifik'))->render();
+            $html = View::make('ergonominbm', compact('pengukuran', 'personal','spesifik','ttd'))->render();
             return $html;  
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -188,7 +209,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='')
+    public function ergonomiReba($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -262,7 +283,7 @@ class TemplateLhpErgonomi
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur
             ];
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomireba', compact('pengukuran', 'personal','cssGlobal','spesifik'))->render();
+            $html = View::make('ergonomireba', compact('pengukuran', 'personal','cssGlobal','spesifik','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -272,7 +293,7 @@ class TemplateLhpErgonomi
         
     }
 
-    public function ergonomiRosa($data = null)
+    public function ergonomiRosa($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -330,10 +351,12 @@ class TemplateLhpErgonomi
                 "periode_analisis" => '-',
                 "nama_pekerja" => $dataRosa->nama_pekerja,
                 "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
+                "usia" => $dataRosa->usia,
+                "lama_kerja" => json_decode($dataRosa->lama_kerja),
             ];
             
             $pdf = new PDF($mpdfConfig);
-            $html = View::make('ergonomirosa', compact('pengukuran', 'personal'))->render();
+            $html = View::make('ergonomirosa', compact('pengukuran', 'personal','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -342,7 +365,7 @@ class TemplateLhpErgonomi
         }
     }
     
-    public function ergonomiBrief($data = null)
+    public function ergonomiBrief($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     {   
         try {
             $mpdfConfig = [
@@ -363,8 +386,9 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='')
+    public function ergonomiPotensiBahaya ($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {
+       
         try {
             $mpdfConfig = [
                 'mode' => 'utf-8',
@@ -390,14 +414,22 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
+                "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
+             
     
-            $pengukuran = json_decode($dataRwl->pengukuran);
-            // dd($pengukuran);
-            $html = View::make('ergonompotensibahaya',compact('cssGlobal'))->render();
+            $pengukuran = json_decode($dataRwl->pengukuran,true);
+            
+            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran['Tubuh_Bagian_Atas']);
+            
+            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran['Tubuh_Bagian_Bawah']);
+            
+            $groupedAtas  = $this->groupByKategori($dataAtas);
+            $groupedBawah  = $this->groupByKategori($dataBawah);
+            // dd($personal);
+            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -406,7 +438,7 @@ class TemplateLhpErgonomi
         }
     }
 
-    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='' )
+    public function ergonomiGontrak ($data = null,$cssGlobal ='',$spesifik ='',$ttd= null)
     {   
         
         try {
@@ -466,7 +498,7 @@ class TemplateLhpErgonomi
             $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
             $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
             
-            $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik'))->render();
+            $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -474,7 +506,7 @@ class TemplateLhpErgonomi
             throw $th;
         }
     }
-
+    
     private function hitungResiko($skor, $case = null)
     {
         if ($case == 'nbm') {
@@ -490,5 +522,83 @@ class TemplateLhpErgonomi
                 return [null, 'Tidak Diketahui', 'Skor tidak valid'];
             }
         }
+    }
+    
+    private function flattenPengukuran($sectionName, $data)
+    { 
+        $result = [];
+        if($data != null){
+            foreach ($data as $kategori => $subdata) {
+                
+                if (is_iterable($subdata)) {
+                    foreach ($subdata as $potensi => $value) {
+                        
+                        // kalau langsung string
+                        if (is_string($value)) {
+                            $result[] = [
+                                'section'  => $sectionName,
+                                'kategori' => $kategori,
+                                'potensi'  => $potensi,
+                                'skor'     => $value,
+                            ];
+                        }
+    
+                        // kalau array/object
+                        elseif (is_iterable($value)) {
+                            foreach ($value as $subpotensi => $subval) {
+                                
+                                if (is_string($subval)) {
+                                    $result[] = [
+                                        'section'  => $sectionName,
+                                        'kategori' => $kategori,
+                                        'potensi'  => $potensi . ' - ' . $subpotensi,
+                                        'skor'     => $subval,
+                                    ];
+                                }
+    
+                                elseif (is_iterable($subval)) {
+                                    foreach ($subval as $detailKey => $detailVal) {
+                                        $result[] = [
+                                            'section'  => $sectionName,
+                                            'kategori' => $kategori,
+                                            'potensi'  => $potensi . ' - ' . $subpotensi . ' - ' . $detailKey,
+                                            'skor'     => $detailVal,
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } 
+                // kalau $subdata langsung string (kayak "Faktor Tidak Dapat Di Kontrol")
+                elseif (is_string($subdata)) {
+                    $result[] = [
+                        'section'  => $sectionName,
+                        'kategori' => $kategori,
+                        'potensi'  => $kategori, // bisa juga kosong
+                        'skor'     => $subdata,
+                    ];
+                }
+                
+            }
+        }
+      
+
+
+        return $result;
+    }
+    
+    private function groupByKategori($data)
+    {
+       
+        $grouped = [];
+        foreach ($data as $row) {
+            $kategori = $row['kategori'];
+            if (!isset($grouped[$kategori])) {
+                $grouped[$kategori] = [];
+            }
+            $grouped[$kategori][] = $row;
+        }
+        return $grouped;
     }
 }

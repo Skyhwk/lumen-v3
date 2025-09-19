@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian (DRAFT)</title>
+    <title>Laporan Hasil Pengujian</title>
    
     @if(!empty($cssGlobal))
         <style>{!! $cssGlobal !!}</style>
@@ -14,7 +14,7 @@
 </head>
 <body>
     <div class="page-container">
-        <div class="main-header-title">LAPORAN HASIL PENGUJIAN</div>
+        <!-- DIV main-header-title LAPORAN HASIL PENGUJIAN -->
         <div class="two-column-layout">
             <!-- KIRI -->
             <div class="column column-left">
@@ -63,15 +63,21 @@
                             <table class="body-parts-list">
                                 <tr>
                                     <td><span>1 = Leher</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_leher !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_leher->Poin : 0 }}</div></td>
+                                    <td>
+                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_leher !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_leher->Poin : 0 }}</div>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><span>2 = Bahu</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu->Poin : 0 }}</div></td>
+                                    <td>
+                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu->Poin : 0 }}</div>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><span>3 = Punggung Atas</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas->Poin : 0 }}</div></td>
+                                    <td>
+                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas->Poin : 0 }}</div>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><span>4 = Lengan</span></td>
@@ -124,7 +130,6 @@
                     </div>
                 </div>
             </div>
-
             <!-- KANAN -->
             <div class="column column-right">
                 <table class="lhp-info-table info-table">
@@ -261,9 +266,42 @@
                         <br>** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Standar Nasional Indonesia Nomor 9011
                         Tahun 2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
                     </div>
+                    <div class="signature-section">
+                        @if($ttd != null)
+                            @if($ttd->qr_path != null)
+                                <table class="signature-table">
+                                    <tr>
+                                        <td class="signature-left"></td>
+                                        <td class="signature-right">
+                                            <div class="signature-date">
+                                                {{ $ttd->tanggal }}
+                                            </div><br>
+                                            <div class="signature-text">
+                                                    <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            @else
+                                <table class="signature-table">
+                                    <tr>
+                                        <td class="signature-left"></td>
+                                        <td class="signature-right" style="text-align: center;">
+                                            <div class="signature-date">
+                                                Tangerang, 13 Agustus 2025
+                                            </div><br><br><br>
+                                            <div class="signature-text">
+                                                <strong>(Abidah Walfathiyyah)</strong><br>
+                                                <span>Technical Control Supervisor</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            @endif
+                        @endif
+                    </div>
                 </div>
             </div>
-
             <div style="clear: both;"></div>
         </div>
     </div>

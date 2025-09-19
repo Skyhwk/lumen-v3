@@ -3,19 +3,358 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Hasil Pengujian (DRAFT)</title>
-    @if(!empty($spesifik))
-        <style>{!! $spesifik !!}</style>
-    @endif
+    <title>Laporan Hasil Pengujian</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            font-size: 10px; /* Base font size yang konsisten */
+            width: 100%;
+            min-width: 800px; /* Minimum width untuk mempertahankan layout */
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .header h1 {
+            font-size: 12px; /* Dikurangi untuk konsistensi */
+            font-weight: bold;
+            margin: 5px 0;
+            text-decoration: underline;
+        }
+
+        .company-name {
+            font-weight: bold;
+            font-size: 10px; /* Konsisten dengan base */
+            text-align: left;
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin: 10px 0 5px 0;
+            font-size: 10px; /* Konsisten dengan base */
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px; /* Sedikit lebih kecil untuk tabel */
+            margin-bottom: 10px;
+            table-layout: fixed; /* Fixed table layout */
+        }
+
+        th,
+        td {
+            border: 1px solid black;
+            padding: 3px 5px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 9px; /* Konsisten untuk semua sel tabel */
+        }
+
+        thead {
+            display: table-header-group;
+        }
+
+        tbody {
+            display: table-row-group;
+        }
+
+        .body-map {
+            width: 80px;
+            height: auto;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .info-section {
+            margin-bottom: 10px;
+        }
+
+        .info-section p {
+            margin: 3px 0;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .info-label {
+            font-weight: normal;
+            width: 120px;
+            float: left;
+            font-size: 9px; /* Konsisten, tidak lagi 10pt */
+        }
+
+        .info-value {
+            display: inline-block;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .customer-info,
+        .sampling-info,
+        .worker-info {
+            margin-left: 0;
+            margin-bottom: 10px;
+        }
+
+        .customer-info h4,
+        .sampling-info h4,
+        .worker-info h4 {
+            margin: 5px 0 2px 0;
+            font-size: 10px; /* Konsisten */
+            font-weight: bold;
+        }
+
+        .risk-table {
+            margin-top: 5px;
+        }
+
+        .left-section p {
+            font-weight: bold;
+            text-align: justify;
+            margin-bottom: 5px;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .table-note {
+            font-size: 8px; /* Tetap kecil untuk catatan */
+            margin-top: 3px;
+            font-style: italic;
+        }
+
+        .job-description {
+            margin-top: 10px;
+        }
+
+        .job-description th {
+            width: 30%;
+            text-align: left;
+            vertical-align: top;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .job-description td {
+            vertical-align: top;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .conclusion-box {
+            border: 1px solid black;
+            padding: 5px;
+            min-height: 30px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .conclusion-box .section-title {
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-size: 10px; /* Konsisten */
+        }
+
+        /* Fixed Layout - Tidak Responsif */
+        .left-section {
+            padding:0;
+            width: 60%;
+            float: left;
+            box-sizing: border-box;
+            min-width: 60%;
+            max-width: 60%;
+        }
+
+        .right-section {
+            width: 39%;
+            float: right;
+            box-sizing: border-box;
+            min-width: 39%;
+            max-width: 39%;
+        }
+
+        /* Pastikan layout tetap fixed untuk print */
+        @media print {
+            .left-section {
+                width: 60% !important;
+                min-width: 60% !important;
+                max-width: 60% !important;
+            }
+            
+            .right-section {
+                width: 39% !important;
+                min-width: 39% !important;
+                max-width: 39% !important;
+            }
+        }
+
+        .result-header {
+            text-align: center;
+            font-weight: bold;
+            margin: 5px 0;
+            font-size: 9px; /* Konsisten dengan tabel */
+        }
+
+        /* Styling untuk tabel nested SEBELUM/SESUDAH */
+        .nested-table-container {
+            padding: 0;
+        }
+
+        .nested-table {
+            width: 100%;
+            margin: 0;
+            border: none;
+        }
+
+        .nested-table td {
+            border: 1px solid black;
+            width: 50%;
+            text-align: center;
+            font-weight: bold;
+            padding: 3px;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .total-score {
+            font-weight: bold;
+            text-align: center;
+            margin-top: 5px;
+            font-size: 9px; /* Konsisten */
+        }
+
+        .content-container {
+            width: 100%;
+            min-width: 800px; /* Pastikan layout minimum */
+        }
+
+        .clearfix::after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+        
+        .info-header {
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 3px;
+            font-size: 10px; /* Konsisten, tidak lagi 10pt */
+            clear: both;
+        }
+
+        /* Styling khusus untuk informasi di sisi kanan */
+        .right-section div {
+            font-size: 9px; /* Base untuk right section */
+        }
+
+        .right-section span {
+            font-size: 9px; /* Konsisten untuk semua span */
+        }
+
+        /* Styling untuk div dengan margin-bottom di right section */
+        .right-section div[style*="margin-bottom: 3px"] {
+            margin-bottom: 3px;
+            font-size: 9px; /* Konsisten, tidak lagi 10pt */
+        }
+
+        /* Styling untuk signature section yang disesuaikan dengan landscape A4 */
+        .signature-section {
+            width: 100%;
+            margin-top: 8px;
+            clear: both;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none !important;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            table-layout: fixed;
+        }
+
+        .signature-table td {
+            border: none !important;
+            padding: 2px;
+            vertical-align: top;
+        }
+
+        .signature-left {
+            width: 65%;
+        }
+
+        .signature-right {
+            width: 35%;
+            text-align: center;
+        }
+
+        .signature-date {
+            margin-bottom: 8px;
+            font-size: 8px;
+        }
+
+        .signature-qr {
+            width: 60px;
+            height: 60px;
+            margin: 5px auto;
+            display: block;
+        }
+
+        .signature-text {
+            margin-top: 3px;
+            font-size: 7px;
+        }
+        /* header */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+        }
+
+        .header-table td {
+            border: none;
+            padding: 10px;
+            vertical-align: middle;
+            height: 60px;
+        }
+
+        .header-table .left-cell {
+            width: 33.33%;
+            text-align: left;
+            padding-left: 20px;
+        }
+
+        .header-table .center-cell {
+            width: 33.33%;
+            text-align: center;
+        }
+
+        .header-table .right-cell {
+            width: 33.33%;
+            text-align: right;
+            padding-right: 50px;
+        }
+        .header-logo {
+            height: 50px;
+            width: auto;
+            display: block;
+        }
+        .info-table {
+            border: 0;
+            margin-bottom: 6px;
+        }
+
+        .info-table td {
+            border: 0;
+            padding: 0px 2px;
+            font-size: 8pt;
+            vertical-align: top;
+        }
+    </style>
 </head>
 <body>
-    <div class="header">
-        <h1>LAPORAN HASIL PENGUJIAN (DRAFT)</h1>
-    </div>
-
-    <div class="content-container clearfix">
+    <div class="content-container clearfix" >
         <div class="left-section">
-            <div class="section-title">A. KELUHAN SISTEM MUSCULOSKETAL</div>
+            
             <table>
                 <thead>
                     <tr>
@@ -249,9 +588,19 @@
                         </tr>
                 </table>
             </div>
+            <ul style="font-family: Arial, sans-serif; font-size: 8px; text-align: left; list-style-type: none; padding-left: 10px; margin: 0;">
+                <li>
+                    <sup>*</sup> Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman Teknis<br>
+                    Penerapan K3 Penjelasan Tambahan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.
+                </li>
+                <li>
+                    <sup>**</sup> Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and<br>
+                    Ergonomics Methods</i> by Neville Stanton et al, 2005.
+                </li>
+            </ul>
         </div>
         <div class="right-section">
-            <div style="margin-top: 30px;">
+            <div>
                 <table>
                     <thead>
                         <tr>
@@ -269,60 +618,58 @@
                     </tbody>
                 </table>
             </div>
-
             <div style="padding: 5px;">
                     <div class="info-header">Informasi Pelanggan</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Nama Pelanggan</span>
-                        <span>: {{$personal->nama_pelanggan}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Alamat / Lokasi Sampling</span>
-                        <span>: {{$personal->alamat_pelanggan}} </span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                        </tr>
+                    </table>
 
                     <div class="info-header">Informasi Sampling</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Tanggal Sampling</span>
-                        <span>: {{$personal->tanggal_sampling}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Periode Analisa</span>
-                        <span>: {{$personal->periode_analis}} </span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
+                        </tr>
+                        <tr>
+                            <td>Periode Analisis</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
+                        </tr>
+                    </table>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Nama Pekerja</span>
-                        <span>: {{$personal->nama_pekerja}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Jenis Pekerjaan</span>
-                        <span>: </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Jenis Analisa</span>
-                        <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
-                    </div>
-
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Metode Analisa*</span>
-                        <span>: Kuesioner Nordic Body Map</span>
-                    </div>
-
-                    <div class="info-header">Informasi Data Individu/Pekerja yang Diukur</div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Nama</span>
-                        <span>: {{$personal->nama_pekerja}} </span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Usia</span>
-                        <span>: {{$personal->usia}}</span>
-                    </div>
-                    <div style="margin-bottom: 3px;">
-                        <span class="info-label">Lama Bekerja</span>
-                        <span>: {{$personal->lama_kerja}}</span>
-                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Nama</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Usia</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                        </tr>
+                    </table>
             </div>
             <div class="risk-table">
                 <p>**Tabel Acuan Skor Risiko dan Tindakan Perbaikan</p>
@@ -363,11 +710,41 @@
                     </tbody>
                 </table>
             </div>
-            <p class="table-note">* Metode Analisis Mengacu kepada Jenis Metode yang Direkomendasikan Pada Pedoman
-                Teknis Penerapan K3 Penjelasan Tambahan Peraturan Menteri Ketenagakerjaan Nomor 5 Tahun 2018.</p>
-            <p class="table-note">**Tabel Acuan Skor Risiko Mengacu kepada Evaluation of Human Work 3<sup>rd</sup>
-                Edition Chapter 16 : Static Muscle Loading and The Evaluation of Posture by E. Nigel Corlett, 1992.
-            </p>
+            <!-- Signature Section yang disesuaikan -->
+            <div class="signature-section">
+                @if($ttd != null)
+                    @if($ttd->qr_path != null)
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right">
+                                    <div class="signature-date">
+                                        {{ $ttd->tanggal }}
+                                    </div><br>
+                                    <div class="signature-text">
+                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @else
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right" style="text-align: center;">
+                                    <div class="signature-date">
+                                        Tangerang, 13 Agustus 2025
+                                    </div><br><br><br>
+                                    <div class="signature-text">
+                                        <strong>(Abidah Walfathiyyah)</strong><br>
+                                        <span>Technical Control Supervisor</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    @endif
+                @endif
+            </div>
         </div>
     </div>
 </body>

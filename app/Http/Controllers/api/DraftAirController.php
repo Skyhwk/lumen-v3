@@ -22,6 +22,7 @@ use App\Models\DataLapanganAir;
 use App\Models\LhpsAirHeaderHistory;
 use App\Models\LhpsAirDetailHistory;
 use App\Models\PengesahanLhp;
+use App\Models\KonfirmasiLhp;
 
 use App\Jobs\JobPrintLhp;
 
@@ -133,20 +134,21 @@ class DraftAirController extends Controller
                 'alamat_sampling' => $request->alamat_sampling ?: null,
                 'sub_kategori'    => $request->jenis_sampel ?: null,
                 'deskripsi_titik' => $request->penamaan_titik ?: null,
-                'methode_sampling' => $request->metode_sampling ? json_encode(
-                    array_map(function($item) {
-                        if (strpos($item, 'custom;') === 0) {
-                            $parts = explode(';', $item, 2);
-                            return isset($parts[1]) ? $parts[1] : '';
-                        }
-                        return $item;
-                    }, $request->metode_sampling)
-                ) : null,
+                'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
+                // 'methode_sampling' => $request->metode_sampling ? json_encode(
+                //     array_map(function($item) {
+                //         if (strpos($item, 'custom;') === 0) {
+                //             $parts = explode(';', $item, 2);
+                //             return isset($parts[1]) ? $parts[1] : '';
+                //         }
+                //         return $item;
+                //     }, $request->metode_sampling)
+                // ) : null,
                 'titik_koordinat' => $request->titik_koordinat ?: null,
-                'tanggal_sampling'=> $request->tanggal_terima ?: null,
+                'tanggal_sampling' => $request->tanggal_terima ?: null,
                 'periode_analisa' => $request->periode_analisa ?: null,
                 'nama_karyawan'   => $nama_perilis,
-                'jabatan_karyawan'=> $jabatan_perilis,
+                'jabatan_karyawan' => $jabatan_perilis,
                 'regulasi'        => $request->regulasi ? json_encode($request->regulasi) : null,
                 'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
                 'keterangan'      => $keterangan ? json_encode($keterangan) : null,
@@ -252,7 +254,6 @@ class DraftAirController extends Controller
                 'message' => "Data draft lhp air no sampel {$request->no_sampel} berhasil disimpan",
                 'status'  => true
             ], 201);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -311,8 +312,8 @@ class DraftAirController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
                 ->render();
-            
-            if($dataHeader->file_lhp != $fileName){
+
+            if ($dataHeader->file_lhp != $fileName) {
                 // ada perubahan nomor lhp yang artinya di token harus di update
                 GenerateLink::where('id_quotation', $dataHeader->id_token)->update(['fileName_pdf' => $fileName]);
             }
@@ -580,14 +581,14 @@ class DraftAirController extends Controller
             ->where('parameter', $val->parameter)
             ->where('is_active', true)
             ->first();
-        
+
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
             $entry['methode'] = $bakumutu->method;
             $entry['baku_mutu'] = [$bakumutu->baku_mutu];
             $methodsUsed[] = $bakumutu->method;
         }
-        
+
         return $entry;
     }
 
@@ -603,7 +604,7 @@ class DraftAirController extends Controller
                 ->where('id_regulasi', $regulasiId)
                 ->where('is_active', true)
                 ->first();
-            
+
             $masterParameter = Parameter::where('nama_lab', 'pH')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
@@ -630,7 +631,7 @@ class DraftAirController extends Controller
             $parameter = array_values($parameter);
             $parameter = $parameter[0];
             $parameterName = explode(';', $parameter)[1];
-          
+
 
             $bakumutu = MasterBakumutu::where('parameter', $parameterName)
                 ->where('id_regulasi', $regulasiId)
@@ -664,7 +665,7 @@ class DraftAirController extends Controller
                 ->where('is_active', true)
                 ->first();
 
-                $masterParameterSuhu = Parameter::where('nama_lab', 'Suhu')->where('id_kategori', 1)->where('is_active', true)->first();
+            $masterParameterSuhu = Parameter::where('nama_lab', 'Suhu')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
                 'name' => 'Suhu',
@@ -699,7 +700,7 @@ class DraftAirController extends Controller
                 } else {
                     $history = LhpsAirHeaderHistory::where('no_sampel', $header->no_sampel)->whereNotNull('id_token')->orderBy('id', 'desc')->first();
                     if ($history != null) {
-                        
+
                         $header->id_token = $history->id_token;
                         $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $header->generated_by = $this->karyawan;
@@ -710,7 +711,6 @@ class DraftAirController extends Controller
                             'id_quotation' => $header->id,
                             'fileName_pdf' => $header->file_lhp
                         ]);
-
                     } else {
                         $key = $header->no_sampel . str_replace('.', '', microtime(true));
                         $gen = MD5($key);
@@ -846,6 +846,28 @@ class DraftAirController extends Controller
     {
         DB::beginTransaction();
         try {
+            $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+
+            if (!$konfirmasiLhp) {
+                $konfirmasiLhp = new KonfirmasiLhp();
+                $konfirmasiLhp->created_by = $this->karyawan;
+                $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            } else {
+                $konfirmasiLhp->updated_by = $this->karyawan;
+                $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            }
+
+            $konfirmasiLhp->no_lhp = $request->cfr;
+            $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+            $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+            $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+            $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+            $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+            $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+            $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+
+            $konfirmasiLhp->save();
+
             $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
                 ->where('is_active', true)->firstOrFail();
             // $detail = LhpsAirDetail::where('id_header', $header->id)->get();
@@ -882,9 +904,9 @@ class DraftAirController extends Controller
                 // $header->nama_karyawan = $nama_perilis ?? 'Abidah Walfathiyyah';
                 // $header->jabatan_karyawan = $jabatan_perilis ?? 'Technical Control Supervisor';
 
-                if($header->count_print < 1) {
-                    $header->is_printed = 1; 
-                    $header->count_print = $header->count_print + 1; 
+                if ($header->count_print < 1) {
+                    $header->is_printed = 1;
+                    $header->count_print = $header->count_print + 1;
                 }
                 $header->save();
 
@@ -918,7 +940,7 @@ class DraftAirController extends Controller
                     return response()->json(['message' => 'Gagal Melakukan Approve Data', 'status' => '401'], 401);
                 }
 
-                
+
 
                 DB::commit();
                 return response()->json([

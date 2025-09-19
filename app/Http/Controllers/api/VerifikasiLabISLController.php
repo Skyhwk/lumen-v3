@@ -116,7 +116,7 @@ class VerifikasiLabISLController extends Controller
                     ->first();
 
                 if (!$data) {
-                    return response()->json(["message" => "Data Lapangan tidak ditemukan", "code" => 404], 404);
+                    return response()->json(["message" => "Botol Belum di SCAN di TC", "code" => 404], 404);
                 }
                 
                 $dataDisplay = json_decode($data->data_detail); 
@@ -135,19 +135,19 @@ class VerifikasiLabISLController extends Controller
                     }
 
                     
-                //     // if (isset($parameters->air->$type)) {
-                //     //     $item->disiapkan = $parameters->air->$type->disiapkan;
-                //     //     if ($item->koding == $request->no_sampel) {
-                //     //         $item->add = 1;
-                //     //     }
-                //     // } else if (isset($parameters->udara->$type)) {
-                //     //     $item->disiapkan = $parameters->udara->$type->disiapkan;
-                //     //     if ($item->koding == $request->no_sampel) {
-                //     //         $item->add = 1;
-                //     //     }
-                //     // } else {
-                //     //     $item->disiapkan = null;
-                //     // }
+                    // if (isset($parameters->air->$type)) {
+                    //     $item->disiapkan = $parameters->air->$type->disiapkan;
+                    //     if ($item->koding == $request->no_sampel) {
+                    //         $item->add = 1;
+                    //     }
+                    // } else if (isset($parameters->udara->$type)) {
+                    //     $item->disiapkan = $parameters->udara->$type->disiapkan;
+                    //     if ($item->koding == $request->no_sampel) {
+                    //         $item->add = 1;
+                    //     }
+                    // } else {
+                    //     $item->disiapkan = null;
+                    // }
                 }
 
 
@@ -174,10 +174,6 @@ class VerifikasiLabISLController extends Controller
 
             $dataDisplay = array_values($dataDisplay);
 
-           
-
-
-
             DB::commit();
             return response()->json([
                 'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
@@ -200,6 +196,7 @@ class VerifikasiLabISLController extends Controller
         DB::beginTransaction();
         try {
             $no_sampel = $request->no_sampel;
+            $order_detail = OrderDetail::where('no_sampel', $no_sampel)->first();
             $data_scan = $request->data_botol;
             $data = ScanSampelAnalis::where('no_sampel', $no_sampel)->first();
             $lengkap = false;
@@ -238,11 +235,14 @@ class VerifikasiLabISLController extends Controller
             if(is_null($ftc)) {
                 $ftc = new Ftc();
                 $ftc->no_sample = $no_sampel;
+
             }
             $ftc->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');
             $ftc->user_laboratory = $this->user_id;
             $ftc->save();
-          
+            
+            $order_detail->tanggal_terima =  Carbon::now()->format('Y-m-d');
+            $order_detail->save();
 
             DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan dengan no sample ' . $request->no_sampel, 'status' => '201'], 201);

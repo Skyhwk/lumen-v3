@@ -1,3 +1,8 @@
+@php
+use App\Models\TabelRegulasi;
+use App\Models\MasterRegulasi;
+
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -90,7 +95,7 @@
             </table>
 
                 {{-- Regulasi --}}
-                @if ($header->regulasi_custom!=null)
+                <!-- @if ($header->regulasi_custom!=null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
                             @if ($y->page == $page)
@@ -100,6 +105,38 @@
                             @endif
                         @endforeach
                     </table>
+                @endif -->
+                @if (!empty($header->regulasi_custom))
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                   
+                        <table style="padding-top: 10px;" width="100%">
+                            @if($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y->regulasi)[1] }}</strong></td>
+                                </tr>
+                            @endif
+                        </table>
+                        @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y->regulasi)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y->regulasi)[0])->first();
+                            if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                        @if(!empty($table))
+                            {!! preg_replace(
+                                '/<table(\s|>)/i',
+                                '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
+                                $table
+                            ) !!}
+                        @else
+                            <table></table>
+                        @endif
+                
+                    @endforeach
                 @endif
           
             </td>

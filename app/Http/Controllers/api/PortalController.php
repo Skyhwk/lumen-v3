@@ -27,6 +27,7 @@ class PortalController extends Controller
                $cek = GenerateLink::where('token', $request->token)
                    ->where('key', $request->key)
                    ->first();
+               
                $uri = env('APP_URL');
                if ($cek != null) {
                    if ($request->mode == 'GETDATA') {
@@ -322,7 +323,7 @@ class PortalController extends Controller
                            $data = DraftErgonomiFile::with('link','order_detail')
                            ->where('id',$cek->id_quotation)
                            ->first();
-                           $uri = env('APP_URL') . '/public/draft_ergonomi/';
+                           $uri = env('APP_URL') . '/public/draft_ergonomi/draft/';
                            if($data !== null){
                                $data->flag_status = 'draft';
                                $data->type = $cek->quotation_status;
