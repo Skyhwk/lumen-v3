@@ -414,10 +414,11 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
+                "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
+             
     
             $pengukuran = json_decode($dataRwl->pengukuran,true);
             
