@@ -69,16 +69,21 @@
                             </tr>
                         @endif
                     </table>
-                     @php
+                     <!-- @php
                         // pastikan $header ada nilainya
                         $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                        $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first()->konten;
+                        $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                             if (!empty($table)) {
+                                    $table = $table->konten;
+                                } else {
+                                    $table = '';
+                                }
                     @endphp
                  {!! preg_replace(
                         '/<table(\s|>)/i',
                         '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
                         $table
-                    ) !!}
+                    ) !!} -->
 
                     @endforeach
                 @endif
