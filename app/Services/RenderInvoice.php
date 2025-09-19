@@ -1593,7 +1593,7 @@ class RenderInvoice
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
             $sisa_tagihan = $total_tagihan - $nilai_tagihan;
-            if ($sisa_tagihan != 0) {
+            if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr class="line_">
                     <td style="border: 1px solid; font-size: 10px; padding:3px;" colspan="2"><b style="text-transform: uppercase;">SISA PEMBAYARAN</b></td>
@@ -1908,7 +1908,7 @@ class RenderInvoice
                         <td style="border: 1px solid; font-size: 10px; padding: 3px;" colspan="2"><b style="text-transform: uppercase;">' . $dataHead->keterangan . '</b></td>
                         <td style="border: 1px solid; font-size: 9px; text-align:center;" class="text-right">' . self::rupiah($customInvoice->harga->nilai_tagihan) . '</td></tr>
                         ');
-                        if ($customInvoice->harga->sisa_tagihan != 0) {
+                        if (abs($customInvoice->harga->sisa_tagihan) > 10) {
                             $pdf->writeHTML('
                             <tr class="line_">
                             <td style="border: 1px solid; font-size: 10px; padding:3px;" colspan="2"><b style="text-transform: uppercase;">SISA PEMBAYARAN</b></td>
