@@ -5027,6 +5027,14 @@ class RequestQuotationController extends Controller
                         ];
                     }
                 }
+                uksort($pengujian_group_by_per, function($a, $b) {
+                    return strtotime($a) <=> strtotime($b);
+                });
+                uksort($allOldPengujianByPeriode, function($a, $b) {
+                    return strtotime($a) <=> strtotime($b);
+                });
+
+                // dd($pengujian_group_by_per, $allOldPengujianByPeriode);
                 foreach ($pengujian_group_by_per as $per => &$pengujianList) {
                     if ($alreadyOrdered && isset($allOldPengujianByPeriode[$per])) {
                         $lower_per = (int) substr($per, 0, 4) . substr($per, 5, 2) < (int) date('Ym');
@@ -5050,19 +5058,18 @@ class RequestQuotationController extends Controller
                                             array_keys($item)
                                         );
                                     }
-                                    $validSample = false;
-                                    foreach ($keysOldFoundPenamaanTitik as $key) {
-                                        // dump("$no_order/$key");
-                                        $od = OrderDetail::with('dataLapanganAir')->where('no_sampel', "$no_order/$key")->first();
-                                        
-                                        if($od && $od->tanggal_terima !== null) {
-                                            $validSample = true;
-                                        } else if ($od && $od->tanggal_terima === null) {
-                                            if($od->data_lapangan_air) {
-                                                $validSample = true;
-                                            }
-                                        }
-                                    }
+                                    $validSample = true;
+                                    // foreach ($keysOldFoundPenamaanTitik as $key) {
+                                    //     // dump("$no_order/$key");
+                                    //     $od = OrderDetail::with('dataLapanganAir')->where('no_sampel', "$no_order/$key")->first();
+                                    //     if($od && $od->tanggal_terima !== null) {
+                                    //         $validSample = true;
+                                    //     } else if ($od && $od->tanggal_terima === null) {
+                                    //         if($od->data_lapangan_air) {
+                                    //             $validSample = true;
+                                    //         }
+                                    //     }
+                                    // }
                                     
                                     if($validSample){  
                                         $penamaan_titik_fixed = [];
@@ -5103,9 +5110,12 @@ class RequestQuotationController extends Controller
                         unset($pengujianBaru);
                     }
                 }
+
+                // dd($pengujian_group_by_per);
                 // dump($biggestNumberOfSampel);
                 foreach ($pengujian_group_by_per as $per => &$pengujianList) {
                     foreach ($pengujianList as &$pengujianBaru) {
+                        // dd($pengujianBaru);
                         $foundMatch = false;
                         if(!$pengujianBaru['executed']) {
                             $keysOldFoundPenamaanTitik = [];
@@ -5131,6 +5141,9 @@ class RequestQuotationController extends Controller
                                             $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                             if ($alreadyOrdered) {
                                                 if ($i < count($keysOldFoundPenamaanTitik)) {
+                                                    // if($keysOldFoundPenamaanTitik[$i] == '309') {
+                                                    //     dd('ketemu', $per, $pengujianLama, $pengujianBaru);
+                                                    // }
                                                     $penamaan_titik_fixed[] = (object)[str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 } else {
                                                     $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
@@ -5165,10 +5178,8 @@ class RequestQuotationController extends Controller
                         }
                     }
                 }
-
+                // dd('ga ketemu');
                 // dump($biggestNumberOfSampel);
-
-                unset($pengujianList);
                 // dd($pengujian_group_by_per);
 
                 foreach ($period as $k => $per) {
@@ -5442,13 +5453,17 @@ class RequestQuotationController extends Controller
                         }
                     }
 
-                    // dump($data_sampling);
-                    // dump($data_sampling);
+                    
                     $datas[$j] = [
                         'periode_kontrak' => $per,
                         'data_sampling' => array_values($data_sampling)
                         // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
                     ];
+                    // dump($datas[$j]);
+
+                    // if($per = '2025-08' || $per = '2026-01') {
+                    //     dump($datas[$j]);
+                    // }
 
                     $dataD->periode_kontrak = $per;
                     $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
