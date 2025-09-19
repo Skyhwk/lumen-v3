@@ -74,35 +74,10 @@ use App\Models\MasterRegulasi;
                             </td>
                         </tr>
 
-                        {{-- Tanggal Sampling / Terima --}}
-                        <!-- <tr>
-                            <td class="custom5" width="120">
-                                @if ($header->status_sampling == 'SD') 
-                                    Tanggal Terima 
-                                @else 
-                                    Tanggal Sampling 
-                                @endif
-                            </td>
-                            <td class="custom5" width="12">:</td>
-                            @php
-                                $tanggal_ = $header->status_sampling == 'SD'
-                                    ? $header->tanggal_terima
-                                    : $header->tanggal_sampling;
-                            @endphp
-                            <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                        </tr> -->
                     </table>
 
                 {{-- Regulasi --}}
-                <!-- @if (!empty($header->regulasi))
-                    <table style="padding-top: 10px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
-                        @endforeach
-                    </table>
-                @endif -->
+             
                   @if (!empty($header->regulasi))
                 
                         @foreach (json_decode($header->regulasi) as $y)
@@ -111,7 +86,7 @@ use App\Models\MasterRegulasi;
                                     <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
                                 </tr>
                             </table>
-                            @php
+                            <!-- @php
                                 // pastikan $header ada nilainya
                                 $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
                                 $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
@@ -125,7 +100,7 @@ use App\Models\MasterRegulasi;
                                 '/<table(\s|>)/i',
                                 '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
                                 $table
-                            ) !!}
+                            ) !!} -->
 
                         @endforeach
                     

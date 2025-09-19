@@ -421,27 +421,28 @@ class DraftUdaraPencahayaanController extends Controller
 
                 // Bentuk data_custom
                 foreach ($regulasi_custom as $item) {
-                    if (empty($item['id']) || empty($item['page'])) continue;
-                    $id_regulasi = "id_" . $item['id'];
-                    $page        = $item['page'];
+                    if (empty($item['page'])) continue;
+                    // $id_regulasi = "id_" . $item['id'];
+                        $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
+                        $page        = $item['page'];
 
-                    if (!empty($groupedCustom[$page])) {
-                        foreach ($groupedCustom[$page] as $val) {
-                            $data_custom[$id_regulasi][] = [
-                                'id'                => $val->id,
-                                'no_sampel'         => $val->no_sampel,
-                                'param'             => $val->param,
-                                'lokasi_keterangan' => $val->lokasi_keterangan,
-                                'hasil_uji'         => $val->hasil_uji,
-                                'sumber_cahaya'     => $val->sumber_cahaya,
-                                'jenis_pengukuran'  => $val->jenis_pengukuran,
-                                'nab'               => $val->nab,
-                                'tanggal_sampling'  => $val->tanggal_sampling,
-                            ];
+                        if (!empty($groupedCustom[$page])) {
+                            foreach ($groupedCustom[$page] as $val) {
+                                $data_custom[$id_regulasi][] = [
+                                    'id'                => $val->id,
+                                    'no_sampel'         => $val->no_sampel,
+                                    'param'             => $val->param,
+                                    'lokasi_keterangan' => $val->lokasi_keterangan,
+                                    'hasil_uji'         => $val->hasil_uji,
+                                    'sumber_cahaya'     => $val->sumber_cahaya,
+                                    'jenis_pengukuran'  => $val->jenis_pengukuran,
+                                    'nab'               => $val->nab,
+                                    'tanggal_sampling'  => $val->tanggal_sampling,
+                                ];
+                            }
                         }
                     }
                 }
-            }
 
             // ==============================
             // Ambil mainData & otherRegulations
