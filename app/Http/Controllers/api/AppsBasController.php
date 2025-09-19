@@ -1074,7 +1074,7 @@ class AppsBasController extends Controller
 
             if ($sent) {
 
-                $persiapanHeader = PersiapanSampelHeader::where('no_quotation', $noDocument)->where('no_order', $noOrder)->where('tanggal_sampling', $request->input('tanggal_sampling'))->where('is_active', true)->first();
+                $persiapanHeader = PersiapanSampelHeader::where('no_quotation', $noDocument)->where('no_order', $noOrder)->where('tanggal_sampling', $request->input('tanggal_sampling'))->where('is_active', true)->whereNotNull('detail_bas_documents')->first();
 
                 if ($persiapanHeader) {
                     $persiapanHeader->is_emailed_bas = 1;
