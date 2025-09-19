@@ -63,6 +63,10 @@ class WsFinalUdaraKebisinganController extends Controller
 			->orderByDesc('id')
 			->get()
 			->map(function ($item) {
+                $item->getAnyHeaderUdara();
+                return $item;
+            })->values()
+			->map(function ($item) {
 				$item->getAnyDataLapanganUdara();
 				return $item;
 			});
