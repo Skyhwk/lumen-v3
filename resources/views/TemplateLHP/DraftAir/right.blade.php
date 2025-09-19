@@ -1,4 +1,5 @@
-<div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
+<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"> -->
+<div class="right">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>

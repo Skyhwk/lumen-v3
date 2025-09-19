@@ -147,6 +147,8 @@ class DraftUdaraPencahayaanController extends Controller
     public function store(Request $request)
     {
         DB::beginTransaction();
+            // dd($request->regulasi);
+
         try {
             // Pencahayaan
             $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
@@ -320,6 +322,7 @@ class DraftUdaraPencahayaanController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
                 ->whereView('DraftPencahayaan')
                 ->render();
 
