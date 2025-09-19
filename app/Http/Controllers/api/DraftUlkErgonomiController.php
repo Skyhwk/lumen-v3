@@ -34,7 +34,7 @@ class DraftUlkErgonomiController extends Controller
             ->where('order_detail.status', 2)
             ->where('is_active', true)
             ->whereIn('kategori_3', $kategori)
-            // ->whereJsonContains('parameter','230;Ergonomi')
+            ->whereJsonContains('parameter','230;Ergonomi')
             ->groupBy('no_sampel')
             ->get() // ambil data dulu
             ->map(function ($item) use ($generatedFiles) {
