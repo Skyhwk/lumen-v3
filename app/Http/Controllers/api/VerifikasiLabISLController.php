@@ -196,6 +196,7 @@ class VerifikasiLabISLController extends Controller
         DB::beginTransaction();
         try {
             $no_sampel = $request->no_sampel;
+            $order_detail = OrderDetail::where('no_sampel', $no_sampel)->first();
             $data_scan = $request->data_botol;
             $data = ScanSampelAnalis::where('no_sampel', $no_sampel)->first();
             $lengkap = false;
@@ -234,11 +235,14 @@ class VerifikasiLabISLController extends Controller
             if(is_null($ftc)) {
                 $ftc = new Ftc();
                 $ftc->no_sample = $no_sampel;
+
             }
             $ftc->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');
             $ftc->user_laboratory = $this->user_id;
             $ftc->save();
-          
+            
+            $order_detail->tanggal_terima =  Carbon::now()->format('Y-m-d');
+            $order_detail->save();
 
             DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan dengan no sample ' . $request->no_sampel, 'status' => '201'], 201);
