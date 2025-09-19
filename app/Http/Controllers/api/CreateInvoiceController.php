@@ -370,12 +370,30 @@ class CreateInvoiceController extends Controller
 
     public function getDetailPelanggan(Request $request)
     {
+        // dd($request->all());
         try {
             // $tabel = ($request->status == "kontrak") ? 'request_quotation_kontrak_H AS quot' : 'request_quotation AS quot';
             $table = $request->status == "kontrak" ? new QuotationKontrakH  : new QuotationNonKontrak;
             // dd($table);
             $data = $table->from(DB::raw($table->getTable() . ' AS quot'))
-                ->select(DB::raw('order_header.no_document, order_header.no_order, order_header.id_pelanggan, order_header.nama_perusahaan, order_header.konsultan, quot.alamat_kantor, quot.alamat_sampling, order_header.no_pic_order, order_header.nama_pic_order, order_header.jabatan_pic_order, order_header.no_pic_order, order_header.email_pic_order, order_header.biaya_akhir, COALESCE(SUM(invoice.nilai_tagihan), 0) AS tertagih, YEAR(order_header.tanggal_order) AS tahun_order'))
+                ->select(DB::raw('
+                    order_header.no_document, 
+                    order_header.no_order, 
+                    order_header.id_pelanggan, 
+                    order_header.nama_perusahaan, 
+                    order_header.konsultan, 
+                    quot.alamat_kantor, 
+                    quot.alamat_sampling, 
+                    order_header.no_pic_order, 
+                    order_header.nama_pic_order, 
+                    order_header.jabatan_pic_order, 
+                    order_header.no_pic_order, 
+                    order_header.email_pic_order, 
+                    order_header.biaya_akhir, 
+                    COALESCE(SUM(invoice.nilai_tagihan), 0) AS tertagih, 
+                    COALESCE(SUM(invoice.nilai_pelunasan), 0) AS total_pelunasan,
+                    YEAR(order_header.tanggal_order) AS tahun_order
+                '))
                 ->leftJoin('order_header', 'quot.no_document', '=', 'order_header.no_document')
                 ->leftJoin('invoice', function ($join) use ($request) {
                     $join->on('order_header.no_order', '=', 'invoice.no_order')
@@ -383,8 +401,26 @@ class CreateInvoiceController extends Controller
                 })
                 ->where('order_header.is_active', true)
                 ->where('order_header.id_pelanggan', $request->id_pelanggan)
-                ->groupBy('order_header.no_document', 'order_header.id_pelanggan', 'order_header.nama_perusahaan', 'order_header.konsultan', 'order_header.biaya_akhir', 'order_header.no_order', 'quot.alamat_kantor', 'quot.alamat_sampling', 'order_header.no_pic_order', 'order_header.nama_pic_order', 'order_header.jabatan_pic_order', 'order_header.no_pic_order', 'order_header.email_pic_order', DB::raw('YEAR(order_header.tanggal_order)'))
+                ->groupBy(
+                    'order_header.no_document', 
+                    'order_header.id_pelanggan', 
+                    'order_header.nama_perusahaan', 
+                    'order_header.konsultan', 
+                    'order_header.biaya_akhir', 
+                    'order_header.no_order', 
+                    'quot.alamat_kantor', 
+                    'quot.alamat_sampling', 
+                    'order_header.no_pic_order', 
+                    'order_header.nama_pic_order', 
+                    'order_header.jabatan_pic_order', 
+                    'order_header.no_pic_order', 
+                    'order_header.email_pic_order', 
+                    DB::raw('YEAR(order_header.tanggal_order)')
+                )
+                // disini dicek: hanya ambil kalau biaya_akhir > total_pelunasan
+                ->havingRaw('order_header.biaya_akhir > COALESCE(SUM(invoice.nilai_pelunasan), 0)')
                 ->get();
+
 
             return response()->json([
                 'data' => $data,
