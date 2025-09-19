@@ -106,37 +106,36 @@ use App\Models\MasterRegulasi;
                         @endforeach
                     </table>
                 @endif -->
-                  @if (!empty($header->regulasi_custom))
-                @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                @php
-                @endphp
-                    <table style="padding-top: 10px;" width="100%">
-                        @if($y->page == $page)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y->regulasi)[1] }}</strong></td>
-                            </tr>
+                @if (!empty($header->regulasi_custom))
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                   
+                        <table style="padding-top: 10px;" width="100%">
+                            @if($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y->regulasi)[1] }}</strong></td>
+                                </tr>
+                            @endif
+                        </table>
+                        @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y->regulasi)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y->regulasi)[0])->first();
+                            if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                        @if(!empty($table))
+                            {!! preg_replace(
+                                '/<table(\s|>)/i',
+                                '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
+                                $table
+                            ) !!}
+                        @else
+                            <table></table>
                         @endif
-                    </table>
-                     @php
-                        // pastikan $header ada nilainya
-                        $regulasi = MasterRegulasi::where('id',  explode('-',$y->regulasi)[0])->first();
-                        $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y->regulasi)[0])->first();
-                        if (!empty($table)) {
-                            $table = $table->konten;
-                        } else {
-                            $table = '';
-                        }
-                    @endphp
-                    @if(!empty($table))
-                        {!! preg_replace(
-                            '/<table(\s|>)/i',
-                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
-                            $table
-                        ) !!}
-                    @else
-                        <table></table>
-                    @endif
-              
+                
                     @endforeach
                 @endif
           
