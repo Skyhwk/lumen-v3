@@ -296,12 +296,14 @@ class DraftUdaraGetaranController extends Controller
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
                 $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
                             ->setDataHeader($header)
+                            ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
                             ->render();
             } else {
                 $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
                             ->setDataHeader($header)
+                            ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaran')
                             ->render();
