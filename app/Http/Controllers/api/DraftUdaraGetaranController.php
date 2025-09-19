@@ -406,9 +406,9 @@ class DraftUdaraGetaranController extends Controller
                 ->where('no_lhp', $request->cfr)
                 ->first();
             if ($cek_lhp) {
-                $data_entry = array();
-                $data_custom = array();
-                $cek_regulasi = array();
+                $data_entry = [];
+                $data_custom = [];
+                $cek_regulasi = [];
 
                 foreach ($cek_lhp->lhpsGetaranDetail->toArray() as $key => $val) {
                     $data_entry[$key] = [
@@ -463,6 +463,7 @@ class DraftUdaraGetaranController extends Controller
                         $groupedCustom[$val->page][] = $val;
                     }
 
+
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
                     usort($regulasi_custom, function ($a, $b) {
@@ -470,8 +471,8 @@ class DraftUdaraGetaranController extends Controller
                     });
 
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
+                        if (empty($item['page'])) continue;
+                        $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
                         $page = $item['page'];
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
@@ -494,69 +495,74 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
+                        // dd($data_custom);   
+
                   $mainData         = [];
-            $otherRegulations = [];
+                $otherRegulations = [];
 
-               $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
-                    ->whereIn('no_sampel', $noSampel)
-                    ->where('is_approve', 1)
-                    ->where('is_active', true)
-                    ->where('lhps', 1)
-                    ->get();
+                $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+                        ->whereIn('no_sampel', $noSampel)
+                        ->where('is_approve', 1)
+                        ->where('is_active', true)
+                        ->where('lhps', 1)
+                        ->get();
 
-            foreach ($data as $val) {
-                $entry     = $this->formatEntry($val);
-                $mainData[] = $entry;
+                foreach ($data as $val) {
+                    $entry     = $this->formatEntry($val);
+                    $mainData[] = $entry;
 
-                if ($request->other_regulasi) {
-                    foreach ($request->other_regulasi as $id_regulasi) {
-                        $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
+                    if ($request->other_regulasi) {
+                        foreach ($request->other_regulasi as $id_regulasi) {
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
+                        }
                     }
                 }
-            }
 
-            // Sort mainData
-            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+                // Sort mainData
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
 
-            // Sort otherRegulations
-            foreach ($otherRegulations as $id => $regulations) {
-                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
-            }
-
-            // ==============================
-            // Sinkronisasi data_entry dengan mainData
-            // ==============================
-            $dataEntrySamples = array_column($data_entry, 'no_sampel');
-
-            foreach ($mainData as $main) {
-                if (!in_array($main['no_sampel'], $dataEntrySamples)) {
-                    $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
+                // Sort otherRegulations
+                foreach ($otherRegulations as $id => $regulations) {
+                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
                 }
-            }
 
-            // ==============================
-            // Sinkronisasi data_custom dengan otherRegulations
-            // ==============================
-            $dataCustomSamples = [];
-            foreach ($data_custom as $group) {
-                foreach ($group as $row) {
-                    $dataCustomSamples[] = $row['no_sampel'];
-                }
-            }
+                // ==============================
+                // Sinkronisasi data_entry dengan mainData
+                // ==============================
+                $dataEntrySamples = array_column($data_entry, 'no_sampel');
 
-            foreach ($otherRegulations as $id_regulasi => $entries) {
-                foreach ($entries as $other) {
-                    if (!in_array($other['no_sampel'], $dataCustomSamples)) {
-                        $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                foreach ($mainData as $main) {
+
+                    if (!in_array($main['no_sampel'], $dataEntrySamples)) {
+                        $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
                     }
                 }
-            }
 
-                return response()->json([
-                    'status' => true,
-                    'data' => $data_entry,
-                    'next_page' => $data_custom,
-                ], 201);
+                // ==============================
+                // Sinkronisasi data_custom dengan otherRegulations
+                // ==============================
+                $dataCustomSamples = [];
+                // dd($data_custom, $dataCustomSamples); 
+                foreach ($data_custom as $group) {
+                    foreach ($group as $row) {
+                        $dataCustomSamples[] = $row['no_sampel'];
+                    }
+                }
+
+                foreach ($otherRegulations as $id_regulasi => $entries) {
+                    foreach ($entries as $other) {
+                        // dd($entries,$other, $dataCustomSamples); 
+                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
+                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                        }
+                    }
+                }
+
+                    return response()->json([
+                        'status' => true,
+                        'data' => $data_entry,
+                        'next_page' => $data_custom,
+                    ], 201);
             } else {
                 $mainData = [];
                 $otherRegulations = [];
