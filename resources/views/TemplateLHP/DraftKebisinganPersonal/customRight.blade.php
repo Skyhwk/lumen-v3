@@ -80,7 +80,7 @@
                         @foreach (json_decode($header->custom_regulasi) as $key => $y)
                         @if($key + 1 == $page)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
                             </tr>
                         @endif
                         @endforeach
