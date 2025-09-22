@@ -67,7 +67,7 @@
                             <tr>
                                 <td class="custom5" colspan="3">
                                     <strong>
-                                        **{{ str_repeat('*', $page) }}{{ explode('-',$y)[1] }}
+                                      {{ explode('-',$y)[1] }}
                                     </strong>
                                 </td>
                             </tr>
