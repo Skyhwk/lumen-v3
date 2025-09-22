@@ -53,9 +53,12 @@ class TicketProgrammingController extends Controller
                             return 'File not found';
                         }
                     })
+                    ->addColumn('can_approve', function ($row) use ($getBawahan) {
+                        // comment
+                        return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+                    })
                     ->make(true);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'data' => [],
@@ -94,7 +97,6 @@ class TicketProgrammingController extends Controller
                     'message' => 'Data tidak sesuai format array.',
                 ], 400);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'data' => [],
@@ -152,7 +154,7 @@ class TicketProgrammingController extends Controller
         }
     }
 
-    // Done By Client 
+    // Done By Client
     public function approve(Request $request)
     {
         // dd($request->all());
@@ -314,7 +316,7 @@ class TicketProgrammingController extends Controller
             DB::commit();
 
             if ($this->karyawan == $data->created_by) {
-                $user_programmer = where('id_department', 7)
+                $user_programmer = MasterKaryawan::where('id_department', 7)
                     ->whereNotIn('id', [10, 15, 93, 123])
                     ->where('is_active', true)
                     ->pluck('id')
@@ -340,7 +342,9 @@ class TicketProgrammingController extends Controller
         } catch (\Throwable $th) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Proses process Ticket Programming: ' . $th->getMessage()
+                'message' => 'Gagal Proses process Ticket Programming: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
             ], 500);
         }
     }
@@ -360,7 +364,32 @@ class TicketProgrammingController extends Controller
                 $uniq_id = $microtime;
                 $filename = $microtime . '.txt';
                 $content = $request->details;
-                file_put_contents(public_path('ticket_programming/' . $filename), $content);
+                $contentDir = 'ticket_programming';
+
+                if (!file_exists(public_path($contentDir))) {
+                    mkdir(public_path($contentDir), 0777, true);
+                }
+
+                file_put_contents(public_path($contentDir . '/' . $filename), $content);
+
+                if ($request->hasFile('dokumentasi')) {
+                    $dir_dokumentasi = "ticket";
+
+                    if (!file_exists(public_path($dir_dokumentasi))) {
+                        mkdir(public_path($dir_dokumentasi), 0777, true);
+                    }
+
+                    $file = $request->file('dokumentasi');
+                    $extTicket = $file->getClientOriginalExtension();
+                    $filenameDok = "PROGRAMMING_" . $uniq_id . '.' . $extTicket;
+
+                    // simpan ke folder public/ticket
+                    $file->move(public_path($dir_dokumentasi), $filenameDok);
+
+                    $data->dokumentasi = $filenameDok;
+                } else {
+                    $data->dokumentasi = null;
+                }
 
                 $data->nama_menu = $request->nama_menu;
                 $data->nomor_ticket = $uniq_id;
@@ -374,11 +403,34 @@ class TicketProgrammingController extends Controller
                         'message' => 'Ticket Programming tidak ditemukan'
                     ], 404);
                 }
+
+                if ($request->hasFile('dokumentasi')) {
+                    $dir_dokumentasi = "ticket";
+
+                    if (!file_exists(public_path($dir_dokumentasi))) {
+                        mkdir(public_path($dir_dokumentasi), 0777, true);
+                    }
+
+                    $file = $request->file('dokumentasi');
+                    $extTicket = $file->getClientOriginalExtension();
+                    $filenameDok = "PROGRAMMING_" . $data->nomor_ticket . '.' . $extTicket;
+
+                    // simpan ke folder public/ticket
+                    $file->move(public_path($dir_dokumentasi), $filenameDok);
+                } else {
+                    $data->dokumentasi = null;
+                }
+
                 $data->updated_by = $this->karyawan;
                 $data->updated_at = Carbon::now();
 
+                $contentDir = 'ticket_programming';
+                if (!file_exists(public_path($contentDir))) {
+                    mkdir(public_path($contentDir), 0777, true);
+                }
+
                 $content = $request->details;
-                file_put_contents(public_path('ticket_programming/' . $data->filename), $content);
+                file_put_contents(public_path($contentDir . '/' . $data->filename), $content);
                 $message = 'Ticket Programming Telah Diperbarui';
             }
 
@@ -414,4 +466,48 @@ class TicketProgrammingController extends Controller
         }
     }
 
+    public function approveTicket(Request $request)
+    {
+        // dd($request->all());
+        DB::beginTransaction();
+        try {
+            $data = TicketProgramming::find($request->id);
+            $data->approved_by = $this->karyawan;
+            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+
+            $data->save();
+
+            $message = 'Ticket Programming telah diapprove oleh ' . $this->karyawan .' dan siap untuk diproses oleh tim IT';
+
+            $user_programmer = MasterKaryawan::where('id_department', 7)
+                ->whereNotIn('id', [10, 15, 93, 123])
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
+
+            Notification::whereIn('id', $user_programmer)
+                ->title('Ticket Programming Siap Diproses!')
+                ->message($message)
+                ->url('/ticket-programming')
+                ->send();
+
+            Notification::where('nama_lengkap', $data->created_by)
+                ->title('Ticket Programming Update')
+                ->message($message)
+                ->url('/ticket-programming')
+                ->send();
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal Proses Ticket Programming: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
