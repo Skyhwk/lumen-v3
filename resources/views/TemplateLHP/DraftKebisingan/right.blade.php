@@ -66,7 +66,7 @@
                     @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>**{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
                                 </tr>
                             </table>
                     @endforeach
