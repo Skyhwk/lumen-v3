@@ -20,9 +20,9 @@
     }
 @endphp
 
-<table width="100%" style="font-size:7px;">
+<table width="100%" style="font-size:7px; font-weight: 800;">
     <tr>
-        <td width="15%" style="vertical-align: bottom;">
+        <td width="15%" style="vertical-align: bottom; ">
             <div>PT Inti Surya laboratirum</div>
             <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
             <div>021-5089-8988/89 contact@intilab.com</div>
