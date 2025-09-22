@@ -65,11 +65,29 @@
                     <table style="padding-top: 10px;" width="100%">
                         @if($key + 1 == $page)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                <td class="custom5" colspan="3">
+                                    <strong>
+                                        **{{ str_repeat('*', $page) }}{{ explode('-',$y)[1] }}
+                                    </strong>
+                                </td>
                             </tr>
                         @endif
                     </table>
                     @endforeach
+                    @php
+                            $regulasiId = explode('-', $y)[0];
+                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
+                        @endif
                 @endif
 
               
