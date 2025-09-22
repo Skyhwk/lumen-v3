@@ -54,6 +54,7 @@ class TicketProgrammingController extends Controller
                         }
                     })
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
+                        // comment
                         return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
                     })
                     ->make(true);
