@@ -92,15 +92,15 @@
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi_custom))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                        @if($key == $page)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
-                        @endif
-                        @endforeach
-                    </table>
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            @if($key + 1 == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            @endif
+                        </table>
+                    @endforeach
                 @endif
             </td>
         </tr>

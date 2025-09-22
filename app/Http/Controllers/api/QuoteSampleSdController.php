@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Http;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use Mpdf\Mpdf;
-
+use Carbon\Carbon;
 class QuoteSampleSdController extends Controller
 {
     public function index(Request $request)
@@ -578,8 +578,13 @@ class QuoteSampleSdController extends Controller
             $keter = [];
             $tgl = $data_order->orderDetail->pluck('tanggal_terima')->toArray();
             $tglFormatted = array_map(function ($tanggal) {
-                return $this->tanggal_indonesia($tanggal);
+                if (is_null($tanggal)) {
+                    return null;
+                }
+                return Carbon::parse($tanggal)->locale('id')->isoFormat('D MMMM YYYY');
+                // return $this->tanggal_indonesia($tanggal);
             }, $tgl);
+
             $jam = '';
             // if (!is_null($sp)) {
             //     foreach (json_decode($sp->keterangan_lain) as $key) {

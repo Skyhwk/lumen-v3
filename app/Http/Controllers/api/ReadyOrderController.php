@@ -1017,7 +1017,8 @@ class ReadyOrderController extends Controller
                             'M100' => 100,
                             'HNO3' => 500,
                             'M1000' => 1000,
-                            'BENTHOS' => 100
+                            'BENTHOS' => 100,
+                            'BEBAS PYROGEN' => 10
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
@@ -1426,7 +1427,8 @@ class ReadyOrderController extends Controller
                             'M100' => 100,
                             'HNO3' => 500,
                             'M1000' => 1000,
-                            'BENTHOS' => 100
+                            'BENTHOS' => 100,
+                            'BEBAS PYROGEN' => 10
                         ];
                         foreach ($botol_volumes as $type => $volume) {
                             $koding = $no_sampling . strtoupper(Str::random(5));
@@ -1864,12 +1866,12 @@ class ReadyOrderController extends Controller
                                         'M100' => 100,
                                         'HNO3' => 500,
                                         'M1000' => 1000,
-                                        'BENTHOS' => 100
+                                        'BENTHOS' => 100,
+                                        'BEBAS PYROGEN' => 10
                                     ];
 
                                     foreach ($botol_volumes as $type => $volume) {
                                         $koding = $no_sampling . strtoupper(Str::random(5));
-
                                         // Hitung jumlah botol yang dibutuhkan
                                         $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
 
@@ -1966,6 +1968,7 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
+            dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }
@@ -2282,7 +2285,8 @@ class ReadyOrderController extends Controller
                             'M100' => 100,
                             'HNO3' => 500,
                             'M1000' => 1000,
-                            'BENTHOS' => 100
+                            'BENTHOS' => 100,
+                            'BEBAS PYROGEN' => 10
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
