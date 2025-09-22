@@ -20,7 +20,7 @@
     }
 @endphp
 
-<table width="100%" style="font-size:7px; font-weight: 800;">
+<table width="100%" style="font-size:7px; font-weight: 400;">
     <tr>
         <td width="15%" style="vertical-align: bottom; ">
             <div>PT Inti Surya laboratirum</div>
