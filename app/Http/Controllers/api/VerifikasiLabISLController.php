@@ -359,8 +359,8 @@ class VerifikasiLabISLController extends Controller
             $ftc->user_laboratory = $this->user_id;
             $ftc->save();
 
-            $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
-            $order_detail->save();
+            // $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+            // $order_detail->save();
 
             DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan dengan no sample ' . $request->no_sampel, 'status' => '201'], 201);
