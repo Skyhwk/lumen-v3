@@ -333,7 +333,7 @@ class DraftUdaraIklimKerjaController extends Controller
                                 $custom->kecepatan_angin   = $custom_cleaned_kecepatan_angin[$val] ?? null;
                                 $custom->suhu_temperatur   = $custom_cleaned_suhu_temperatur[$val] ?? null;
                                 $custom->kondisi           = $custom_cleaned_kondisi[$val] ?? null;
-                                $custom->tanggal_sampling           = $custom_cleaned_tanggal_sampling[$val] ?? null;
+                                $custom->tanggal_sampling  = $custom_cleaned_tanggal_sampling[$val] ?? null;
                             }
                         }
 
@@ -358,12 +358,14 @@ class DraftUdaraIklimKerjaController extends Controller
                 if($parameter[0] == 'ISBB' || $parameter[0] == 'ISBB (8 Jam)'){
                     $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)
+                        ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimPanas')
                         ->render();
                 } else {
                     $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)
+                        ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimDingin')
                         ->render();

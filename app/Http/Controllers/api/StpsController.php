@@ -849,40 +849,6 @@ class StpsController extends Controller
                     'message' => 'Sample diantar tidak memiliki STPS.!',
                 ], 401);
             }
-            //  =========================================CETAK PDF========================================
-            // $psh = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
-            //     ->where('no_order', $dataOrder->no_order)
-            //     // ->where('periode', $request->periode)
-            //     ->where('tanggal_sampling', $request->jadwal)
-            //     ->whereJsonContains('no_sampel', $pra_no_sample[0])
-            //     ->first();
-
-
-
-
-
-            // $dataList = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
-            //     ->where('no_order', $dataOrder->no_order)
-            //     ->where('tanggal_sampling', $request->jadwal)
-            //     ->where('is_active', 1)
-            //     ->get();
-
-            // $psh = $dataList->first(function ($item) use ($pra_no_sample) {
-            //     $noSampel = json_decode($item->no_sampel, true) ?? [];
-            //     return count(array_intersect($noSampel, $pra_no_sample)) > 0;
-            // });
-
-
-            // if (!$psh) {
-            //     if (file_exists(public_path() . '/stps')) {
-            //     }
-
-            //     return response()->json([
-            //         'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
-            //     ], 401);
-            // }
-
-            // dd($pra_no_sample);
 
             $psController = new PersiapanSampleController($request);
             $pshModel = PersiapanSampelHeader::class;
@@ -890,13 +856,14 @@ class StpsController extends Controller
             $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                 ->where('no_order', $dataOrder->no_order)
                 ->where('tanggal_sampling', $request->jadwal)
+                ->where('is_active', 1)
                 ->where('sampler_jadwal', $request->sampler);
             // ->whereJsonContains('no_sampel', $pra_no_sample);
 
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
-
+            // dd($psHeader, $request->sampler);
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
                 // $request->no_order = $request->no_order;
@@ -905,7 +872,7 @@ class StpsController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-
+                
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {
