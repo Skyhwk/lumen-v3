@@ -9,6 +9,11 @@ use Carbon\Carbon;
 use Repository;
 use Illuminate\Support\Facades\Http;
 
+use App\Models\LhpsAirCustom;
+use App\Models\LhpsAirDetail;
+use App\Models\LhpsAirHeader;
+use App\Services\ABCService;
+
 class CustomController
 {
     public function handle(Request $request)
@@ -47,33 +52,58 @@ class CustomController
     }
 
     public function total(Request $request){
-        $data1 = DB::table('kontak_pelanggan')->where('email_perusahaan', 'like', '%@%')->where('is_active', 1)->pluck('email_perusahaan')->toArray();
-        $data2 = DB::table('pic_pelanggan')->where('email_pic', 'like', '%@%')->where('is_active', 1)->pluck('email_pic')->toArray();
-        $allArray = array_merge($data1, $data2);
-        // dd(count($data1), count($data2), count($allArray));
+        // $data1 = DB::table('kontak_pelanggan')->where('email_perusahaan', 'like', '%@%')->where('is_active', 1)->pluck('email_perusahaan')->toArray();
+        // $data2 = DB::table('pic_pelanggan')->where('email_pic', 'like', '%@%')->where('is_active', 1)->pluck('email_pic')->toArray();
+        // $allArray = array_merge($data1, $data2);
+        // // dd(count($data1), count($data2), count($allArray));
         
-        $cleanArray = array_values(array_unique($allArray));
+        // $cleanArray = array_values(array_unique($allArray));
 
-        $response = Http::withHeaders([
-            'X-MLMMJADMIN-API-AUTH-TOKEN' => 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS'
-        ])->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
+        // $response = Http::withHeaders([
+        //     'X-MLMMJADMIN-API-AUTH-TOKEN' => 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS'
+        // ])->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
 
-        if (!$response->successful()) {
-            return response()->json([
-            'error' => 'API request failed',
-            'status' => $response->status(),
-            'message' => $response->body()
-            ], $response->status());
+        // if (!$response->successful()) {
+        //     return response()->json([
+        //     'error' => 'API request failed',
+        //     'status' => $response->status(),
+        //     'message' => $response->body()
+        //     ], $response->status());
+        // }
+
+        // $return = $response->json();
+        // $dataCollection = collect($return['_data'] ?? []);
+        // $data = $dataCollection->pluck('mail')->toArray();
+        
+        // $arraykedua = array_merge($cleanArray, $data);
+        // $arraykedua = array_values(array_unique($arraykedua));
+        // dd(count($arraykedua));
+        // Repository::dir('daftar_email')->key('daftar_email')->save(json_encode($arraykedua));
+        $headers = LhpsAirHeader::where('is_active', 1)
+        ->whereNotNull('nama_karyawan')
+        ->whereNotNull('jabatan_karyawan')
+        ->whereNotNull('file_qr')
+        ->whereNotNull('file_lhp')
+        ->whereNotNull('tanggal_lhp')
+        ->whereDate('created_at', '>=', '2025-09-08')
+        ->orderBy('id', 'desc')
+        ->get();
+        
+        $total = 0;
+        foreach($headers as $header){
+            $groupedByPage = collect(LhpsAirCustom::where('id_header', $header->id)->get())
+                    ->groupBy('page')
+                    ->toArray();
+            
+            $fileName = ABCService::setDataDetail(LhpsAirDetail::where('id_header', $header->id)->get())
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftAir')
+                ->render();
+            Log::channel('render')->info('Render LHP', ['no_lhp' => $header->no_lhp, 'file_lhp' => $fileName]); 
+            $total++;
         }
 
-        $return = $response->json();
-        $dataCollection = collect($return['_data'] ?? []);
-        $data = $dataCollection->pluck('mail')->toArray();
-        
-        $arraykedua = array_merge($cleanArray, $data);
-        $arraykedua = array_values(array_unique($arraykedua));
-        dd(count($arraykedua));
-        // Repository::dir('daftar_email')->key('daftar_email')->save(json_encode($arraykedua));
-        return response()->json(['message' => 'Data updated successfully', 'data' => $arraykedua], 200);
+        return response()->json(['message' => 'Data updated successfully', 'data' => $total], 200);
     }
 }
