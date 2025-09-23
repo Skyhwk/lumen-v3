@@ -63,18 +63,31 @@ class FdlDirectLainController extends Controller
                     }, $pDecoded);
 
                     // Ambil parameter dari data lapangan
-                    $par = DataLapanganDirectLain::where('no_sampel', $noSampel)->groupBy('parameter')->pluck('parameter')->toArray();
+                    $par = DataLapanganDirectLain::where('no_sampel', $noSampel)
+                        ->groupBy('parameter')
+                        ->pluck('parameter')
+                        ->toArray();
+
                     $par2 = DataLapanganDirectLain::where('no_sampel', $noSampel)
                         ->where('shift', '!=', 'Sesaat')
                         ->groupBy('parameter')
                         ->pluck('parameter')
                         ->toArray();
-                
+
+                    // Ambil parameter yg sudah punya shift = Sesaat
+                    $parSesaat = DataLapanganDirectLain::where('no_sampel', $noSampel)
+                        ->where('shift', 'Sesaat')
+                        ->groupBy('parameter')
+                        ->pluck('parameter')
+                        ->toArray();
+
                     // Hitung parameter yang belum masuk ke $par
                     $paramBelumAda = array_diff($pDecoded, $par);
-                    // Gabungkan hasil param2 (shift != Sesaat) dan param yang belum ada
+                    // Gabungkan hasil par2 (shift != Sesaat) dan param yang belum ada
                     $gabungParam = array_unique(array_merge($par2, $paramBelumAda));
-                
+                    // Eliminasi parameter yang sudah ada di shift = Sesaat
+                    $gabungParam = array_diff($gabungParam, $parSesaat);
+                    
                     // Encode final
                     $param_fin = json_encode(array_values($gabungParam), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                     $cek = MasterSubKategori::find(explode('-', $data->kategori_3)[0]);
@@ -83,7 +96,7 @@ class FdlDirectLainController extends Controller
                         'jenis'      => $cek->nama_sub_kategori ?? '-',
                         'keterangan' => $data->keterangan_1,
                         'id_ket'     => explode('-', $data->kategori_3)[0],
-                        'param'      => $param_fin,
+                        'param'      => json_decode($param_fin, true),
                         'parameterList' => $listParameter
                     ], 200);
                 }                
@@ -120,13 +133,8 @@ class FdlDirectLainController extends Controller
 
         $query = DataLapanganDirectLain::with('detail')
             ->where('created_by', $this->karyawan)
-            ->where(function ($q) {
-                $q->where('is_rejected', 1)
-                ->orWhere(function ($q2) {
-                    $q2->where('is_rejected', 0)
-                        ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                });
-            });
+            ->whereIn('is_rejected', [0, 1])
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {

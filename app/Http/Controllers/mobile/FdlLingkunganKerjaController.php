@@ -166,13 +166,8 @@ class FdlLingkunganKerjaController extends Controller
 
         $query = DataLapanganLingkunganKerja::with('detail', 'detailLingkunganKerja')
             ->where('created_by', $this->karyawan)
-            ->where(function ($q) {
-                $q->where('is_rejected', 1)
-                ->orWhere(function ($q2) {
-                    $q2->where('is_rejected', 0)
-                        ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                });
-            });
+            ->whereIn('is_rejected', [0, 1])
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
         
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -204,13 +199,6 @@ class FdlLingkunganKerjaController extends Controller
     public function getShift(Request $request)
     {
         try {
-            // $importantKeyword = [
-            // "As", "Asam Asetat", "Asbestos", "Carbon Dust", "Ba", "Cl-", "Cl2", "Co", "Cr",
-            // "Cu", "Cd", "Fe", "H2S", "H2SO4", "HCl", "HF", "Hg", "Kelembaban", "Laju Ventilasi",
-            // "Mn", "NH3", "Ni", "NO2", "NOx", "O3", "Oil Mist", "Ox", "Passive NO2", "Passive SO2",
-            // "Pb", "Sb", "Se", "Sn", "SO2", "Suhu", "TSP", "Zn", "Pertukaran Udara",
-            // "Aluminium", "Silica Crystaline 8 Jam", "Ortho Cresol", "Dustfall"
-            // ];
 
             $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lk')->first();
 
@@ -289,8 +277,6 @@ class FdlLingkunganKerjaController extends Controller
             } else if ($pp2 !== "") {
                 $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
             }
-
-            
             
             // Hapus parameter yang ada di $existing_parameters
             $filtered_param = array_values(array_diff($nilai_param2, $lk_parameter));
@@ -791,7 +777,7 @@ class FdlLingkunganKerjaController extends Controller
                                 'Flow' => $request->awal[$in],
                             ];
                         }
-                    } else if (str_contains($a, 'O3')) {
+                    } else if ($a == 'O3 (8 Jam)' || $a == 'O3') {
                         $pengukuran = [
                             'Flow Awal' => $request->awal[$in],
                             'Flow Tengah' => $request->tengah[$in],

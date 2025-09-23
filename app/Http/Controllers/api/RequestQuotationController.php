@@ -38,6 +38,8 @@ use App\Services\RenderInvoice;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
+use App\Jobs\CreateNonKontrakJob;
+use App\Jobs\CreateKontrakJob;
 
 class RequestQuotationController extends Controller
 {
@@ -537,188 +539,183 @@ class RequestQuotationController extends Controller
             ], 400);
         }
 
-        DB::beginTransaction();
+        $job = new CreateNonKontrakJob($payload, $this->idcabang, $this->karyawan, $sales_id);
+        $this->dispatch($job);
+        
+        sleep(3);
 
-        try {
-            $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
-            $bulan_chek = date('m', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit bulan (misal: 01)
-            $bulan_chek = self::romawi($bulan_chek);
+        return response()->json([
+            'message' => "Penawaran berhasil dibuat dengan nomor dokumen",
+        ], 200);
 
-            $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
-                ->where('no_document', 'not like', '%R%')
-                ->where('no_document', 'like', '%/' . $tahun_chek . '-%')
-                ->orderBy('id', 'DESC')
-                ->first();
+        // DB::beginTransaction();
 
-            // $no_urut = '1';
+        // try {
+        //     $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
+        //     $bulan_chek = date('m', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit bulan (misal: 01)
+        //     $bulan_chek = self::romawi($bulan_chek);
 
-            // if ($cek != null) {
-            //     $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
-            // }
+        //     $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
+        //         ->where('no_document', 'not like', '%R%')
+        //         ->where('no_document', 'like', '%/' . $tahun_chek . '-%')
+        //         ->orderBy('id', 'DESC')
+        //         ->first();
 
-            // $no_quotation = sprintf('%06d', ($no_urut));
-            // $no_document = 'ISL/QT/' . DATE('y', strtotime($payload->informasi_pelanggan->tgl_penawaran)) . '-' . self::romawi(DATE('m', strtotime($payload->informasi_pelanggan->tgl_penawaran))) . '/' . $no_quotation;
+        //     $no_ = 1;  // Set default nomor urut menjadi 1
 
-            $no_ = 1;  // Set default nomor urut menjadi 1
+        //     if ($cek != null) {
+        //         // Pisahkan komponen no_document untuk mengambil tahun dan nomor urut terakhir
+        //         $parts = explode('/', $cek->no_document);
 
-            if ($cek != null) {
-                // Pisahkan komponen no_document untuk mengambil tahun dan nomor urut terakhir
-                $parts = explode('/', $cek->no_document);
+        //         if (count($parts) > 3) {  // Pastikan formatnya sesuai
+        //             $tahun_cek_full = $parts[2];  // Tahun dan bulan dokumen terakhir
+        //             list($tahun_cek_docLast, $bulan_cek_docLast) = explode('-', $tahun_cek_full);
 
-                if (count($parts) > 3) {  // Pastikan formatnya sesuai
-                    $tahun_cek_full = $parts[2];  // Tahun dan bulan dokumen terakhir
-                    list($tahun_cek_docLast, $bulan_cek_docLast) = explode('-', $tahun_cek_full);
+        //             if ((int) $tahun_chek == (int) $tahun_cek_docLast) {
+        //                 // Ambil nomor urut terakhir dan tambah 1
+        //                 $no_ = (int) explode('/', $cek->no_document)[3] + 1;
+        //             }
+        //         }
+        //     }
 
-                    // Jika tahun dan bulan dokumen terakhir sama dengan tahun dan bulan sekarang
-                    // if ((int) $tahun_chek == (int) $tahun_cek_docLast && $bulan_chek == $bulan_cek_docLast) {
-                    //     // Ambil nomor urut terakhir dan tambah 1
-                    //     $no_ = (int) explode('/', $cek->no_document)[3] + 1;
-                    // }
-                    if ((int) $tahun_chek == (int) $tahun_cek_docLast) {
-                        // Ambil nomor urut terakhir dan tambah 1
-                        $no_ = (int) explode('/', $cek->no_document)[3] + 1;
-                    }
-                }
-            }
+        //     // Format nomor dokumen menjadi 8 digit
+        //     $no_quotation = sprintf('%06d', $no_);
+        //     $no_document = 'ISL/QT/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
 
-            // Format nomor dokumen menjadi 8 digit
-            $no_quotation = sprintf('%06d', $no_);
-            $no_document = 'ISL/QT/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
+        //     $data = new QuotationNonKontrak;
 
-            $data = new QuotationNonKontrak;
+        //     $data->no_quotation = $no_quotation;
+        //     $data->no_document = $no_document;
+        //     $data->pelanggan_ID = $payload->informasi_pelanggan->pelanggan_ID;
+        //     $data->id_cabang = $this->idcabang;
 
-            $data->no_quotation = $no_quotation;
-            $data->no_document = $no_document;
-            $data->pelanggan_ID = $payload->informasi_pelanggan->pelanggan_ID;
-            $data->id_cabang = $this->idcabang;
+        //     $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan->nama_perusahaan));
+        //     $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
+        //     $data->konsultan = strtoupper(trim($payload->informasi_pelanggan->konsultan));
+        //     $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
+        //     $data->no_tlp_perusahaan = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
+        //     $data->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
+        //     $data->jabatan_pic_order = $payload->informasi_pelanggan->jabatan_pic_order;
+        //     $data->no_pic_order = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_pic_order);
+        //     $data->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
+        //     $data->email_cc = isset($payload->informasi_pelanggan->email_cc) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
+        //     $data->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
+        //     $data->no_tlp_sampling = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
+        //     $data->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
+        //     $data->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
+        //     $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
+        //     $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
 
-            $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan->nama_perusahaan));
-            $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
-            $data->konsultan = strtoupper(trim($payload->informasi_pelanggan->konsultan));
-            $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
-            $data->no_tlp_perusahaan = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
-            $data->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
-            $data->jabatan_pic_order = $payload->informasi_pelanggan->jabatan_pic_order;
-            $data->no_pic_order = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_pic_order);
-            $data->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
-            $data->email_cc = isset($payload->informasi_pelanggan->email_cc) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
-            $data->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
-            $data->no_tlp_sampling = str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $data->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
-            $data->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
-            $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
+        //     $data_sampling = [];
+        //     $harga_total = 0;
+        //     $harga_air = 0;
+        //     $harga_udara = 0;
+        //     $harga_emisi = 0;
+        //     $harga_padatan = 0;
+        //     $harga_swab_test = 0;
+        //     $harga_tanah = 0;
+        //     $harga_pangan = 0;
+        //     $grand_total = 0;
+        //     // $total_diskon = 0;
 
-            $data_sampling = [];
-            $harga_total = 0;
-            $harga_air = 0;
-            $harga_udara = 0;
-            $harga_emisi = 0;
-            $harga_padatan = 0;
-            $harga_swab_test = 0;
-            $harga_tanah = 0;
-            $harga_pangan = 0;
-            $grand_total = 0;
-            // $total_diskon = 0;
+        //     if (isset($payload->data_pendukung)) {
+        //         foreach ($payload->data_pendukung as $i => $item) {
+        //             // dd($item);
+        //             $param = $item->parameter;
+        //             $exp = explode("-", $item->kategori_1);
+        //             $kategori = $exp[0];
+        //             $vol = 0;
 
-            if (isset($payload->data_pendukung)) {
-                foreach ($payload->data_pendukung as $i => $item) {
-                    // dd($item);
-                    $param = $item->parameter;
-                    $exp = explode("-", $item->kategori_1);
-                    $kategori = $exp[0];
-                    $vol = 0;
+        //             $parameter = [];
+        //             foreach ($param as $par) {
+        //                 $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
+        //                 // dd();
+        //                 // dump($cek_par->nama_lab);
+        //                 array_push($parameter, $cek_par->nama_lab);
+        //             }
+        //             // dd($param);
 
-                    $parameter = [];
-                    foreach ($param as $par) {
-                        $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
-                        // dd();
-                        // dump($cek_par->nama_lab);
-                        array_push($parameter, $cek_par->nama_lab);
-                    }
-                    // dd($param);
+        //             $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
+        //                 ->where('is_active', true)
+        //                 ->whereIn('nama_parameter', $parameter)
+        //                 ->where('id_kategori', $kategori)
+        //                 ->first();
 
-                    $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                        ->where('is_active', true)
-                        ->whereIn('nama_parameter', $parameter)
-                        ->where('id_kategori', $kategori)
-                        ->first();
+        //             if ($harga_pertitik->volume != null) {
+        //                 $vol += floatval($harga_pertitik->volume);
+        //             }
 
-                    if ($harga_pertitik->volume != null) {
-                        $vol += floatval($harga_pertitik->volume);
-                    }
+        //             $titik = $item->jumlah_titik;
 
-                    $titik = $item->jumlah_titik;
+        //             $data_sampling[$i] = [
+        //                 'kategori_1' => $item->kategori_1,
+        //                 'kategori_2' => $item->kategori_2,
+        //                 'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
+        //                 'penamaan_titik' => $item->penamaan_titik,
+        //                 'parameter' => $param,
+        //                 'jumlah_titik' => $titik,
+        //                 'total_parameter' => count($param),
+        //                 'harga_satuan' => $harga_pertitik->total_harga,
+        //                 'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
+        //                 'volume' => $vol
+        //             ];
 
-                    $data_sampling[$i] = [
-                        'kategori_1' => $item->kategori_1,
-                        'kategori_2' => $item->kategori_2,
-                        'regulasi' => isset($item->regulasi) ? $item->regulasi : '',
-                        'penamaan_titik' => $item->penamaan_titik,
-                        'parameter' => $param,
-                        'jumlah_titik' => $titik,
-                        'total_parameter' => count($param),
-                        'harga_satuan' => $harga_pertitik->total_harga,
-                        'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
-                        'volume' => $vol
-                    ];
+        //             switch ($kategori) {
+        //                 case '1':
+        //                     $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '4':
+        //                     $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '5':
+        //                     $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '6':
+        //                     $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '7':
+        //                     $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '8':
+        //                     $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //                 case '9':
+        //                     $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
+        //                     break;
+        //             }
+        //         }
+        //     } else {
+        //         $data_sampling = [];
+        //     }
 
-                    switch ($kategori) {
-                        case '1':
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '4':
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '5':
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '6':
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '7':
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '8':
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                        case '9':
-                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $titik;
-                            break;
-                    }
-                }
-            } else {
-                $data_sampling = [];
-            }
+        //     $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
+        //     $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
 
-            $grand_total = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
-            $data->data_pendukung_sampling = json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE);
+        //     $data->harga_air = $harga_air;
+        //     $data->harga_udara = $harga_udara;
+        //     $data->harga_emisi = $harga_emisi;
+        //     $data->harga_padatan = $harga_padatan;
+        //     $data->harga_swab_test = $harga_swab_test;
+        //     $data->harga_tanah = $harga_tanah;
+        //     $data->harga_pangan = $harga_pangan;
 
-            $data->harga_air = $harga_air;
-            $data->harga_udara = $harga_udara;
-            $data->harga_emisi = $harga_emisi;
-            $data->harga_padatan = $harga_padatan;
-            $data->harga_swab_test = $harga_swab_test;
-            $data->harga_tanah = $harga_tanah;
-            $data->harga_pangan = $harga_pangan;
+        //     $data->grand_total = $grand_total;
+        //     $data->sales_id = $sales_id;
+        //     $data->created_by = $this->karyawan;
+        //     $data->created_at = DATE('Y-m-d H:i:s');
+        //     $data->save();
 
-            $data->grand_total = $grand_total;
-            $data->sales_id = $sales_id;
-            $data->created_by = $this->karyawan;
-            $data->created_at = DATE('Y-m-d H:i:s');
-            $data->save();
-
-            DB::commit();
-            return response()->json([
-                'message' => "Penawaran berhasil dibuat dengan nomor dokumen $data->no_document",
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
-        }
+        //     DB::commit();
+        //     return response()->json([
+        //         'message' => "Penawaran berhasil dibuat dengan nomor dokumen $data->no_document",
+        //     ], 200);
+        // } catch (\Exception $e) {
+        //     DB::rollBack();
+        //     return response()->json([
+        //         'message' => 'Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage(),
+        //         'line' => $e->getLine()
+        //     ], 500);
+        // }
     }
 
     private function updateNonKontrak($payload)
@@ -2484,317 +2481,326 @@ class RequestQuotationController extends Controller
             ], 400);
         }
 
+        $job = new CreateKontrakJob($payload, $this->idcabang, $this->karyawan, $sales_id);
+        $this->dispatch($job);
 
-        DB::beginTransaction();
-        try {
-            $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
-            $bulan_chek = date('m', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit bulan (misal: 01)
-            $bulan_chek = self::romawi($bulan_chek);
+        sleep(3);
 
-            $cek = QuotationKontrakH::where('id_cabang', $this->idcabang)
-                ->where('no_document', 'not like', '%R%')
-                ->where('no_document', 'like', '%/' . $tahun_chek . '-%')
-                ->orderBy('id', 'DESC')
-                ->first();
+        return response()->json([
+            'message' => "Penawaran berhasil dibuat dengan nomor dokumen",
+        ], 200);
 
-            // $no_urut = '1';
-            // if ($cek != null)
-            //     $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
 
-            // $no_quotation = sprintf('%06d', ($no_urut));
-            // $no_document = 'ISL/QTC/' . DATE('y', \strtotime($payload->informasi_pelanggan->tgl_penawaran)) . '-' . self::romawi(DATE('m', \strtotime($payload->informasi_pelanggan->tgl_penawaran))) . '/' . $no_quotation;
+        // DB::beginTransaction();
+        // try {
+        //     $tahun_chek = date('y', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit tahun (misal: 25)
+        //     $bulan_chek = date('m', strtotime($payload->informasi_pelanggan->tgl_penawaran));  // 2 digit bulan (misal: 01)
+        //     $bulan_chek = self::romawi($bulan_chek);
 
-            $no_ = 1;  // Set default nomor urut menjadi 1
+        //     $cek = QuotationKontrakH::where('id_cabang', $this->idcabang)
+        //         ->where('no_document', 'not like', '%R%')
+        //         ->where('no_document', 'like', '%/' . $tahun_chek . '-%')
+        //         ->orderBy('id', 'DESC')
+        //         ->first();
 
-            if ($cek != null) {
-                // Pisahkan komponen no_document untuk mengambil tahun dan nomor urut terakhir
-                $parts = explode('/', $cek->no_document);
+        //     // $no_urut = '1';
+        //     // if ($cek != null)
+        //     //     $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
 
-                if (count($parts) > 3) {  // Pastikan formatnya sesuai
-                    $tahun_cek_full = $parts[2];  // Tahun dan bulan dokumen terakhir
-                    list($tahun_cek_docLast, $bulan_cek_docLast) = explode('-', $tahun_cek_full);
+        //     // $no_quotation = sprintf('%06d', ($no_urut));
+        //     // $no_document = 'ISL/QTC/' . DATE('y', \strtotime($payload->informasi_pelanggan->tgl_penawaran)) . '-' . self::romawi(DATE('m', \strtotime($payload->informasi_pelanggan->tgl_penawaran))) . '/' . $no_quotation;
 
-                    // Jika tahun dan bulan dokumen terakhir sama dengan tahun dan bulan sekarang
-                    // if ((int) $tahun_chek == (int) $tahun_cek_docLast && $bulan_chek == $bulan_cek_docLast) {
-                    //     // Ambil nomor urut terakhir dan tambah 1
-                    //     $no_ = (int) explode('/', $cek->no_document)[3] + 1;
-                    // }
-                    if ((int) $tahun_chek == (int) $tahun_cek_docLast) {
-                        // Ambil nomor urut terakhir dan tambah 1
-                        $no_ = (int) explode('/', $cek->no_document)[3] + 1;
-                    }
-                }
-            }
+        //     $no_ = 1;  // Set default nomor urut menjadi 1
 
-            // Format nomor dokumen menjadi 8 digit
-            $no_quotation = sprintf('%06d', $no_);
-            $no_document = 'ISL/QTC/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
+        //     if ($cek != null) {
+        //         // Pisahkan komponen no_document untuk mengambil tahun dan nomor urut terakhir
+        //         $parts = explode('/', $cek->no_document);
 
-            // Implementasi untuk create kontrak
-            // Insert Data Quotation Kontrak Header
-            $dataH = new QuotationKontrakH;
-            $dataH->no_quotation = $no_quotation;  //penentian nomor Quotation
-            $dataH->no_document = $no_document;
-            $dataH->pelanggan_ID = $payload->informasi_pelanggan->pelanggan_ID;
-            $dataH->id_cabang = $this->idcabang;
+        //         if (count($parts) > 3) {  // Pastikan formatnya sesuai
+        //             $tahun_cek_full = $parts[2];  // Tahun dan bulan dokumen terakhir
+        //             list($tahun_cek_docLast, $bulan_cek_docLast) = explode('-', $tahun_cek_full);
 
-            //dataH customer order     -------------------------------------------------------> save ke master customer parrent
-            $dataH->nama_perusahaan = strtoupper(htmlspecialchars_decode($payload->informasi_pelanggan->nama_perusahaan));
-            $dataH->tanggal_penawaran = strtoupper($payload->informasi_pelanggan->tgl_penawaran);
-            if ($payload->informasi_pelanggan->konsultan != '')
-                $dataH->konsultan = strtoupper(trim(htmlspecialchars_decode($payload->informasi_pelanggan->konsultan)));
-            if ($payload->informasi_pelanggan->alamat_kantor != '')
-                $dataH->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
-            $dataH->no_tlp_perusahaan = \str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
-            $dataH->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
-            $dataH->jabatan_pic_order = $payload->informasi_pelanggan->jabatan_pic_order;
-            $dataH->no_pic_order = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_pic_order);
-            $dataH->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
-            $dataH->email_cc = (!empty($payload->informasi_pelanggan->email_cc) && sizeof($payload->informasi_pelanggan->email_cc) !== 0) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
-            $dataH->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
-            // $dataH->no_tlp_sampling = \str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $dataH->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
-            $dataH->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
-            $dataH->no_tlp_pic_sampling = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
-            $dataH->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
-            //end lokasi sampling customer
-            // $dataH->status_wilayah = $payload->status_wilayah;
-            // $dataH->wilayah = $payload->wilayah;
-            $dataH->periode_kontrak_awal = $payload->data_pendukung[0]->periodeAwal;
-            $dataH->periode_kontrak_akhir = $payload->data_pendukung[0]->periodeAkhir;
-            $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
-            $dataH->created_by = $this->karyawan;
-            $dataH->created_at = DATE('Y-m-d H:i:s');
-            $data_pendukung_h = [];
-            $data_s = [];
-            $period = [];
+        //             // Jika tahun dan bulan dokumen terakhir sama dengan tahun dan bulan sekarang
+        //             // if ((int) $tahun_chek == (int) $tahun_cek_docLast && $bulan_chek == $bulan_cek_docLast) {
+        //             //     // Ambil nomor urut terakhir dan tambah 1
+        //             //     $no_ = (int) explode('/', $cek->no_document)[3] + 1;
+        //             // }
+        //             if ((int) $tahun_chek == (int) $tahun_cek_docLast) {
+        //                 // Ambil nomor urut terakhir dan tambah 1
+        //                 $no_ = (int) explode('/', $cek->no_document)[3] + 1;
+        //             }
+        //         }
+        //     }
 
-            $globalTitikCounter = 1; // <======= BUAT NOMOR DI PENAMAAN TITIK
-            foreach ($payload->data_pendukung as $key => $data_pendukungH) {
-                $param = [];
-                $regulasi = '';
-                $periode = '';
+        //     // Format nomor dokumen menjadi 8 digit
+        //     $no_quotation = sprintf('%06d', $no_);
+        //     $no_document = 'ISL/QTC/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
 
-                if ($data_pendukungH->parameter != null)
-                    $param = $data_pendukungH->parameter;
-                if (isset($data_pendukungH->regulasi))
-                    $regulasi = $data_pendukungH->regulasi;
-                if ($data_pendukungH->periode != null)
-                    $periode = $data_pendukungH->periode;
+        //     // Implementasi untuk create kontrak
+        //     // Insert Data Quotation Kontrak Header
+        //     $dataH = new QuotationKontrakH;
+        //     $dataH->no_quotation = $no_quotation;  //penentian nomor Quotation
+        //     $dataH->no_document = $no_document;
+        //     $dataH->pelanggan_ID = $payload->informasi_pelanggan->pelanggan_ID;
+        //     $dataH->id_cabang = $this->idcabang;
 
-                $exp = explode("-", $data_pendukungH->kategori_1);
-                $kategori = $exp[0];
-                $vol = 0;
+        //     //dataH customer order     -------------------------------------------------------> save ke master customer parrent
+        //     $dataH->nama_perusahaan = strtoupper(htmlspecialchars_decode($payload->informasi_pelanggan->nama_perusahaan));
+        //     $dataH->tanggal_penawaran = strtoupper($payload->informasi_pelanggan->tgl_penawaran);
+        //     if ($payload->informasi_pelanggan->konsultan != '')
+        //         $dataH->konsultan = strtoupper(trim(htmlspecialchars_decode($payload->informasi_pelanggan->konsultan)));
+        //     if ($payload->informasi_pelanggan->alamat_kantor != '')
+        //         $dataH->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
+        //     $dataH->no_tlp_perusahaan = \str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_perusahaan);
+        //     $dataH->nama_pic_order = ucwords($payload->informasi_pelanggan->nama_pic_order);
+        //     $dataH->jabatan_pic_order = $payload->informasi_pelanggan->jabatan_pic_order;
+        //     $dataH->no_pic_order = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_pic_order);
+        //     $dataH->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
+        //     $dataH->email_cc = (!empty($payload->informasi_pelanggan->email_cc) && sizeof($payload->informasi_pelanggan->email_cc) !== 0) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
+        //     $dataH->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
+        //     // $dataH->no_tlp_sampling = \str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
+        //     $dataH->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
+        //     $dataH->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
+        //     $dataH->no_tlp_pic_sampling = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
+        //     $dataH->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
+        //     //end lokasi sampling customer
+        //     // $dataH->status_wilayah = $payload->status_wilayah;
+        //     // $dataH->wilayah = $payload->wilayah;
+        //     $dataH->periode_kontrak_awal = $payload->data_pendukung[0]->periodeAwal;
+        //     $dataH->periode_kontrak_akhir = $payload->data_pendukung[0]->periodeAkhir;
+        //     $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
+        //     $dataH->created_by = $this->karyawan;
+        //     $dataH->created_at = DATE('Y-m-d H:i:s');
+        //     $data_pendukung_h = [];
+        //     $data_s = [];
+        //     $period = [];
 
-                // GET PARAMETER NAME FOR CEK HARGA KONTRAK
-                $parameter = [];
-                foreach ($data_pendukungH->parameter as $va) {
-                    $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
-                    array_push($parameter, $cek_par->nama_lab);
-                }
+        //     $globalTitikCounter = 1; // <======= BUAT NOMOR DI PENAMAAN TITIK
+        //     foreach ($payload->data_pendukung as $key => $data_pendukungH) {
+        //         $param = [];
+        //         $regulasi = '';
+        //         $periode = '';
 
-                $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                    ->where('is_active', true)
-                    ->whereIn('nama_parameter', $parameter)
-                    ->where('id_kategori', $kategori)
-                    ->first();
+        //         if ($data_pendukungH->parameter != null)
+        //             $param = $data_pendukungH->parameter;
+        //         if (isset($data_pendukungH->regulasi))
+        //             $regulasi = $data_pendukungH->regulasi;
+        //         if ($data_pendukungH->periode != null)
+        //             $periode = $data_pendukungH->periode;
 
-                if ($harga_pertitik->volume != null)
-                    $vol += floatval($harga_pertitik->volume);
-                if ($data_pendukungH->jumlah_titik == '') {
-                    $reqtitik = 0;
-                } else {
-                    $reqtitik = $data_pendukungH->jumlah_titik;
-                }
+        //         $exp = explode("-", $data_pendukungH->kategori_1);
+        //         $kategori = $exp[0];
+        //         $vol = 0;
 
-                $temp_prearasi = [];
-                if ($data_pendukungH->biaya_preparasi != null || $data_pendukungH->biaya_preparasi != "") {
-                    foreach ($data_pendukungH->biaya_preparasi as $pre) {
-                        if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
-                            $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ','], '', $pre->biaya_preparasi_padatan))];
-                    }
-                }
-                $biaya_preparasi = $temp_prearasi;
+        //         // GET PARAMETER NAME FOR CEK HARGA KONTRAK
+        //         $parameter = [];
+        //         foreach ($data_pendukungH->parameter as $va) {
+        //             $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
+        //             array_push($parameter, $cek_par->nama_lab);
+        //         }
 
-                array_push($data_pendukung_h, (object) [
-                    'kategori_1' => $data_pendukungH->kategori_1,
-                    'kategori_2' => $data_pendukungH->kategori_2,
-                    'regulasi' => $regulasi,
-                    'parameter' => $param,
-                    'jumlah_titik' => $data_pendukungH->jumlah_titik,
-                    'penamaan_titik' => $data_pendukungH->penamaan_titik,
-                    'total_parameter' => count($param),
-                    'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
-                    'volume' => $vol,
-                    'periode' => $periode,
-                    'biaya_preparasi' => $biaya_preparasi
-                ]);
+        //         $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
+        //             ->where('is_active', true)
+        //             ->whereIn('nama_parameter', $parameter)
+        //             ->where('id_kategori', $kategori)
+        //             ->first();
 
-                foreach ($data_pendukungH->periode as $key => $v) {
-                    array_push($period, $v);
-                }
-            }
+        //         if ($harga_pertitik->volume != null)
+        //             $vol += floatval($harga_pertitik->volume);
+        //         if ($data_pendukungH->jumlah_titik == '') {
+        //             $reqtitik = 0;
+        //         } else {
+        //             $reqtitik = $data_pendukungH->jumlah_titik;
+        //         }
 
-            $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
+        //         $temp_prearasi = [];
+        //         if ($data_pendukungH->biaya_preparasi != null || $data_pendukungH->biaya_preparasi != "") {
+        //             foreach ($data_pendukungH->biaya_preparasi as $pre) {
+        //                 if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
+        //                     $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ','], '', $pre->biaya_preparasi_padatan))];
+        //             }
+        //         }
+        //         $biaya_preparasi = $temp_prearasi;
 
-            $dataH->save();
+        //         array_push($data_pendukung_h, (object) [
+        //             'kategori_1' => $data_pendukungH->kategori_1,
+        //             'kategori_2' => $data_pendukungH->kategori_2,
+        //             'regulasi' => $regulasi,
+        //             'parameter' => $param,
+        //             'jumlah_titik' => $data_pendukungH->jumlah_titik,
+        //             'penamaan_titik' => $data_pendukungH->penamaan_titik,
+        //             'total_parameter' => count($param),
+        //             'harga_satuan' => $harga_pertitik->total_harga,
+        //             'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+        //             'volume' => $vol,
+        //             'periode' => $periode,
+        //             'biaya_preparasi' => $biaya_preparasi
+        //         ]);
 
-            $period = array_values(array_unique($period));
+        //         foreach ($data_pendukungH->periode as $key => $v) {
+        //             array_push($period, $v);
+        //         }
+        //     }
 
-            foreach ($period as $key => $per) {
-                // Insert Data Quotation Kontrak Detail
-                $dataD = new QuotationKontrakD;
-                $dataD->id_request_quotation_kontrak_h = $dataH->id;
+        //     $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
 
-                $data_sampling = [];
-                $datas = [];
-                $harga_total = 0;
-                $harga_air = 0;
-                $harga_udara = 0;
-                $harga_emisi = 0;
-                $harga_padatan = 0;
-                $harga_swab_test = 0;
-                $harga_tanah = 0;
-                $grand_total = 0;
-                $total_diskon = 0;
-                $j = $key + 1;
-                $n = 0;
+        //     $dataH->save();
 
-                $desc_preparasi = [];
-                $harga_preparasi = 0;
-                foreach ($payload->data_pendukung as $m => $data_pendukungD) {
-                    if (in_array($per, $data_pendukungD->periode)) {
-                        $param = [];
-                        $regulasi = '';
-                        if ($data_pendukungD->parameter != null)
-                            $param = $data_pendukungD->parameter;
-                        if (isset($data_pendukungD->regulasi))
-                            $regulasi = $data_pendukungD->regulasi;
+        //     $period = array_values(array_unique($period));
 
-                        $exp = explode("-", $data_pendukungD->kategori_1);
-                        $kategori = $exp[0];
-                        $vol = 0;
+        //     foreach ($period as $key => $per) {
+        //         // Insert Data Quotation Kontrak Detail
+        //         $dataD = new QuotationKontrakD;
+        //         $dataD->id_request_quotation_kontrak_h = $dataH->id;
 
-                        // GET PARAMETER NAME FOR CEK HARGA KONTRAK
-                        $parameter = [];
-                        foreach ($data_pendukungD->parameter as $va) {
-                            $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
-                            array_push($parameter, $cek_par->nama_lab);
-                        }
+        //         $data_sampling = [];
+        //         $datas = [];
+        //         $harga_total = 0;
+        //         $harga_air = 0;
+        //         $harga_udara = 0;
+        //         $harga_emisi = 0;
+        //         $harga_padatan = 0;
+        //         $harga_swab_test = 0;
+        //         $harga_tanah = 0;
+        //         $grand_total = 0;
+        //         $total_diskon = 0;
+        //         $j = $key + 1;
+        //         $n = 0;
 
-                        $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                            ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter)
-                            ->where('id_kategori', $kategori)
-                            ->first();
+        //         $desc_preparasi = [];
+        //         $harga_preparasi = 0;
+        //         foreach ($payload->data_pendukung as $m => $data_pendukungD) {
+        //             if (in_array($per, $data_pendukungD->periode)) {
+        //                 $param = [];
+        //                 $regulasi = '';
+        //                 if ($data_pendukungD->parameter != null)
+        //                     $param = $data_pendukungD->parameter;
+        //                 if (isset($data_pendukungD->regulasi))
+        //                     $regulasi = $data_pendukungD->regulasi;
 
-                        if ($harga_pertitik->volume != null)
-                            $vol += floatval($harga_pertitik->volume);
-                        if ($data_pendukungD->jumlah_titik == '') {
-                            $reqtitik = 0;
-                        } else {
-                            $reqtitik = $data_pendukungD->jumlah_titik;
-                        }
+        //                 $exp = explode("-", $data_pendukungD->kategori_1);
+        //                 $kategori = $exp[0];
+        //                 $vol = 0;
 
-                        //============= BIAYA PREPARASI ==================
-                        $temp_prearasi = [];
-                        if ($data_pendukungD->biaya_preparasi != null || $data_pendukungD->biaya_preparasi != "") {
-                            foreach ($data_pendukungD->biaya_preparasi as $pre) {
-                                if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
-                                    $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))];
-                                if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "")
-                                    $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
-                            }
-                        }
-                        $biaya_preparasi = $temp_prearasi;
+        //                 // GET PARAMETER NAME FOR CEK HARGA KONTRAK
+        //                 $parameter = [];
+        //                 foreach ($data_pendukungD->parameter as $va) {
+        //                     $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
+        //                     array_push($parameter, $cek_par->nama_lab);
+        //                 }
 
-                        // dd($biaya_preparasi);
+        //                 $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
+        //                     ->where('is_active', true)
+        //                     ->whereIn('nama_parameter', $parameter)
+        //                     ->where('id_kategori', $kategori)
+        //                     ->first();
 
-                        // PENENTUAN NOMOR PENAMAAN TITIK
-                        $penamaan_titik_fixed = [];
-                        if ($data_pendukungD->penamaan_titik != null) {
-                            foreach ($data_pendukungD->penamaan_titik as $pt) {
-                                $penamaan_titik_fixed[] = [sprintf('%03d', $globalTitikCounter) => trim($pt)];
-                                $globalTitikCounter++;
-                            }
-                        }
+        //                 if ($harga_pertitik->volume != null)
+        //                     $vol += floatval($harga_pertitik->volume);
+        //                 if ($data_pendukungD->jumlah_titik == '') {
+        //                     $reqtitik = 0;
+        //                 } else {
+        //                     $reqtitik = $data_pendukungD->jumlah_titik;
+        //                 }
 
-                        $data_sampling[$n++] = [
-                            'kategori_1' => $data_pendukungD->kategori_1,
-                            'kategori_2' => $data_pendukungD->kategori_2,
-                            'regulasi' => $regulasi,
-                            'parameter' => $param,
-                            'jumlah_titik' => $data_pendukungD->jumlah_titik,
-                            'penamaan_titik' => $penamaan_titik_fixed,
-                            'total_parameter' => count($param),
-                            'harga_satuan' => $harga_pertitik->total_harga,
-                            'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
-                            'volume' => $vol,
-                            'biaya_preparasi' => $biaya_preparasi
-                        ];
+        //                 //============= BIAYA PREPARASI ==================
+        //                 $temp_prearasi = [];
+        //                 if ($data_pendukungD->biaya_preparasi != null || $data_pendukungD->biaya_preparasi != "") {
+        //                     foreach ($data_pendukungD->biaya_preparasi as $pre) {
+        //                         if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
+        //                             $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))];
+        //                         if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "")
+        //                             $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
+        //                     }
+        //                 }
+        //                 $biaya_preparasi = $temp_prearasi;
 
-                        // kalkulasi harga parameter sesuai titik
-                        if ($kategori == 1) { // air
-                            // dd('masuk');
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 4) { //  udara
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 5) { // emisi
+        //                 // dd($biaya_preparasi);
 
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 6) { // padatan
+        //                 // PENENTUAN NOMOR PENAMAAN TITIK
+        //                 $penamaan_titik_fixed = [];
+        //                 if ($data_pendukungD->penamaan_titik != null) {
+        //                     foreach ($data_pendukungD->penamaan_titik as $pt) {
+        //                         $penamaan_titik_fixed[] = [sprintf('%03d', $globalTitikCounter) => trim($pt)];
+        //                         $globalTitikCounter++;
+        //                     }
+        //                 }
 
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 7) { // swab test
+        //                 $data_sampling[$n++] = [
+        //                     'kategori_1' => $data_pendukungD->kategori_1,
+        //                     'kategori_2' => $data_pendukungD->kategori_2,
+        //                     'regulasi' => $regulasi,
+        //                     'parameter' => $param,
+        //                     'jumlah_titik' => $data_pendukungD->jumlah_titik,
+        //                     'penamaan_titik' => $penamaan_titik_fixed,
+        //                     'total_parameter' => count($param),
+        //                     'harga_satuan' => $harga_pertitik->total_harga,
+        //                     'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+        //                     'volume' => $vol,
+        //                     'biaya_preparasi' => $biaya_preparasi
+        //                 ];
 
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 8) { // tanah
+        //                 // kalkulasi harga parameter sesuai titik
+        //                 if ($kategori == 1) { // air
+        //                     // dd('masuk');
+        //                     $harga_air += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 } else if ($kategori == 4) { //  udara
+        //                     $harga_udara += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 } else if ($kategori == 5) { // emisi
 
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        }
-                        // end kalkulasi harga parameter sesuai titik
-                    }
-                }
+        //                     $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 } else if ($kategori == 6) { // padatan
 
-                $datas[$j] = [
-                    'periode_kontrak' => $per,
-                    'data_sampling' => array_values($data_sampling)
-                    // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
-                ];
+        //                     $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 } else if ($kategori == 7) { // swab test
 
-                $dataD->periode_kontrak = $per;
-                $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
-                $dataD->data_pendukung_sampling = json_encode($datas, JSON_UNESCAPED_UNICODE);
-                // $dataD->data_pendukung_sampling = json_encode($datas);
-                // end data sampling
-                $dataD->harga_air = $harga_air;
-                $dataD->harga_udara = $harga_udara;
-                $dataD->harga_emisi = $harga_emisi;
-                $dataD->harga_padatan = $harga_padatan;
-                $dataD->harga_swab_test = $harga_swab_test;
-                $dataD->harga_tanah = $harga_tanah;
+        //                     $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 } else if ($kategori == 8) { // tanah
 
-                //============= BIAYA PREPARASI
-                $dataD->biaya_preparasi = json_encode($desc_preparasi);
-                $dataD->total_biaya_preparasi = $harga_preparasi;
-                // dd($dataD);
-                $dataD->save();
-            }
+        //                     $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
+        //                 }
+        //                 // end kalkulasi harga parameter sesuai titik
+        //             }
+        //         }
 
-            DB::commit();
+        //         $datas[$j] = [
+        //             'periode_kontrak' => $per,
+        //             'data_sampling' => array_values($data_sampling)
+        //             // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
+        //         ];
 
-            return response()->json([
-                'message' => "Request Quotation number $no_document success created",
-                'status' => 200
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json([
-                'message' => $e->getMessage(),
-                'line' => $e->getLine()
-            ], 401);
-        }
+        //         $dataD->periode_kontrak = $per;
+        //         $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+        //         $dataD->data_pendukung_sampling = json_encode($datas, JSON_UNESCAPED_UNICODE);
+        //         // $dataD->data_pendukung_sampling = json_encode($datas);
+        //         // end data sampling
+        //         $dataD->harga_air = $harga_air;
+        //         $dataD->harga_udara = $harga_udara;
+        //         $dataD->harga_emisi = $harga_emisi;
+        //         $dataD->harga_padatan = $harga_padatan;
+        //         $dataD->harga_swab_test = $harga_swab_test;
+        //         $dataD->harga_tanah = $harga_tanah;
+
+        //         //============= BIAYA PREPARASI
+        //         $dataD->biaya_preparasi = json_encode($desc_preparasi);
+        //         $dataD->total_biaya_preparasi = $harga_preparasi;
+        //         // dd($dataD);
+        //         $dataD->save();
+        //     }
+
+        //     DB::commit();
+
+        //     return response()->json([
+        //         'message' => "Request Quotation number $no_document success created",
+        //         'status' => 200
+        //     ], 200);
+        // } catch (\Exception $e) {
+        //     DB::rollback();
+        //     return response()->json([
+        //         'message' => $e->getMessage(),
+        //         'line' => $e->getLine()
+        //     ], 401);
+        // }
     }
 
     // Yang mulia - 2025-08-06

@@ -71,34 +71,20 @@
                             </table>
                         </td>
                     </tr>
-                    <tr>
-                        <td class="custom5" width="120">Tanggal Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>   
-                    @php
-                            $periode = explode(' - ', $header['periode_analisa']);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
-                        @endphp
-                      <!-- <tr>
-                        <td class="custom5" width="120">Periode Analisa</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
-                    </tr> -->
-                   
+          
                     
                 </table>
 
                 {{-- Regulasi --}}
-                @if (!empty($header->regulasi))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
-                        @endforeach
-                    </table>
+                   @if (!empty($header->regulasi))
+                    @foreach (json_decode($header->regulasi) as $y)
+                            <table style="padding-top: 10px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            </table>
+                    @endforeach
+                    
                 @endif
             </td>
         </tr>

@@ -261,7 +261,7 @@ class AppsBasController extends Controller
                         foreach ($item['detail_bas_documents'] as $docIndex => $document) {
                             if (isset($document['tanda_tangan']) && is_array($document['tanda_tangan'])) {
                                 foreach ($document['tanda_tangan'] as $key => $ttd) {
-                                    // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)    
+                                    // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)
                                     if (strpos($ttd['tanda_tangan'], 'data:') === 0) {
                                         $item['detail_bas_documents'][$docIndex]['tanda_tangan'][$key]['tanda_tangan_lama'] = $ttd['tanda_tangan'];
                                     } else {
@@ -410,7 +410,6 @@ class AppsBasController extends Controller
 
                         $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-
                     } else {
                         $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
@@ -445,7 +444,6 @@ class AppsBasController extends Controller
                     }
                     $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                 }
-
             }
 
             return DataTables::of($filteredResult)->make(true);
@@ -683,7 +681,7 @@ class AppsBasController extends Controller
                         foreach ($item['detail_bas_documents'] as $docIndex => $document) {
                             if (isset($document['tanda_tangan']) && is_array($document['tanda_tangan'])) {
                                 foreach ($document['tanda_tangan'] as $key => $ttd) {
-                                    // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)    
+                                    // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)
                                     if (strpos($ttd['tanda_tangan'], 'data:') === 0) {
                                         $item['detail_bas_documents'][$docIndex]['tanda_tangan'][$key]['tanda_tangan_lama'] = $ttd['tanda_tangan'];
                                     } else {
@@ -832,7 +830,6 @@ class AppsBasController extends Controller
 
                         $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                         $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-
                     } else {
                         $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
                         $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
@@ -867,7 +864,6 @@ class AppsBasController extends Controller
                     }
                     $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                 }
-
             }
             // dd($filteredResult);
             return DataTables::of($filteredResult)->make(true);
@@ -1078,7 +1074,7 @@ class AppsBasController extends Controller
 
             if ($sent) {
 
-                $persiapanHeader = PersiapanSampelHeader::where('no_quotation', $noDocument)->where('no_order', $noOrder)->where('tanggal_sampling', $request->input('tanggal_sampling'))->where('is_active', true)->first();
+                $persiapanHeader = PersiapanSampelHeader::where('no_quotation', $noDocument)->where('no_order', $noOrder)->where('tanggal_sampling', $request->input('tanggal_sampling'))->where('is_active', true)->whereNotNull('detail_bas_documents')->first();
 
                 if ($persiapanHeader) {
                     $persiapanHeader->is_emailed_bas = 1;
@@ -1250,7 +1246,7 @@ class AppsBasController extends Controller
                 ->whereIn('tanggal_sampling', $jadwal)
                 ->where('is_active', true)
                 ->get();
-            // dd($orderD); 
+            // dd($orderD);
 
             $tipe = explode("/", $request->no_document);
             $tahun = "20" . explode("-", $tipe[2])[0];
@@ -1336,7 +1332,6 @@ class AppsBasController extends Controller
                         $hariTanggal[$sample->no_sample] = null;
                     }
                 }
-
             }
 
             // dd($status);
@@ -1359,7 +1354,7 @@ class AppsBasController extends Controller
 
     private function cetakBASPDF($dataHeader, $dataSampling, $dataParam, $dataPersiapan, $file_name_old, $file_name, $samplerJadwal, $status, $hariTanggal)
     {
-        
+
         $psh = $dataPersiapan;
         if (!$psh) {
             return response()->json([
@@ -1437,7 +1432,7 @@ class AppsBasController extends Controller
                 $requestedSampelsSorted = $requestedSampels;
                 sort($requestedSampelsSorted);
 
-                if ($detailNoSampelSorted === $requestedSampelsSorted) {
+                if (empty(array_diff($detailNoSampelSorted, $requestedSampelsSorted))) {
                     $selectedDetail = $detail;
                     break;
                 }
@@ -1571,7 +1566,7 @@ class AppsBasController extends Controller
 
         $hariInggris = date('l', strtotime($tanggal));
         $bulanInggris = date('F', strtotime($tanggal));
-        
+
         $hari = $namaHari[$hariInggris];
         // dd($hariInggris, $hari);
         $tanggalNumber = date('d', strtotime($tanggal));
@@ -1685,9 +1680,9 @@ class AppsBasController extends Controller
                 <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;margin-bottom: 40px;">
                     <tr>
                         <td class="custom3" colspan="2">
-                            Hari: ' . $hari . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-                            Tanggal: ' . $tanggalNumber . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-                            Bulan: ' . $bulan . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+                            Hari: ' . $hari . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                            Tanggal: ' . $tanggalNumber . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                            Bulan: ' . $bulan . ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                             Tahun: ' . $tahun . '
                         </td>
                     </tr>
@@ -1995,7 +1990,7 @@ class AppsBasController extends Controller
                                     <tr>
                                         <td style="padding-bottom: 13px;">...........................................................................................................................................................................................................................................</td>
                                     </tr>
-                                    ') . '  
+                                    ') . '
                                 </td>
                             </tr>
                         </table>
@@ -2304,7 +2299,6 @@ class AppsBasController extends Controller
                 'message' => $th->getMessage(),
             ]);
         }
-
     }
 
     private function getStatusSampling($sample) // return selesai / blm selesai
@@ -2327,16 +2321,24 @@ class AppsBasController extends Controller
             return $carry;
         }, []);
 
-
-
         $parameters = array_filter($parameters, function ($param) {
+            if($param['category'] == '6-Padatan'){
+                return is_array($param);
+            }
             return is_array($param) && isset($param['model']);
         });
+
+        // if($sample->no_sample == 'AARG012503/063' || $sample->no_sample == 'AARG012503/064' || $sample->no_sample == 'AARG012503/065'){
+        //     dd($parameters);
+        // }
 
 
         $status = 'selesai';
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
+                if($parameter['category'] == '6-Padatan'){
+                    continue; // Skip Padatan
+                }
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
@@ -2528,7 +2530,7 @@ class AppsBasController extends Controller
     private function getRequiredParameters()
     {
         // gini aja lah pake sub kategori mlh ngawur mls bgt
-        return [
+        $data_parameters = [
             [
                 "parameter" => "Air",
                 "requiredCount" => 1,
@@ -4310,5 +4312,17 @@ class AppsBasController extends Controller
                 "model2" => null
             ]
         ];
+
+        $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];
+        foreach ($padatanParam as $key => $value) {
+            $data_parameters[] = [
+                "parameter" => $value,
+                "requiredCount" => 1,
+                "category" => "6-Padatan",
+                "model" => null,
+                "model2" => null
+            ];
+        }
+        return $data_parameters;
     }
 }

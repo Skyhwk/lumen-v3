@@ -12,18 +12,17 @@ use App\Models\LhpsGetaranDetail;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
-
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
+use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 
 use App\Models\GetaranHeader;
 
-use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
@@ -82,59 +81,66 @@ class DraftUdaraGetaranController extends Controller
         ], 201);
     }
 
-     public function handleMetodeSampling(Request $request)
-    {
-        try {
-            $subKategori = explode('-', $request->kategori_3);
+      public function handleMetodeSampling(Request $request)
+        {
+            try {
+                $subKategori = explode('-', $request->kategori_3);
+                $param = explode(';', (json_decode($request->parameter)[0]))[0];
+                $result = [];
+                // Data utama
+                $data = Parameter::where('id_kategori', '4')
+                    ->where('id', $param)
+                    ->get();
+                $resultx = $data->toArray();
+                foreach ($resultx as $key => $value) {
+                    $result[$key]['id'] = $value['id'];
+                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
+                    $result[$key]['kategori'] = $value['nama_kategori'];
+                    $result[$key]['sub_kategori'] = $subKategori[1];
+                }
 
-            $header = LhpsGetaranHeader::where('id', $request->id_lhp)->first();
-            $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                // $result = $resultx;
 
-            $data = MetodeSampling::where('kategori', '4-UDARA')
-                ->where('sub_kategori', strtoupper($subKategori[1]))
-                ->get();
+                if ($request->filled('id_lhp')) {
+                    $header = LhpsGetaranHeader::find($request->id_lhp);
 
-            // konversi collection ke array biar bisa diubah
-            $result = $data->toArray();
+                    if ($header) {
+                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-            foreach ($data as $key => $value) {
-                $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                        foreach ($data as $key => $value) {
+                            $valueMetode = array_map('trim', explode(',', $value->method));
 
-                $missing = array_diff($headerMetode, $valueMetode);
+                            $missing = array_diff($headerMetode, $valueMetode);
 
-                if (!empty($missing)) {
-                    foreach ($missing as $miss) {
-                        $result[] = [
-                            'id' => null, 
-                            'metode_sampling' => $miss,
-                            'kategori' => $value->kategori,
-                            'sub_kategori' => $value->sub_kategori,
-                        ];
+                            if (!empty($missing)) {
+                                foreach ($missing as $miss) {
+                                    $result[] = [
+                                        'id' => null,
+                                        'metode_sampling' => $miss ?? '',
+                                        'kategori' => $value->kategori,
+                                        'sub_kategori' => $value->sub_kategori,
+                                    ];
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            if (!empty($result)) {
                 return response()->json([
                     'status' => true,
-                    'message' => 'Available data retrieved successfully',
-                    'data' => $result
+                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                    'data' => $result,
                 ], 200);
-            } else {
+
+            } catch (\Exception $e) {
                 return response()->json([
-                    'status' => true,
-                    'message' => 'Belum ada method',
-                    'data' => []
-                ], 200);
+                    'status' => false,
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                    'line' => $e->getLine(),
+                ], 500);
             }
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine()
-            ], 500);
         }
-    }
+
 
 
    public function store(Request $request)
@@ -189,7 +195,7 @@ class DraftUdaraGetaranController extends Controller
                 'no_lhp'          => $request->no_lhp ?: null,
                 'no_qt'           => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
-                'tanggal_sampling'=> $request->tanggal_sampling ?: null,
+                // 'tanggal_sampling'=> $request->tanggal_sampling ?: null,
                 'tanggal_terima'  => $request->tanggal_terima ?: null,
                 'parameter_uji'   => json_encode($parameter_uji),
                 'nama_pelanggan'  => $request->nama_perusahaan ?: null,
@@ -233,6 +239,7 @@ class DraftUdaraGetaranController extends Controller
                     'hasil'       => $request->hasil[$val] ?? null,
                     'tipe_getaran'=>$request->tipe_getaran[$val] ?? null,
                     'nab'         => $request->nab[$val] ?? null,
+                    'tanggal_sampling'         => $request->tanggal_sampling[$val] ?? null,
                 ]);
                 $detail->save();
             } else {
@@ -244,6 +251,7 @@ class DraftUdaraGetaranController extends Controller
                     'percepatan'  => $request->percepatan[$val] ?? null,
                     'kecepatan'   => $request->kecepatan[$val] ?? null,
                     'tipe_getaran'=> $request->tipe_getaran[$val] ?? null,
+                    'tanggal_sampling'  => $request->tanggal_sampling[$val] ?? null,
                 ]);
                 $detail->save();
             }
@@ -264,6 +272,7 @@ class DraftUdaraGetaranController extends Controller
                             'w_paparan'      => $request->custom_w_paparan[$page][$sampel] ?? null,
                             'param'     => $request->custom_parameter[$page][$sampel] ?? null,
                             'nab'     => $request->custom_nab[$page][$sampel] ?? null,
+                            'tanggal_sampling'     => $request->custom_tanggal_sampling[$page][$sampel] ?? null,
                             'tipe_getaran'     => $request->custom_tipe_getaran[$page][$sampel] ?? null,
                             'percepatan'     => $request->custom_percepatan[$page][$sampel] ?? null,
                             'kecepatan'     => $request->custom_kecepatan[$page][$sampel] ?? null,
@@ -287,16 +296,19 @@ class DraftUdaraGetaranController extends Controller
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
                 $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
                             ->setDataHeader($header)
+                            ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
                             ->render();
             } else {
                 $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
                             ->setDataHeader($header)
+                            ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaran')
                             ->render();
             }
+
          
             $header->file_lhp = $fileName;
             $header->save();
@@ -394,9 +406,9 @@ class DraftUdaraGetaranController extends Controller
                 ->where('no_lhp', $request->cfr)
                 ->first();
             if ($cek_lhp) {
-                $data_entry = array();
-                $data_custom = array();
-                $cek_regulasi = array();
+                $data_entry = [];
+                $data_custom = [];
+                $cek_regulasi = [];
 
                 foreach ($cek_lhp->lhpsGetaranDetail->toArray() as $key => $val) {
                     $data_entry[$key] = [
@@ -409,6 +421,7 @@ class DraftUdaraGetaranController extends Controller
                         'w_paparan' => $val['w_paparan'],
                         'param' => $val['param'],
                         'nab' => $val['nab'],
+                        'tanggal_sampling' => $val['tanggal_sampling'],
                         'tipe_getaran' => $val['tipe_getaran'],
                         'percepatan' => $val['percepatan'],
                         'kecepatan' => $val['kecepatan'],
@@ -450,6 +463,7 @@ class DraftUdaraGetaranController extends Controller
                         $groupedCustom[$val->page][] = $val;
                     }
 
+
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
                     usort($regulasi_custom, function ($a, $b) {
@@ -457,8 +471,8 @@ class DraftUdaraGetaranController extends Controller
                     });
 
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
+                        if (empty($item['page'])) continue;
+                        $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
                         $page = $item['page'];
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
@@ -472,6 +486,7 @@ class DraftUdaraGetaranController extends Controller
                                     'w_paparan' => $val['w_paparan'],
                                     'param' => $val['param'],
                                     'nab' => $val['nab'],
+                                    'tanggal_sampling' => $val['tanggal_sampling'],
                                     'tipe_getaran' => $val['tipe_getaran'],
                                     'percepatan' => $val['percepatan'],
                                     'kecepatan' => $val['kecepatan'],
@@ -480,36 +495,91 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
+                        // dd($data_custom);   
 
-                return response()->json([
-                    'status' => true,
-                    'data' => $data_entry,
-                    'next_page' => $data_custom,
-                ], 201);
-            } else {
-                $mainData = [];
+                  $mainData         = [];
                 $otherRegulations = [];
-                $models = [
-                    GetaranHeader::class,
-                ];
 
-                foreach ($models as $model) {
-                    $approveField =  'is_approve';
-                    $data = $model::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+                $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
                         ->whereIn('no_sampel', $noSampel)
-                        ->where($approveField, 1)
+                        ->where('is_approve', 1)
                         ->where('is_active', true)
                         ->where('lhps', 1)
                         ->get();
 
-                    foreach ($data as $val) {
-                        $entry = $this->formatEntry($val);
-                        $mainData[] = $entry;
+                foreach ($data as $val) {
+                    $entry     = $this->formatEntry($val);
+                    $mainData[] = $entry;
 
-                        if ($request->other_regulasi) {
-                            foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
-                            }
+                    if ($request->other_regulasi) {
+                        foreach ($request->other_regulasi as $id_regulasi) {
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
+                        }
+                    }
+                }
+
+                // Sort mainData
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+
+                // Sort otherRegulations
+                foreach ($otherRegulations as $id => $regulations) {
+                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+                }
+
+                // ==============================
+                // Sinkronisasi data_entry dengan mainData
+                // ==============================
+                $dataEntrySamples = array_column($data_entry, 'no_sampel');
+
+                foreach ($mainData as $main) {
+
+                    if (!in_array($main['no_sampel'], $dataEntrySamples)) {
+                        $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
+                    }
+                }
+
+                // ==============================
+                // Sinkronisasi data_custom dengan otherRegulations
+                // ==============================
+                $dataCustomSamples = [];
+                // dd($data_custom, $dataCustomSamples); 
+                foreach ($data_custom as $group) {
+                    foreach ($group as $row) {
+                        $dataCustomSamples[] = $row['no_sampel'];
+                    }
+                }
+
+                foreach ($otherRegulations as $id_regulasi => $entries) {
+                    foreach ($entries as $other) {
+                        // dd($entries,$other, $dataCustomSamples); 
+                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
+                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                        }
+                    }
+                }
+
+                    return response()->json([
+                        'status' => true,
+                        'data' => $data_entry,
+                        'next_page' => $data_custom,
+                    ], 201);
+            } else {
+                $mainData = [];
+                $otherRegulations = [];
+
+                $data = GetaranHeader::with('ws_udara', 'lapangan_getaran', 'master_parameter', 'lapangan_getaran_personal')
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_approve', 1)
+                    ->where('is_active', true)
+                    ->where('lhps', 1)
+                    ->get();
+                foreach ($data as $val) {
+                    $entry = $this->formatEntry($val);
+                    $mainData[] = $entry;
+
+                    if ($request->other_regulasi) {
+                        foreach ($request->other_regulasi as $id_regulasi) {
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
                         }
                     }
                 }
@@ -522,7 +592,7 @@ class DraftUdaraGetaranController extends Controller
                     $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
                         return mb_strtolower($item['param']);
                     })->values()->toArray();
-                }
+                }   
            
                 return response()->json([
                     'status' => true,

@@ -74,6 +74,20 @@ return [
             'level' => 'critical',
         ],
 
+        'render' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/render/render.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
+        'quotation' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/create_quotation/quotation.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'custom_email_log' => [
             'driver' => 'single',
             'path' => storage_path('logs/custom_email.log'),

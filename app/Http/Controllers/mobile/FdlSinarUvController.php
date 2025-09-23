@@ -37,6 +37,13 @@ class FdlSinarUvController extends Controller
                     $query->where('parameter', 'like', '%Sinar UV%');
                 })
                 ->where('is_active', 1)->first();
+            $fdl = DataLapanganSinarUV::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            if($fdl){
+                return response()->json([
+                    'message' => 'No Sampel sudah terinput di data lapangan sinar UV'
+                ],401);
+            }
+
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sampel tidak ditemukan di kategori sinar UV'
@@ -64,12 +71,6 @@ class FdlSinarUvController extends Controller
     {
         DB::beginTransaction();
         try{
-            $cek = DataLapanganSinarUV::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-            if ($cek) {
-                return response()->json([
-                    'message' => 'No sample sudah terinput di data lapangan sinar UV.!'
-                ], 401);
-            }
             if ($request->jam_pengambilan == '') {
                 return response()->json([
                     'message' => 'Jam pengambilan tidak boleh kosong .!'
@@ -151,13 +152,8 @@ class FdlSinarUvController extends Controller
 
         $query = DataLapanganSinarUV::with('detail')
             ->where('created_by', $this->karyawan)
-            ->where(function ($q) {
-                $q->where('is_rejected', 1)
-                ->orWhere(function ($q2) {
-                    $q2->where('is_rejected', 0)
-                        ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                });
-            });
+            ->whereIn('is_rejected', [0, 1])
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
 
         if ($search) {
             $query->where(function ($q) use ($search) {

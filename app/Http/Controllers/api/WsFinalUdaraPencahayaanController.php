@@ -103,7 +103,6 @@ class WsFinalUdaraPencahayaanController extends Controller
             $parameters = json_decode(html_entity_decode($request->parameter), true);
             $parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
             $idParameter = isset($parameterArray[0]) ? $parameterArray[0] : null;
-            if (in_array($request->kategori, $this->categoryPencahayaan)) {
                 $data = PencahayaanHeader::with(['data_lapangan', 'ws_udara', 'orderDetail'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
@@ -121,12 +120,7 @@ class WsFinalUdaraPencahayaanController extends Controller
                         return $method;
                     })
                     ->make(true);
-            } else {
-                return response()->json([
-                    'message' => 'Kategori tidak sesuai',
-                    'status' => 404,
-                ], 404);
-            }
+          
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => $th->getMessage(),
@@ -142,10 +136,14 @@ class WsFinalUdaraPencahayaanController extends Controller
             ->get()
             ->where('status', 0)
             ->map(function ($item) {
+                $item->getAnyHeaderUdara();
+                return $item;
+            })->values()
+            ->map(function ($item) {
                 $item->getAnyDataLapanganUdara();
                 return $item;
             })->values();
-
+            // dd($data);
         return response()->json([
             'data' => $data,
             'message' => 'Data retrieved successfully',
@@ -788,11 +786,11 @@ class WsFinalUdaraPencahayaanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $dataLapangan = DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
+          DataLapanganCahaya::where('no_sampel', $request->no_sampel)->update([
                 'is_approve' => 0,
             ]);
 
-            $cahayaHeader = PencahayaanHeader::where('no_sampel', $request->no_sampel)
+           PencahayaanHeader::where('no_sampel', $request->no_sampel)
                 ->update([
                     'is_approved' => 0,
                 ]);
@@ -818,11 +816,15 @@ class WsFinalUdaraPencahayaanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $orderDetail = OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+           OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
                 ->update([
                     'status' => 1,
                 ]);
 
+            PencahayaanHeader::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'lhps' => 1,
+                ]);
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',

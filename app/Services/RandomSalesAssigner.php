@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 use Carbon\Carbon;
+
+Carbon::setLocale('id');
 
 use App\Models\{
     MasterPelanggan,
@@ -15,16 +17,29 @@ use App\Models\{
     QuotationNonKontrak,
 };
 
-Carbon::setLocale('id');
-
 class RandomSalesAssigner
 {
+    private static $salesPool;
+    private static $salesPoolIndex = 0;
+
     public static function run()
     {
         try {
             Log::channel('reassign_customer')->info("\n\n\n== RANDOM SALES ASSIGNER STARTED ==\n\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
+
+            self::$salesPool = MasterKaryawan::select('id', 'nama_lengkap')
+                ->where('is_active', true)
+                ->whereIn('id_jabatan', [24]) // sales staff
+                ->get()
+                ->shuffle()
+                ->toArray();
+
+            $excludedSalesIds = MasterKaryawan::whereIn('id_jabatan', [15, 21]) // manajer, spv
+                ->pluck('id')
+                ->toArray();
+            $excludedSalesIds[] = 41; // Novva Novita Ayu Putri Rukmana
 
             MasterPelanggan::with([
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
@@ -33,8 +48,8 @@ class RandomSalesAssigner
             ])
                 ->select('id_pelanggan', 'nama_pelanggan', 'sales_id', 'sales_penanggung_jawab', 'is_active')
                 ->where('is_active', true)
-                ->whereNotIn('sales_id', [14, 22, 41])
-                ->chunk(5000, function ($customers) {
+                ->whereNotIn('sales_id', $excludedSalesIds)
+                ->chunk(2000, function ($customers) {
                     foreach ($customers as $customer) {
                         if (!$customer->historySales) {
                             self::checkCustomer($customer, 12, 8, 'Sales belum pernah dishuffle; ');
@@ -122,30 +137,36 @@ class RandomSalesAssigner
             ->values()
             ->all();
 
-        $newSales = MasterKaryawan::select('id', 'nama_lengkap', 'id_jabatan', 'is_active')
-            ->where('is_active', true)
-            ->whereIn('id_jabatan', [24]) // spv sama staff
-            ->whereNotIn('id', $excludedSalesIds)
-            ->inRandomOrder()
-            ->first();
+        $newSales = null;
+        $poolSize = count(self::$salesPool);
+        $initialIndex = self::$salesPoolIndex;
+
+        do {
+            $potentialSales = self::$salesPool[self::$salesPoolIndex];
+
+            self::$salesPoolIndex = (self::$salesPoolIndex + 1) % $poolSize;
+
+            if (!in_array($potentialSales['id'], $excludedSalesIds)) {
+                $newSales = (object) $potentialSales;
+                break;
+            }
+        } while (self::$salesPoolIndex !== $initialIndex);
 
         if ($newSales) {
             DB::beginTransaction();
             try {
-                //code...
                 $historySales = new HistoryPerubahanSales();
                 $historySales->id_pelanggan = $customer->id_pelanggan;
                 $historySales->id_sales_lama = $currentSales ? $currentSales->id : null;
                 $historySales->id_sales_baru = $newSales->id;
                 $historySales->tanggal_rotasi = Carbon::now();
                 $historySales->save();
-    
-                // UPDATE DATABASE
-                $updateCustomer = MasterPelanggan::where('id_pelanggan', $customer->id_pelanggan)->update([
+
+                MasterPelanggan::where('id_pelanggan', $customer->id_pelanggan)->update([
                     'sales_id' => $newSales->id,
                     'sales_penanggung_jawab' => $newSales->nama_lengkap,
                 ]);
-    
+
                 Log::channel('reassign_customer')->info("\n\n== Informasi Perubahan Sales ==\n\n", [
                     'timestamp' => Carbon::now()->toDateTimeString(),
                     'id_pelanggan' => $customer->id_pelanggan,

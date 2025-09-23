@@ -63,18 +63,27 @@
                             $dataArray = json_decode($header->methode_sampling ?? []);
                             
                             $result = array_map(function ($item) {
-                                $parts = explode(';', $item);
-                                $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
-                                $sni = $parts[1] ?? '-';
-                                return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                if (strpos($item, ';') !== false) {
+                                    $parts = explode(';', $item);
+                                    $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                    $sni = $parts[1] ?? '-';
+                                    return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                } else {
+                                    // Jika tidak ada ';', langsung tampilkan itemnya saja
+                                    return $item;
+                                }
                             }, $dataArray);
 
                             foreach ($result as $index => $item) {
-                                $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                if (trim($item) == '-' || trim($item) == '******') {
+                                    $methode_sampling .= "<span><span>" . $item . "</span></span><br>";
+                                } else {
+                                    $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                }
                             }
 
                             if($header->status_sampling == 'SD') {
-                                $methode_sampling = $dataArray[0] ?? '-';
+                                $methode_sampling = str_replace('<span><span>******</span></span><br>', '******', $methode_sampling ?? '-');
                             }
                         } else {
                             $methode_sampling = "-";
@@ -84,11 +93,7 @@
                     <tr>
                         <td class="custom5">Metode Sampling</td>
                         <td class="custom5">:</td>
-                        @if ($header->status_sampling == 'SD')
-                            <td class="custom5">****** {!! str_replace('-', '', $methode_sampling) !!}</td>
-                        @else
-                            <td class="custom5">{!! $methode_sampling !!}</td>
-                        @endif
+                        <td class="custom5">{!! $methode_sampling !!}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -172,7 +177,7 @@
                                 @endif
                             @endforeach
                         @endforeach
-                        @if ($header->status_sampling == 'SD')
+                        @if ($header->status_sampling == 'SD' && $methode_sampling == '******')
                             <tr>
                                 <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
                             </tr>

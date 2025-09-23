@@ -165,6 +165,7 @@ class FdlPartikulatMeterController extends Controller
             //             'created_by' => $existingHeader ? $existingHeader->created_by : $this->karyawan,
             //             'created_at' => $existingHeader ? $existingHeader->created_at : Carbon::now(),
             //             'is_active' => true,
+            //             'lhps' => true,
             //             'is_approve' => true,
             //             'approved_by' => $this->karyawan,
             //             'approved_at' => Carbon::now()->format('Y-m-d H:i:s')

@@ -221,6 +221,9 @@ class FdlLingkunganKerjaController extends Controller
                     //                 'tanggal_terima' => $tanggalTerima,
                     //                 'created_by' => $this->karyawan,
                     //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    //                 'is_approved' => true,
+                    //                 'approved_by' => $this->karyawan,
+                    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
                     //             ]
                     //         );
 
@@ -237,6 +240,7 @@ class FdlLingkunganKerjaController extends Controller
                     //                 'C' => $hasil['hasil'],
                     //                 'tanggal_terima' =>$tanggalTerima,
                     //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    //                 'created_by' => $this->karyawan,
                     //             ]
                     //         );
 
@@ -289,14 +293,17 @@ class FdlLingkunganKerjaController extends Controller
                     //         $header = LingkunganHeader::updateOrCreate(
                     //             [
                     //                 'no_sampel' => $data->no_sampel,
-                    //                 'parameter' => $param,
+                    //                 'id_parameter' => $id_parameter[$index] ?? null,
                     //             ],
                     //             [
-                    //                 'id_parameter' => $id_parameter[$index] ?? null,
+                    //                 'parameter' => $param,
                     //                 'template_stp' => 30,
                     //                 'tanggal_terima' => $tanggalTerima,
                     //                 'created_by' => $this->karyawan,
                     //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    //                 'is_approved' => true,
+                    //                 'approved_by' => $this->karyawan,
+                    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
                     //             ]
                     //         );
 
@@ -313,6 +320,7 @@ class FdlLingkunganKerjaController extends Controller
                     //                 'C' => $rataRata,
                     //                 'tanggal_terima' =>$tanggalTerima,
                     //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    //                 'created_by' => $this->karyawan,
                     //             ]
                     //         );
 

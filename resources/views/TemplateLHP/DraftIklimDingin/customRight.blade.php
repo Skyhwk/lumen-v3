@@ -71,7 +71,7 @@
                             </table>
                         </td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
@@ -80,7 +80,7 @@
                             $periode = explode(' - ', $header['periode_analisa']);
                             $periode1 = $periode[0] ?? '';
                             $periode2 = $periode[1] ?? '';
-                        @endphp
+                        @endphp -->
                       <!-- <tr>
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
@@ -92,15 +92,15 @@
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi_custom))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                        @if($key == $page)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
-                        @endif
-                        @endforeach
-                    </table>
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            @if($key + 1 == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            @endif
+                        </table>
+                    @endforeach
                 @endif
             </td>
         </tr>

@@ -460,18 +460,18 @@ class FdlSenyawaVolatileController extends Controller
                     ];
                 }
                 
-                $shift2 = $request->shift;
+                $shift2 = $request->shift_pengambilan;
                 if ($request->kateg_uji[$in] == null) {
                     $shift_peng = 'Sesaat';
                     $shift2 = 'Sesaat';
                 } else if ($request->kateg_uji[$in] == '24 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift);
+                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
                 } else if ($request->kateg_uji[$in] == '8 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift);
+                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
                 } else if ($request->kateg_uji[$in] == '6 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift);
+                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
                 }else if ($request->kateg_uji[$in] == '3 Jam') {
-                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($request->shift);
+                    $shift_peng = $request->kateg_uji[$in] . '-' . json_encode($shift2);
                 }
 
                 $fdl = DataLapanganSenyawaVolatile::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
@@ -491,8 +491,8 @@ class FdlSenyawaVolatileController extends Controller
                 if ($request->keterangan_4 != '') $fdlvalue->keterangan            = $request->keterangan_4;
                 if ($request->keterangan_2 != '') $fdlvalue->keterangan_2          = $request->keterangan_2;
                 if ($request->koordinat != '') $fdlvalue->titik_koordinat             = $request->koordinat;
-                if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitudeitude;
-                if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitudetude;
+                if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitude;
+                if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitude;
                 if ($request->lok != '') $fdlvalue->lokasi                         = $request->lok;
                 $fdlvalue->parameter                                               = $a;
 

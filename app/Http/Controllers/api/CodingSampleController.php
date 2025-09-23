@@ -292,17 +292,17 @@ class CodingSampleController extends Controller
                         $docSamples = $doc->no_sampel;
                         sort($docSamples);
 
-                        // $intersection = array_intersect($cleanedSamples, $doc->no_sampel);
-                        // if (!empty($intersection)) {
-                        //     $matchedDocument = $doc; // simpan dokumen yang cocok
-                        //     break; // stop di match pertama
-                        // }
+                        $intersection = array_intersect($cleanedSamples, $doc->no_sampel);
+                        if (!empty($intersection)) {
+                            $matchedDocument = $doc; // simpan dokumen yang cocok
+                            break; // stop di match pertama
+                        }
 
                         // Bandingkan apakah sama persis (jumlah dan isi, setelah diurutkan)
-                        if ($cleanedSamples === $docSamples) {
+                        /* if ($cleanedSamples === $docSamples) {
                             $matchedDocument = $doc;
                             break;
-                        }
+                        } */
                     }
                     $bsDocument = $matchedDocument;
                 }

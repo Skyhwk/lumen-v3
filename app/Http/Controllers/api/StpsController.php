@@ -569,8 +569,8 @@ class StpsController extends Controller
                                 ->where('kategori_1', '!=', 'SD')
                                 ->where('kategori_2', $data_sampling['kategori_1'])
                                 ->where('kategori_3', $data_sampling['kategori_2'])
-                                ->whereJsonContains('regulasi', $data_sampling['regulasi'])
-                                // ->whereJsonContains('parameter', $data_sampling['parameter']) // dipindah ke bawah pengecekane
+                                // ->whereJsonContains('regulasi', $data_sampling['regulasi']) // dipindah ke bawah pengecekana
+                                // ->whereJsonContains('parameter', $data_sampling['parameter']) // dipindah ke bawah pengecekana
                                 ->where('periode', $item['periode_kontrak'])
                                 ->whereIn('no_sampel', $pra_no_sample)
                                 ->where('is_active', 1)
@@ -582,17 +582,21 @@ class StpsController extends Controller
                             foreach ($sampleNumbersFromOrder as $orderDetail) {
                                 $number = explode('/', $orderDetail->no_sampel)[1];
 
-                                $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
-                                $inputParameter = $data_sampling['parameter'];
+                                $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
+                                $idRegulasiPenawaran    = array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']);
 
-                                // cek isi dulu
-                                $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+                                $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
 
-                                // jika isi ga cocok, cek total
-                                $totalSame = count($orderParameter) === count($inputParameter);
+                                if (in_array($number, $penawaran_keys) && $regulasiMatch) {
+                                    $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
+                                    $inputParameter = $data_sampling['parameter'];
 
-                                if (in_array($number, $penawaran_keys) && ($parameterMatch || $totalSame)) {
-                                    $sampleNumbers[] = $orderDetail->no_sampel;
+                                    $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+                                    $totalParameterSame = count($orderParameter) === count($inputParameter);
+
+                                    if ($parameterMatch || $totalParameterSame) {
+                                        $sampleNumbers[] = $orderDetail->no_sampel;
+                                    }
                                 }
                             }
 
@@ -754,8 +758,8 @@ class StpsController extends Controller
                                         }, json_decode($first->parameter)),
 
                                         'persiapan' => ($first->kategori_2 == '1-Air' ? '( ' . number_format((array_sum(array_map(function ($item) {
-                                            
-                                            
+
+
                                             if (!is_object($item)) {
                                                 if (is_array($item) && isset($item['persiapan'])) {
                                                     $itemObj = (object) $item;
@@ -845,53 +849,21 @@ class StpsController extends Controller
                     'message' => 'Sample diantar tidak memiliki STPS.!',
                 ], 401);
             }
-            //  =========================================CETAK PDF========================================
-            // $psh = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
-            //     ->where('no_order', $dataOrder->no_order)
-            //     // ->where('periode', $request->periode)
-            //     ->where('tanggal_sampling', $request->jadwal)
-            //     ->whereJsonContains('no_sampel', $pra_no_sample[0])
-            //     ->first();
-
-
-
-
-
-            // $dataList = PersiapanSampelHeader::where('no_quotation', $request->nomor_quotation)
-            //     ->where('no_order', $dataOrder->no_order)
-            //     ->where('tanggal_sampling', $request->jadwal)
-            //     ->where('is_active', 1)
-            //     ->get();
-
-            // $psh = $dataList->first(function ($item) use ($pra_no_sample) {
-            //     $noSampel = json_decode($item->no_sampel, true) ?? [];
-            //     return count(array_intersect($noSampel, $pra_no_sample)) > 0;
-            // });
-
-
-            // if (!$psh) {
-            //     if (file_exists(public_path() . '/stps')) {
-            //     }
-
-            //     return response()->json([
-            //         'message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!',
-            //     ], 401);
-            // }
-
-            // dd($pra_no_sample);
 
             $psController = new PersiapanSampleController($request);
             $pshModel = PersiapanSampelHeader::class;
 
             $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                 ->where('no_order', $dataOrder->no_order)
-                ->where('tanggal_sampling', $request->jadwal);
+                ->where('tanggal_sampling', $request->jadwal)
+                ->where('is_active', 1)
+                ->where('sampler_jadwal', $request->sampler);
             // ->whereJsonContains('no_sampel', $pra_no_sample);
 
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
-            
+            // dd($psHeader, $request->sampler);
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
                 // $request->no_order = $request->no_order;
@@ -910,8 +882,8 @@ class StpsController extends Controller
                         };
                     }
                 }
-                
-                if (!$isMustPrepared) {
+
+                if ($isMustPrepared) {
                     return response()->json(['message' => 'Sampel belum disiapkan, Silahkan melakukan update terlebih dahulu.!'], 401);
                 } else {
                     $requestPsData = new Request([
@@ -920,12 +892,13 @@ class StpsController extends Controller
                         'tanggal_sampling' => $request->jadwal,
                         'nama_perusahaan' => $request->nama_perusahaan,
                         'kategori_jadwal' => $request->kategori,
+                        'sampler_jadwal' => $request->sampler,
                         'periode' => $request->periode,
                         'analis_berangkat' => null,
                         'sampler_berangkat' => null,
                         'analis_pulang' => null,
                         'sampler_pulang' => null,
-                        'masker' => [   
+                        'masker' => [
                             'disiapkan' => 2,
                             'tambahan' => "",
                         ],
@@ -939,24 +912,25 @@ class StpsController extends Controller
                         ],
                         'detail' => [],
                         'plastik_benthos' => [
-                            "tambahan"=> "",
-                            "disiapkan"=> ""
+                            "tambahan" => "",
+                            "disiapkan" => ""
                         ],
                         'media_petri_dish' => [
-                            "tambahan"=> "",
-                            "disiapkan"=> ""
+                            "tambahan" => "",
+                            "disiapkan" => ""
                         ],
                         'media_tabung' => [
-                            "tambahan"=> "",
-                            "disiapkan"=> ""
+                            "tambahan" => "",
+                            "disiapkan" => ""
                         ],
                     ]);
-                    
+
                     $psController->save($requestPsData);
-                    
+
                     $psHeader = $pshModel::where('no_quotation', $request->nomor_quotation)
                         ->where('no_order', $dataOrder->no_order)
                         ->where('tanggal_sampling', $request->jadwal)
+                        ->where('sampler_jadwal', $request->sampler)
                         // ->whereJsonContains('no_sampel', $pra_no_sample)
                         ->first();
                 }
@@ -1251,24 +1225,47 @@ class StpsController extends Controller
                     $regulasiText = implode(', ', $value->regulasi);
                 }
                 // dd($value);
-                $pdf->WriteHTML(
-                    '<tr>
-                            <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                            <td style="font-size: 12px; padding: 5px;">
-                                <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
-                                <b style="font-size: 12px;">' .
-                        (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
-                        $value->total_parameter . ' Parameter ' . $value->persiapan .
-                        '</b>'
-                );
-                foreach ($value->parameter as $keys => $parameter) {
-                    // dd($parameter);
-                    $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
-                }
+                if (count($value->no_sampel) > 100) {
+                    # code...
+                    $pdf->WriteHTML(
+                        '<tr>
+                                <td style="vertical-align: middle; text-align:center;font-size: 13px; width: 5%;">' . $i . '</td>
+                                <td style="font-size: 12px; padding: 5px; width: 45%;">
+                                    <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
+                                    <b style="font-size: 12px;">' .
+                            (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
+                            $value->total_parameter . ' Parameter ' . $value->persiapan .
+                            '</b>'
+                    );
+                    foreach ($value->parameter as $keys => $parameter) {
+                        // dd($parameter);
+                        $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
+                    }
 
-                $pdf->WriteHTML(
-                    '<td style="font-size: 13px; padding: 5px;text-align:center;">' . implode('<br />', $value->no_sampel) . '</td></tr>'
-                );
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 13px; padding: 5px;text-align:center; width: 50%;">' . implode('; ', $value->no_sampel) . '</td></tr>'
+                    );
+                } else {
+
+                    $pdf->WriteHTML(
+                        '<tr>
+                                <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
+                                <td style="font-size: 12px; padding: 5px;">
+                                    <b style="font-size: 12px;">' . $value->kategori_3 . '</b><br><hr>
+                                    <b style="font-size: 12px;">' .
+                            (!empty($regulasiText) ? $regulasiText . ' - ' : '') . // hanya tampil jika ada regulasi
+                            $value->total_parameter . ' Parameter ' . $value->persiapan .
+                            '</b>'
+                    );
+                    foreach ($value->parameter as $keys => $parameter) {
+                        // dd($parameter);
+                        $pdf->WriteHTML(($keys == 0 ? '<br><hr>' : ' &bull; ') . '<span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $parameter . '</span> ');
+                    }
+
+                    $pdf->WriteHTML(
+                        '<td style="font-size: 13px; padding: 5px;text-align:center;">' . implode('; ', $value->no_sampel) . '</td></tr>'
+                    );
+                }
                 $i++;
                 $pe++;
             }

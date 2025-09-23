@@ -1,6 +1,8 @@
 
-
-
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -71,81 +73,21 @@
                             </table>
                         </td>
                     </tr>
-                    <tr>
-                        <td class="custom5" width="120">Tanggal Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>   
-                    @php
-                            $periode = explode(' - ', $header['periode_analisa']);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
-                        @endphp
-                      <!-- <tr>
-                        <td class="custom5" width="120">Periode Analisa</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
-                    </tr> -->
                    
                     
                 </table>
-
-                {{-- Regulasi --}}
-                @if (!empty($header->regulasi_custom))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                        @if($key + 1 == $page)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
-                            </tr>
-                        @endif
-                        @endforeach
-                    </table>
+                   @if (!empty($header->regulasi_custom))
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            @if($key + 1 == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            @endif
+                        </table>
+                    @endforeach
                 @endif
 
-                  <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px; margin-top: 20px">
-                    <tr>
-                        <th class="custom" rowspan="3">Pengaturan Siklus Waktu Kerja</th>
-                        <th class="custom" colspan="4">ISBB (°C)</th>
-                    </tr>
-                    <tr>
-                        <th class="custom" colspan="4">Beban Kerja</th>
-                    </tr>
-                    <tr>
-                        <th class="custom">Ringan</th>
-                        <th class="custom">Sedang</th>
-                        <th class="custom">Berat</th>
-                        <th class="custom">Sangat Berat</th>
-                    </tr>
-                    <tr>
-                        <td class="custom2">75 - 100 %</td>
-                        <td class="custom2">31,0</td>
-                        <td class="custom2">28,0</td>
-                        <td class="custom2">-</td>
-                        <td class="custom2">-</td>
-                    </tr>
-                    <tr>
-                        <td class="custom2">50 - 75 %</td>
-                        <td class="custom2">31,0</td>
-                        <td class="custom2">29,0</td>
-                        <td class="custom2">27,5</td>
-                        <td class="custom2">-</td>
-                    </tr>
-                    <tr>
-                        <td class="custom2">25 - 50 %</td>
-                        <td class="custom2">32,0</td>
-                        <td class="custom2">30,0</td>
-                        <td class="custom2">29,0</td>
-                        <td class="custom2">28,0</td>
-                    </tr>
-                    <tr>
-                        <td class="custom2">0 - 25 %</td>
-                        <td class="custom2">32,5</td>
-                        <td class="custom2">31,5</td>
-                        <td class="custom2">30,5</td>
-                        <td class="custom2">30,0</td>
-                        </tr>
-                 </table>
             </td>
         </tr>
     </table>

@@ -112,12 +112,12 @@ class FdlKebisinganController extends Controller
             }
 
 
-            if ($request->lat) {
-                $data->latitude = $request->lat;
+            if ($request->latitude) {
+                $data->latitude = $request->latitude;
             }
 
-            if ($request->longi) {
-                $data->longitude = $request->longi;
+            if ($request->longitude) {
+                $data->longitude = $request->longitude;
             }
 
             if ($request->jenis_frekuensi) {
@@ -142,6 +142,9 @@ class FdlKebisinganController extends Controller
 
             if ($request->kebisingan) {
                 $data->value_kebisingan = json_encode($request->kebisingan);
+            }
+            if ($request->jam_pemaparan) {
+                $data->jam_pemaparan = $request->jam_pemaparan;
             }
 
             if ($request->suhu_udara) {
@@ -192,13 +195,8 @@ class FdlKebisinganController extends Controller
     {
         $data = DataLapanganKebisingan::with('detail')
             ->where('created_by', $this->karyawan)
-            ->where(function ($q) {
-                $q->where('is_rejected', 1)
-                ->orWhere(function ($q2) {
-                    $q2->where('is_rejected', 0)
-                        ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
-                });
-            });
+            ->whereIn('is_rejected', [0, 1])
+            ->whereDate('created_at', '>=', Carbon::now()->subDays(7));
             
         return Datatables::of($data)->make(true);
     }

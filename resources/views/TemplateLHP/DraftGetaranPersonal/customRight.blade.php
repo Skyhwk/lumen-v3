@@ -1,3 +1,7 @@
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -70,36 +74,40 @@
 
                     </tr>
 
-                {{-- Tanggal Sampling / Terima --}}
-                <tr>
-                    <td class="custom5" width="120">
-                        @if ($header->status_sampling == 'SD') 
-                            Tanggal Terima 
-                        @else 
-                            Tanggal Sampling 
-                        @endif
-                    </td>
-                    <td class="custom5" width="12">:</td>
-                    @php
-                        $tanggal_ = $header->status_sampling == 'SD'
-                            ? $header->tanggal_terima
-                            : $header->tanggal_sampling;
-                    @endphp
-                    <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                </tr>
             </table>
 
                 {{-- Regulasi --}}
-                @if ($header->regulasi_custom!=null)
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                            @if ($y->page == $page)
+                
+               @if (!empty($header->regulasi))
+        
+                    @foreach (json_decode($header->regulasi) as $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            <tr>
+                                @php
+                                
+                                @endphp
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                            </tr>
+                        </table>
+                    @endforeach
+                       @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                                if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
                                 </tr>
-                            @endif
-                        @endforeach
-                    </table>
+                        </table>
+                        @endif
+                    
                 @endif
           
             </td>

@@ -3,6 +3,10 @@
 namespace App\Services;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
+use App\Models\LhpsAirHeader;
+use App\Models\LhpsAirDetail;
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Config\FontVariables;
 
 class LhpTemplate
 {
@@ -17,7 +21,9 @@ class LhpTemplate
     private $filename;
     private $custom;
     private $prefix ='LHP';
+
     private $stylesheet;
+    private $lampiran = false;
     private static $instance;
 
     public static function set($field, $value)
@@ -40,6 +46,10 @@ class LhpTemplate
                 break;
             case 'filename':
                 self::$instance->filename = $value;
+                break;
+
+            case 'lampiran':
+                self::$instance->lampiran = $value;
                 break;
         }
 
@@ -66,6 +76,15 @@ class LhpTemplate
             self::$instance = new self();
         }
         self::$instance->header = $value;
+        return self::$instance;
+    }
+    public static function useLampiran($value)
+    {
+        // dd($value, 'asd');
+        if (!self::$instance) {
+            self::$instance = new self();
+        }
+        self::$instance->lampiran = $value;
         return self::$instance;
     }
 
@@ -142,20 +161,20 @@ class LhpTemplate
         if (!$value) {
             $resultName = '';
             foreach ($modes as $mode) { 
-                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode);
+                $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $this->lampiran);
             }
 
             self::$instance = null;
             return $resultName;
         }
         
-        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value);
+        $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $this->lampiran);
 
         self::$instance = null;
         return $resultName;
     }
 
-    private function execute($header, $detail, $prefix, $view, $customs, $mode)
+    private function execute($header, $detail, $prefix, $view, $customs, $mode, $lampiran)
     {   
         $namaFile = '';
         if ($this->filename) {
@@ -167,14 +186,18 @@ class LhpTemplate
         $header->sub_kategori = $this->ReplaceAlias($header->sub_kategori);
         
         $dir = $this->folderLocation($mode);
+
         if (!file_exists($dir)) {
             mkdir($dir, 0777, true);
         }
+
         $this->generateStylesheet();
         $last = true;
+
         if(!empty($customs)) {
             $last = false;
         }
+
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
         $filePath = $dir . '/' . $filename;
@@ -192,9 +215,34 @@ class LhpTemplate
                 $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
                 $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
             }
-            
         }
 
+        if ($lampiran) {
+            $pdfLampiran = view($view . '.lampiran', [
+                'header' => $header,
+                'custom' => false,
+                'page'   => null
+            ])->render();
+
+            $lampiranHeader = view($this->directoryDefault . '.lampiranHeader', compact('header', 'showKan', 'mode'))->render();
+
+            if (!empty($customs)) {
+                foreach ($customs as $page => $custom) {
+                    $pdfLampiranCustom[$page] = view($view . '.lampiran', [
+                        'header' => $header,
+                        'custom' => true,
+                        'page'   => $page
+                    ])->render();
+                }
+            }
+        }
+
+        $defaultConfig = (new ConfigVariables())->getDefaults();
+        $fontDirs = $defaultConfig['fontDir'];
+
+        $defaultFontConfig = (new FontVariables())->getDefaults();
+        $fontData = $defaultFontConfig['fontdata'];
+        
         $mpdf = new \Mpdf\Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
@@ -205,11 +253,40 @@ class LhpTemplate
             'margin_left' => 10,
             'margin_right' => 10,
             'orientation' => 'L',
+
+            'fontDir' => array_merge($fontDirs, [
+                __DIR__ . '/vendor/mpdf/mpdf/ttfonts', // pastikan path sesuai!
+            ]),
+
+            // Tambahkan font Roboto
+            'fontdata' => $fontData + [
+                'roboto' => [
+                    'R'  => 'Roboto-Regular.ttf',     // 400
+                    'M'  => 'Roboto-Medium.ttf',      // 500
+                    'SB' => 'Roboto-SemiBold.ttf',    // 600
+                    'B'  => 'Roboto-Bold.ttf',        // 700
+                    'BI'  => 'Roboto-BoldItalic.ttf',        // 700
+                ]
+            ],
         ]);
 
-        $mpdf->SetProtection(array(
-            'print'
-        ), '', 'skyhwk12');
+        
+        $mpdf->SetProtection(
+            ['print'], // hanya boleh print
+            '',        // user password kosong (bisa dibuka tanpa password)
+            'skyhwk12',
+            128,       // level enkripsi 128-bit
+            [
+                'copy' => false,
+                'modify' => false,
+                'print' => true,
+                'annot-forms' => false,
+                'fill-forms' => false,
+                'extract' => false,
+                'assemble' => false,
+                'print-highres' => true
+            ]
+        );
 
         if ($mode == 'downloadWSDraft') {
             $mpdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0,0), 200);
@@ -236,6 +313,17 @@ class LhpTemplate
             }
         }
 
+        if(isset($pdfLampiran) && isset($lampiranHeader)) {
+            $mpdf->SetHTMLHeader($lampiranHeader);
+            $mpdf->WriteHTML($pdfLampiran);
+            $mpdf->SetHTMLFooter($htmlFooter);
+            if(isset($pdfLampiranCustom)) {
+                foreach ($pdfLampiranCustom as $page => $custom) {
+                    $mpdf->WriteHTML($pdfLampiranCustom[$page]);
+                }
+            }
+        }
+
         $mpdf->Output($filePath, \Mpdf\Output\Destination::FILE);
         return $filename;
     }
@@ -255,8 +343,8 @@ class LhpTemplate
 
         return $paths[$mode];
     }
-
-    private function cekAkreditasi( $no_lhp)
+    
+    private function cekAkreditasi($no_lhp)
     {
 
         $parameterAkreditasi = 0;
@@ -267,16 +355,29 @@ class LhpTemplate
         foreach ($orderDetail as  $value) {
             $kategori = explode('-', $value->kategori_2)[0];
             $dataDecode = json_decode($value->parameter);
-        foreach ($dataDecode as $key => $val) {
-            $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
-            if ($parameter->status == 'AKREDITASI') {
-                $parameterAkreditasi++;
+            if($kategori == 1) {
+                $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+                
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
             } else {
-                $parameterNonAkreditasi++;
+                foreach ($dataDecode as $val) {
+                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
+                    if ($parameter->status == 'AKREDITASI') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+
+                }
             }
-
-        }
-
+      
             
         }
         if ($parameterAkreditasi == 0) {
@@ -401,6 +502,13 @@ class LhpTemplate
                             border-top: 1px solid #000000;
                             font-size: 9px;
                             font-weight: bold;
+                        }
+                        .bordered{
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            border-top: 1px solid #000000;
+                            font-size: 9px;
                         }
                         .right {
                             float: right;

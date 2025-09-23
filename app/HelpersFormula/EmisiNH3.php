@@ -20,7 +20,7 @@ class EmisiNH3
         $C2 = null;
 
 
-        
+
         if (is_array($data->ks)) {
             $ks = array_sum($data->ks) / count($data->ks);
         }else {
@@ -32,9 +32,9 @@ class EmisiNH3
             $kb = floatval($data->kb);
         }
 
-        $tekanan_dry = LookUpRdm::getRdm();
+        // $tekanan_dry = LookUpRdm::getRdm();
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
-        
+
         $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 25) / floatval($Vs)) * (17 / 24.45), 4));
         $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 17), 4));
         // dump($C1, $C2);

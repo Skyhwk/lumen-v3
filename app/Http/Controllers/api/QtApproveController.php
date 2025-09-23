@@ -284,7 +284,7 @@ class QtApproveController extends Controller
                 $data->emailed_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->emailed_by = $this->karyawan;
 
-                if (empty($data->data_pendukung_sampling)) {
+                if (empty(json_decode($data->data_pendukung_sampling, true))) {
                     $nonPengujian = true;
                 }
 

@@ -1,4 +1,4 @@
-<table width="100%" style="text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif; {{$mode == 'downloadLHPFinal' ? 'margin-bottom: 33px;' : ''}}">
+<table width="100%" style="text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
     @if ($mode == 'downloadWSDraft' || $mode == 'downloadLHP')
         <tr>
             <td style="text-align: center;">
