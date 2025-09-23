@@ -47,4 +47,26 @@ class MysqlController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    public function restartDatabase(Request $request)
+    {
+        try {
+            $output = [];
+            $returnVar = 0;
+
+            // Gunakan sudo dengan path lengkap
+            exec('sudo /usr/bin/systemctl restart mysql.service 2>&1', $output, $returnVar);
+
+            if ($returnVar !== 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal me-restart database: ' . implode("\n", $output)
+                ], 500);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Database berhasil di-restart']);
+        } catch (\Throwable $th) {
+            return response()->json(['success' => false, 'message' => $th->getMessage()], 500);
+        }
+    }
 }
