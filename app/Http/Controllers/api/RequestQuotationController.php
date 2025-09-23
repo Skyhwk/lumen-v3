@@ -3363,7 +3363,11 @@ class RequestQuotationController extends Controller
                                 foreach ($pengujianLamaPer as $idx2 => $pengujianLama) {
                                     $kategori1Same = $pengujianLama['kategori_1'] === $pengujianBaru['kategori_1'];
                                     $kategori2Same = $pengujianLama['kategori_2'] === $pengujianBaru['kategori_2'];
-                                    $regulasiSame = $this->sameRegulasi($pengujianLama['regulasi'], $pengujianBaru['regulasi']);
+
+                                    $regulasiLama = is_string($pengujianLama['regulasi']) ? [] : $pengujianLama['regulasi'];
+                                    $regulasiBaru = is_string($pengujianBaru['regulasi']) ? [] : $pengujianBaru['regulasi'];
+                                    
+                                    $regulasiSame = $this->sameRegulasi($regulasiLama, $regulasiBaru);
 
                                     if ($kategori1Same  && $regulasiSame && $kategori2Same) {
                                         $matchedOldPenamaan = $pengujianLama['penamaan_titik'] ?? [];
@@ -5193,7 +5197,9 @@ class RequestQuotationController extends Controller
                                 foreach ($pengujianLamaPer as $idx2 => $pengujianLama) {
                                     $kategori1Same = $pengujianLama['kategori_1'] === $pengujianBaru['kategori_1'];
                                     $kategori2Same = $pengujianLama['kategori_2'] === $pengujianBaru['kategori_2'];
-                                    $regulasiSame = $this->sameRegulasi($pengujianLama['regulasi'], $pengujianBaru['regulasi']);
+                                    $regulasiLama = is_string($pengujianLama['regulasi']) ? [] : $pengujianLama['regulasi'];
+                                    $regulasiBaru = is_string($pengujianBaru['regulasi']) ? [] : $pengujianBaru['regulasi'];
+                                    $regulasiSame = $this->sameRegulasi($regulasiLama, $regulasiBaru);
 
                                     if ($kategori1Same  && $regulasiSame && $kategori2Same) {
                                         $matchedOldPenamaan = $pengujianLama['penamaan_titik'] ?? [];

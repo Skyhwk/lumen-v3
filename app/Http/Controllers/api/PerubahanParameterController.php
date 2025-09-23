@@ -128,10 +128,6 @@ class PerubahanParameterController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            // Log error untuk debugging, jangan gunakan dd di production
-            \Log::error('Gagal update perubahan parameter: '.$th->getMessage(), [
-                'trace' => $th->getTraceAsString()
-            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Perubahan parameter gagal diupdate',
