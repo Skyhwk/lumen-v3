@@ -71,7 +71,8 @@ class TicketProgrammingController extends Controller
     public function getAllMenu(Request $request)
     {
         try {
-            $menu = AksesMenu::select('akses')->where('user_id', $this->user_id)->first();
+            $masterKaryawan = MasterKaryawan::where('id', $this->user_id)->first();
+            $menu = AksesMenu::select('akses')->where('user_id', $masterKaryawan->user_id)->first();
             if ($menu && is_string($menu->akses)) {
                 $menus = json_decode($menu->akses, true);
             } else if ($menu && is_array($menu->akses)) {
