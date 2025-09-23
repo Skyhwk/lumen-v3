@@ -38,6 +38,7 @@ use App\Services\{
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log as FacadesLog;
 use Illuminate\Support\Str;
 use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -426,18 +427,18 @@ class TestingController extends Controller
                                     //     $parameter_names = array_map(function ($p) {
                                     //         return explode(';', $p)[1];
                                     //     }, json_decode($value->parameter) ?? []);
-    
+
                                     //     $id_kategori = explode("-", $value->kategori_2)[0];
                                     //     $params = HargaParameter::where('id_kategori', $id_kategori)
                                     //         ->where('is_active', true)
                                     //         ->whereIn('nama_parameter', $parameter_names)
                                     //         ->get();
-    
+
                                     //     $param_map = [];
                                     //     foreach ($params as $param) {
                                     //         $param_map[$param->nama_parameter] = $param;
                                     //     }
-    
+
                                     //     $botol_volumes = [];
                                     //     foreach (json_decode($value->parameter) ?? [] as $parameter) {
                                     //         $param_name = explode(';', $parameter)[1];
@@ -449,10 +450,10 @@ class TestingController extends Controller
                                     //             $botol_volumes[$param->regen] += ($param->volume != "" && $param->volume != "-" && $param->volume != null) ? (float) $param->volume : 0;
                                     //         }
                                     //     }
-    
+
                                     //     // Generate botol dan barcode
                                     //     $botol = [];
-    
+
                                     //     $ketentuan_botol = [
                                     //         'ORI' => 1000,
                                     //         'H2SO4' => 1000,
@@ -461,7 +462,7 @@ class TestingController extends Controller
                                     //         'M1000' => 1000,
                                     //         'BENTHOS' => 100
                                     //     ];
-    
+
                                     //     foreach ($botol_volumes as $type => $volume) {
                                     //         $typeUpper = strtoupper($type);
                                     //         if (!isset($ketentuan_botol[$typeUpper])) {
@@ -469,10 +470,10 @@ class TestingController extends Controller
                                     //             continue;
                                     //         }
                                     //         $koding = $value->koding_sampling . strtoupper(Str::random(5));
-    
+
                                     //         // Hitung jumlah botol yang dibutuhkan
                                     //         $jumlah_botol = ceil($volume / $ketentuan_botol[$typeUpper]);
-    
+
                                     //         $botol[] = (object) [
                                     //             'koding' => $koding,
                                     //             'type_botol' => $type,
@@ -480,15 +481,15 @@ class TestingController extends Controller
                                     //             'file' => $koding . '.png',
                                     //             'disiapkan' => (int) $jumlah_botol
                                     //         ];
-    
+
                                     //         if (!file_exists(public_path() . '/barcode/botol')) {
                                     //             mkdir(public_path() . '/barcode/botol', 0777, true);
                                     //         }
-    
+
                                     //         // file_put_contents(public_path() . '/barcode/botol/' . $koding . '.png', $generator->getBarcode($koding, $generator::TYPE_CODE_128, 3, 100));
                                     //         self::generateQR($koding, '/barcode/botol');
                                     //     }
-    
+
                                     //     $value->persiapan = json_encode($botol);
                                     //     $value->save();
                                     // } else {
@@ -853,7 +854,7 @@ class TestingController extends Controller
                                 foreach ($item['detail_bas_documents'] as $docIndex => $document) {
                                     if (isset($document['tanda_tangan']) && is_array($document['tanda_tangan'])) {
                                         foreach ($document['tanda_tangan'] as $key => $ttd) {
-                                            // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)    
+                                            // Lakukan pengecekan apakah data sudah berupa data URI (data:image/png;base64,...)
                                             if (strpos($ttd['tanda_tangan'], 'data:') === 0) {
                                                 $item['detail_bas_documents'][$docIndex]['tanda_tangan'][$key]['tanda_tangan_lama'] = $ttd['tanda_tangan'];
                                             } else {
@@ -1303,7 +1304,7 @@ class TestingController extends Controller
                                 continue;
                             }
 
-                            // Sort regulasi dan parameter  
+                            // Sort regulasi dan parameter
                             $regulasi = $detail['regulasi'] ?? [];
                             $parameter = $detail['parameter'] ?? [];
 
@@ -1320,7 +1321,7 @@ class TestingController extends Controller
                             $regulasiJson = json_encode($regulasi, JSON_UNESCAPED_UNICODE);
                             $parameterJson = str_replace('\\', '', str_replace(',', ', ', json_encode($parameter, JSON_UNESCAPED_UNICODE)));
 
-                            // Filter order detail  
+                            // Filter order detail
                             // $order_detail = $sortedOrderDetail
                             //     ->whereNotIn('no_sampel', $substract)
                             //     ->where('regulasi', $regulasiJson)
@@ -1330,7 +1331,7 @@ class TestingController extends Controller
                             //     ->where('is_active', true)
                             //     ->values();
 
-                            // Filter order detail sesuai criteria 
+                            // Filter order detail sesuai criteria
                             $order_detail = $sortedOrderDetail
                                 ->whereNotIn('no_sampel', $substract)
                                 ->where('is_active', true)
@@ -1382,7 +1383,7 @@ class TestingController extends Controller
                             $detail['penamaan_titik'] = $penamaan_titik;
                         }
                     } else {
-                        // Proses tanpa order detail  
+                        // Proses tanpa order detail
                         foreach ($pendukung_sampling as &$detail) {
                             if (!isset($detail['jumlah_titik'])) {
                                 continue;
@@ -1578,7 +1579,7 @@ class TestingController extends Controller
                                     continue;
                                 }
 
-                                // Sort regulasi dan parameter 
+                                // Sort regulasi dan parameter
                                 $regulasi = $detailSampling['regulasi'] ?? [];
                                 $parameter = $detailSampling['parameter'] ?? [];
 
@@ -1599,7 +1600,7 @@ class TestingController extends Controller
                                 $regulasiJson = json_encode($regulasi, JSON_UNESCAPED_UNICODE);
                                 $parameterJson = str_replace('\\', '', str_replace(',', ', ', json_encode($parameter, JSON_UNESCAPED_UNICODE)));
 
-                                // Filter order detail sesuai criteria 
+                                // Filter order detail sesuai criteria
                                 $order_detail = $sortedOrderDetail
                                     ->whereNotIn('no_sampel', $substract)
                                     ->where('periode', $periode)
@@ -1704,7 +1705,7 @@ class TestingController extends Controller
                                     continue;
                                 }
 
-                                // Normalisasi array 
+                                // Normalisasi array
                                 $itemRegulasi = $item['regulasi'] ?? [];
                                 $itemParameter = $item['parameter'] ?? [];
                                 $headerRegulasi = $header['regulasi'] ?? [];
@@ -2938,6 +2939,136 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'error',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function numberingLhpOrder(Request $request){
+        DB::beginTransaction();
+        try {
+            $order_detail = OrderDetail::where('no_order', $request->no_order)->get();
+
+            if ($order_detail->isEmpty()) {
+                return response()->json([
+                    'message' => 'No Order Tidak Ditemukan'
+                ], 404);
+            }
+
+            $num = "001";
+
+            // variabel penyimpan kondisi sebelumnya
+            $lastPeriode   = null;
+            $lastRegulasi  = [];
+            $lastKategori3 = null;
+
+            $changes = []; // ✅ simpan perubahan detail
+
+            foreach ($order_detail as $od) {
+                $needIncrement = false;
+
+                if ($od->kategori_2 == '1-Air') {
+                    // ✅ Aturan 1: Air -> selalu increment
+                    $needIncrement = true;
+                } else {
+                    $od_regulasi = json_decode($od->regulasi, true) ?: [];
+
+                    // if($od->no_sampel == 'KPJD022504/002'){
+                    //     dd([$od_regulasi, $lastRegulasi, count(array_diff($od_regulasi, $lastRegulasi)), $od->periode, $lastPeriode, $od->kategori_3, $lastKategori3]);
+                    // }
+                    if ($od->periode) {
+                        // ✅ Aturan 2: Non-Air + ada periode
+                        if (
+                            $od->periode !== $lastPeriode ||
+                            $od->kategori_3 !== $lastKategori3 ||
+                            count(array_diff($od_regulasi, $lastRegulasi)) > 0
+                        ) {
+                            $needIncrement = true;
+                        }
+                    } else {
+                        // ✅ Aturan 3: Non-Air + tanpa periode
+                        if (
+                            $od->kategori_3 !== $lastKategori3 ||
+                            count(array_diff($od_regulasi, $lastRegulasi)) > 0
+                        ) {
+                            $needIncrement = true;
+                        }
+                    }
+
+                    // update kondisi terakhir
+                    $lastPeriode   = $od->periode;
+                    $lastKategori3 = $od->kategori_3;
+                    $lastRegulasi  = $od_regulasi;
+                }
+
+                if (!$needIncrement) {
+                    $oldCfr = $od->cfr;
+                    $newCfr = $request->no_order . "/" . str_pad(((int)$num - 1), 3, "0", STR_PAD_LEFT);
+
+                    $od->cfr = $newCfr;
+                    $od->save();
+
+                    if($od->status > 1){
+                        $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
+                        if($lhpsH){
+                            $lhpsH->no_lhp = $newCfr;
+                            $lhpsH->save();
+                        }
+                    }
+
+                    $changes[] = [
+                        'no_sampel' => $od->no_sampel,
+                        'old_cfr'   => $oldCfr,
+                        'new_cfr'   => $newCfr,
+                    ];
+                }else{
+                    $oldCfr = $od->cfr;
+                    $newCfr = $request->no_order . "/" . $num;
+
+                    $od->cfr = $newCfr;
+                    $od->save();
+
+                    if($od->status > 1){
+                        $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
+                        if($lhpsH){
+                            $lhpsH->no_lhp = $newCfr;
+                            $lhpsH->save();
+                        }
+                    }
+
+                    $changes[] = [
+                        'no_sampel' => $od->no_sampel,
+                        'old_cfr'   => $oldCfr,
+                        'new_cfr'   => $newCfr,
+                    ];
+
+                    $num = str_pad((int)$num + 1, 3, "0", STR_PAD_LEFT);
+                }
+            }
+
+            FacadesLog::info('Re-numbering LHP Order Berhasil', [
+                'no_order' => $request->no_order,
+                'changes'  => $changes, // ✅ detail perubahan per sampel
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Re-numbering LHP Order Berhasil',
+                'changes' => $changes, // ✅ juga bisa dikembalikan ke response
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            FacadesLog::error('Re-numbering LHP Order Gagal', [
+                'error' => $e->getMessage(),
+                'line'  => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'file'  => $e->getFile()
+            ]);
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'file'    => $e->getFile()
             ], 500);
         }
     }
