@@ -9,7 +9,7 @@
                 <tr>
                     <th width="25" rowspan="2" class="pd-5-solid-top-center">NO</th>
                     <th width="200" rowspan="2" class="pd-5-solid-top-center">LOKASI / KETERANGAN SAMPLE</th>
-                    <th width="100" class="pd-5-solid-top-center" >Kebisingan 24 Jam (dBA)</th>
+                    <th width="100" class="pd-5-solid-top-center"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
                     <th width="80" rowspan="2" class="pd-5-solid-top-center">TITIK KOORDINAT</th>
                 </tr>
                 <tr>
