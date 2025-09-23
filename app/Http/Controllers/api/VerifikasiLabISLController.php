@@ -115,12 +115,15 @@ class VerifikasiLabISLController extends Controller
                 ], 404);
             }
 
-            $data_scanned = array_map(function ($item) {
-                if ($item->kategori == '4-Udara' || $item->kategori == '5-Emisi') {
-                    return $item->disiapkan = '1';
+            $data_scanned = array_map(function ($item) use ($scan) {
+                $item->kategori = $scan->kategori;
+
+                if ($scan->kategori == '4-Udara' || $scan->kategori == '5-Emisi') {
+                    $item->disiapkan = '1';
                 } else {
-                    return $item->disiapkan = $item->jumlah;
+                    $item->disiapkan = $item->jumlah;
                 }
+
                 return $item;
             }, json_decode($scan->data_detail, false) ?: []);
 
@@ -137,7 +140,7 @@ class VerifikasiLabISLController extends Controller
             //     ], 500);
             // }
 
-            $data_botol = array_values($scanned_filter);
+            $data_botol = array_values($data_scanned);
         } else {
             $scan = ScanSampelTc::whereRaw(
                 "JSON_CONTAINS(data_detail, ?)",
@@ -151,12 +154,15 @@ class VerifikasiLabISLController extends Controller
                 ], 404);
             }
 
-            $data_scanned = array_map(function ($item) {
-                if ($item->kategori == '4-Udara' || $item->kategori == '5-Emisi') {
-                    return $item->disiapkan = '1';
+            $data_scanned = array_map(function ($item) use ($scan) {
+                $item->kategori = $scan->kategori;
+
+                if ($scan->kategori == '4-Udara' || $scan->kategori == '5-Emisi') {
+                    $item->disiapkan = '1';
                 } else {
-                    return $item->disiapkan = $item->jumlah;
+                    $item->disiapkan = $item->jumlah;
                 }
+
                 return $item;
             }, json_decode($scan->data_detail, false) ?: []);
 
@@ -191,7 +197,11 @@ class VerifikasiLabISLController extends Controller
 
                 $parameterExcludeEmisi = ['SO2', 'NO2', 'Velocity', 'NOX'];
 
-                if ($scan->kategori == '5-Emisi' && in_array($item->parameter, $parameterExcludeEmisi)) {
+                if (
+                    $scan->kategori == '5-Emisi'
+                    && isset($item->jenis_botol->parameter)
+                    && in_array($item->jenis_botol->parameter, $parameterExcludeEmisi)
+                ) {
                     unset($data_scanned[$key]);
                 }
 
