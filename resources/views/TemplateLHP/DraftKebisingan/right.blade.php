@@ -52,10 +52,24 @@
                         </td>
                     </tr>
                     <tr>
+                    @php
+                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
+                    @endphp
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            {{ $header->metode_sampling[0] ?? '-' }}
+                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                                @foreach($methode_sampling as $index => $item)
+                                    <tr>
+                                        @if (count($methode_sampling) > 1)
+                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
+                                            <td class="custom5">{{ $item ?? '-' }}</td>
+                                        @else
+                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </table>
                         </td>
                     </tr>
                 </table>
