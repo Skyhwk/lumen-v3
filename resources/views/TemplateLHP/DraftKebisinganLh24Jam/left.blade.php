@@ -7,15 +7,15 @@
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
-                    <th width="25" rowspan="2" class="pd-5-solid-top-center">NO</th>
-                    <th width="200" rowspan="2" class="pd-5-solid-top-center">LOKASI / KETERANGAN SAMPLE</th>
-                    <th width="100" class="pd-5-solid-top-center"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
-                    <th width="80" rowspan="2" class="pd-5-solid-top-center">TITIK KOORDINAT</th>
+                    <th width="6%" rowspan="2" class="custom">NO</th>
+                    <th width="30%" rowspan="2" class="custom">LOKASI / KETERANGAN SAMPLE</th>
+                    <th width="30%" class="custom"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
+                    <th width="24%" rowspan="2" class="custom">TITIK KOORDINAT</th>
                 </tr>
                 <tr>
-                    <th class="pd-5-solid-top-center" >Ls (Siang)</th>
-                    <th class="pd-5-solid-top-center" >Lm (Malam)</th>
-                    <th class="pd-5-solid-top-center" >Ls-m (Siang-Malam)</th>
+                    <th class="custom" >Ls (Siang)</th>
+                    <th class="custom" >Lm (Malam)</th>
+                    <th class="custom" >Ls-m (Siang-Malam)</th>
                 </tr>
             </thead>
             <tbody>
