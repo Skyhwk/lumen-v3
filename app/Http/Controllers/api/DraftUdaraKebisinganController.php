@@ -439,7 +439,7 @@ class DraftUdaraKebisinganController extends Controller
             
             // Mapping data ke array associative
             $mappedData = $kebisinganData->map(function ($val) {
-                $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_terima;
+                $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
                 return [
                     'lokasi_keterangan' => $val->data_lapangan->lokasi_titik_sampling
                         ?? $val->data_lapangan->keterangan
@@ -460,7 +460,7 @@ class DraftUdaraKebisinganController extends Controller
                     'leq_lsm'             =>$val->ws_udara->hasil1 ?? null,
                     'hasil_uji'       => $val->ws_udara->hasil1 ?? null,
                     'nab'             => $val->ws_udara->nab ?? null,
-                    'tanggal_sampling'=> Carbon::parse($tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY')
+                    'tanggal_sampling'=>  $tanggal_sampling
                 ];
             })->values()->toArray();
 
