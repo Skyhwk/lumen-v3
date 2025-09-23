@@ -1388,7 +1388,7 @@ class BasOnlineController extends Controller
                     }
                     $samplingBySampler[$samplerKey][] = $sampling;
                 } else {
-                    $assignedSamplers = $samplerKategoriMap['007'];
+                    $assignedSamplers = $samplerKategoriMap['001'];
                     $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
 
                     // Create combined key for samplers working together

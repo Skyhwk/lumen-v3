@@ -435,7 +435,7 @@ class TicketProgrammingController extends Controller
             }
 
             $data->status = 'WAITING PROCESS';
-            $data->tingkat_masalah = $request->tingkat_masalah;
+            $data->kategori = $request->kategori;
 
             $data->save();
 
@@ -447,7 +447,7 @@ class TicketProgrammingController extends Controller
 
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Programming !')
-                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . $data->tingkat_masalah)
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
                 ->url('/ticket-programming')
                 ->send();
 
