@@ -36,7 +36,7 @@ class ControlPanelController extends Controller
             return response()->json(['success' => false, 'message' => 'Service not allowed'], 403);
         }
 
-        if (!in_array($action, ['start', 'stop', 'restart'])) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'status'])) {
             return response()->json(['success' => false, 'message' => 'Invalid action'], 400);
         }
 
@@ -46,13 +46,14 @@ class ControlPanelController extends Controller
         $output = [];
         $returnCode = 0;
 
-        exec("sudo systemctl $safeAction $safeService 2>&1", $output, $returnCode);
+        $status = trim(shell_exec("sudo systemctl $safeAction $safeService 2>&1"));
 
         return response()->json([
             'success' => $returnCode === 0,
             'service' => $service,
             'action'  => $action,
-            'output'  => $output
+            'output'  => $output,
+            'status' => $status
         ]);
     }
 }
