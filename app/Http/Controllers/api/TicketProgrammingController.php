@@ -7,6 +7,7 @@ use App\Models\MasterKaryawan;
 use App\Models\AksesMenu;
 // use App\Models\User;
 use App\Http\Controllers\Controller;
+use App\Services\GetAtasan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -448,6 +449,15 @@ class TicketProgrammingController extends Controller
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Programming !')
                 ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+                ->url('/ticket-programming')
+                ->send();
+
+            $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
+
+            $isPerubahanData = $data->kategori == 'PERUBAHAN_DATA';
+            Notification::whereIn('id', $getAtasan)
+                ->title('Ticket Programming !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
                 ->url('/ticket-programming')
                 ->send();
 
