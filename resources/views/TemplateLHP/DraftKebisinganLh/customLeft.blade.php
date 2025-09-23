@@ -4,11 +4,11 @@
             <thead>
                 <tr>
                    <tr>
-                     <th width="6%"  class="pd-5-solid-top-center">NO</th>
-                    <th width="30%"  class="pd-5-solid-top-center">LOKASI SAMPLING</th>
-                    <th width="10%" class="pd-5-solid-top-center">HASIL UJI</th>
-                    <th width="30%" class="pd-5-solid-top-center">TITIK KOORDINAT</th>
-                    <th width="24%" class="pd-5-solid-top-center">TANGGAL SAMPLING</th>
+                     <th width="6%"  class="custom">NO</th>
+                    <th width="30%"  class="custom">LOKASI SAMPLING</th>
+                    <th width="10%" class="custom">HASIL UJI</th>
+                    <th width="30%" class="custom">TITIK KOORDINAT</th>
+                    <th width="24%" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 </tr>
             </thead>

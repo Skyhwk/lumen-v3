@@ -177,9 +177,9 @@ class DraftUdaraKebisinganController extends Controller
             $cleaned_lokasi     = $this->cleanArrayKeys($request->lokasi);
             $cleaned_noSampel   = $this->cleanArrayKeys($request->no_sampel);
             $cleaned_hasil_uji  = $this->cleanArrayKeys($request->hasil_uji ?? []);
-            $cleaned_ls         = $this->cleanArrayKeys($request->ls ?? []);
-            $cleaned_lsm         = $this->cleanArrayKeys($request->lsm ?? []);
-            $cleaned_lm         = $this->cleanArrayKeys($request->lm ?? []);
+            $cleaned_ls         = $this->cleanArrayKeys($request->leq_ls ?? []);
+            $cleaned_lsm         = $this->cleanArrayKeys($request->leq_lsm ?? []);
+            $cleaned_lm         = $this->cleanArrayKeys($request->leq_lm ?? []);
             $cleaned_tanggal_sampling = $this->cleanArrayKeys($request->tanggal_sampling ?? []);
             $cleaned_nama_pekerja = [];
             $cleaned_nab        = [];
