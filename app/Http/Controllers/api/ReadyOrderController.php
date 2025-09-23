@@ -339,9 +339,10 @@ class ReadyOrderController extends Controller
             }
         } catch (\Throwable $th) {
             if (
-                str_contains($e->getMessage(), 'Connection timed out') ||
-                str_contains($e->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'Connection timed out') ||
+                str_contains($th->getMessage(), 'MySQL server has gone away')
             ) {
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan qs ulang atau di Controller ReadyOrder bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
                     'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
                     'status' => 401
