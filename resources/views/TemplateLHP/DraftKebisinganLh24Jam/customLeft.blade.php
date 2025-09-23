@@ -9,9 +9,9 @@
                     <th width="80" rowspan="2" class="pd-5-solid-top-center">TITIK KOORDINAT</th>
                 </tr>
                 <tr>
-                    <th class="pd-5-solid-top-center" colspan="2">Ls (Siang)</th>
-                    <th class="pd-5-solid-top-center" colspan="2">Lm (Malam)</th>
-                    <th class="pd-5-solid-top-center" colspan="2">Ls-m (Siang-Malam)</th>
+                    <th class="pd-5-solid-top-center" >Ls (Siang)</th>
+                    <th class="pd-5-solid-top-center" >Lm (Malam)</th>
+                    <th class="pd-5-solid-top-center" >Ls-m (Siang-Malam)</th>
                 </tr>
             </thead>
             <tbody>
