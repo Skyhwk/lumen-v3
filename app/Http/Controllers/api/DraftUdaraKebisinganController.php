@@ -460,7 +460,7 @@ class DraftUdaraKebisinganController extends Controller
                     'leq_lsm'             =>$val->ws_udara->hasil1 ?? null,
                     'hasil_uji'       => $val->ws_udara->hasil1 ?? null,
                     'nab'             => $val->ws_udara->nab ?? null,
-                    'tanggal_sampling'=>  $tanggal_sampling
+                    'tanggal_sampling'=> Carbon::parse($tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY')
                 ];
             })->values()->toArray();
 
