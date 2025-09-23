@@ -115,14 +115,14 @@ class VerifikasiLabISLController extends Controller
                 ], 404);
             }
 
-            $data_scanned = json_decode($scan->data_detail, false) ?: [];
-            $scanned_filter = array_filter($data_scanned, function ($item) {
+            $data_scanned = array_map(function ($item) {
                 if ($item->kategori == '4-Udara' || $item->kategori == '5-Emisi') {
                     return $item->disiapkan = '1';
                 } else {
-                    return $item->disiapkan == $item->jumlah;
+                    return $item->disiapkan = $item->jumlah;
                 }
-            });
+                return $item;
+            }, json_decode($scan->data_detail, false) ?: []);
 
             $data_scan_analis = ScanSampelAnalis::where('no_sampel', $request->no_sampel)
                 ->where('is_active', 1)
@@ -130,12 +130,12 @@ class VerifikasiLabISLController extends Controller
 
             $data_scanned_analis = $data_scan_analis ? json_decode($data_scan_analis->data, false) : [];
 
-            if (count($data_scanned) !== count($scanned_filter)) {
-                return response()->json([
-                    'message' => 'Botol dengan no sampel tersebut belum lengkap',
-                    'status' => '500'
-                ], 500);
-            }
+            // if (count($data_scanned) !== count($scanned_filter)) {
+            //     return response()->json([
+            //         'message' => 'Botol dengan no sampel tersebut belum lengkap',
+            //         'status' => '500'
+            //     ], 500);
+            // }
 
             $data_botol = array_values($scanned_filter);
         } else {
@@ -151,10 +151,14 @@ class VerifikasiLabISLController extends Controller
                 ], 404);
             }
 
-            $data_scanned = json_decode($scan->data_detail, false) ?: [];
-            $scanned_filter = array_filter($data_scanned, function ($item) {
-                return $item->disiapkan == $item->jumlah;
-            });
+            $data_scanned = array_map(function ($item) {
+                if ($item->kategori == '4-Udara' || $item->kategori == '5-Emisi') {
+                    return $item->disiapkan = '1';
+                } else {
+                    return $item->disiapkan = $item->jumlah;
+                }
+                return $item;
+            }, json_decode($scan->data_detail, false) ?: []);
 
             $data_scan_analis = ScanSampelAnalis::whereRaw(
                 "JSON_CONTAINS(data, ?)",
@@ -165,12 +169,12 @@ class VerifikasiLabISLController extends Controller
 
             $data_scanned_analis = $data_scan_analis ? json_decode($data_scan_analis->data, false) : [];
 
-            if (count($data_scanned) !== count($scanned_filter)) {
-                return response()->json([
-                    'message' => 'Botol dengan no sampel tersebut belum lengkap',
-                    'status' => '500'
-                ], 500);
-            }
+            // if (count($data_scanned) !== count($scanned_filter)) {
+            //     return response()->json([
+            //         'message' => 'Botol dengan no sampel tersebut belum lengkap',
+            //         'status' => '500'
+            //     ], 500);
+            // }
 
             $data_botol = array_map(function ($item) use ($request) {
                 if ($item->koding === $request->no_sampel) {
@@ -355,8 +359,8 @@ class VerifikasiLabISLController extends Controller
             $ftc->user_laboratory = $this->user_id;
             $ftc->save();
 
-            $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
-            $order_detail->save();
+            // $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+            // $order_detail->save();
 
             DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan dengan no sample ' . $request->no_sampel, 'status' => '201'], 201);

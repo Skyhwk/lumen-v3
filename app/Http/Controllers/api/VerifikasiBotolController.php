@@ -116,7 +116,7 @@ class VerifikasiBotolController extends Controller
                         $item->disiapkan = null;
                     }
                 }
-                
+
             } else {
 
                 $data = OrderDetail::whereNotNull('persiapan')
@@ -126,7 +126,7 @@ class VerifikasiBotolController extends Controller
                 if (!$data) {
                     return response()->json(["message" => "Koding botol tidak ditemukan di Order Detail", "code" => 404], 404);
                 }
-                
+
                 $lapangan = DataLapanganAir::where('no_sampel', $data->no_sampel)->first();
                 $scan = ScanSampelTc::where('no_sampel', $data->no_sampel)->first();
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
@@ -289,6 +289,12 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
                 }
+
+                $order_detail = OrderDetail::where('no_sampel', $scanSampelTc->no_sampel)->where('is_active', true)->first();
+                if ($order_detail) {
+                    $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                    $order_detail->save();
+                }
             } else {
                 $kondisi_sampel = '';
                 $dokumentasi_lainnya = '';
@@ -363,6 +369,12 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_at = Carbon::now();
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
+                }
+
+                $order_detail = OrderDetail::where('no_sampel', $scanSampelTc->no_sampel)->where('is_active', true)->first();
+                if ($order_detail) {
+                    $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                    $order_detail->save();
                 }
             }
 

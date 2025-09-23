@@ -1,3 +1,7 @@
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -76,10 +80,24 @@
                         @foreach (json_decode($header->custom_regulasi) as $key => $y)
                         @if($key + 1 == $page)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
                             </tr>
                         @endif
                         @endforeach
+                         @php
+                            $regulasiId = explode('-', $y)[0];
+                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
+                        @endif
                     </table>
                 @endif
             </td>
