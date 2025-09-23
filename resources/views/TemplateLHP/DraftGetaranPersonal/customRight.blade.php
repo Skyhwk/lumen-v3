@@ -1,7 +1,6 @@
 @php
-use App\Models\TabelRegulasi;
-use App\Models\MasterRegulasi;
-
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -79,18 +78,36 @@ use App\Models\MasterRegulasi;
 
                 {{-- Regulasi --}}
                 
-                @if (!empty($header->regulasi_custom))
-                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
-                   
+               @if (!empty($header->regulasi))
+        
+                    @foreach (json_decode($header->regulasi) as $y)
                         <table style="padding-top: 10px;" width="100%">
-                            @if($y->page == $page)
-                                <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y->regulasi)[1] }}</strong></td>
-                                </tr>
-                            @endif
+                            <tr>
+                                @php
+                                
+                                @endphp
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                            </tr>
                         </table>
-                      
                     @endforeach
+                       @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                                if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
+                        @endif
+                    
                 @endif
           
             </td>
