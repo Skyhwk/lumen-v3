@@ -81,6 +81,34 @@ class DraftUdaraGetaranController extends Controller
         ], 201);
     }
 
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
       public function handleMetodeSampling(Request $request)
         {
             try {
@@ -154,7 +182,9 @@ class DraftUdaraGetaranController extends Controller
             'no_order'      => $request->no_order,
             'is_active'     => true
         ])->first();
+        $is_revisi = false;
             if ($header) {
+                $is_revisi = $header->is_revisi == 1 ? true : false;
                 // Backup ke history sebelum update
                 $history = $header->replicate();
                 $history->setTable((new LhpsGetaranHeaderHistory())->getTable());
@@ -205,6 +235,9 @@ class DraftUdaraGetaranController extends Controller
                 'id_kategori_3'    => null,
                 'metode_sampling'=> $request->metode_sampling ? json_encode($request->metode_sampling) : null,
                 'nama_karyawan'   => $nama_perilis,
+                'is_revisi'       => false,
+                'count_revisi'    => $is_revisi ? $header->count_revisi + 1 : $header->count_revisi,
+                'is_generated'    => $is_revisi ? false : $header->is_generated,
                 'jabatan_karyawan'=> $jabatan_perilis,
                 'regulasi'        => $request->regulasi ? json_encode($request->regulasi) : null,
                 'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
@@ -610,47 +643,47 @@ class DraftUdaraGetaranController extends Controller
         }
     }
    private function formatEntry($val)
-{
-    $entry = [
-        'id'        => $val->id,
-        'param' => $val->parameter,
-    ];
+    {
+        $entry = [
+            'id'        => $val->id,
+            'param' => $val->parameter,
+        ];
 
-    // Cek apakah getaran personal
-    if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
-        $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
+        // Cek apakah getaran personal
+        if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
+            $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
+            $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+
+            return array_merge($entry, [
+                'w_paparan'    => ($personal && $personal->durasi_paparan) ? json_decode($personal->durasi_paparan, true) : null,
+                'hasil'        => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
+                'no_sampel'    => $personal ? $personal->no_sampel : null,
+                'sumber_get'   => $personal ? $personal->sumber_getaran : null,
+                'keterangan'   => trim(
+                    (($personal && $personal->keterangan) ? $personal->keterangan : '') .
+                    (($personal && !empty($personal->nama_pekerja)) ? ' (' . $personal->nama_pekerja . ')' : '')
+                ),
+                'nab'          => $wsUdara ? $wsUdara->nab : null,
+                'tipe_getaran' => 'getaran personal',
+            ]);
+        }
+
+        // Default: getaran umum
+        $lapangan = isset($val->lapangan_getaran) ? $val->lapangan_getaran : null;
         $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+        $hasilWs  = ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : [];
 
         return array_merge($entry, [
-            'w_paparan'    => ($personal && $personal->durasi_paparan) ? json_decode($personal->durasi_paparan, true) : null,
-            'hasil'        => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
-            'no_sampel'    => $personal ? $personal->no_sampel : null,
-            'sumber_get'   => $personal ? $personal->sumber_getaran : null,
+            'no_sampel'    => $lapangan ? $lapangan->no_sampel : null,
             'keterangan'   => trim(
-                (($personal && $personal->keterangan) ? $personal->keterangan : '') .
-                (($personal && !empty($personal->nama_pekerja)) ? ' (' . $personal->nama_pekerja . ')' : '')
+                (($lapangan && $lapangan->keterangan) ? $lapangan->keterangan : '') .
+                (($lapangan && !empty($lapangan->nama_pekerja)) ? ' (' . $lapangan->nama_pekerja . ')' : '')
             ),
-            'nab'          => $wsUdara ? $wsUdara->nab : null,
-            'tipe_getaran' => 'getaran personal',
+            'tipe_getaran' => 'getaran',
+            'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
+            'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
         ]);
     }
-
-    // Default: getaran umum
-    $lapangan = isset($val->lapangan_getaran) ? $val->lapangan_getaran : null;
-    $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
-    $hasilWs  = ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : [];
-
-    return array_merge($entry, [
-        'no_sampel'    => $lapangan ? $lapangan->no_sampel : null,
-        'keterangan'   => trim(
-            (($lapangan && $lapangan->keterangan) ? $lapangan->keterangan : '') .
-            (($lapangan && !empty($lapangan->nama_pekerja)) ? ' (' . $lapangan->nama_pekerja . ')' : '')
-        ),
-        'tipe_getaran' => 'getaran',
-        'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
-        'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
-    ]);
-}
 
 
 
