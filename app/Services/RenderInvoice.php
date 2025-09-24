@@ -1155,9 +1155,9 @@ class RenderInvoice
                                     $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                                 }
                                 //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
-                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 15)); $i++) {
+                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 12)); $i++) {
 
-                                    foreach (array_chunk($dataSampling->data_sampling, 15)[$i] as $key => $datasp) {
+                                    foreach (array_chunk($dataSampling->data_sampling, 12)[$i] as $key => $datasp) {
 
                                         if ($values->periode != null) {
                                             $pr = self::tanggal_indonesia($values->periode, 'period');
@@ -1168,8 +1168,8 @@ class RenderInvoice
                                         if ($key == 0) {
 
 
-                                            if ($i == count(array_chunk($dataSampling->data_sampling, 15)) - 1) {
-                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1 + $tambah;
+                                            if ($i == count(array_chunk($dataSampling->data_sampling, 12)) - 1) {
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 12)[$i]) + 1 + $tambah;
 
                                                 $pdf->writeHTML(
                                                     '<tr style="border: 1px solid; font-size: 9px;">
@@ -1177,7 +1177,7 @@ class RenderInvoice
                                                         <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
                                             } else {
-                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 15)[$i]) + 1;
+                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 12)[$i]) + 1;
                                                 $pdf->writeHTML(
                                                     '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                         <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
@@ -1240,7 +1240,7 @@ class RenderInvoice
 
                                     }
 
-                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 15)) - 1;
+                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 12)) - 1;
 
                                     if ($isLastElement) {
 
@@ -1593,7 +1593,7 @@ class RenderInvoice
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
             $sisa_tagihan = $total_tagihan - $nilai_tagihan;
-            if ($sisa_tagihan != 0) {
+            if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr class="line_">
                     <td style="border: 1px solid; font-size: 10px; padding:3px;" colspan="2"><b style="text-transform: uppercase;">SISA PEMBAYARAN</b></td>
@@ -1908,7 +1908,7 @@ class RenderInvoice
                         <td style="border: 1px solid; font-size: 10px; padding: 3px;" colspan="2"><b style="text-transform: uppercase;">' . $dataHead->keterangan . '</b></td>
                         <td style="border: 1px solid; font-size: 9px; text-align:center;" class="text-right">' . self::rupiah($customInvoice->harga->nilai_tagihan) . '</td></tr>
                         ');
-                        if ($customInvoice->harga->sisa_tagihan != 0) {
+                        if (abs($customInvoice->harga->sisa_tagihan) > 10) {
                             $pdf->writeHTML('
                             <tr class="line_">
                             <td style="border: 1px solid; font-size: 10px; padding:3px;" colspan="2"><b style="text-transform: uppercase;">SISA PEMBAYARAN</b></td>

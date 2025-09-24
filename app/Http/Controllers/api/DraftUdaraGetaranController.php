@@ -733,7 +733,7 @@ class DraftUdaraGetaranController extends Controller
             $lhps = LhpsGetaranHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
-            $no_lhp = $lhps->no_lhp;
+            $no_lhp = $lhps->no_lhp ?? null;
 
             if ($lhps) {
                 HistoryAppReject::insert([
