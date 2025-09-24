@@ -31,7 +31,7 @@ class ReleaseUiController extends Controller
             $projectDir = '/var/www/javascript/react-js';
             $buildDir   = "$projectDir/build";
             $deployDir  = '/var/www/javascript/frontend/build';
-            $backupDir  = '/mnt/backup/file/frontend/backup-' . date('dmHi');
+            $backupDir  = '/mnt/backup/file/frontend/backup-' . date('dmyHi');
 
             $commands = [
                 "cd $projectDir && git pull --ff-only origin main",
