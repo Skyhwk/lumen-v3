@@ -38,6 +38,7 @@ use Yajra\Datatables\Datatables;
 
 class DraftUdaraPencahayaanController extends Controller
 {
+
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
@@ -69,7 +70,6 @@ class DraftUdaraPencahayaanController extends Controller
             ->make(true);
     }
 
-    // Amang
     public function getKategori(Request $request)
     {
         $kategori = MasterSubKategori::where('id_kategori', 4)
@@ -83,72 +83,69 @@ class DraftUdaraPencahayaanController extends Controller
         ], 201);
     }
 
-  public function handleMetodeSampling(Request $request)
-        {
-            try {
-                $subKategori = explode('-', $request->kategori_3);
-                $param = explode(';', (json_decode($request->parameter)[0]))[0];
-                $result = [];
-                // Data utama
-                $data = Parameter::where('id_kategori', '4')
-                    ->where('id', $param)
-                    ->get();
-                $resultx = $data->toArray();
-                foreach ($resultx as $key => $value) {
-                    $result[$key]['id'] = $value['id'];
-                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                    $result[$key]['kategori'] = $value['nama_kategori'];
-                    $result[$key]['sub_kategori'] = $subKategori[1];
-                }
+    public function handleMetodeSampling(Request $request)
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
+            $param = explode(';', (json_decode($request->parameter)[0]))[0];
+            $result = [];
+            // Data utama
+            $data = Parameter::where('id_kategori', '4')
+                ->where('id', $param)
+                ->get();
+            $resultx = $data->toArray();
+            foreach ($resultx as $key => $value) {
+                $result[$key]['id'] = $value['id'];
+                $result[$key]['metode_sampling'] = $value['method'] ?? '';
+                $result[$key]['kategori'] = $value['nama_kategori'];
+                $result[$key]['sub_kategori'] = $subKategori[1];
+            }
 
-                // $result = $resultx;
+            // $result = $resultx;
 
-                if ($request->filled('id_lhp')) {
-                    $header = LhpsPencahayaanHeader::find($request->id_lhp);
+            if ($request->filled('id_lhp')) {
+                $header = LhpsPencahayaanHeader::find($request->id_lhp);
 
-                    if ($header) {
-                        $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                        foreach ($data as $key => $value) {
-                            $valueMetode = array_map('trim', explode(',', $value->method));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->method));
 
-                            $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                            if (!empty($missing)) {
-                                foreach ($missing as $miss) {
-                                    $result[] = [
-                                        'id' => null,
-                                        'metode_sampling' => $miss ?? '',
-                                        'kategori' => $value->kategori,
-                                        'sub_kategori' => $value->sub_kategori,
-                                    ];
-                                }
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss ?? '',
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
                             }
                         }
                     }
                 }
-
-                return response()->json([
-                    'status' => true,
-                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-                    'data' => $result,
-                ], 200);
-
-            } catch (\Exception $e) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                    'line' => $e->getLine(),
-                ], 500);
             }
-        }
 
-    // Amang
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
+        }
+    }
+
     public function store(Request $request)
     {
         DB::beginTransaction();
-            // dd($request->regulasi);
-
         try {
             // Pencahayaan
             $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
@@ -345,107 +342,176 @@ class DraftUdaraPencahayaanController extends Controller
         }
     }
 
-  public function handleDatadetail(Request $request)
-{
-    try {
-        $noSampel = explode(', ', $request->no_sampel);
+    public function handleDatadetail(Request $request)
+    {
+        try {
+            $noSampel = explode(', ', $request->no_sampel);
 
-        // Ambil data LHP jika ada
-        $cek_lhp = LhpsPencahayaanHeader::with('lhpsPencahayaanDetail', 'lhpsPencahayaanCustom')
-            ->where('is_active', true)
-            ->where('no_lhp', $request->cfr)
-            ->first();
+            // Ambil data LHP jika ada
+            $cek_lhp = LhpsPencahayaanHeader::with('lhpsPencahayaanDetail', 'lhpsPencahayaanCustom')
+                ->where('is_active', true)
+                ->where('no_lhp', $request->cfr)
+                ->first();
+            
+            // ==============================
+            // CASE 1: Jika ada cek_lhp
+            // ==============================
+            if ($cek_lhp) {
+                $data_entry   = [];
+                $data_custom  = [];
+                $cek_regulasi = [];
 
-        // ==============================
-        // CASE 1: Jika ada cek_lhp
-        // ==============================
-        if ($cek_lhp) {
-            $data_entry   = [];
-            $data_custom  = [];
-            $cek_regulasi = [];
+                // Ambil data detail dari LHP (existing entry)
+                foreach ($cek_lhp->lhpsPencahayaanDetail as $val) {
+                    // if($val->no_sampel == 'AARG012503/024')dd($val);
+                    $data_entry[] = [
+                        'id'                => $val->id,
+                        'no_sampel'         => $val->no_sampel,
+                        'param'             => $val->param,
+                        'lokasi_keterangan' => $val->lokasi_keterangan,
+                        'hasil_uji'         => $val->hasil_uji,
+                        'sumber_cahaya'     => $val->sumber_cahaya,
+                        'jenis_pengukuran'  => $val->jenis_pengukuran,
+                        'nab'               => $val->nab,
+                        'tanggal_sampling'  => $val->tanggal_sampling,
+                    ];
+                }
 
-            // Ambil data detail dari LHP (existing entry)
-            foreach ($cek_lhp->lhpsPencahayaanDetail as $val) {
-                $data_entry[] = [
-                    'id'                => $val->id,
-                    'no_sampel'         => $val->no_sampel,
-                    'param'             => $val->param,
-                    'lokasi_keterangan' => $val->lokasi_keterangan,
-                    'hasil_uji'         => $val->hasil_uji,
-                    'sumber_cahaya'     => $val->sumber_cahaya,
-                    'jenis_pengukuran'  => $val->jenis_pengukuran,
-                    'nab'               => $val->nab,
-                    'tanggal_sampling'  => $val->tanggal_sampling,
-                ];
-            }
+                // Ambil regulasi tambahan jika ada
+                if ($request->other_regulasi) {
+                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
+                        ->select('id', 'peraturan as regulasi')
+                        ->get()
+                        ->toArray();
+                }
 
-            // Ambil regulasi tambahan jika ada
-            if ($request->other_regulasi) {
-                $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
-                    ->select('id', 'peraturan as regulasi')
-                    ->get()
-                    ->toArray();
-            }
+                // Proses regulasi custom dari LHP
+                if (!empty($cek_lhp->lhpsPencahayaanDetail) && !empty($cek_lhp->regulasi_custom)) {
+                    $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
-            // Proses regulasi custom dari LHP
-            if (!empty($cek_lhp->lhpsPencahayaanDetail) && !empty($cek_lhp->regulasi_custom)) {
-                $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
+                    // Mapping regulasi id
+                    if (!empty($cek_regulasi)) {
+                        $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
 
-                // Mapping regulasi id
-                if (!empty($cek_regulasi)) {
-                    $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
+                        $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
+                            $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
+                            if (isset($mapRegulasi[$regulasi_clean])) {
+                                $item['id'] = $mapRegulasi[$regulasi_clean];
+                            } else {
+                                $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
+                                if ($db) {
+                                    $item['id'] = $db->id;
+                                    $mapRegulasi[$regulasi_clean] = $db->id;
+                                }
+                            }
+                            return $item;
+                        }, $regulasi_custom);
+                    }
 
-                    $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
-                        $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
-                        if (isset($mapRegulasi[$regulasi_clean])) {
-                            $item['id'] = $mapRegulasi[$regulasi_clean];
-                        } else {
-                            $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
-                            if ($db) {
-                                $item['id'] = $db->id;
-                                $mapRegulasi[$regulasi_clean] = $db->id;
+                    // Group custom by page
+                    $groupedCustom = [];
+                    foreach ($cek_lhp->lhpsPencahayaanCustom as $val) {
+                        $groupedCustom[$val->page][] = $val;
+                    }
+
+                    // Urutkan regulasi_custom berdasarkan page
+                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
+
+                    // Bentuk data_custom
+                    foreach ($regulasi_custom as $item) {
+                        if (empty($item['page'])) continue;
+                        // $id_regulasi = "id_" . $item['id'];
+                            $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
+                            $page        = $item['page'];
+
+                            if (!empty($groupedCustom[$page])) {
+                                foreach ($groupedCustom[$page] as $val) {
+                                    $data_custom[$id_regulasi][] = [
+                                        'id'                => $val->id,
+                                        'no_sampel'         => $val->no_sampel,
+                                        'param'             => $val->param,
+                                        'lokasi_keterangan' => $val->lokasi_keterangan,
+                                        'hasil_uji'         => $val->hasil_uji,
+                                        'sumber_cahaya'     => $val->sumber_cahaya,
+                                        'jenis_pengukuran'  => $val->jenis_pengukuran,
+                                        'nab'               => $val->nab,
+                                        'tanggal_sampling'  => $val->tanggal_sampling,
+                                    ];
+                                }
                             }
                         }
-                        return $item;
-                    }, $regulasi_custom);
-                }
+                    }
 
-                // Group custom by page
-                $groupedCustom = [];
-                foreach ($cek_lhp->lhpsPencahayaanCustom as $val) {
-                    $groupedCustom[$val->page][] = $val;
-                }
+                // ==============================
+                // Ambil mainData & otherRegulations
+                // ==============================
+                $mainData         = [];
+                $otherRegulations = [];
 
-                // Urutkan regulasi_custom berdasarkan page
-                usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
+                $data = PencahayaanHeader::with('ws_udara', 'lapangan_cahaya', 'master_parameter')
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_approved', 1)
+                    ->where('is_active', true)
+                    ->where('lhps', 1)
+                    ->get();
 
-                // Bentuk data_custom
-                foreach ($regulasi_custom as $item) {
-                    if (empty($item['page'])) continue;
-                    // $id_regulasi = "id_" . $item['id'];
-                        $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
-                        $page        = $item['page'];
+                foreach ($data as $val) {
+                    $entry     = $this->formatEntry($val);
+                    $mainData[] = $entry;
 
-                        if (!empty($groupedCustom[$page])) {
-                            foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
-                                    'id'                => $val->id,
-                                    'no_sampel'         => $val->no_sampel,
-                                    'param'             => $val->param,
-                                    'lokasi_keterangan' => $val->lokasi_keterangan,
-                                    'hasil_uji'         => $val->hasil_uji,
-                                    'sumber_cahaya'     => $val->sumber_cahaya,
-                                    'jenis_pengukuran'  => $val->jenis_pengukuran,
-                                    'nab'               => $val->nab,
-                                    'tanggal_sampling'  => $val->tanggal_sampling,
-                                ];
-                            }
+                    if ($request->other_regulasi) {
+                        foreach ($request->other_regulasi as $id_regulasi) {
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
                         }
                     }
                 }
 
+                // Sort mainData
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+
+                // Sort otherRegulations
+                foreach ($otherRegulations as $id => $regulations) {
+                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+                }
+
+                // ==============================
+                // Sinkronisasi data_entry dengan mainData
+                // ==============================
+                $dataEntrySamples = array_column($data_entry, 'no_sampel');
+
+                foreach ($mainData as $main) {
+                    if (!in_array($main['no_sampel'], $dataEntrySamples)) {
+                        $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
+                    }
+                }
+
+                // ==============================
+                // Sinkronisasi data_custom dengan otherRegulations
+                // ==============================
+                $dataCustomSamples = [];
+                foreach ($data_custom as $group) {
+                    foreach ($group as $row) {
+                        $dataCustomSamples[] = $row['no_sampel'];
+                    }
+                }
+
+                foreach ($otherRegulations as $id_regulasi => $entries) {
+                    foreach ($entries as $other) {
+                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
+                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                        }
+                    }
+                }
+
+                return response()->json([
+                    'status'    => true,
+                    'data'      => $data_entry,
+                    'next_page' => $data_custom,
+                ], 201);
+            }
+
             // ==============================
-            // Ambil mainData & otherRegulations
+            // CASE 2: Jika tidak ada cek_lhp
             // ==============================
             $mainData         = [];
             $otherRegulations = [];
@@ -458,9 +524,9 @@ class DraftUdaraPencahayaanController extends Controller
                 ->get();
 
             foreach ($data as $val) {
-                $entry     = $this->formatEntry($val);
+                $entry      = $this->formatEntry($val);
                 $mainData[] = $entry;
-
+                
                 if ($request->other_regulasi) {
                     foreach ($request->other_regulasi as $id_regulasi) {
                         $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
@@ -476,89 +542,21 @@ class DraftUdaraPencahayaanController extends Controller
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
             }
 
-            // ==============================
-            // Sinkronisasi data_entry dengan mainData
-            // ==============================
-            $dataEntrySamples = array_column($data_entry, 'no_sampel');
-
-            foreach ($mainData as $main) {
-                if (!in_array($main['no_sampel'], $dataEntrySamples)) {
-                    $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
-                }
-            }
-
-            // ==============================
-            // Sinkronisasi data_custom dengan otherRegulations
-            // ==============================
-            $dataCustomSamples = [];
-            foreach ($data_custom as $group) {
-                foreach ($group as $row) {
-                    $dataCustomSamples[] = $row['no_sampel'];
-                }
-            }
-
-            foreach ($otherRegulations as $id_regulasi => $entries) {
-                foreach ($entries as $other) {
-                    if (!in_array($other['no_sampel'], $dataCustomSamples)) {
-                        $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
-                    }
-                }
-            }
-
             return response()->json([
                 'status'    => true,
-                'data'      => $data_entry,
-                'next_page' => $data_custom,
+                'data'      => $mainData,
+                'next_page' => $otherRegulations,
             ], 201);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+            ], 500);
         }
-
-        // ==============================
-        // CASE 2: Jika tidak ada cek_lhp
-        // ==============================
-        $mainData         = [];
-        $otherRegulations = [];
-
-        $data = PencahayaanHeader::with('ws_udara', 'lapangan_cahaya', 'master_parameter')
-            ->whereIn('no_sampel', $noSampel)
-            ->where('is_approved', 1)
-            ->where('is_active', true)
-            ->where('lhps', 1)
-            ->get();
-
-        foreach ($data as $val) {
-            $entry      = $this->formatEntry($val);
-            $mainData[] = $entry;
-
-            if ($request->other_regulasi) {
-                foreach ($request->other_regulasi as $id_regulasi) {
-                    $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
-                }
-            }
-        }
-
-        // Sort mainData
-        $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
-
-        // Sort otherRegulations
-        foreach ($otherRegulations as $id => $regulations) {
-            $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
-        }
-
-        return response()->json([
-            'status'    => true,
-            'data'      => $mainData,
-            'next_page' => $otherRegulations,
-        ], 201);
-
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status'  => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            'line'    => $e->getLine(),
-            'file'    => $e->getFile(),
-        ], 500);
     }
-}
 
 
     private function formatEntry($val)
@@ -571,9 +569,13 @@ class DraftUdaraPencahayaanController extends Controller
         if (in_array($val->parameter, ["Pencahayaan"])) {
             $cahaya = isset($val->lapangan_cahaya) ? $val->lapangan_cahaya : null;
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
-
+            
             return array_merge($entry, [
-                'hasil_uji'         => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
+                'hasil_uji' => ($wsUdara && $wsUdara->hasil1) 
+                    ? (is_array(json_decode($wsUdara->hasil1, true)) 
+                        ? json_decode($wsUdara->hasil1, true) 
+                        : str_replace(',', '', $wsUdara->hasil1)) 
+                    : null,
                 'param'             => $val ? $val->parameter : null,
                 'no_sampel'         => $cahaya ? $cahaya->no_sampel : null,
                 'sumber_cahaya'     => $cahaya ? $cahaya->jenis_cahaya : null,
