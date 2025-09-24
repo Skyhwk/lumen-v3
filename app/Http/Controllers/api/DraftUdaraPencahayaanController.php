@@ -573,7 +573,7 @@ class DraftUdaraPencahayaanController extends Controller
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
 
             return array_merge($entry, [
-                'hasil_uji'         => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
+                'hasil_uji'         => ($wsUdara && $wsUdara->hasil1) ? $wsUdara->hasil1 : null,
                 'param'             => $val ? $val->parameter : null,
                 'no_sampel'         => $cahaya ? $cahaya->no_sampel : null,
                 'sumber_cahaya'     => $cahaya ? $cahaya->jenis_cahaya : null,
