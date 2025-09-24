@@ -2517,6 +2517,13 @@ class BasOnlineController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "O2 (ESTB)",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Suhu",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",

@@ -94,8 +94,7 @@ class AppsBasController extends Controller
                 ->where('kategori_1', '!=', 'SD');
             if ($isProgrammer) {
                 $orderDetail->whereBetween('tanggal_sampling', [
-                    Carbon::now()->subDays(20)->toDateString(),
-                    Carbon::now()->toDateString()
+                    '2025-08-19', '2025-08-20'
                 ]);
             } else {
                 $orderDetail->whereBetween('tanggal_sampling', [
@@ -2827,6 +2826,13 @@ class AppsBasController extends Controller
             ],
             [
                 "parameter" => "O2",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "O2 (ESTB)",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",
                 "model" => DataLapanganEmisiCerobong::class,
