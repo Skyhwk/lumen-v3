@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsKebisinganHeader;
 use App\Models\LhpsKebisinganDetail;
 use App\Models\LhpsKebisinganCustom;
@@ -299,6 +300,14 @@ class DraftUdaraKebisinganController extends Controller
                         ->render();
                 }
                 $header->file_lhp = $fileName;
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                    $header->is_generated = 0;
+                    $header->count_revisi++;
+                if ($header->count_revisi > 2) {
+                    $this->handleApprove($request, false);
+                }
+            }
                 $header->save();
             }
 
@@ -361,17 +370,7 @@ class DraftUdaraKebisinganController extends Controller
             $custom = collect(LhpsKebisinganCustom::where('id_header', $dataHeader->id)->get())
                 ->groupBy('page')
                 ->toArray();
-            // if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
-            //     $fileName = LhpTemplate::setDataDetail($detail)
-            //         ->setDataHeader($dataHeader)
-            //         ->whereView('DraftKebisinganPersonal')
-            //         ->render();
-            // } else {
-            //     $fileName = LhpTemplate::setDataDetail($detail)
-            //         ->setDataHeader($dataHeader)
-            //         ->whereView('DraftKebisingan')
-            //         ->render();
-            // }
+         
                $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
                 if(in_array($id_regulasii, [54, 151, 167, 168, 382])) {
                     
@@ -549,40 +548,36 @@ class DraftUdaraKebisinganController extends Controller
         }
     }
 
-
-    public function handleDetailEdit(Request $request)
-    {
-
-        $id_category = explode('-', $request->kategori_3)[0];
-
-        try {
-            $data = LhpsKebisinganHeader::where('no_lhp', $request->no_lhp)
-                ->where('id_kategori_3', $id_category)
-                ->where('is_active', true)
-                ->first();
-            $details = LhpsKebisinganDetail::where('id_header', $data->id)->get();
-
-
-            return response()->json([
-                'data' => $data,
-                'details' => $details,
-            ], 201);
-        } catch (\Exception $th) {
-            DB::rollBack();
-            dd($th);
-            return response()->json([
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false
-            ], 500);
-        }
-    }
-    public function handleApprove(Request $request)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
-            $data = LhpsKebisinganHeader::where('id', $request->id)
-                ->where('is_active', true)
-                ->first();
-            $noSampel = array_map('trim', explode(',', $request->no_sampel));
+            if($isManual) {
+                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+
+            if (!$konfirmasiLhp) {
+                $konfirmasiLhp = new KonfirmasiLhp();
+                $konfirmasiLhp->created_by = $this->karyawan;
+                $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            } else {
+                $konfirmasiLhp->updated_by = $this->karyawan;
+                $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            }
+
+                $konfirmasiLhp->no_lhp = $request->cfr;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+
+                $konfirmasiLhp->save();
+            }
+            $data = LhpsKebisinganHeader::where('no_lhp', $request->cfr)
+                    ->where('is_active', true)
+                    ->first();
+            $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp = $data->no_lhp;
         
             $qr = QrDocument::where('id_document', $data->id)
@@ -593,7 +588,7 @@ class DraftUdaraKebisinganController extends Controller
                 ->first();
 
             if ($data != null) {
-                OrderDetail::where('cfr', $data->no_lhp)
+                OrderDetail::where('cfr', $request->cfr)
                 ->whereIn('no_sampel', $noSampel)
                 ->where('is_active', true)
                 ->update([
@@ -602,16 +597,23 @@ class DraftUdaraKebisinganController extends Controller
                     'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'approved_by' => $this->karyawan
                 ]);
+
                 
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
                 $data->nama_karyawan = $this->karyawan;
                 $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                 if ($data->count_print < 1) {
+                    $data->is_printed = 1;
+                    $data->count_print = $data->count_print + 1;
+                }
+                // dd($data->id_kategori_2);
+
                 $data->save();
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,
-                    'no_sampel' => $request->no_sampel,
+                    'no_sampel' => $request->noSampel,
                     'kategori_2' => $data->id_kategori_2,
                     'kategori_3' => $data->id_kategori_3,
                     'menu' => 'Draft Udara',
@@ -727,42 +729,49 @@ class DraftUdaraKebisinganController extends Controller
                 ->where('id', $request->id)
                 ->first();
               if ($header != null) {
-                $key = $header->no_lhp . str_replace('.', '', microtime(true));
-                $gen = MD5($key);
-                $gen_tahun = self::encrypt(DATE('Y-m-d'));
-                $token = self::encrypt($gen . '|' . $gen_tahun);
+                    if ($header->count_revisi > 0) {
+                        $header->is_generated = true;
+                        $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $header->generated_by = $this->karyawan;
+                    } else {
+                    $key = $header->no_lhp . str_replace('.', '', microtime(true));
+                    $gen = MD5($key);
+                    $gen_tahun = self::encrypt(DATE('Y-m-d'));
+                    $token = self::encrypt($gen . '|' . $gen_tahun);
 
-                $cek = GenerateLink::where('fileName_pdf', $header->file_lhp)->first();
-                if($cek) {
-                    $cek->id_quotation = $header->id;
-                    $cek->expired = Carbon::now()->addYear()->format('Y-m-d');
-                    $cek->created_by = $this->karyawan;
-                    $cek->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $cek->save();
+                    $cek = GenerateLink::where('fileName_pdf', $header->file_lhp)->first();
+                    if($cek) {
+                        $cek->id_quotation = $header->id;
+                        $cek->expired = Carbon::now()->addYear()->format('Y-m-d');
+                        $cek->created_by = $this->karyawan;
+                        $cek->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $cek->save();
 
-                    $header->id_token = $cek->id;
-                } else {
-                    $insertData = [
-                        'token' => $token,
-                        'key' => $gen,
-                        'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_kebisingan',
-                        'type' => 'draft_kebisingan',
-                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                        'fileName_pdf' => $header->file_lhp,
-                        'created_by' => $this->karyawan,
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s')
-                    ];
+                        $header->id_token = $cek->id;
+                    } else {
+                        $insertData = [
+                            'token' => $token,
+                            'key' => $gen,
+                            'id_quotation' => $header->id,
+                            'quotation_status' => 'draft_lhp_kebisingan',
+                            'type' => 'draft_kebisingan',
+                            'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                            'fileName_pdf' => $header->file_lhp,
+                            'created_by' => $this->karyawan,
+                            'created_at' => Carbon::now()->format('Y-m-d H:i:s')
+                        ];
 
-                    $insert = GenerateLink::insertGetId($insertData);
+                        $insert = GenerateLink::insertGetId($insertData);
 
-                    $header->id_token = $insert;
+                        $header->id_token = $insert;
+                    }
+                
+                    $header->is_generated = true;
+                    $header->generated_by = $this->karyawan;
+                    $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $header->expired = Carbon::now()->addYear()->format('Y-m-d');
                 }
-            
-                $header->is_generated = true;
-                $header->generated_by = $this->karyawan;
-                $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
-                $header->expired = Carbon::now()->addYear()->format('Y-m-d');
+               
                 $header->save();
             }
             DB::commit();
@@ -859,6 +868,34 @@ class DraftUdaraKebisinganController extends Controller
                 'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'line' => $th->getLine()
+            ], 500);
+        }
+    }
+
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsKebisinganHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
             ], 500);
         }
     }

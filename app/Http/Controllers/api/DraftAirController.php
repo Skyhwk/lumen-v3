@@ -24,7 +24,6 @@ use App\Models\LhpsAirDetailHistory;
 use App\Models\PengesahanLhp;
 use App\Models\KonfirmasiLhp;
 
-use App\Jobs\JobPrintLhp;
 
 use App\Services\TemplateLhps;
 use App\Services\SendEmail;
