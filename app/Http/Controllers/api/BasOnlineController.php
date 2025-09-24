@@ -896,7 +896,6 @@ class BasOnlineController extends Controller
                 return $matches[1] ?? null;
             }, $requestSamples);
             $requestSamples = array_filter($requestSamples);
-            // dd($requestSamples);
 
             $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
             ->where('no_quotation', $request->no_document)
@@ -907,7 +906,7 @@ class BasOnlineController extends Controller
                     $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                 }
             })->first();
-
+            
             if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
                 $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
                 // dd($dataBas);
