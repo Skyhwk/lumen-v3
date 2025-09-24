@@ -74,6 +74,13 @@ return [
             'level' => 'critical',
         ],
 
+        'release_apps_fdl' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_apps_fdl/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'release_frontend' => [
             'driver' => 'daily',
             'path' => storage_path('logs/release_frontend/log.log'),
