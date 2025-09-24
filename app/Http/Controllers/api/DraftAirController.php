@@ -243,7 +243,7 @@ class DraftAirController extends Controller
                 $header->is_generated = 0;
                 $header->count_revisi++;
                 if ($header->count_revisi > 2) {
-                    $this->handleApprove($request);
+                    $this->handleApprove($request, false);
                 }
             }
             $header->save();
@@ -841,31 +841,33 @@ class DraftAirController extends Controller
         }
     }
 
-    public function handleApprove(Request $request)
+    public function handleApprove(Request $request, $isManual = true)
     {
         DB::beginTransaction();
         try {
-            $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
-
-            if (!$konfirmasiLhp) {
-                $konfirmasiLhp = new KonfirmasiLhp();
-                $konfirmasiLhp->created_by = $this->karyawan;
-                $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
-            } else {
-                $konfirmasiLhp->updated_by = $this->karyawan;
-                $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            }
-
-            $konfirmasiLhp->no_lhp = $request->cfr;
-            $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
-            $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
-            $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
-            $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
-            $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
-            $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
-            $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
-
-            $konfirmasiLhp->save();
+            if ($isManual) {
+                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+    
+                if (!$konfirmasiLhp) {
+                    $konfirmasiLhp = new KonfirmasiLhp();
+                    $konfirmasiLhp->created_by = $this->karyawan;
+                    $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                } else {
+                    $konfirmasiLhp->updated_by = $this->karyawan;
+                    $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                }
+    
+                $konfirmasiLhp->no_lhp = $request->cfr;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+    
+                $konfirmasiLhp->save();
+            };
 
             $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
                 ->where('is_active', true)->firstOrFail();
