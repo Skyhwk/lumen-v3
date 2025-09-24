@@ -596,7 +596,7 @@ class DraftUdaraPencahayaanController extends Controller
             $no_lhp = $data->no_lhp;
 
             $qr = QrDocument::where('id_document', $data->id)
-                ->where('type_document', 'LHP_KEBISINGAN')
+                ->where('type_document', 'LHP_PENCAHAYAAN')
                 ->where('is_active', 1)
                 ->where('file', $data->file_qr)
                 ->orderBy('id', 'desc')
@@ -643,7 +643,7 @@ class DraftUdaraPencahayaanController extends Controller
             return response()->json([
                 'data' => $data,
                 'status' => true,
-                'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
+                'message' => 'Data draft LHP Pencahayaan no LHP ' . $no_lhp . ' berhasil diapprove'
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -724,7 +724,7 @@ class DraftUdaraPencahayaanController extends Controller
             DB::commit();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . ($no_lhp ?? '-') . ' berhasil direject'
+                'message' => 'Data draft Pencahayaan no LHP ' . ($no_lhp ?? '-') . ' berhasil direject'
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -765,8 +765,8 @@ class DraftUdaraPencahayaanController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_lhp_pencahayaan',
+                        'type' => 'draft_pencahayaan',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,

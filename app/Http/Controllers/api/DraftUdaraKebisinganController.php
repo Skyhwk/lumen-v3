@@ -187,7 +187,6 @@ class DraftUdaraKebisinganController extends Controller
             $cleaned_nab          = $this->cleanArrayKeys($request->nab ?? []);
 
             foreach ($request->no_sampel as $key => $val) {
-                // dd(array_key_exists($val, $cleaned_noSampel), $cleaned_noSampel, $val);
                 if (array_key_exists($val, $cleaned_noSampel)) {
                     $detail = new LhpsKebisinganDetail;
                     $detail->id_header = $header->id;
@@ -299,30 +298,13 @@ class DraftUdaraKebisinganController extends Controller
                         ->whereView('DraftKebisingan')
                         ->render();
                 }
-                // if($parameter[0] == 'Kebisingan (P8J)' ){
-                // $fileName = LhpTemplate::setDataDetail($details)
-                //     ->setDataHeader($header)
-                //     ->setDataCustom($custom)
-                //     ->useLampiran(true)
-                //     ->whereView('DraftKebisinganPersonal')
-                //     ->render();
-
-                // } else {
-                //     $fileName = LhpTemplate::setDataDetail($details)
-                //         ->setDataHeader($header)  
-                //         ->setDataCustom($custom)
-                //         ->useLampiran(true)
-                //         ->whereView('DraftKebisingan')
-                //         ->render();
-                // }
-
                 $header->file_lhp = $fileName;
                 $header->save();
             }
 
             DB::commit();
             return response()->json([
-                'message' => 'Data draft LHP udara no sampel ' . $request->no_lhp . ' berhasil disimpan',
+                'message' => 'Data draft Kebisingan udara no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status' => true
             ], 201);
         } catch (\Exception $th) {
@@ -364,7 +346,6 @@ class DraftUdaraKebisinganController extends Controller
             $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 
-            // Update QR Document jika ada
             $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
             if ($qr) {
                 $dataQr = json_decode($qr->data, true);
@@ -377,17 +358,47 @@ class DraftUdaraKebisinganController extends Controller
 
             // Render ulang file LHP
             $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
-            if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->whereView('DraftKebisinganPersonal')
-                    ->render();
-            } else {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->whereView('DraftKebisingan')
-                    ->render();
-            }
+            $custom = collect(LhpsKebisinganCustom::where('id_header', $dataHeader->id)->get())
+                ->groupBy('page')
+                ->toArray();
+            // if (in_array('Kebisingan (P8J)', json_decode($dataHeader->parameter_uji, true))) {
+            //     $fileName = LhpTemplate::setDataDetail($detail)
+            //         ->setDataHeader($dataHeader)
+            //         ->whereView('DraftKebisinganPersonal')
+            //         ->render();
+            // } else {
+            //     $fileName = LhpTemplate::setDataDetail($detail)
+            //         ->setDataHeader($dataHeader)
+            //         ->whereView('DraftKebisingan')
+            //         ->render();
+            // }
+               $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
+                if(in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+                    
+                    $master_regulasi = MasterRegulasi::find($id_regulasii);
+                    if($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                          $fileName = LhpTemplate::setDataDetail($detail)
+                            ->setDataHeader($dataHeader)
+                            ->setDataCustom($custom)
+                            ->useLampiran(true)
+                            ->whereView('DraftKebisinganLh')
+                            ->render();
+                    } else if($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                          $fileName = LhpTemplate::setDataDetail($detail)
+                            ->setDataHeader($dataHeader)
+                            ->setDataCustom($custom)
+                            ->useLampiran(true)
+                            ->whereView('DraftKebisinganLh24Jam')
+                            ->render();
+                    }
+                } else {
+                      $fileName = LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($dataHeader)  
+                        ->setDataCustom($custom)
+                        ->useLampiran(true)
+                        ->whereView('DraftKebisingan')
+                        ->render();
+                }
 
         
             $dataHeader->file_lhp = $fileName;
@@ -622,7 +633,7 @@ class DraftUdaraKebisinganController extends Controller
             return response()->json([
                 'data' => $data,
                 'status' => true,
-                'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
+                'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove'
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -692,7 +703,7 @@ class DraftUdaraKebisinganController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . $request->no_lhp . ' berhasil direject'
+                'message' => 'Data draft Kebisingan no LHP ' . $request->no_lhp . ' berhasil direject'
             ], 201);
 
         } catch (\Exception $th) {
@@ -735,8 +746,8 @@ class DraftUdaraKebisinganController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_lhp_kebisingan',
+                        'type' => 'draft_kebisingan',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,
