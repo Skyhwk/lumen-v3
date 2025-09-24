@@ -95,6 +95,7 @@ class RenderNonKontrak
             } else {
                 $sampling = strtoupper(__('QT.status_sampling.S'));
             }
+
             $pdf = new Mpdf($mpdfConfig);
 
             $pdf->charset_in = 'utf-8';
@@ -218,7 +219,7 @@ class RenderNonKontrak
 
             return $getBody;
         } catch (\Throwable $th) {
-            Log::error(['RenderNonKontrakHeader: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            Log::error(['RenderNonKontrakHeader with id: ' . $id . ' : ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
             return false;
         }
     }

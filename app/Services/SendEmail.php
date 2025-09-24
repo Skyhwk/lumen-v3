@@ -182,13 +182,15 @@ class SendEmail
 
             if (!empty($this->cc)) {
                 foreach ($this->cc as $cc) {
-                    $mail->addCC($cc);
+                    $trimCc = preg_replace('/\s+/', '', $cc);
+                    $mail->addCC($trimCc);
                 }
             }
 
             if (!empty($this->bcc)) {
                 foreach ($this->bcc as $bcc) {
-                    $mail->addBCC($bcc);
+                    $trimBcc = preg_replace('/\s+/', '', $bcc);
+                    $mail->addBCC($trimBcc);
                 }
             }
 
@@ -197,7 +199,8 @@ class SendEmail
                     if ($email == 'admsales01@intilab.com') {
                         $mail->addReplyTo($email, 'Admin Sales');
                     } else {
-                        $mail->addReplyTo($email);
+                        $trimTo = preg_replace('/\s+/', '', $email);
+                        $mail->addReplyTo($trimTo);
                     }
                 }
             }

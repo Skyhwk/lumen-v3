@@ -143,6 +143,9 @@ class FdlKebisinganController extends Controller
             if ($request->kebisingan) {
                 $data->value_kebisingan = json_encode($request->kebisingan);
             }
+            if ($request->jam_pemaparan) {
+                $data->jam_pemaparan = $request->jam_pemaparan;
+            }
 
             if ($request->suhu_udara) {
                 $data->suhu_udara = $request->suhu_udara;
