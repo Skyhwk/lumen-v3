@@ -270,9 +270,10 @@ class CodingSampleController extends Controller
             // ->first();
           
 
-           
+          
             if ($psHeader) {
                 $bsDocument = ($psHeader->detail_cs_documents != null) ? json_decode($psHeader->detail_cs_documents) : null;
+                
                 if ($bsDocument != null) {
                     // $temNosampel = $orderDetail->pluck('no_sampel')->toArray();
                     $kategoriList = is_array($request->kategori)
@@ -291,6 +292,7 @@ class CodingSampleController extends Controller
                         // Sort no_sampel dokumen juga
                         $docSamples = $doc->no_sampel;
                         sort($docSamples);
+                        
 
                         $intersection = array_intersect($cleanedSamples, $doc->no_sampel);
                         if (!empty($intersection)) {
@@ -304,9 +306,11 @@ class CodingSampleController extends Controller
                             break;
                         } */
                     }
+                   
                     $bsDocument = $matchedDocument;
                 }
             } else {
+                
                 $psHeader = PersiapanSampelHeader::with('psDetail')->where([
                 'no_order' => $request->no_order,
                 'no_quotation' => $request->no_document,
