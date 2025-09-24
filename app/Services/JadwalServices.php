@@ -342,6 +342,7 @@ class JadwalServices
     // tinggal di test
     public function updateJadwalSP()
     {
+        
         $dataUpdate = $this->updateJadwal;
         
 
@@ -620,9 +621,9 @@ class JadwalServices
             //     }
             // }
             //update order
-            // dd($dataUpdate);
+            
             if ($dataUpdate->kategori != null) {
-
+                
                 $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
                 if ($tipe_qt == 'QTC') {
                     $status_order = QuotationKontrakH::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
@@ -638,10 +639,15 @@ class JadwalServices
                                 $array_no_samples[] = $no_samples;
                             }
 
-                            OrderDetail::where('id_order_header', $orderh->id)
+                            $updated = OrderDetail::where('id_order_header', $orderh->id)
                                 ->where('is_active', true)
                                 ->whereIn('no_sampel', $array_no_samples)
                                 ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
+                            
+                            if ($updated === 0) {
+                                // kalau tidak ada satupun data yang kena update
+                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                            }
                         }
                     }
 
@@ -657,10 +663,15 @@ class JadwalServices
                                 $array_no_samples[] = $no_samples;
                             }
 
-                            OrderDetail::where('id_order_header', $orderh->id)
+                            $updated = OrderDetail::where('id_order_header', $orderh->id)
                                 ->where('is_active', true)
                                 ->whereIn('no_sampel', $array_no_samples)
                                 ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
+                            
+                            if ($updated === 0) {
+                                // kalau tidak ada satupun data yang kena update
+                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                            }
                         }
                     }
                 }
@@ -724,6 +735,7 @@ class JadwalServices
     // tinggal di test
     public function updateJadwalSPKategori()
     {
+        
         $dataUpdate = $this->updateJadwalKategori;
 
         if (
@@ -1002,10 +1014,14 @@ class JadwalServices
                                     $array_no_samples[] = $no_samples;
                                 }
 
-                                OrderDetail::where('id_order_header', $orderh->id)
+                                $update = OrderDetail::where('id_order_header', $orderh->id)
                                     ->where('is_active', true)
                                     ->whereIn('no_sampel', $array_no_samples)
                                     ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
+                                if ($updated === 0) {
+                                // kalau tidak ada satupun data yang kena update
+                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                            }
                             }
                         }
                     } catch (Exception $ex) {
@@ -1024,10 +1040,14 @@ class JadwalServices
                                     $array_no_samples[] = $no_samples;
                                 }
 
-                                OrderDetail::where('id_order_header', $orderh->id)
+                                $update = OrderDetail::where('id_order_header', $orderh->id)
                                     ->where('is_active', true)
                                     ->whereIn('no_sampel', $array_no_samples)
                                     ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
+                                if ($updated === 0) {
+                                    // kalau tidak ada satupun data yang kena update
+                                    throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                                }
                             }
                         }
                     } catch (Exception $ex) {
@@ -1806,6 +1826,7 @@ class JadwalServices
             $status_order = QuotationKontrakH::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
             if ($status_order != null && $status_order->flag_status == 'ordered') {
                 $orderh = OrderHeader::where('no_document', $dataParsial->no_quotation)->where('is_active', true)->first();
+                $notFound =false;
                 foreach ($dataParsial->kategori as $x => $y) {
                     $datsamp = explode(" - ", $y);
                     $kateg = MasterSubKategori::where('nama_sub_kategori', $datsamp[0])->where('is_active', true)->first();
@@ -1819,7 +1840,14 @@ class JadwalServices
                     if ($order_detail != null) {
                         $order_detail->tanggal_sampling = date('Y-m-d', strtotime($dataParsial->tanggal));
                         $order_detail->save();
+                    }else{
+                        $notFound =true;
                     }
+                }
+                if ($notFound) {
+                    throw new \Exception("Ada nomor sampel yang tidak ditemukan, silakan hubungi IT untuk pengecekan.");
+                    // atau bisa pakai response JSON kalau API
+                    // return response()->json(['status' => false, 'message' => 'Ada nomor sampel yang tidak ditemukan, silakan hubungi IT.'], 400);
                 }
             }
 
@@ -1827,7 +1855,6 @@ class JadwalServices
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataParsial->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal $dataParsial->tanggal";
             Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
-
             DB::commit();
             return true;
         } catch (Exception $e) {

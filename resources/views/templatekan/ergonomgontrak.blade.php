@@ -15,6 +15,19 @@
 <body>
     <div class="page-container">
         <!-- DIV main-header-title LAPORAN HASIL PENGUJIAN -->
+        <table class="header-table">
+            <tr>
+                <td class="left-cell">
+                    <img src="{{public_path('img/isl_logo.png')}}" alt="ISL" class="header-logo">
+                </td>
+                <td class="center-cell">
+                    <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                </td>
+                <td class="right-cell">
+                    <img src="{{public_path('img/logo_kan.png')}}" alt="KAN" class="header-logo">
+                </td>
+            </tr>
+        </table>
         <div class="two-column-layout">
             <!-- KIRI -->
             <div class="column column-left">
@@ -267,38 +280,18 @@
                         Tahun 2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
                     </div>
                     <div class="signature-section">
-                        @if($ttd != null)
-                            @if($ttd->qr_path != null)
-                                <table class="signature-table">
-                                    <tr>
-                                        <td class="signature-left"></td>
-                                        <td class="signature-right">
-                                            <div class="signature-date">
-                                                {{ $ttd->tanggal }}
-                                            </div><br>
-                                            <div class="signature-text">
-                                                    <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            @else
-                                <table class="signature-table">
-                                    <tr>
-                                        <td class="signature-left"></td>
-                                        <td class="signature-right" style="text-align: center;">
-                                            <div class="signature-date">
-                                                Tangerang, 13 Agustus 2025
-                                            </div><br><br><br>
-                                            <div class="signature-text">
-                                                <strong>(Abidah Walfathiyyah)</strong><br>
-                                                <span>Technical Control Supervisor</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            @endif
-                        @endif
+                        <table class="signature-table">
+                            <tr>
+                                <td class="signature-left"></td>
+                                <td class="signature-right">
+                                    <div class="signature-date">
+                                        Jakarta, 04 September 2025
+                                    </div><br>
+                                    
+                                    <div class="signature-text">(Tanda Tangan Digital)</div>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
             </div>
