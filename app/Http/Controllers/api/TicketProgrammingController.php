@@ -439,6 +439,11 @@ class TicketProgrammingController extends Controller
             $data->status = 'WAITING PROCESS';
             $data->kategori = $request->kategori;
 
+            if($this->grade == 'MANAGER' && $data->kategori == 'PERUBAHAN_DATA') {
+                $data->approved_by = $this->karyawan;
+                $data->approved_time = Carbon::now()->format('Y-m-d H:i:s');
+            }
+
             $data->save();
 
             $user_programmer = MasterKaryawan::where('id_department', 7)
