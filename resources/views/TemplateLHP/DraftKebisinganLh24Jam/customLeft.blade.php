@@ -2,11 +2,11 @@
     <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
-               <tr>
-                     <th width="6%" rowspan="2" class="custom">NO</th>
-                    <th width="30%" rowspan="2" class="custom">LOKASI / KETERANGAN SAMPLE</th>
-                    <th width="30%" class="custom"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
-                    <th width="24%" rowspan="2" class="custom">TITIK KOORDINAT</th>
+               <     <th width="6%" rowspan="2" class="custom">NO</th>
+                    <th width="25%" rowspan="2" class="custom">LOKASI / KETERANGAN SAMPLE</th>
+                    <th width="25%" class="custom"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
+                    <th width="17%" rowspan="2" class="custom">TITIK KOORDINAT</th>
+                    <th width="17%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th class="custom" >Ls (Siang)</th>
@@ -25,6 +25,7 @@
                         <td class="pd-5-solid-center">{{ $yy['leq_lm'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['leq_lsm'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['titik_koordinat'] }}</td>
+                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
                     </tr>
                 @endforeach
             </tbody>
