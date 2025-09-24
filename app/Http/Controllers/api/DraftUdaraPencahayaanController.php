@@ -31,6 +31,7 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsPencahayaanCustom;
 use App\Models\PengesahanLhp;
 use Carbon\Carbon;
@@ -242,8 +243,8 @@ class DraftUdaraPencahayaanController extends Controller
                 $cleaned_sumber_cahaya = array_combine($cleaned_key_sumber_cahaya, array_values($request->sumber_cahaya));
                 $cleaned_key_jenis_pengukuran = array_map(fn($k) => trim($k, " '\""), array_keys($request->jenis_pengukuran));
                 $cleaned_jenis_pengukuran = array_combine($cleaned_key_jenis_pengukuran, array_values($request->jenis_pengukuran));
-                $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
-                $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
+                // $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
+                // $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
                 $cleaned_key_tanggal_sampling = array_map(fn($k) => trim($k, " '\""), array_keys($request->tanggal_sampling));
                 $cleaned_tanggal_sampling = array_combine($cleaned_key_tanggal_sampling, array_values($request->tanggal_sampling));
                 if (array_key_exists($val, $cleaned_noSampel)) {
@@ -255,7 +256,7 @@ class DraftUdaraPencahayaanController extends Controller
                     $detail->hasil_uji          = $cleaned_hasil_uji[$val];
                     $detail->sumber_cahaya      = $cleaned_sumber_cahaya[$val];
                     $detail->jenis_pengukuran   = $cleaned_jenis_pengukuran[$val];
-                    $detail->nab                = $cleaned_nab[$val];
+                    // $detail->nab                = $cleaned_nab[$val];
                     $detail->tanggal_sampling                = $cleaned_tanggal_sampling[$val];
                     $detail->save();
                 }
@@ -276,7 +277,7 @@ class DraftUdaraPencahayaanController extends Controller
                             'sumber_cahaya'         => $request->custom_sumber_cahaya[$page][$sampel] ?? null,
                             'jenis_pengukuran'      => $request->custom_jenis_pengukuran[$page][$sampel] ?? null,
                             'hasil_uji'             => $request->custom_hasil_uji[$page][$sampel] ?? null,
-                            'nab'                   => $request->custom_nab[$page][$sampel] ?? null,
+                            // 'nab'                   => $request->custom_nab[$page][$sampel] ?? null,
                             'tanggal_sampling'      => $request->custom_tanggal_sampling[$page][$sampel] ?? null
                         ]);
                     }
@@ -324,6 +325,14 @@ class DraftUdaraPencahayaanController extends Controller
                 ->render();
 
             $header->file_lhp = $fileName;
+            if ($header->is_revisi == 1) {
+                $header->is_revisi = 0;
+                $header->is_generated = 0;
+                $header->count_revisi++;
+                if ($header->count_revisi > 2) {
+                    $this->handleApprove($request, false);
+                }
+            }
             $header->save();
 
             DB::commit();
@@ -586,17 +595,41 @@ class DraftUdaraPencahayaanController extends Controller
         }
     }
 
-    public function handleApprove(Request $request)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
-            $data = LhpsPencahayaanHeader::where('id', $request->id)
+            if ($isManual) {
+                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+    
+                if (!$konfirmasiLhp) {
+                    $konfirmasiLhp = new KonfirmasiLhp();
+                    $konfirmasiLhp->created_by = $this->karyawan;
+                    $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                } else {
+                    $konfirmasiLhp->updated_by = $this->karyawan;
+                    $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                }
+    
+                $konfirmasiLhp->no_lhp = $request->cfr;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+    
+                $konfirmasiLhp->save();
+            }
+            
+            $data = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
-            $noSampel = array_map('trim', explode(',', $request->no_sampel));
+            $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp = $data->no_lhp;
 
             $qr = QrDocument::where('id_document', $data->id)
-                ->where('type_document', 'LHP_KEBISINGAN')
+                ->where('type_document', 'LHP_PENCAHAYAAN')
                 ->where('is_active', 1)
                 ->where('file', $data->file_qr)
                 ->orderBy('id', 'desc')
@@ -607,21 +640,25 @@ class DraftUdaraPencahayaanController extends Controller
                     ->whereIn('no_sampel', $noSampel)
                     ->where('is_active', true)
                     ->update([
-                        'is_approved'   => 1,
+                        'is_approve'   => 1,
                         'status'        => 3,
                         'approved_at'   => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by'   => $this->karyawan
                     ]);
 
-                $data->is_approved = 1;
+                $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
                 $data->nama_karyawan = $this->karyawan;
                 $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                if ($data->count_print < 1) {
+                    $data->is_printed = 1;
+                    $data->count_print = $data->count_print + 1;
+                }
                 $data->save();
                 HistoryAppReject::insert([
                     'no_lhp'        => $data->no_lhp,
-                    'no_sampel'     => $request->no_sampel,
+                    'no_sampel'     => $request->noSampel,
                     'kategori_2'    => $data->id_kategori_2,
                     'kategori_3'    => $data->id_kategori_3,
                     'menu'          => 'Draft Udara',
@@ -643,7 +680,7 @@ class DraftUdaraPencahayaanController extends Controller
             return response()->json([
                 'data' => $data,
                 'status' => true,
-                'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
+                'message' => 'Data draft LHP pencahayaan no sampel ' . $no_lhp . ' berhasil diapprove'
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -738,13 +775,13 @@ class DraftUdaraPencahayaanController extends Controller
     // Amang
     public function generate(Request $request)
     {
-
         DB::beginTransaction();
         try {
             $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
-                ->where('id', $request->id)
+                // ->where('id', $request->id)
                 ->first();
+                
             if ($header != null) {
                 $key = $header->no_lhp . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
@@ -765,8 +802,8 @@ class DraftUdaraPencahayaanController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_lhp_pencahayaan',
+                        'type' => 'draft_pencahayaan',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,
@@ -797,6 +834,33 @@ class DraftUdaraPencahayaanController extends Controller
             ], 500);
         }
     }
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 
     // Amang
     public function getUser(Request $request)
@@ -810,7 +874,7 @@ class DraftUdaraPencahayaanController extends Controller
     public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_air', 'type' => 'draft_air'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_pencahayaan', 'type' => 'draft_pencahayaan'])->first();
 
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
