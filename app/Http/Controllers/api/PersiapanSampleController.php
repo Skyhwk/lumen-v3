@@ -465,7 +465,7 @@ class PersiapanSampleController extends Controller
             // ->where('tanggal_sampling', $request->tanggal_sampling)
             ->where('is_active', 1)
             ->get();
-
+        // dd($dataList);
         $psh = $dataList->first(function ($item) use ($request) {
             $noSampelDb = json_decode($item->no_sampel, true) ?? [];
             if (!$noSampelDb) return false;

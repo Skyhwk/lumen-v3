@@ -82,7 +82,8 @@ class VerifikasiLabISLController extends Controller
         try {
             $data = Ftc::where('no_sample', $request->no_sampel)->first();
 
-            if ($data->ftc_laboratory) return response()->json(['message' => 'Nomor sampel sudah pernah di scan'], 401);
+            if ($data->ftc_laboratory)
+                return response()->json(['message' => 'Nomor sampel sudah pernah di scan'], 401);
 
             $data->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');
             $data->user_laboratory = $this->user_id;
@@ -97,96 +98,222 @@ class VerifikasiLabISLController extends Controller
 
     public function checkBottle2(Request $request)
     {
-        DB::beginTransaction();
         $datachek = explode('/', $request->no_sampel);
-        $data = null;
-        $persiapan = null;
-        $dataDisplay = null;
-        $parameters = null;
-        try {
-            if (isset($datachek[1])) {
 
-                $data = ScanSampelTc::where('no_sampel', $request->no_sampel)->first();
-                $dataDisplay = json_decode($data->data_detail);
-                $data_scan_analis = ScanSampelAnalis::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
-                $data_scanned_analis = isset($data_scan_analis) ? json_decode($data_scan_analis->data) : [];
-            } else {
-                $data = ScanSampelTc::whereNotNull('data_detail')
-                    ->whereJsonContains('data_detail', ['koding' => $request->no_sampel])
-                    ->first();
+        $scan = null;
+        $data_botol = [];
+        $data_scanned = [];
+        $data_scanned_analis = [];
 
-                if (!$data) {
-                    return response()->json(["message" => "Botol Belum di SCAN di TC", "code" => 404], 404);
-                }
-                
-                $dataDisplay = json_decode($data->data_detail); 
-                $data_scan_analis = ScanSampelAnalis::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
-                $data_scanned_analis = isset($data_scan_analis) ? json_decode($data_scan_analis->data) : [];
-                foreach ($dataDisplay as $item) {
-                    if ($data->kategori == '1-Air' ) {
-                        $type = $item->jenis_botol;
-                    } else {
-                        $type = $item->parameter;
+        if (isset($datachek[1])) {
+            $scan = ScanSampelTc::where('no_sampel', $request->no_sampel)->first();
 
-                    }
-
-                    if ($item->koding == $request->no_sampel) {
-                        $item->add = 1;
-                    }
-
-                    
-                    // if (isset($parameters->air->$type)) {
-                    //     $item->disiapkan = $parameters->air->$type->disiapkan;
-                    //     if ($item->koding == $request->no_sampel) {
-                    //         $item->add = 1;
-                    //     }
-                    // } else if (isset($parameters->udara->$type)) {
-                    //     $item->disiapkan = $parameters->udara->$type->disiapkan;
-                    //     if ($item->koding == $request->no_sampel) {
-                    //         $item->add = 1;
-                    //     }
-                    // } else {
-                    //     $item->disiapkan = null;
-                    // }
-                }
-
-
+            if (!$scan) {
+                return response()->json([
+                    'message' => 'Botol dengan no sampel tersebut belum di-scan',
+                    'status' => '404'
+                ], 404);
             }
-            foreach ($dataDisplay as $key => $item) {
-                if ($data->kategori == '4-Udara' || $data->kategori == '5-Emisi') {
+
+            $data_scanned = array_map(function ($item) use ($scan) {
+                $item->kategori = $scan->kategori;
+
+                if ($scan->kategori == '4-Udara' || $scan->kategori == '5-Emisi') {
+                    $item->disiapkan = '1';
+                } else {
+                    $item->disiapkan = $item->jumlah;
+                }
+
+                return $item;
+            }, json_decode($scan->data_detail, false) ?: []);
+
+            $data_scan_analis = ScanSampelAnalis::where('no_sampel', $request->no_sampel)
+                ->where('is_active', 1)
+                ->first();
+
+            $data_scanned_analis = $data_scan_analis ? json_decode($data_scan_analis->data, false) : [];
+
+            // if (count($data_scanned) !== count($scanned_filter)) {
+            //     return response()->json([
+            //         'message' => 'Botol dengan no sampel tersebut belum lengkap',
+            //         'status' => '500'
+            //     ], 500);
+            // }
+
+            $data_botol = array_values($data_scanned);
+        } else {
+            $scan = ScanSampelTc::whereRaw(
+                "JSON_CONTAINS(data_detail, ?)",
+                ['{"koding": "' . $request->no_sampel . '"}']
+            )->first();
+
+            if (!$scan) {
+                return response()->json([
+                    'message' => 'Botol dengan kode tersebut belum di-scan',
+                    'status' => '404'
+                ], 404);
+            }
+
+            $data_scanned = array_map(function ($item) use ($scan) {
+                $item->kategori = $scan->kategori;
+
+                if ($scan->kategori == '4-Udara' || $scan->kategori == '5-Emisi') {
+                    $item->disiapkan = '1';
+                } else {
+                    $item->disiapkan = $item->jumlah;
+                }
+
+                return $item;
+            }, json_decode($scan->data_detail, false) ?: []);
+
+            $data_scan_analis = ScanSampelAnalis::whereRaw(
+                "JSON_CONTAINS(data, ?)",
+                ['{"koding": "' . $request->no_sampel . '"}']
+            )
+                ->where('is_active', 1)
+                ->first();
+
+            $data_scanned_analis = $data_scan_analis ? json_decode($data_scan_analis->data, false) : [];
+
+            // if (count($data_scanned) !== count($scanned_filter)) {
+            //     return response()->json([
+            //         'message' => 'Botol dengan no sampel tersebut belum lengkap',
+            //         'status' => '500'
+            //     ], 500);
+            // }
+
+            $data_botol = array_map(function ($item) use ($request) {
+                if ($item->koding === $request->no_sampel) {
+                    $item->add = 1;
+                }
+                return $item;
+            }, $data_scanned);
+
+            foreach ($data_scanned as $key => $item) {
+                if ($scan->kategori == '4-Udara' || $scan->kategori == '5-Emisi') {
                     $item->disiapkan = '1';
                 }
-                $item->kategori = $data->kategori;
+                $item->kategori = $scan->kategori;
 
+                $parameterExcludeEmisi = ['SO2', 'NO2', 'Velocity', 'NOX'];
 
-                 $parameterExcludeEmisi = [
-                    'SO2',
-                    'NO2',
-                    'Velocity',
-                    'NOX'
-                 ];
-
-                if($data->kategori == '5-Emisi' && in_array($item->parameter, $parameterExcludeEmisi)){ 
-                    unset($dataDisplay[$key]);
+                if (
+                    $scan->kategori == '5-Emisi'
+                    && isset($item->jenis_botol->parameter)
+                    && in_array($item->jenis_botol->parameter, $parameterExcludeEmisi)
+                ) {
+                    unset($data_scanned[$key]);
                 }
-    
+
+                if ($item->koding === $request->no_sampel) {
+                    $item->add = 1;
+                }
             }
 
-            $dataDisplay = array_values($dataDisplay);
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
-                'status' => '200',
-                'data_botol' => $dataDisplay,
-                'no_sampel' => $data->no_sampel,
-                'data_scan' => $data_scanned_analis ?? []
-            ], 200);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json(['message' => 'No sample tidak ditemukan', 'status' => '400', 'log' => $th->getMessage(),'getLine' => $th->getLine(), 'getFile' => $th->getFile()], 400);
+            $data_scanned = array_values($data_scanned);
         }
+
+        return response()->json([
+            'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
+            'status' => '200',
+            'data_botol' => $data_botol,
+            'no_sampel' => $scan->no_sampel ?? null,
+            'data_scan' => $data_scanned_analis
+        ], 200);
     }
+
+    // public function checkBottle2(Request $request)
+    // {
+    //     DB::beginTransaction();
+    //     $datachek = explode('/', $request->no_sampel);
+    //     $data = null;
+    //     $persiapan = null;
+    //     $dataDisplay = null;
+    //     $parameters = null;
+    //     try {
+    //         if (isset($datachek[1])) {
+
+    //             $data = ScanSampelTc::where('no_sampel', $request->no_sampel)->first();
+    //             $dataDisplay = json_decode($data->data_detail);
+    //             $data_scan_analis = ScanSampelAnalis::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
+    //             $data_scanned_analis = isset($data_scan_analis) ? json_decode($data_scan_analis->data) : [];
+    //         } else {
+    //             $data = ScanSampelTc::whereNotNull('data_detail')
+    //                 ->whereJsonContains('data_detail', ['koding' => $request->no_sampel])
+    //                 ->first();
+
+    //             if (!$data) {
+    //                 return response()->json(["message" => "Botol Belum di SCAN di TC", "code" => 404], 404);
+    //             }
+
+    //             $dataDisplay = json_decode($data->data_detail);
+    //             $data_scan_analis = ScanSampelAnalis::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
+    //             $data_scanned_analis = isset($data_scan_analis) ? json_decode($data_scan_analis->data) : [];
+    //             foreach ($dataDisplay as $item) {
+    //                 if ($data->kategori == '1-Air') {
+    //                     $type = $item->jenis_botol;
+    //                 } else {
+    //                     $type = $item->parameter;
+
+    //                 }
+
+    //                 if ($item->koding == $request->no_sampel) {
+    //                     $item->add = 1;
+    //                 }
+
+
+    //                 // if (isset($parameters->air->$type)) {
+    //                 //     $item->disiapkan = $parameters->air->$type->disiapkan;
+    //                 //     if ($item->koding == $request->no_sampel) {
+    //                 //         $item->add = 1;
+    //                 //     }
+    //                 // } else if (isset($parameters->udara->$type)) {
+    //                 //     $item->disiapkan = $parameters->udara->$type->disiapkan;
+    //                 //     if ($item->koding == $request->no_sampel) {
+    //                 //         $item->add = 1;
+    //                 //     }
+    //                 // } else {
+    //                 //     $item->disiapkan = null;
+    //                 // }
+    //             }
+
+
+    //         }
+    //         foreach ($dataDisplay as $key => $item) {
+    //             if ($data->kategori == '4-Udara' || $data->kategori == '5-Emisi') {
+    //                 $item->disiapkan = '1';
+    //             }
+    //             $item->kategori = $data->kategori;
+
+
+    //             $parameterExcludeEmisi = [
+    //                 'SO2',
+    //                 'NO2',
+    //                 'Velocity',
+    //                 'NOX'
+    //             ];
+
+    //             if ($data->kategori == '5-Emisi' && in_array($item->parameter, $parameterExcludeEmisi)) {
+    //                 unset($dataDisplay[$key]);
+    //             }
+
+    //         }
+
+    //         $dataDisplay = array_values($dataDisplay);
+
+    //         DB::commit();
+    //         return response()->json([
+    //             'message' => 'Botol dengan no sampel tersebut berhasil di dapatkan',
+    //             'status' => '200',
+    //             'data_botol' => $dataDisplay,
+    //             'no_sampel' => $data->no_sampel,
+    //             'data_scan' => $data_scanned_analis ?? []
+    //         ], 200);
+    //     } catch (\Throwable $th) {
+    //         DB::rollBack();
+    //         return response()->json(['message' => 'No sample tidak ditemukan', 'status' => '400', 'log' => $th->getMessage(), 'getLine' => $th->getLine(), 'getFile' => $th->getFile()], 400);
+    //     }
+    // }
 
 
 
@@ -208,7 +335,8 @@ class VerifikasiLabISLController extends Controller
             });
 
             $data_scan = array_filter($data_scan, function ($item) use (&$lengkap) {
-                if (isset($item['add'])) unset($item['add']);
+                if (isset($item['add']))
+                    unset($item['add']);
                 return $item;
             });
 
@@ -219,7 +347,7 @@ class VerifikasiLabISLController extends Controller
                 $data->data = json_encode($data_scan);
                 $data->updated_at = Carbon::now();
                 $data->updated_by = $this->karyawan;
-                $data->status = 'lengkap';
+                $data->status = $lengkap ? 'lengkap' : 'belum_lengkap';
                 $data->save();
             } else {
                 $data = new ScanSampelAnalis();
@@ -227,12 +355,12 @@ class VerifikasiLabISLController extends Controller
                 $data->data = json_encode($data_scan);
                 $data->created_at = Carbon::now();
                 $data->created_by = $this->karyawan;
-                $data->status = 'lengkap';
+                $data->status = $lengkap ? 'lengkap' : 'belum_lengkap';
                 $data->save();
             }
-            
+
             $ftc = Ftc::where('no_sample', $no_sampel)->first();
-            if(is_null($ftc)) {
+            if (is_null($ftc)) {
                 $ftc = new Ftc();
                 $ftc->no_sample = $no_sampel;
 
@@ -240,9 +368,9 @@ class VerifikasiLabISLController extends Controller
             $ftc->ftc_laboratory = Carbon::now()->format('Y-m-d H:i:s');
             $ftc->user_laboratory = $this->user_id;
             $ftc->save();
-            
-            $order_detail->tanggal_terima =  Carbon::now()->format('Y-m-d');
-            $order_detail->save();
+
+            // $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+            // $order_detail->save();
 
             DB::commit();
             return response()->json(['message' => 'Data berhasil disimpan dengan no sample ' . $request->no_sampel, 'status' => '201'], 201);

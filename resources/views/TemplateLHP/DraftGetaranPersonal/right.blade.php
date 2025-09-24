@@ -74,60 +74,39 @@ use App\Models\MasterRegulasi;
                             </td>
                         </tr>
 
-                        {{-- Tanggal Sampling / Terima --}}
-                        <!-- <tr>
-                            <td class="custom5" width="120">
-                                @if ($header->status_sampling == 'SD') 
-                                    Tanggal Terima 
-                                @else 
-                                    Tanggal Sampling 
-                                @endif
-                            </td>
-                            <td class="custom5" width="12">:</td>
-                            @php
-                                $tanggal_ = $header->status_sampling == 'SD'
-                                    ? $header->tanggal_terima
-                                    : $header->tanggal_sampling;
-                            @endphp
-                            <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                        </tr> -->
                     </table>
 
                 {{-- Regulasi --}}
-                <!-- @if (!empty($header->regulasi))
-                    <table style="padding-top: 10px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
+             
+                @if (!empty($header->regulasi))
+        
+                    @foreach (json_decode($header->regulasi) as $y)
+                        <table style="padding-top: 10px;" width="100%">
                             <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
+                                @php
+                                
+                                @endphp
+                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
                             </tr>
-                        @endforeach
-                    </table>
-                @endif -->
-                  @if (!empty($header->regulasi))
-                
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <table style="padding-top: 10px;" width="100%">
+                        </table>
+                    @endforeach
+                       @php
+                            // pastikan $header ada nilainya
+                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
+                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
+                                if (!empty($table)) {
+                                $table = $table->konten;
+                            } else {
+                                $table = '';
+                            }
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
                                 </tr>
-                            </table>
-                            @php
-                                // pastikan $header ada nilainya
-                                $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                                $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
-                                    if (!empty($table)) {
-                                    $table = $table->konten;
-                                } else {
-                                    $table = '';
-                                }
-                            @endphp
-                        {!! preg_replace(
-                                '/<table(\s|>)/i',
-                                '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
-                                $table
-                            ) !!}
-
-                        @endforeach
+                        </table>
+                        @endif
                     
                 @endif
             </td>

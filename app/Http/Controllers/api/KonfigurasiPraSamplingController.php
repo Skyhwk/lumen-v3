@@ -235,6 +235,8 @@ class KonfigurasiPraSamplingController extends Controller
 
             $data->volume = $request->volume;
             $data->regen = $request->regen;
+            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->updated_by = $this->karyawan;
             $data->save();
 
             DB::commit();
