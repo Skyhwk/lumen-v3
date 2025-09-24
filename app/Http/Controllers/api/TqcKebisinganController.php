@@ -31,12 +31,14 @@ class TqcKebisinganController extends Controller
             DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
             'kategori_1',
             'konsultan',
+            'regulasi',
+            'parameter',
         )
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "26-Kualitas Udara Dalam Ruang"])
-            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', "regulasi", "parameter")
             ->orderBy('max_id', 'desc');
 
         return Datatables::of($data)
@@ -74,7 +76,7 @@ class TqcKebisinganController extends Controller
         $data = [];
         foreach ($orderDetails as $orderDetail) {
             $kebisinganHeader = KebisinganHeader::where('no_sampel', $orderDetail->no_sampel)->first();
-
+// dd($kebisinganHeader);
             $lhpsKebisinganHeader = LhpsKebisinganHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
             $lhpsKebisinganDetail = LhpsKebisinganDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
                 ->pluck('hasil_uji')
@@ -85,10 +87,12 @@ class TqcKebisinganController extends Controller
                 'titik' => $orderDetail->keterangan_1,
                 'history' => $lhpsKebisinganDetail,
                 'hasil' => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil1,
-                'min' => optional($kebisinganHeader)->min,
-                'max' => optional($kebisinganHeader)->max,
-                'analyst' => optional($lhpsKebisinganHeader)->created_by,
-                'approved_by' => optional($lhpsKebisinganHeader)->approved_by
+                'leq_ls' => optional($kebisinganHeader)->leq_ls,
+                'leq_lm' => optional($kebisinganHeader)->leq_lm,
+                // 'analyst' => optional($lhpsKebisinganHeader)->created_by,
+                // 'approved_by' => optional($lhpsKebisinganHeader)->approved_by
+                'analyst' => optional($kebisinganHeader)->created_by,
+                'approved_by' => optional($kebisinganHeader)->approved_by
             ];
         }
 

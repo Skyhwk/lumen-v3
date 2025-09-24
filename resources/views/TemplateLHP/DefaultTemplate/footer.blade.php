@@ -33,7 +33,8 @@
                     <strong>Cetakan ke-{{$header->count_print}}</strong><br/>
                 @endif
             @endif
-            Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
+            <!-- Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium. -->
+            Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.
             @if ($mode != 'downloadWSDraft')
             <br>Halaman {PAGENO} - {nbpg}
             @endif
