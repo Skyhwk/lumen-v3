@@ -203,7 +203,7 @@ class TelegramController extends Controller
         } else if($respons == Carbon::now()->subMonth(1)->format('Y-m')){
             self::update($chat_id, $message_id, self::getAbsen(Carbon::now()->subMonth(1)->format('Y-m'), $chat_id));
         } else if($respons == Carbon::now()->format('Y-m')){
-            self::update($chat_id, $message_id, self::getAbsen(Carbon::now()->format('m'), $chat_id));
+            self::update($chat_id, $message_id, self::getAbsen(Carbon::now()->format('Y-m'), $chat_id));
         } else if ($respons == 'pengambilan_barang'){
             $data = MasterKaryawan::where('pin_user', $chat_id)->where('is_active', 1)->first();
             if($data!=null){
