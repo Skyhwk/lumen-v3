@@ -753,8 +753,8 @@ class DraftUdaraKebisinganController extends Controller
                             'token' => $token,
                             'key' => $gen,
                             'id_quotation' => $header->id,
-                            'quotation_status' => 'draft_lhp_kebisingan',
-                            'type' => 'draft_kebisingan',
+                            'quotation_status' => 'draft_kebisingan',
+                            'type' => 'draft',
                             'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                             'fileName_pdf' => $header->file_lhp,
                             'created_by' => $this->karyawan,
@@ -800,7 +800,7 @@ class DraftUdaraKebisinganController extends Controller
     public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_kebisingan', 'type' => 'draft_kebisingan'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_kebisingan', 'type' => 'draft'])->first();
 
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
