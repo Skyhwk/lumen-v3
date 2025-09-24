@@ -2854,6 +2854,13 @@ class AppsBasController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "O2 (ESTB)",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "O2 (P)",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",
