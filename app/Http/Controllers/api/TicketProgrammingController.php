@@ -55,12 +55,8 @@ class TicketProgrammingController extends Controller
                         }
                     })
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
-                        $can_approve = in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
-
-                        if($this->grade == 'MANAGER'){
-                            $can_approve = true;
-                        }
-                        return $can_approve;
+                        // comment
+                        return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
                     })
                     ->make(true);
             }
@@ -442,6 +438,11 @@ class TicketProgrammingController extends Controller
 
             $data->status = 'WAITING PROCESS';
             $data->kategori = $request->kategori;
+
+            if($this->grade == 'MANAGER' && $data->kategori == 'PERUBAHAN_DATA') {
+                $data->approved_by = $this->karyawan;
+                $data->approved_time = Carbon::now()->format('Y-m-d H:i:s');
+            }
 
             $data->save();
 
