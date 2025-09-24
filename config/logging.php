@@ -74,6 +74,20 @@ return [
             'level' => 'critical',
         ],
 
+        'release_frontend' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_frontend/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
+        'release_backend' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/release_backend/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'render' => [
             'driver' => 'daily',
             'path' => storage_path('logs/render/render.log'),
