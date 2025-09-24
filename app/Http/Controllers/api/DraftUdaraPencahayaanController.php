@@ -680,7 +680,8 @@ class DraftUdaraPencahayaanController extends Controller
             return response()->json([
                 'data' => $data,
                 'status' => true,
-                'message' => 'Data draft LHP pencahayaan no sampel ' . $no_lhp . ' berhasil diapprove'
+                'message' => 'Data draft LHP Pencahayaan no LHP ' . $no_lhp . ' berhasil diapprove'
+
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -761,7 +762,7 @@ class DraftUdaraPencahayaanController extends Controller
             DB::commit();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . ($no_lhp ?? '-') . ' berhasil direject'
+                'message' => 'Data draft Pencahayaan no LHP ' . ($no_lhp ?? '-') . ' berhasil direject'
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
