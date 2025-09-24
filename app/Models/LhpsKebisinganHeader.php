@@ -25,5 +25,11 @@ class LhpsKebisinganHeader extends Sector
     {
         return $this->hasMany(LhpsKebisinganCustom::class, 'id_header', 'id');
     }
- 
+
+    public function link ()
+    {
+        return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
+        ->where('quotation_status', 'draft_kebisingan');
+    }
+
 }
