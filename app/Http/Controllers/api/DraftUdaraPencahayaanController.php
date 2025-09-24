@@ -655,86 +655,85 @@ class DraftUdaraPencahayaanController extends Controller
         }
     }
 
-    // Amang
-   public function handleReject(Request $request)
-{
-    DB::beginTransaction();
-    try {
+    public function handleReject(Request $request)
+    {
+        DB::beginTransaction();
+        try {
 
-        $lhps = LhpsPencahayaanHeader::where('id', $request->id)
-            ->where('is_active', true)
-            ->first();
+            $lhps = LhpsPencahayaanHeader::where('id', $request->id)
+                ->where('is_active', true)
+                ->first();
 
-        $no_lhp = $lhps->no_lhp ?? null;
+            $no_lhp = $lhps->no_lhp ?? null;
 
-        if ($lhps) {
-            HistoryAppReject::insert([
-                'no_lhp' => $lhps->no_lhp,
-                'no_sampel' => $request->no_sampel,
-                'kategori_2' => $lhps->id_kategori_2,
-                'kategori_3' => $lhps->id_kategori_3,
-                'menu' => 'Draft Udara',
-                'status' => 'rejected',
-                'rejected_at' => Carbon::now(),
-                'rejected_by' => $this->karyawan
+            if ($lhps) {
+                HistoryAppReject::insert([
+                    'no_lhp' => $lhps->no_lhp,
+                    'no_sampel' => $request->no_sampel,
+                    'kategori_2' => $lhps->id_kategori_2,
+                    'kategori_3' => $lhps->id_kategori_3,
+                    'menu' => 'Draft Udara',
+                    'status' => 'rejected',
+                    'rejected_at' => Carbon::now(),
+                    'rejected_by' => $this->karyawan
+                ]);
+
+                // History Header
+                $lhpsHistory = $lhps->replicate();
+                $lhpsHistory->setTable((new LhpsPencahayaanHeaderHistory())->getTable());
+                $lhpsHistory->created_at = $lhps->created_at;
+                $lhpsHistory->updated_at = $lhps->updated_at;
+                $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+                $lhpsHistory->deleted_by = $this->karyawan;
+                $lhpsHistory->save();
+
+                // History Detail
+                $oldDetails = LhpsPencahayaanDetail::where('id_header', $lhps->id)->get();
+                foreach ($oldDetails as $detail) {
+                    $detailHistory = $detail->replicate();
+                    $detailHistory->setTable((new LhpsPencahayaanDetailHistory())->getTable());
+                    $detailHistory->created_by = $this->karyawan;
+                    $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $detailHistory->save();
+                }
+
+                foreach ($oldDetails as $detail) {
+                    $detail->delete();
+                }
+
+                $lhps->delete();
+            }
+
+            $noSampel = array_map('trim', explode(",", $request->no_sampel));
+
+            if ($no_lhp) {
+                OrderDetail::where('cfr', $no_lhp)
+                    ->whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            } else {
+                // kalau tidak ada LHP, update tetap bisa dilakukan dengan kriteria lain
+                // contoh: berdasarkan no_sampel saja
+                OrderDetail::whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            }
+
+            DB::commit();
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Data draft no sample ' . ($no_lhp ?? '-') . ' berhasil direject'
             ]);
-
-            // History Header
-            $lhpsHistory = $lhps->replicate();
-            $lhpsHistory->setTable((new LhpsPencahayaanHeaderHistory())->getTable());
-            $lhpsHistory->created_at = $lhps->created_at;
-            $lhpsHistory->updated_at = $lhps->updated_at;
-            $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
-            $lhpsHistory->deleted_by = $this->karyawan;
-            $lhpsHistory->save();
-
-            // History Detail
-            $oldDetails = LhpsPencahayaanDetail::where('id_header', $lhps->id)->get();
-            foreach ($oldDetails as $detail) {
-                $detailHistory = $detail->replicate();
-                $detailHistory->setTable((new LhpsPencahayaanDetailHistory())->getTable());
-                $detailHistory->created_by = $this->karyawan;
-                $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                $detailHistory->save();
-            }
-
-            foreach ($oldDetails as $detail) {
-                $detail->delete();
-            }
-
-            $lhps->delete();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+            ]);
         }
-
-        $noSampel = array_map('trim', explode(",", $request->no_sampel));
-
-        if ($no_lhp) {
-            OrderDetail::where('cfr', $no_lhp)
-                ->whereIn('no_sampel', $noSampel)
-                ->update([
-                    'status' => 1
-                ]);
-        } else {
-            // kalau tidak ada LHP, update tetap bisa dilakukan dengan kriteria lain
-            // contoh: berdasarkan no_sampel saja
-            OrderDetail::whereIn('no_sampel', $noSampel)
-                ->update([
-                    'status' => 1
-                ]);
-        }
-
-        DB::commit();
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Data draft no sample ' . ($no_lhp ?? '-') . ' berhasil direject'
-        ]);
-    } catch (\Exception $th) {
-        DB::rollBack();
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Terjadi kesalahan ' . $th->getMessage()
-        ]);
     }
-}
 
     // Amang
     public function generate(Request $request)
