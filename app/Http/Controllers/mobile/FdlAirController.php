@@ -284,8 +284,8 @@ class FdlAirController extends Controller
                             if ($request->selected_type_debit == 'Input Data' && $request->debit_air != '' && $request->satuan_debit != '') {
                                 $data->debit_air = $request->debit_air . ' ' . $request->satuan_debit;
                             } else if ($request->selected_type_debit == 'Data By Customer' && $request->debit_air != '') {
-                                if ($request->selected_type_customer == 'Email' && $request->debit_air != '') {
-                                    $data->debit_air = 'Data By Customer(' . $request->debit_air . ')';
+                                if ($request->selected_type_customer == 'Email') {
+                                    $data->debit_air = 'Data By Customer( Email )';
                                 } else if ($request->selected_type_customer == 'Input Data' && $request->debit_air != '') {
                                     if ($request->satuan_debit != '' && $request->debit_air != '') {
                                         $data->debit_air = 'Data By Customer(' . $request->debit_air . ' ' . $request->satuan_debit . ')';
