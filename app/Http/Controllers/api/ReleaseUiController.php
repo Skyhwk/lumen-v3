@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\ReleaseSystem;
+use App\Models\Menu;
 
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -26,12 +27,32 @@ class ReleaseUiController extends Controller
         $outputLog = [];
 
         $startTime = Carbon::now();
+        
+        $versionFile = '/var/www/javascript/react-js/src/utils/version.json';
+        $version = null;
+        if (file_exists($versionFile)) {
+            $versionContent = file_get_contents($versionFile);
+            $version = json_decode($versionContent, true);
+            $oldVersion = $version;
+            $awal = \explode('.', $version['version'])[2];
+            if($awal == 1){
+                $awal = 518;
+            } else {
+                $awal = $awal + 1;
+            }
+        }
 
+        $countMenu = $this->getCountMenu();
+
+        $numberPatch = '3.'.$countMenu.'.'.$awal;
+        
         try {
+            $lastData = ReleaseSystem::where('system', 'Frontend')->where('is_main', true)->orderBy('id', 'desc')->first();
+
             $projectDir = '/var/www/javascript/react-js';
             $buildDir   = "$projectDir/build";
             $deployDir  = '/var/www/javascript/frontend/build';
-            $backupDir  = '/mnt/backup/file/frontend/backup-' . date('dmyHi');
+            $backupDir  = '/mnt/backup/file/frontend/' . $lastData && $lastData->patch ? $lastData->patch : 'backup-' . date('dmyHi');
 
             $commands = [
                 "cd $projectDir && git pull --ff-only origin main",
@@ -40,7 +61,14 @@ class ReleaseUiController extends Controller
                 "rsync -a --delete $buildDir/ $deployDir/"
             ];
 
-            foreach ($commands as $cmd) {
+            foreach ($commands as $key => $cmd) {
+                if($key == 1){
+                    if (file_exists($versionFile)) {
+                        $version['version'] = $numberPatch;
+                        file_put_contents($versionFile, json_encode($version, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                    }
+                }
+                
                 $process = Process::fromShellCommandline($cmd);
                 $process->setTimeout(1200); // 20 menit
                 $process->run();
@@ -53,6 +81,10 @@ class ReleaseUiController extends Controller
                 ];
 
                 if (!$process->isSuccessful()) {
+                    if ($oldVersion) {
+                        file_put_contents($versionFile, json_encode($oldVersion, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                    }
+
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
@@ -71,8 +103,15 @@ class ReleaseUiController extends Controller
                 'proses_by'     => $this->karyawan,
                 'proses_at'     => $startTime,
                 'done_at'       => $endTime,
-                'duration_sec'  => $duration // pastikan kolom ini ada di tabel
+                'duration_sec'  => $duration,
+                'patch'         => $numberPatch,
+                'is_main'       => true
             ]);
+
+            if($lastData) {
+                $lastData->is_main = false;
+                $lastData->save();
+            }
 
             DB::commit();
 
@@ -84,6 +123,10 @@ class ReleaseUiController extends Controller
                 'logs'     => $outputLog
             ]);
         } catch (\Throwable $th) {
+            if ($oldVersion) {
+                file_put_contents($versionFile, json_encode($oldVersion, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            }
+
             DB::rollBack();
             Log::channel('release_frontend')->error('Frontend gagal dirilis!', $outputLog);
             return response()->json([
@@ -93,5 +136,92 @@ class ReleaseUiController extends Controller
                 'error'   => $th->getMessage()
             ], 500);
         }
+    }
+
+    private function getCountMenu()
+    {
+        $menu = Menu::where('is_active', true)->get();
+
+        $transformedData = $menu->map(function ($item) {
+            $children = collect($item->submenu)->map(function ($submenu) {
+                $submenu = (object) $submenu;
+                $children = collect($submenu->sub_menu)->map(function ($subMenuItem) {
+                    return [
+                        'name' => $subMenuItem,
+                        'path' => '/' . \Illuminate\Support\Str::slug($subMenuItem)
+                    ];
+                });
+
+                return [
+                    'name' => $submenu->nama_inden_menu,
+                    'path' => '/' . \Illuminate\Support\Str::slug($submenu->nama_inden_menu),
+                    'children' => $children
+                ];
+            });
+
+            return [
+                'name' => $item->menu,
+                'icon' => $item->icon,
+                'children' => $children,
+                'path' => '/' . \Illuminate\Support\Str::slug($item->menu)
+            ];
+        });
+
+        return count($this->getMenus($transformedData));
+    }
+
+    private function getMenus($menu)
+    {
+        $result = [];
+
+        foreach ($menu as $item) {
+            // Jika item memiliki children
+            if (isset($item['children']) && count($item['children']) > 0) {
+
+                foreach ($item['children'] as $child) {
+                    if (isset($child['children']) && count($child['children']) > 0) {
+                        foreach ($child['children'] as $grandChild) {
+                            if (isset($grandChild['path'])) {
+                                $permissions = $this->getPermissions($grandChild['name']);
+                                $result[] = array_merge(
+                                    $permissions,
+                                    [
+                                        'name' => '→→ ' . $grandChild['name']
+                                    ]
+                                );
+                            }
+                        }
+                    } else if (isset($child['path'])) {
+                        $permissions = $this->getPermissions($child['name']);
+                        $result[] = array_merge(
+                            $permissions,
+                            [
+                                'name' => '→ ' . $child['name']
+                            ]
+                        );
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function getPermissions($name)
+    {
+        $defaultPermissions = [
+            'name' => $name,
+            'view' => false,
+            'create' => false,
+            'update' => false,
+            'delete' => false,
+            'export' => false,
+            'import' => false,
+            'approve' => false,
+            'reject' => false,
+            'all' => false,
+        ];
+
+        return $defaultPermissions;
     }
 }
