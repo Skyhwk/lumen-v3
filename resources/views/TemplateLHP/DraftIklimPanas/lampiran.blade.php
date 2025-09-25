@@ -41,7 +41,7 @@
                         ],
                         $table
                     ) !!}
-                   {!! preg_replace(
+                   {{-- {!! preg_replace(
                     '/<th(\s|>)/i',
                     '<th style="background:#f2f2f2; font-weight:bold; text-align:center;"$1',
                     preg_replace(
@@ -53,7 +53,7 @@
                             $table
                         )
                     )
-                ) !!}
+                ) !!} --}}
                 </div>
             @endif
         @endforeach
@@ -94,7 +94,7 @@
                         ],
                         $table
                     ) !!}
-                 {!! preg_replace(
+                 {{-- {!! preg_replace(
                     '/<th(\s|>)/i',
                     '<th style="background:#f2f2f2; font-weight:bold; text-align:center;"$1',
                     preg_replace(
@@ -106,7 +106,7 @@
                             $table
                         )
                     )
-                ) !!}
+                ) !!} --}}
 
 
                 </div>
