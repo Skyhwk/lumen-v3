@@ -12,7 +12,27 @@
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
                         <td class="custom">{{ $header->no_sampel }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">
+                            @php
+                                $aliases = [
+                                    'Air Bersih' => 'Air untuk Keperluan Higiene Sanitasi',
+                                    'Air Limbah Domestik' => 'Air Limbah',
+                                    'Air Limbah Industri' => 'Air Limbah',
+                                    'Air Permukaan' => 'Air Sungai',
+                                    'Air Kolam Renang' => 'Air Kolam Renang',
+                                    'Air Higiene Sanitasi' => 'Air untuk Keperluan Higiene Sanitasi',
+                                    'Air Khusus' => 'Air Reverse Osmosis',
+                                    'Air Limbah Terintegrasi' => 'Air Limbah',
+                                ];
+
+                                $categoryName = explode('-', $header->sub_kategori)[1];
+                                if (array_key_exists($categoryName, $aliases)) {
+                                    $categoryName = $aliases[$categoryName];
+                                }
+
+                                echo $categoryName;
+                            @endphp
+                        </td>
                     </tr>
                 </table>
             </td>
