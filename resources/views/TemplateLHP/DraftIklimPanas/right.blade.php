@@ -52,24 +52,18 @@
                         </td>
                     </tr>
                     <tr>
-                    @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
-                    @endphp
-                        <td class="custom5" width="120">Metode Sampling</td>
+                     <td class="custom5" width="120">Spesifikasi Metode</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @foreach($methode_sampling as $index => $item)
-                                    <tr>
-                                        @if (count($methode_sampling) > 1)
-                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                            <td class="custom5">{{ $item ?? '-' }}</td>
-                                        @else
-                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                        @endif
-                                    </tr>
-                                @endforeach
-                            </table>
+                            @if (count($header->metode_sampling) > 1)
+                                <ol>
+                                    @foreach($header->metode_sampling as $index => $item)
+                                        <li>{{ $item ?? '-' }}</li>
+                                    @endforeach
+                                </ol>
+                            @else
+                                {{ $header->metode_sampling[0] ?? '-' }}
+                            @endif
                         </td>
                     </tr>
                 </table>
