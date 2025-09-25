@@ -679,7 +679,7 @@ class DraftUlkSinarUvController extends Controller
             $lhps = LhpsSinarUVHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
-            $no_lhp = $lhps->no_lhp;
+            $no_lhp = $lhps->no_lhp ?? null;
             if ($lhps) {
                 HistoryAppReject::insert([
                     'no_lhp' => $lhps->no_lhp,
@@ -721,11 +721,21 @@ class DraftUlkSinarUvController extends Controller
                 $lhps->delete();
             }
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+
+            if ($no_lhp) {
+                OrderDetail::where('cfr', $no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1
                     ]);
+            } else {
+                // kalau tidak ada LHP, update tetap bisa dilakukan dengan kriteria lain
+                // contoh: berdasarkan no_sampel saja
+                OrderDetail::whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            }
 
 
             DB::commit();
