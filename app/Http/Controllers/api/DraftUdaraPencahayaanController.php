@@ -512,6 +512,8 @@ class DraftUdaraPencahayaanController extends Controller
                     }
                 }
 
+                $data_entry = collect($data_entry)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+
                 return response()->json([
                     'status'    => true,
                     'data'      => $data_entry,
