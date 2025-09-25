@@ -6,14 +6,16 @@
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
-                <table style="border-collapse: collapse; text-align: center;" width="100%">
+               <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="240">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Iklim Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
