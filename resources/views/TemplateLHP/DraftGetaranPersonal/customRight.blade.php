@@ -84,9 +84,14 @@
                         <table style="padding-top: 10px;" width="100%">
                             <tr>
                                 @php
-                                
+                                    $cekRegulasi = explode('-',$y);
+                                    if(count($cekRegulasi) > 1){
+                                        $regulasi = $cekRegulasi[1];
+                                    } else {
+                                        $regulasi = $cekRegulasi[0];
+                                    }
                                 @endphp
-                                <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $regulasi }}</strong></td>
                             </tr>
                         </table>
                     @endforeach

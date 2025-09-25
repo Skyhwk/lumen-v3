@@ -10,10 +10,12 @@
                     <tr>
                         <td class="custom" width="120">No. LHP</td>
                         <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="200">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Pencahayaan Lingkungan Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
