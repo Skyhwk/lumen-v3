@@ -8,7 +8,7 @@
                 <tr>
                     <th width="6%" class="custom">NO</th>
                     <th width="30%" class="custom">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="10%" class="custom">HASIL UJI</th>
+                    <th width="10%" class="custom">HASIL UJI (dBA)</th>
                     <th width="30%" class="custom">TITIK KOORDINAT</th>
                     <th width="24%" class="custom">TANGGAL SAMPLING</th>
                 </tr>

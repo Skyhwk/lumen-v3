@@ -28,13 +28,12 @@ use App\Models\{
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
-    Printers};
+     LhpsAirCustom, LhpsAirDetail, Printers};
 //services
-use App\Services\{GeneratePraSampling,GetBawahan,SendTelegram,SamplingPlanServices,Printing,PrintLhp};
+use App\Services\{GeneratePraSampling,GetBawahan, LhpTemplate, SendTelegram,SamplingPlanServices,Printing,PrintLhp};
 //jobs
 use App\Jobs\{RenderSamplingPlan,JobPrintLhp};
-
-
+use Illuminate\Support\Facades\Log;
 
 class PortalController extends Controller
 {
@@ -1132,5 +1131,160 @@ class PortalController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to dispatch printing job: ' . $e->getMessage(), 'status' => '401'], 200);
         }
+    }
+
+    public function renderLhp(Request $request)
+    {
+        $orderDetails = OrderDetail::select('id', 'cfr', 'no_sampel', 'kategori_2', 'kategori_3')
+            ->with([
+                'lhps_air',
+                'lhps_emisi',
+                'lhps_emisi_c',
+                'lhps_getaran',
+                'lhps_kebisingan',
+                'lhps_ling',
+                'lhps_medanlm',
+                'lhps_pencahayaan',
+                'lhps_sinaruv',
+                'lhps_iklim',
+                'lhps_ergonomi',
+            ])
+            ->where(['cfr' => $request->lhp_number, 'is_active' => true])
+            ->get();
+
+        $grouped = $orderDetails->map(function ($detail) {
+            $allLhps = collect([
+                $detail->lhps_air,
+                $detail->lhps_emisi,
+                $detail->lhps_emisi_c,
+                $detail->lhps_getaran,
+                $detail->lhps_kebisingan,
+                $detail->lhps_ling,
+                $detail->lhps_medanlm,
+                $detail->lhps_pencahayaan,
+                $detail->lhps_sinaruv,
+                $detail->lhps_iklim,
+                $detail->lhps_ergonomi,
+            ])->flatten(1);
+
+            $validLhps = $allLhps->filter(function ($lhp) {
+                if (!$lhp) return false;
+
+                return $lhp->is_active == 1
+                    && !empty($lhp->nama_karyawan)
+                    && !empty($lhp->jabatan_karyawan)
+                    && !empty($lhp->file_qr)
+                    && !empty($lhp->file_lhp)
+                    && !empty($lhp->tanggal_lhp);
+            });
+
+            return [
+                'kategori_2' => $detail->kategori_2,
+                'kategori_3' => $detail->kategori_3,
+                'lhps'       => $validLhps->sortByDesc('id')->values(),
+            ];
+        })->filter(fn($row) => $row['lhps']->isNotEmpty())->values()->first();
+
+        if (!$grouped) return response()->json(['message' => 'LHP tidak ditemukan atau belum dirilis'], 404);
+
+        $kategori_2 = $grouped['kategori_2'];
+        $kategori_3 = $grouped['kategori_3'];
+        $lhps = $grouped['lhps']->first();
+
+        if ($kategori_2 == '1-Air') {
+            $custom = $lhps->lhpsAirCustom;
+            $detail = $lhps->lhpsAirDetail;
+            $view = 'DraftAir';
+        } 
+        
+        // else if ($kategori_2 == '4-Udara') {
+        //     $custom = $lhps->lhpsEmisiCustom;
+        //     $detail = $lhps->lhpsEmisiDetail;
+        //     $view = 'DraftEmisi';
+        // } else if ($kategori_2 == '5-Emisi') {
+        //     $custom = $lhps->lhpsEmisiCustom;
+        //     $detail = $lhps->lhpsEmisiDetail;
+        //     $view = 'DraftEmisi';
+        // } else if ($kategori_2 == '6-Padatan') {
+        //     $custom = $lhps->lhpsEmisiCustom;
+        //     $detail = $lhps->lhpsEmisiDetail;
+        //     $view = 'DraftEmisi';
+        // } else if ($kategori_2 == '9-Pangan') {
+        //     $custom = $lhps->lhpsEmisiCustom;
+        //     $detail = $lhps->lhpsEmisiDetail;
+        //     $view = 'DraftEmisi';
+        // }
+
+        // if ($data->id_kategori_3 == 32) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->DirectESBSolar($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     return true;
+        // } else if ($data->id_kategori_3 == 31) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->DirectESBBensin($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     return true;
+        // } else if ($data->id_kategori_2 == 34) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->emisisumbertidakbergerak($data, $data_detail, $mode_download, $data_custom, null, $mpdf);
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [11, 27])) {
+        //     $parameter = json_decode($data->parameter_uji);
+
+        //     if (in_array("Sinar UV", $parameter)) {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpSinarUV($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     } else if (in_array("Medan Magnit Statis", $parameter) || in_array("Medan Listrik", $parameter) || in_array("Power Density", $parameter)) {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpMagnet($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     } else {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpLingkungan($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     }
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [28])) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->lhpPencahayaan($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [23, 24, 25])) {
+        //     $parameter = json_decode($data->parameter_uji);
+        //     if (is_array($parameter) && in_array("Kebisingan (P8J)", $parameter)) {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpKebisinganPersonal($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     } else {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpKebisinganSesaat($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     }
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [21])) {
+        //     $parameter = json_decode($data->parameter_uji);
+        //     if (is_array($parameter) && (in_array("ISBB", $parameter) || in_array("ISBB (8 Jam)", $parameter))) {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpIklimPanas($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     } else {
+        //         $render = new BundledTemplateLhps;
+        //         $render->lhpIklimDingin($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     }
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [13, 14, 15, 16, 18, 19])) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->lhpGetaran($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     return true;
+        // } else if (in_array($data->id_kategori_3, [17, 20])) {
+        //     $render = new BundledTemplateLhps;
+        //     $render->lhpGetaranPersonal($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
+        //     return true;
+        // }
+
+        $groupedByPage = collect($custom)
+            ->groupBy('page')
+            ->toArray();
+            
+        $fileName = LhpTemplate::setDataDetail($detail)
+            ->setDataHeader($lhps)
+            ->setDataCustom($groupedByPage)
+            ->whereView($view)
+            ->render();
+
+        return response()->json(['file' => $fileName], 200);
     }
 }

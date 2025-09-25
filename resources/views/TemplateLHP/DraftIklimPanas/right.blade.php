@@ -1,9 +1,10 @@
-@php
-use App\Models\TabelRegulasi;
-use App\Models\MasterRegulasi;
-@endphp
 
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+@endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
+<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"></div> -->
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
@@ -19,10 +20,11 @@ use App\Models\MasterRegulasi;
                 </table>
             </td>
         </tr>
+
+        {{-- Informasi Pelanggan --}}
         <tr>
             <td>
-                {{-- Informasi Pelanggan --}}
-                <table style="padding: 20px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 20px;" width="100%">
                     <tr>
                         <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
@@ -34,7 +36,7 @@ use App\Models\MasterRegulasi;
                 </table>
 
                 {{-- Alamat Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
@@ -43,39 +45,32 @@ use App\Models\MasterRegulasi;
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr> 
-
+                        <td class="custom5" width="120" colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                        </td>
+                    </tr>
                     <tr>
-                     <td class="custom5">Spesifikasi Metode</td>
-                        <td class="custom5">:</td>
+                     <td class="custom5" width="120">Spesifikasi Metode</td>
+                        <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @if(!empty($header->metode_sampling))
+                            @if (count($header->metode_sampling) > 1)
+                                <ol>
                                     @foreach($header->metode_sampling as $index => $item)
-                                        <tr>
-                                            @if (count($header->metode_sampling) > 1)
-                                                <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                                <td class="custom5">{{ $item ?? '-' }}</td>
-                                            @else
-                                                <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                            @endif
-                                        </tr>
+                                        <li>{{ $item ?? '-' }}</li>
                                     @endforeach
-                                @else
-                                    <tr>
-                                        <td class="custom5" colspan="2">-</td>
-                                    </tr>
-                                @endif
-                            </table>
+                                </ol>
+                            @else
+                                {{ $header->metode_sampling[0] ?? '-' }}
+                            @endif
                         </td>
                     </tr>
                 </table>
 
-           
-                  @if (!empty($header->regulasi))
+                {{-- Regulasi --}}
+                @if (!empty($header->regulasi))
+                
                     @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
@@ -83,7 +78,20 @@ use App\Models\MasterRegulasi;
                                 </tr>
                             </table>
                     @endforeach
-                    
+                        @php
+                            $regulasiId = explode('-', $y)[0];
+                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
+                        @endif
                 @endif
             </td>
         </tr>
