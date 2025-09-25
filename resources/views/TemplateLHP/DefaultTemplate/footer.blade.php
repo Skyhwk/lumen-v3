@@ -22,12 +22,12 @@
 
 <table width="100%" style="font-size:7px;">
     <tr>
-        <td width="15%" style="vertical-align: bottom; font-family: roboto; font-weight: bold;">
+        <td width="20%" style="vertical-align: bottom; font-family: roboto; font-weight: bold;">
             <div>PT Inti Surya laboratirum</div>
             <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
             <div>021-5089-8988/89 contact@intilab.com</div>
         </td>
-        <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px; font-family: roboto; font-weight: bold;">
+        <td width="60%" style="vertical-align: bottom; text-align:center; padding-left:44px; margin:0; position:relative; min-height:100px; font-family: roboto; font-weight: bold;">
             @if($mode == 'downloadLHP')
                 @if($header->count_print > 1)
                     <strong>Cetakan ke-{{$header->count_print}}</strong><br/>
@@ -40,11 +40,11 @@
             @endif
         </td>
         <!-- signature -->
-        <td width="26%" style="position: relative; padding: 0; text-align: right;">
+        <td width="20%" style="position: relative; padding: 0; text-align: right;">
             @if (isset($last) && $last)
                 @if($mode == 'downloadLHP')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-size: 9px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
