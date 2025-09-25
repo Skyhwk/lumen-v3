@@ -13,7 +13,7 @@
 
                 </tr>
                 <tr>
-                    <th class="pd-5-solid-top-center" colspan="2">Satuan = LUX</th>
+                    <th class="pd-5-solid-top-center">Satuan = LUX</th>
                 </tr>
             </thead>
             <tbody>
