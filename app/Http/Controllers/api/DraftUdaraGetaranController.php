@@ -770,7 +770,7 @@ class DraftUdaraGetaranController extends Controller
                 $lhps->delete();
             }
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+            OrderDetail::where('cfr', $request->no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1
