@@ -22,7 +22,7 @@
 
 <table width="100%" style="font-size:7px;">
     <tr>
-        <td width="20%" style="vertical-align: bottom; font-family: roboto; font-weight: bold;">
+        <td width="18%" style="vertical-align: bottom; font-family: roboto; font-weight: bold;">
             <div>PT Inti Surya laboratirum</div>
             <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
             <div>021-5089-8988/89 contact@intilab.com</div>
@@ -40,11 +40,11 @@
             @endif
         </td>
         <!-- signature -->
-        <td width="20%" style="position: relative; padding: 0; text-align: right;">
+        <td width="22%" style="position: relative; padding: 0; text-align: right;">
             @if (isset($last) && $last)
                 @if($mode == 'downloadLHP')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-size: 9px;"
+                        style="position: absolute; bottom: 0; left: 0; text-align: center; font-size: 9px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
@@ -54,7 +54,7 @@
                     </table>
                 @elseif($mode == 'downloadLHPFinal')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        style="position: absolute; bottom: 0; left: 0; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
@@ -66,7 +66,7 @@
             @else
                 @if($mode == 'downloadLHPFinal')
                     <table
-                        style="position: absolute; bottom: 0; right: 20px; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
+                        style="position: absolute; bottom: 0; left: 0; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
                     >
                         <tr><td>{{$tanggal_qr}}</td></tr>
@@ -81,7 +81,7 @@
             >   
             @if($mode == 'downloadLHP')
                 <tr>
-                    <td><img src="{{$file_qr}}" width="50px" height="50px"></td>
+                    <td><img src="{{$file_qr}}" width="40px" height="40px"></td>
                 </tr>
             @endif   
             <tr><td style="font-family: roboto; font-weight: bold;">{{$pangging}}</td></tr>  
