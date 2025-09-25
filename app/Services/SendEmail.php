@@ -178,7 +178,7 @@ class SendEmail
             $mail->Port = env('MAIL_PORT');
 
             $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->emailConfig[$this->fromType]['name']);
-            $mail->addAddress($this->to);
+            $mail->addAddress(preg_replace('/\s+/', '', $this->to));
 
             if (!empty($this->cc)) {
                 foreach ($this->cc as $cc) {
