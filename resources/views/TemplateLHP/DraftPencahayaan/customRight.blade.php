@@ -52,8 +52,8 @@
                          $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
                     @endphp
                     <tr>
-                        <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
+                        <td class="custom5" width="120">Metode Sampling</td>
+                        <td class="custom5" width="12">:</td>
                         <td class="custom5">
                              <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
                                 @foreach($methode_sampling as $index => $item)
