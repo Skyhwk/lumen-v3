@@ -20,13 +20,13 @@ class TokenCacheService
      */
     public function getUserTokenWithCache($token)
     {
-        // $cacheKey = self::CACHE_PREFIX . hash('sha256', $token);
+        $cacheKey = self::CACHE_PREFIX . hash('sha256', $token);
         
-        // $cachedToken = Cache::get($cacheKey);
-        // if ($cachedToken) {
-        //     // Log::info('Cache hit untuk token', ['token' => $token, 'cachedToken' => $cachedToken]);
-        //     return $cachedToken;
-        // }
+        $cachedToken = Cache::get($cacheKey);
+        if ($cachedToken) {
+            // Log::info('Cache hit untuk token', ['token' => $token, 'cachedToken' => $cachedToken]);
+            return $cachedToken;
+        }
 
         // Log::info('Cache miss untuk token, query ke database', ['token' => $token]);
         $userToken = UserToken::where('token', $token)->first();
@@ -35,7 +35,7 @@ class TokenCacheService
             return null;
         }
 
-        // Cache::put($cacheKey, $userToken, self::CACHE_TTL);
+        Cache::put($cacheKey, $userToken, self::CACHE_TTL);
         return $userToken;
     }
 

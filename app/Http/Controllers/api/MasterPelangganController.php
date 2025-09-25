@@ -263,10 +263,11 @@ class MasterPelangganController extends Controller
                     $no_tlp_perusahaan = "0" . substr($no_tlp_perusahaan, 2);
                 }
 
-                $existingData = MasterPelanggan::whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
-                    $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
-                })->first();
-    
+                $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
+                    ->whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
+                        $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
+                    })->first();
+
                 if ($existingData) {
                     return response()->json([
                         'status' => 'error',

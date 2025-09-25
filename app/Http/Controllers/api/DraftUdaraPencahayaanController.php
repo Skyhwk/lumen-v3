@@ -317,7 +317,7 @@ class DraftUdaraPencahayaanController extends Controller
                 ->groupBy('page')
                 ->toArray();
 
-            $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->get())
+            $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
