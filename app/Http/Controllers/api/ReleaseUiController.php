@@ -21,6 +21,69 @@ class ReleaseUiController extends Controller
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
+    public function switchPatch(Request $request){
+        if(isset($request->data['patch']) && $request->data['patch'] != null){
+            $patch = $request->data['patch'];
+        } else {
+            return response()->json(['success' => false, 'message' => 'Patch not found'], 400);
+        }
+        
+        $rollback = ReleaseSystem::where('system', 'Frontend')->where('id', $request->data['id'])->first();
+        $main = ReleaseSystem::where('system', 'Frontend')->where('is_main', true)->first();
+
+        $folderRollback = str_replace('.', '-', $rollback->patch);
+        $folderMain = str_replace('.', '-', $main->patch);
+
+        //=====================cek folder=========================================
+        $dirRollback = '/mnt/backup/file/frontend/' . $folderRollback;
+        $dirMain = '/var/www/javascript/frontend/build/';
+        $dirBackup = '/mnt/backup/file/frontend/' . $folderMain;
+
+
+        //cek folder patch sekarang sudah ada di folder backup atau belum, jika belum maka copy folder patch sekarang ke folder backup
+        try{
+            $commands = [
+                // Langkah 1: Backup build sekarang ke dirBackup jika belum ada, jika sudah ada skip
+                "[[ -d $dirBackup && \"\$(ls -A $dirBackup)\" ]] || (mkdir -p $dirBackup && cp -r $dirMain/* $dirBackup/)",
+                // Langkah 2: Hapus semua file di folder build
+                "rm -rf $dirMain/*",
+                // Langkah 3: Copy/rsync dari rollback ke build
+                "cp -r $dirRollback/* $dirMain/"
+            ];
+
+            foreach ($commands as $key => $cmd) {
+                $process = Process::fromShellCommandline($cmd);
+                $process->setTimeout(1200); // 20 menit
+                $process->run();
+
+                $outputLog[] = [
+                    'command' => $cmd,
+                    'output'  => $process->getOutput(),
+                    'error'   => $process->getErrorOutput(),
+                    'success' => $process->isSuccessful()
+                ];
+
+                if (!$process->isSuccessful()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Command gagal: $cmd",
+                        'logs' => $outputLog
+                    ], 500);
+                }
+            }
+
+            $rollback->is_main = true;
+            $rollback->save();
+
+            $main->is_main = false;
+            $main->save();
+
+            return response()->json(['success' => true, 'message' => 'Patch berhasil di switch ke ' . $rollback->patch], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['success' => false, 'message' => 'Patch gagal di switch'], 400);
+        }
+    }   
+
     public function frontend(Request $request)
     {
         DB::beginTransaction();
