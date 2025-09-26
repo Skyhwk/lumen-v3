@@ -17,6 +17,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AlamatPelangganBlacklist;
 use App\Models\KontakPelangganBlacklist;
 use App\Models\MasterPelangganBlacklist;
+use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
@@ -459,13 +460,17 @@ class MasterPelangganController extends Controller
             // Master Pelanggan
             $masterPelanggan = MasterPelanggan::find($request->id);
             if (!$masterPelanggan) return response()->json(['message' => 'Pelanggan tidak ditemukan'], 404);
+
+            $blacklist = new PelangganBlacklist();
+            $blacklist->id_pelanggan = $masterPelanggan->id;
+            $blacklist->alasan_blacklist = $request->alasan;
+            $blacklist->blacklisted_by = $this->karyawan;
+            $blacklist->blacklisted_at = Carbon::now();
+            $blacklist->save();
     
             $a = $masterPelanggan->replicate();
             $a->setTable((new MasterPelangganBlacklist())->getTable());
-            $a->original_id = $masterPelanggan->id;
-            $a->alasan_blacklist = $request->alasan;
-            $a->blacklisted_by = $this->karyawan;
-            $a->blacklisted_at = Carbon::now();
+            $a->id = $masterPelanggan->id;
             $a->save();
 
             // Kontak Pelanggan
@@ -473,7 +478,7 @@ class MasterPelangganController extends Controller
             foreach ($kontakPelanggan as $kp) {
                 $b = $kp->replicate();
                 $b->setTable((new KontakPelangganBlacklist())->getTable());
-                $b->original_id = $kp->id;
+                $b->id = $kp->id;
                 $b->save();
             }
 
@@ -482,7 +487,7 @@ class MasterPelangganController extends Controller
             foreach ($picPelanggan as $pp) {
                 $c = $pp->replicate();
                 $c->setTable((new PicPelangganBlacklist())->getTable());
-                $c->original_id = $pp->id;
+                $c->id = $pp->id;
                 $c->save();
             }
 
@@ -491,7 +496,7 @@ class MasterPelangganController extends Controller
             foreach ($alamatPelanggan as $ap) {
                 $d = $ap->replicate();
                 $d->setTable((new AlamatPelangganBlacklist())->getTable());
-                $d->original_id = $ap->id;
+                $d->id = $ap->id;
                 $d->save();
             }
 
@@ -499,7 +504,7 @@ class MasterPelangganController extends Controller
 
             DB::commit();
     
-            return response()->json(['message' => 'Pelanggan berhasil di blacklist'], 200);
+            return response()->json(['message' => 'Pelanggan berhasil diblacklist'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 500);

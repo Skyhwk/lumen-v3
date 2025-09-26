@@ -35,6 +35,11 @@ class MasterPelangganBlacklist extends Sector
 
     public $timestamps = false;
 
+    public function pelanggan_blacklist()
+    {
+        return $this->hasOne(PelangganBlacklist::class, 'id_pelanggan');
+    }
+
     public function kontak_pelanggan_blacklist()
     {
         return $this->hasMany(KontakPelangganBlacklist::class, 'pelanggan_id')->where('is_active', true);
