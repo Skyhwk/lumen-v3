@@ -1,21 +1,21 @@
-
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
-<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"></div> -->
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="240">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Iklim Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
@@ -40,7 +40,7 @@
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->alamat_sampling }}</td>
+                        <td class="custom5">{{ $header->alamat_sampling ?? '-' }}</td>
                     </tr>
                 </table>
 
@@ -53,7 +53,7 @@
                     </tr>
                     <tr>
                     @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
+                        $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
                     @endphp
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>

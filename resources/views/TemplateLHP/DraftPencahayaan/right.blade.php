@@ -15,7 +15,7 @@
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
                         <td class="custom">Lingkungan Kerja</td>
-                        <td class="custom">Pencahayaan Lingkungan Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
+                        <td class="custom">Pencahayaan <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>

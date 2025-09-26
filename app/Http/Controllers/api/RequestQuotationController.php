@@ -2796,9 +2796,10 @@ class RequestQuotationController extends Controller
                             'fingerprint' => $pengujian->fingerprint,
                             'kategori_1'  => $pengujian->kategori_1,
                             'penamaan_titik' => $pengujian->penamaan_titik,
+                            'jumlah_titik' => $pengujian->jumlah_titik,
                             'regulasi'    => $pengujian->regulasi,
                             'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'parameter' => $pengujian->parameter,
                             'total_parameter' => $pengujian->total_parameter,
                         ];
                     }
@@ -3112,7 +3113,9 @@ class RequestQuotationController extends Controller
                                 $match = (
                                     $pengujian['kategori_1'] === $xyz->kategori_1 &&
                                     $pengujian['kategori_2'] === $xyz->kategori_2 &&
-                                    $pengujian['regulasi'][0] === $xyz->regulasi[0] // kalau yakin 1 aja
+                                    $pengujian['regulasi'] === $xyz->regulasi && 
+                                    $pengujian['parameter'] === $xyz->parameter && 
+                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik
                                 );
 
                                 if ($match) {
@@ -4640,13 +4643,16 @@ class RequestQuotationController extends Controller
                             'fingerprint' => $pengujian->fingerprint,
                             'kategori_1'  => $pengujian->kategori_1,
                             'penamaan_titik' => $pengujian->penamaan_titik,
+                            'parameter' => $pengujian->parameter,
                             'regulasi'    => $pengujian->regulasi,
                             'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'parameter' => $pengujian->parameter,
+                            'jumlah_titik' => $pengujian->jumlah_titik,
                             'total_parameter' => $pengujian->total_parameter,
                         ];
                     }
                 }
+                // dd($pengujian_group_by_per);
                 uksort($pengujian_group_by_per, function($a, $b) {
                     return strtotime($a) <=> strtotime($b);
                 });
@@ -4753,7 +4759,7 @@ class RequestQuotationController extends Controller
                                         $matchedOldPenamaan = $pengujianLama['penamaan_titik'] ?? [];
                                         
                                         $penamaan_titik_fixed = [];
-
+                                        $pengujianBaru['foundOld'] = true;
                                         foreach ($matchedOldPenamaan as $item) {
                                             $keysOldFoundPenamaanTitik = array_merge(
                                                 $keysOldFoundPenamaanTitik,
@@ -4789,6 +4795,8 @@ class RequestQuotationController extends Controller
                                 }
                             }
                             if (!$foundMatch) {
+                                
+                                    // $pengujianBaru['foundOld'] = false;
                                 $penamaan_titik_fixed = [];
                                 foreach ($pengujianBaru['penamaan_titik'] as $i => $pt) {
                                     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
@@ -5016,12 +5024,13 @@ class RequestQuotationController extends Controller
                                     }
                                 }*/
                             }
-
                             foreach ($pengujian_group_by_per[$per] as $pengujian) {
                                 $match = (
                                     $pengujian['kategori_1'] === $xyz->kategori_1 &&
                                     $pengujian['kategori_2'] === $xyz->kategori_2 &&
-                                    $pengujian['regulasi'][0] === $xyz->regulasi[0] // kalau yakin 1 aja
+                                    $pengujian['regulasi'] === $xyz->regulasi &&
+                                    $pengujian['parameter'] === $xyz->parameter &&
+                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik
                                 );
 
                                 if ($match) {
