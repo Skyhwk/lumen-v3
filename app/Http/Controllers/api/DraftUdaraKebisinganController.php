@@ -216,7 +216,8 @@ class DraftUdaraKebisinganController extends Controller
             if($custom) {
                 foreach ($request->regulasi_custom as $key => $value) {
                     $custom_cleaned_param      = $this->cleanArrayKeys($request->custom_param[$key]);
-                    $custom_cleaned_paparan    = $this->cleanArrayKeys($request->custom_paparan[$key]);
+                    $custom_cleaned_paparan    = $this->cleanArrayKeys($request->custom_paparan[$key] ?? []);
+                    // dd($request->custom_lokasi);
                     $custom_cleaned_lokasi     = $this->cleanArrayKeys($request->custom_lokasi[$key]);
                     $custom_cleaned_noSampel   = $this->cleanArrayKeys($request->custom_no_sampel[$key]);
                     $custom_cleaned_hasil_uji  = $this->cleanArrayKeys($request->custom_hasil_uji[$key] ?? []);
@@ -247,7 +248,7 @@ class DraftUdaraKebisinganController extends Controller
                             $custom->leq_lm = $custom_cleaned_lm[$val] ?? null;
                             $custom->leq_lsm = $custom_cleaned_lsm[$val] ?? null;
                             $custom->titik_koordinat = $custom_cleaned_titik_koordinat[$val] ?? null;
-                            $custom->paparan = $custom_cleaned_paparan[$val];
+                            $custom->paparan = $custom_cleaned_paparan[$val] ?? null;
                             $custom->hasil_uji = $custom_cleaned_hasil_uji[$val] ?? null;
                             $custom->nama_pekerja = $custom_cleaned_nama_pekerja[$val] ?? null;
                             $custom->nab = $custom_cleaned_nab[$val] ?? null;
