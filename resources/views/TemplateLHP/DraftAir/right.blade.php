@@ -24,8 +24,12 @@
                                     'Air Khusus' => 'Air Reverse Osmosis',
                                     'Air Limbah Terintegrasi' => 'Air Limbah',
                                 ];
-
-                                $categoryName = explode('-', $header->sub_kategori)[1];
+                                
+                                if (strpos($header->sub_kategori, '-') !== false) {
+                                    $categoryName = explode('-', $header->sub_kategori)[1];
+                                } else {
+                                    $categoryName = $header->sub_kategori;
+                                }
                                 if (array_key_exists($categoryName, $aliases)) {
                                     $categoryName = $aliases[$categoryName];
                                 }
