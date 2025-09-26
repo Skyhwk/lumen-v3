@@ -279,7 +279,7 @@ class DokumenFdlController extends Controller
 
                             if ($allowPush) {
                                 $crf = explode("-", $orderDetail->kategori_3);
-                                $nama_kategori = explode("/", $orderDetail->cfr ?? '');
+                                $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
 
                                 $flatData[] = [
                                     'sampler' => $loggedInUser,
