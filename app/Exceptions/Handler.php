@@ -102,7 +102,7 @@ class Handler extends ExceptionHandler
     private function isDatabaseTimeout($exception)
     {
         $msg = $exception->getMessage();
-        return str_contains($msg, 'Connection timed out') || str_contains($msg, 'MySQL server has gone away');
+        return str_contains($msg, 'Connection timed out') || str_contains($msg, 'MySQL server has gone away') || str_contains($msg, 'Lock wait timeout exceeded');
     }
 
     /**

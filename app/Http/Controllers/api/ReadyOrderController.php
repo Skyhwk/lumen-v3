@@ -340,7 +340,8 @@ class ReadyOrderController extends Controller
         } catch (\Throwable $th) {
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan qs ulang atau di Controller ReadyOrder bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
