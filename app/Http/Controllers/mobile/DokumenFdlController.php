@@ -223,6 +223,7 @@ class DokumenFdlController extends Controller
 
     public function detailsData(Request $request)
     {
+        
         try {
             $loggedInUser = $this->karyawan;
 
@@ -279,7 +280,7 @@ class DokumenFdlController extends Controller
 
                             if ($allowPush) {
                                 $crf = explode("-", $orderDetail->kategori_3);
-                                $nama_kategori = explode("/", $orderDetail->cfr ?? '');
+                                $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
 
                                 $flatData[] = [
                                     'sampler' => $loggedInUser,
@@ -297,7 +298,7 @@ class DokumenFdlController extends Controller
                 });
             }
 
-            // dd($flatData);
+            
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
                 ->where('is_active', true)
@@ -322,6 +323,7 @@ class DokumenFdlController extends Controller
                             }
                         }
                     }
+                    
                     if (!empty($matchingDocs)) {
                         // Jika ada lebih dari satu, coba pilih berdasarkan tanggal yang sesuai
                         $selectedDoc = null;
@@ -361,7 +363,7 @@ class DokumenFdlController extends Controller
                 ->sortBy('no_sampel')
                 ->values()
                 ->toArray();
-
+            dd($flatData,$data,$sorted);
             return DataTables::of($sorted)->make(true);
 
         } catch (\Throwable $th) {
