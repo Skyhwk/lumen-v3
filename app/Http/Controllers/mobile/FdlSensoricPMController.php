@@ -116,7 +116,7 @@ class FdlSensoricPMController extends Controller
                         'keterangan' => $data->keterangan_1,
                         'id_ket'     => $id_ket,
                         'id_ket2'    => $id_ket2,
-                        'param'      => $data->parameter,
+                        'parameter'      => $data->parameter,
                     ], 200);
                 }
 
