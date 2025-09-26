@@ -613,7 +613,7 @@
                         <tr>
                             <td>{{$personal->no_lhp}}</td>
                             <td>{{$personal->no_sampel}}</td>
-                            <td>Lingkungan</td>
+                            <td>Ergonomi NBM</td>
                         </tr>
                     </tbody>
                 </table>

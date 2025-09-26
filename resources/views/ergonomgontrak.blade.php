@@ -4,13 +4,368 @@
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian</title>
    
-    @if(!empty($cssGlobal))
-        <style>{!! $cssGlobal !!}</style>
-    @endif
+   <style>
+        * {
+            box-sizing: border-box;
+        }
 
-    @if(!empty($spesifik))
-        <style>{!! $spesifik !!}</style>
-    @endif
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            font-size: 9px;
+            background-color: #f9f9f9;
+        }
+
+        .page-container {
+            width: 100%;
+            margin: 0;
+            background-color: #fff;
+            padding: 8px;
+            border: none;
+        }
+
+        .main-header-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            text-decoration: underline;
+        }
+
+        .two-column-layout {
+            width: 100%;
+            margin-bottom: 10px;
+            display: table;
+            table-layout: fixed;
+        }
+
+        .column {
+            display: table-cell;
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .column-left {
+            width: 55%;
+            padding-right: 5px;
+        }
+
+        .column-right {
+            width: 44%;
+            padding-left: 5px;
+        }
+
+        .section {
+            border: 1px solid #000;
+            padding: 5px;
+            background-color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            background-color: #e0e0e0;
+            padding: 2px 4px;
+            margin: -5px -5px 4px -5px;
+            border-bottom: 1px solid #000;
+            font-size: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 3px;
+            table-layout: fixed;
+        }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 2px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 8px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .text-input-space {
+            width: 100%;
+            border: 1px solid #ccc;
+            padding: 1px;
+            min-height: 1.2em;
+            background-color: #fff;
+            font-size: 8px;
+        }
+
+        .multi-line-input {
+            width: 100%;
+            border: 1px solid #000;
+            padding: 3px;
+            min-height: 30px;
+            background-color: #fff;
+            font-size: 8px;
+        }
+
+        .footer-text {
+            font-size: 7px;
+            margin-top: 10px;
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .signature-block {
+            margin-top: 10px;
+            text-align: right;
+        }
+
+        .signature-block .signature-name {
+            margin-top: 20px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        .interpretasi-table td { 
+            text-align: center; 
+            font-size: 8px;
+        }
+        .interpretasi-table td:last-child { 
+            text-align: left; 
+        }
+
+        .uraian-tugas-table td { 
+            height: 1.5em; 
+        }
+
+        /* Container gabungan antara gambar & daftar */
+        .image-placeholder-container {
+            width: 100%;
+            margin-top: 8px;
+            min-height: 250px;
+            position: relative;
+        }
+
+        /* Placeholder Gambar Tubuh */
+        .image-placeholder {
+            width: 120px;
+            height: 240px;
+            border: 1px solid #000;
+            text-align: center;
+            font-size: 8px;
+            line-height: 1.3;
+            padding: 3px;
+            float: left;
+            margin-right: 10px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .body-map {
+           width: 100%;
+           height: 100%;
+           object-fit: contain;
+        }
+
+        /* Daftar bagian tubuh */
+        .body-parts-list-container {
+            margin-left: 130px;
+            width: auto;
+        }
+
+        /* Styling untuk tabel daftar bagian tubuh */
+        .body-parts-list {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7px;
+            margin-bottom: 8px;
+        }
+
+        .body-parts-list td {
+            padding: 2px 3px;
+            border: 1px solid #000;
+            vertical-align: middle;
+        }
+
+        .body-parts-list td:first-child {
+            width: 70%;
+            text-align: left;
+        }
+
+        .body-parts-list td:last-child {
+            width: 30%;
+            text-align: center;
+        }
+
+        .input-line {
+            font-weight: bold;
+            text-align: center;
+            font-size: 8px;
+        }
+
+        /* Styling untuk section dalam container */
+        .body-parts-list-container .section {
+            margin-top: 8px;
+            margin-bottom: 6px;
+        }
+
+        .body-parts-list-container .section-title {
+            text-align: left;
+            font-size: 7px;
+            margin-bottom: 3px;
+        }
+
+        .body-parts-list-container .section div:not(.section-title) {
+            font-size: 7px;
+            line-height: 1.2;
+            text-align: justify;
+            padding: 3px;
+            border: 1px solid #000;
+        }
+
+        /* Clearfix untuk memastikan container tidak collapse */
+        .image-placeholder-container::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        /* Styling khusus untuk konten dalam box */
+        .analysis-content {
+            min-height: 40px;
+            padding: 3px;
+            border: 1px solid #000;
+            font-size: 7px;
+            line-height: 1.2;
+        }
+
+        .conclusion-content {
+            min-height: 25px;
+            padding: 3px;
+            border: 1px solid #000;
+            font-size: 7px;
+            line-height: 1.2;
+        }
+
+        /* Info table di kolom kanan */
+        .lhp-info-table {
+            margin-bottom: 8px;
+        }
+
+        .lhp-info-table th, .lhp-info-table td {
+            font-size: 7px;
+            padding: 2px;
+        }
+
+        .info-table {
+            margin-bottom: 5px;
+        }
+
+        .info-table td {
+            font-size: 7px;
+            padding: 1px;
+        }
+
+        .bold {
+            font-weight: bold;
+            margin-bottom: 3px;
+            font-size: 8px;
+        }
+
+        .notes {
+            font-size: 6px;
+            line-height: 1.2;
+            margin-top: 5px;
+            text-align: justify;
+        }
+
+        /* Signature section yang lebih kompak */
+        .signature-section {
+            margin-top: 8px;
+            font-size: 7px;
+        }
+
+        .signature-table {
+            width: 100%;
+            border: none;
+            margin-top: 5px;
+        }
+
+        .signature-table td {
+            border: none;
+            padding: 0;
+        }
+
+        .signature-left {
+            width: 50%;
+        }
+
+        .signature-right {
+            width: 50%;
+            text-align: center;
+            vertical-align: top;
+        }
+
+        .signature-date {
+            font-size: 7px;
+            margin-bottom: 3px;
+        }
+
+        .signature-text {
+            font-size: 7px;
+            line-height: 1.1;
+        }
+
+        .signature-text strong {
+            font-weight: bold;
+        }
+
+        .signature-text span {
+            font-weight: normal;
+        }
+
+        /* Tabel klasifikasi risiko */
+        .risk-table {
+            margin-top: 5px;
+        }
+
+        .risk-table th, .risk-table td {
+            font-size: 7px;
+            padding: 2px;
+            text-align: center;
+        }
+
+        .risk-table td:last-child {
+            text-align: left;
+        }
+
+        /* Penyesuaian untuk label kolom */
+        .label-column {
+            width: 60%;
+            font-size: 8px;
+        }
+
+        /* Centered text utility */
+        .centered-text {
+            text-align: center;
+        }
+
+        /* Responsive adjustments */
+        @media print {
+            .page-container {
+                padding: 5px;
+            }
+            
+            .section {
+                margin-bottom: 5px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="page-container">
@@ -142,7 +497,7 @@
                         <tr>
                             <td>{{ $personal->no_lhp }}</td>
                             <td>{{ $personal->no_sampel }}</td>
-                            <td>Gotrak</td>
+                            <td>Ergonomi - Gontrak</td>
                         </tr>
                     </tbody>
                 </table>
