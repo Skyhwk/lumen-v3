@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 
+use App\Models\MasterRegulasi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -210,7 +211,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				}
 				return $item;
 			});
-			$id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+			// $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+			$id_regulasi = $request->regulasi;
 			foreach ($processedData as $item) {
 
 				$dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
@@ -1153,5 +1155,34 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				'status' => 401
 			], 401);
 		}
+	}
+		public function getRegulasi(Request $request)
+	{
+		$data = MasterRegulasi::where('id_kategori', $request->id_kategori)
+			->where('is_active', '1')->get();
+
+		return response()->json([
+			'data' => $data
+		]);
+	}
+	public function ubahRegulasi(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$regulasi = MasterRegulasi::where('id', $request->regulasi)->first();
+			$new_regulasi = [$request->regulasi . '-' . $regulasi->peraturan];
+			$data = OrderDetail::where('id', $request->id)->first();
+			$data->regulasi = $new_regulasi;
+			$data->save();
+			DB::commit();
+			return response()->json([
+				'success' => true,
+				'message' => 'Regulasi berhasil diubah!'
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollback();
+			throw $th;
+		}
+
 	}
 }

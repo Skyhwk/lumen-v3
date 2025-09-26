@@ -17,5 +17,9 @@ class DirectLainHeader extends Sector
     {
         return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_direct_lain_header');
     }
+     public function baku_mutu()
+    {
+        return $this->belongsTo('App\Models\MasterBakumutu', 'parameter', 'parameter');
+    }
 
 }
