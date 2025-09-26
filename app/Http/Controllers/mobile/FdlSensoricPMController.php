@@ -34,7 +34,7 @@ class FdlSensoricPMController extends Controller
     {
         if (isset($request->no_sample) && $request->no_sample != null) {
             $parameter = ParameterFdl::select('parameters')->where('nama_fdl', 'sensoric_pm')->where('is_active', 1)->first();
-            $listParameter = json_decode($parameter->parameters, true, JSON_UNESCAPED_UNICODE || JSON_UNESCAPED_SLASHES);
+            $listParameter = json_decode($parameter->parameters, true);
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
             ->whereIn('kategori_3', ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])
             ->where(function ($q) use ($listParameter) {
@@ -76,6 +76,11 @@ class FdlSensoricPMController extends Controller
                     $nilai_param2 = array_values(array_diff($parameters, $paramSesaat));
 
                     $param_fin = $nilai_param2;
+                    if(empty($param_fin)){
+                        return response()->json([
+                            'message' => 'Data Parameter Sesaat sudah terinput semua .!'
+                        ], 400);
+                    }
                     if(empty($param_fin)){
                         return response()->json([
                             'message' => 'Data Parameter Sesaat sudah terinput semua .!'
