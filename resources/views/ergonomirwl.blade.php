@@ -484,7 +484,7 @@
                             <tr>
                                 <td>{{$personal->no_lhp}}</td>
                                 <td>{{$personal->no_sampel}}</td>
-                                <td>Ergonomi</td>
+                                <td>Ergonomi - RWL</td>
                             </tr>
                         </tbody>
                     </table>
