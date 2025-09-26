@@ -340,7 +340,8 @@ class ReadyOrderController extends Controller
         } catch (\Throwable $th) {
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan qs ulang atau di Controller ReadyOrder bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -1024,11 +1025,14 @@ class ReadyOrderController extends Controller
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
-                            // if($type == ''){
-                            //     continue; // Skip if type is empty
-                            // }
+                            if (empty($type)) {
+                                return response()->json([
+                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
+                                ], 400);
+                            }
                             $koding = $no_sampling . strtoupper(Str::random(5));
                             // Hitung jumlah botol yang dibutuhkan
+
                             $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
 
                             $botol[] = (object) [
@@ -1432,6 +1436,12 @@ class ReadyOrderController extends Controller
                             'BEBAS PYROGEN' => 10
                         ];
                         foreach ($botol_volumes as $type => $volume) {
+                            if (empty($type)) {
+                                return response()->json([
+                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
+                                ], 400);
+                            }
+
                             $koding = $no_sampling . strtoupper(Str::random(5));
                             $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
 
@@ -1871,6 +1881,12 @@ class ReadyOrderController extends Controller
                                     ];
 
                                     foreach ($botol_volumes as $type => $volume) {
+                                        if (empty($type)) {
+                                            return response()->json([
+                                                'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
+                                            ], 400);
+                                        }
+
                                         $koding = $no_sampling . strtoupper(Str::random(5));
                                         // Hitung jumlah botol yang dibutuhkan
                                         $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
@@ -2289,6 +2305,12 @@ class ReadyOrderController extends Controller
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
+                            if (empty($type)) {
+                                return response()->json([
+                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
+                                ], 400);
+                            }
+
                             $koding = $no_sampling . strtoupper(Str::random(5));
 
                             // Hitung jumlah botol yang dibutuhkan

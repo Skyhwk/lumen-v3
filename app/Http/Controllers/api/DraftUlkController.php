@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 use App\Models\HistoryAppReject;
 
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsLingCustom;
 use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
@@ -72,7 +73,7 @@ class DraftUlkController extends Controller
     }
 
     // Amang
-    public function getKategori()
+    public function getKategori(Request $request)
     {
         $kategori = MasterSubKategori::where('id_kategori', 4)
             ->where('is_active', true)
@@ -102,7 +103,7 @@ class DraftUlkController extends Controller
             $header = LhpsLingHeader::find($request->id_lhp);
 
             if ($header) {
-                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                $headerMetode = json_decode($header->methode_sampling, true) ?? [];
 
                 foreach ($data as $key => $value) {
                     $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
@@ -137,8 +138,6 @@ class DraftUlkController extends Controller
         ], 500);
     }
 }
-
-
 
    public function store(Request $request)
     {
@@ -183,7 +182,6 @@ class DraftUlkController extends Controller
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                 return ['page' => (int)$page, 'regulasi' => $item];
             })->values()->toArray();
-
             // === 4. Simpan / update header ===
             $header->fill([
                 'no_order'        => $request->no_order ?: null,
@@ -218,7 +216,7 @@ class DraftUlkController extends Controller
             foreach ($oldDetails as $detail) {
                 $detailHistory = $detail->replicate();
                 $detailHistory->setTable((new LhpsLingDetailHistory())->getTable());
-                $detailHistory->id = $detail->id;
+                // $detailHistory->id = $detail->id;
                 $detailHistory->created_by = $this->karyawan;
                 $detailHistory->created_at = Carbon::now();
                 $detailHistory->save();
@@ -277,6 +275,7 @@ class DraftUlkController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsLingDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
                 ->whereView('DraftUdaraAmbient')
                 ->render();
 
@@ -293,7 +292,7 @@ class DraftUlkController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => "Data draft lhp air no sampel {$request->no_sampel} berhasil disimpan",
+                'message' => "Data draft Lingkungan Kerja no LHP $request->no_lhp berhasil disimpan",
                 'status'  => true
             ], 201);
 
@@ -308,118 +307,116 @@ class DraftUlkController extends Controller
         }
     }
 
-    //Amang
-     public function handleDatadetail(Request $request)
+
+ 
+         public function handleDatadetail(Request $request)
     {
         try {
-            $cek_lhp = LhpsLingHeader::with('lhpsLingDetail', 'lhpsLingCustom')->where('no_sampel', $request->no_sampel)->first();
-            if ($cek_lhp) {
-                $data_entry = array();
-                $data_custom = array();
-                $cek_regulasi = array();
+            $noSampel = explode(', ', $request->no_sampel);
 
-                foreach ($cek_lhp->lhpsLingDetail->toArray() as $key => $val) {
-                    $data_entry[$key] = [
-                        'id' => $val['id'],
-                        'parameter_lab' => $val['parameter_lab'],
+            // Ambil data LHP jika ada
+            $cek_lhp = LhpsLingHeader::with('lhpsLingDetail', 'lhpsLingCustom')
+                ->where('no_sampel', $noSampel)
+                ->first();
+            
+            // ==============================
+            // CASE 1: Jika ada cek_lhp
+            // ==============================
+            if ($cek_lhp) {
+                $data_entry   = [];
+                $data_custom  = [];
+                $cek_regulasi = [];
+
+                // Ambil data detail dari LHP (existing entry)
+                foreach ($cek_lhp->lhpsLingDetail as $val) {
+                    // if($val->no_sampel == 'AARG012503/024')dd($val);
+                    $data_entry[] = [
+                        'id' => $val->id,
+                        'parameter_lab' => $val->parameter_lab,
                         'no_sampel' => $request->no_sampel,
-                        'akr' => $val['akr'],
-                        'parameter' => $val['parameter'],
-                        'satuan' => $val['satuan'],
-                        'hasil_uji' => $val['hasil_uji'],
-                        'methode' => $val['methode'],
-                        'durasi' => $val['durasi'],
-                        'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
+                        'akr' => $val->akr,
+                        'parameter' => $val->parameter,
+                        'satuan' => $val->satuan,
+                        'hasil_uji' => $val->hasil_uji,
+                        'methode' => $val->methode,
+                        'durasi' => $val->durasi,
+                        'status' => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
                     ];
                 }
 
-                if (isset($request->other_regulasi) && !empty($request->other_regulasi)) {
-                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)->select('id', 'peraturan as regulasi')->get()->toArray();
+                // Ambil regulasi tambahan jika ada
+                if ($request->other_regulasi) {
+                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
+                        ->select('id', 'peraturan as regulasi')
+                        ->get()
+                        ->toArray();
                 }
 
-                if (!empty($cek_lhp->lhpsLingCustom) && !empty($cek_lhp->regulasi_custom)) {
+                // Proses regulasi custom dari LHP
+                if (!empty($cek_lhp->lhpsLingDetail) && !empty($cek_lhp->regulasi_custom)) {
                     $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
-                    // Mapping id regulasi jika ada other_regulasi
+                    // Mapping regulasi id
                     if (!empty($cek_regulasi)) {
-                        // Buat mapping regulasi => id
                         $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
 
-                        // Cari regulasi yang belum ada id-nya
                         $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
                             $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
                             if (isset($mapRegulasi[$regulasi_clean])) {
                                 $item['id'] = $mapRegulasi[$regulasi_clean];
                             } else {
-                                // Cari id regulasi jika belum ada di mapping
-                                $regulasi_db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
-                                if ($regulasi_db) {
-                                    $item['id'] = $regulasi_db->id;
-                                    $mapRegulasi[$regulasi_clean] = $regulasi_db->id;
+                                $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
+                                if ($db) {
+                                    $item['id'] = $db->id;
+                                    $mapRegulasi[$regulasi_clean] = $db->id;
                                 }
                             }
                             return $item;
                         }, $regulasi_custom);
                     }
 
-                    // Group custom berdasarkan page
+                    // Group custom by page
                     $groupedCustom = [];
                     foreach ($cek_lhp->lhpsLingCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
 
-                    // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, function ($a, $b) {
-                        return $a['page'] <=> $b['page'];
-                    });
+                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
 
+                    // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
-                        $page = $item['page'];
+                        if (empty($item['page'])) continue;
+                        // $id_regulasi = "id_" . $item['id'];
+                            $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
+                            $page        = $item['page'];
 
-                        if (!empty($groupedCustom[$page])) {
-                            foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
-                                    'id' => $val['id'],
-                                    'parameter_lab' => $val['parameter_lab'],
-                                    'no_sampel' => $request->no_sampel,
-                                    'akr' => $val['akr'],
-                                    'parameter' => $val['parameter'],
-                                    'satuan' => $val['satuan'],
-                                    'hasil_uji' => $val['hasil_uji'],
-                                    'methode' => $val['methode'],
-                                    'durasi' => $val['durasi'],
-                                    'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
-                                ];
+                            if (!empty($groupedCustom[$page])) {
+                                foreach ($groupedCustom[$page] as $val) {
+                                    $data_custom[$id_regulasi][] = [
+                                        'id' => $val->id,
+                                        'parameter_lab' => $val->parameter_lab,
+                                        'no_sampel' => $request->no_sampel,
+                                        'akr' => $val->akr,
+                                        'parameter' => $val->parameter,
+                                        'satuan' => $val->satuan,
+                                        'hasil_uji' => $val->hasil_uji,
+                                        'methode' => $val->methode,
+                                        'durasi' => $val->durasi,
+                                        'status' => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
+                                    ];
+                                }
                             }
                         }
                     }
-                }
 
-
-                $defaultMethods = Parameter::where('is_active', true)
-                    ->where('id_kategori', 4)
-                    ->whereNotNull('method')
-                    ->pluck('method')
-                    ->unique()
-                    ->values()
-                    ->toArray();
-
-                return response()->json([
-                    'status' => true,
-                    'data' => $data_entry,
-                    'next_page' => $data_custom,
-                    'spesifikasi_method' => $defaultMethods,
-                
-                ], 201);
-            } else {
-
-                $mainData = [];
-                $methodsUsed = [];
+                // ==============================
+                // Ambil mainData & otherRegulations
+                // ==============================
+                $mainData         = [];
                 $otherRegulations = [];
-
+                $methodsUsed = [];
+              
                 $models = [
                     Subkontrak::class,
                     LingkunganHeader::class,
@@ -445,40 +442,126 @@ class DraftUlkController extends Controller
                         }
                     }
                 }
-        
-                $mainData = collect($mainData)->sortBy(function ($item) {
-                    return mb_strtolower($item['parameter']);
-                })->values()->toArray();
 
+                // Sort mainData
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+          
+                // Sort otherRegulations
                 foreach ($otherRegulations as $id => $regulations) {
-                    $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
-                        return mb_strtolower($item['parameter']);
-                    })->values()->toArray();
+                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
                 }
-                $methodsUsed = array_values(array_unique($methodsUsed));
+
+                // ==============================
+                // Sinkronisasi data_entry dengan mainData
+                // ==============================
+                $dataEntrySamples = array_column($data_entry, 'no_sampel');
+
+                foreach ($mainData as $main) {
+                    if (!in_array($main['no_sampel'], $dataEntrySamples)) {
+                        $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
+                    }
+                }
+
+                // ==============================
+                // Sinkronisasi data_custom dengan otherRegulations
+                // ==============================
+                $dataCustomSamples = [];
+                foreach ($data_custom as $group) {
+                    foreach ($group as $row) {
+                        $dataCustomSamples[] = $row['no_sampel'];
+                    }
+                }
+
+                foreach ($otherRegulations as $id_regulasi => $entries) {
+                    foreach ($entries as $other) {
+                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
+                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
+                        }
+                    }
+                }
+                 $defaultMethods = Parameter::where('is_active', true)
+                    ->where('id_kategori', 4)
+                    ->whereNotNull('method')
+                    ->pluck('method')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+              
+
+                return response()->json([
+                    'status'    => true,
+                    'data'      => $data_entry,
+                    'next_page' => $data_custom,
+                    'spesifikasi_method' => $defaultMethods,
+                ], 201);
+            }
+
+            // ==============================
+            // CASE 2: Jika tidak ada cek_lhp
+            // ==============================
+            $mainData         = [];
+            $otherRegulations = [];
+            $methodsUsed = [];
+
+              $models = [
+                    Subkontrak::class,
+                    LingkunganHeader::class,
+                ];
+
+                foreach ($models as $model) {
+                    $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
+                    $data = $model::with('ws_value_linkungan', 'parameter_udara')
+                        ->where('no_sampel', $request->no_sampel)
+                        ->where($approveField, 1)
+                        ->where('is_active', true)
+                        ->where('lhps', 1)
+                        ->get();
+
+                    foreach ($data as $val) {
+                        $entry = $this->formatEntry($val, $request->regulasi, $methodsUsed);
+                        $mainData[] = $entry;
+
+                        if ($request->other_regulasi) {
+                            foreach ($request->other_regulasi as $id_regulasi) {
+                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi);
+                            }
+                        }
+                    }
+                }
+
+            // Sort mainData
+            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+
+            // Sort otherRegulations
+            foreach ($otherRegulations as $id => $regulations) {
+                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+            }
+              $methodsUsed = array_values(array_unique($methodsUsed));
                 $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
 
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
 
-                return response()->json([
-                    'status' => true,
-                    'data' => $mainData,
-                    'next_page' => $otherRegulations,
-                    'spesifikasi_method' => $resultMethods,
-                ], 201);
-            }
+            return response()->json([
+                'status'    => true,
+                'data'      => $mainData,
+                'next_page' => $otherRegulations,
+                'spesifikasi_method' => $resultMethods,
+            ], 201);
+
         } catch (\Throwable $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'getFile' => $e->getFile(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
-     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+
+  private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
         $entry = [
@@ -509,109 +592,133 @@ class DraftUlkController extends Controller
     }
 
 
+ 
   
-     public function handleApprove(Request $request)
-        {
-            try {
-                $data = LhpsLingHeader::where('id', $request->id)
-                    ->where('is_active', true)
-                    ->first();
-                $noSampel = array_map('trim', explode(',', $request->no_sampel));
-                $no_lhp = $data->no_lhp;
-            
-                $qr = QrDocument::where('id_document', $data->id)
-                    ->where('type_document', 'LHP_LINGKUNGAN_KERJA')
-                    ->where('is_active', 1)
-                    ->where('file', $data->file_qr)
-                    ->orderBy('id', 'desc')
-                    ->first();
 
-                if ($data != null) {
-                    OrderDetail::where('cfr', $data->no_lhp)
-                    ->whereIn('no_sampel', $noSampel)
-                    ->where('is_active', true)
-                    ->update([
-                        'is_approve' => 1,
-                        'status' => 3,
-                        'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'approved_by' => $this->karyawan
-                    ]);
-                
-                    $data->is_approved = 1;
-                    $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $data->approved_by = $this->karyawan;
-                    $data->nama_karyawan = $this->karyawan;
-                    $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-                    $data->save();
-                    HistoryAppReject::insert([
-                        'no_lhp' => $data->no_lhp,
-                        'no_sampel' => $request->no_sampel,
-                        'kategori_2' => $data->id_kategori_2,
-                        'kategori_3' => $data->id_kategori_3,
-                        'menu' => 'Draft Udara',
-                        'status' => 'approved',
-                        'approved_at' => Carbon::now(),
-                        'approved_by' => $this->karyawan
-                    ]);
-                    if ($qr != null) {
-                        $dataQr = json_decode($qr->data);
-                        $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                        $dataQr->Disahkan_Oleh = $this->karyawan;
-                        $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-                        $qr->data = json_encode($dataQr);
-                        $qr->save();
-                    }
-                }
+   public function handleApprove(Request $request, $isManual = true)
+    {
+        try {
+            if($isManual) {
+                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
 
-                DB::commit();
-                return response()->json([
-                    'data' => $data,
-                    'status' => true,
-                    'message' => 'Data draft LHP Iklim dengan no LHP ' . $no_lhp . ' berhasil diapprove'
-                ], 201);
-            } catch (\Exception $th) {
-                DB::rollBack();
-                dd($th);
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'status' => false
-                ], 500);
+            if (!$konfirmasiLhp) {
+                $konfirmasiLhp = new KonfirmasiLhp();
+                $konfirmasiLhp->created_by = $this->karyawan;
+                $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            } else {
+                $konfirmasiLhp->updated_by = $this->karyawan;
+                $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             }
+
+                $konfirmasiLhp->no_lhp = $request->no_lhp;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+
+                $konfirmasiLhp->save();
+            }
+            $data = LhpsLingHeader::where('no_lhp', $request->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+            $noSampel = array_map('trim', explode(',', $request->noSampel));
+        
+            $qr = QrDocument::where('id_document', $data->id)
+                ->where('type_document', 'LHP_AMBIENT')
+                ->where('is_active', 1)
+                ->where('file', $data->file_qr)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($data != null) {
+                OrderDetail::where('cfr', $request->no_lhp)
+                ->whereIn('no_sampel', $noSampel)
+                ->where('is_active', true)
+                ->update([
+                    'is_approve' => 1,
+                    'status' => 3,
+                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'approved_by' => $this->karyawan
+                ]);
+
+                
+                $data->is_approve = 1;
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_by = $this->karyawan;
+                $data->nama_karyawan = $this->karyawan;
+                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                 if ($data->count_print < 1) {
+                    $data->is_printed = 1;
+                    $data->count_print = $data->count_print + 1;
+                }
+                // dd($data->id_kategori_2);
+
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp' => $request->no_lhp,
+                    'no_sampel' => $request->noSampel,
+                    'kategori_2' => $data->id_kategori_2,
+                    'kategori_3' => $data->id_kategori_3,
+                    'menu' => 'Draft Udara',
+                    'status' => 'approved',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
+                if ($qr != null) {
+                    $dataQr = json_decode($qr->data);
+                    $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
+                    $dataQr->Disahkan_Oleh = $this->karyawan;
+                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
+                }
+            }
+
+            DB::commit();
+            return response()->json([
+                'data' => $data,
+                'status' => true,
+                'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil diapprove'
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            dd($th);
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'status' => false
+            ], 500);
         }
+    }
 
     // Amang
    public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
-  
-            $data = OrderDetail::where('id', $request->id)->first();
-            $kategori3 = $data->kategori_3;
-            $category = (int) explode('-', $kategori3)[0];
-            $orderDetail = OrderDetail::where('id', $request->id)
-                ->where('is_active', true)
-                ->where('kategori_3', 'LIKE', "%{$category}%")
+            $noSampel = array_map('trim', explode(',', $request->noSampel));
+            $data = OrderDetail::where('cfr', $request->no_lhp)
+                ->whereIn('no_sampel', $request->no_sampel)
                 ->first();
 
-                if ($orderDetail) {
-                    $orderDetailParameter = json_decode($orderDetail->parameter); 
-
+                if ($data) {
+                    $orderDetailParameter = json_decode($data->parameter); // array of strings
                     foreach ($orderDetailParameter as $item) {
-                        // Pecah berdasarkan tanda ';'
                         $parts = explode(';', $item);
-                        // Ambil bagian ke-1 (index 1) jika ada
                         if (isset($parts[1])) {
-                            $parsedParam[] = trim($parts[1]); 
+                            $parsedParam[] = trim($parts[1]); // "Medan Magnit Statis"
                         }
                     }
-
-                        $lhps = LhpsLingHeader::where('no_sampel', $data->no_sampel)
-                            ->where('id_kategori_3', $category)
+                        $id_kategori = explode('-', $data->kategori_3);
+                        $lhps = LhpsLingHeader::where('no_lhp', $data->cfr)
+                            ->where('no_order', $data->no_order)
+                            ->where('id_kategori_3', $id_kategori[0])
                             ->where('is_active', true)
                             ->first();
 
                         if ($lhps) {
-                            // History Header Lingkungan Kerja
                             $lhpsHistory = $lhps->replicate();
                             $lhpsHistory->setTable((new LhpsLingHeaderHistory())->getTable());
                             $lhpsHistory->created_at = $lhps->created_at;
@@ -620,7 +727,6 @@ class DraftUlkController extends Controller
                             $lhpsHistory->deleted_by = $this->karyawan;
                             $lhpsHistory->save();
 
-                            // History Detail Lingkungan Kerja
                             $oldDetails = LhpsLingDetail::where('id_header', $lhps->id)->get();
                             foreach ($oldDetails as $detail) {
                                 $detailHistory = $detail->replicate();
@@ -635,52 +741,70 @@ class DraftUlkController extends Controller
                             }
 
                             $lhps->delete();
-                    }
-            }
+                        }
+                }
 
             $data->status = 1;
             $data->save();
             DB::commit();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . $data->no_sampel . ' berhasil direject'
+                'message' => 'Data draft Udara Ambient no LHP ' . $data->no_sampel . ' berhasil direject'
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json([
                 'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+                'message' => 'Terjadi kesalahan ' . $th->getMessage(),
+                'line' => $th->getLine(),
+                'getFile' => $th->getFile()
             ]);
         }
     }
 
     // Amang
-  public function generate(Request $request)
+    public function generate(Request $request)
     {
         DB::beginTransaction();
         try {
-            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
-            $quotation_status = "draft_lhp_ling_kerja";
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
+                ->where('is_active', true)
+                // ->where('id', $request->id)
+                ->first();
+                
             if ($header != null) {
-                $key = $header->no_sampel . str_replace('.', '', microtime(true));
+                $key = $header->no_lhp . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
                 $gen_tahun = self::encrypt(DATE('Y-m-d'));
                 $token = self::encrypt($gen . '|' . $gen_tahun);
 
-                $insertData = [
-                    'token' => $token,
-                    'key' => $gen,
-                    'id_quotation' => $header->id,
-                    'quotation_status' => $quotation_status,
-                    'type' => 'draft_ling_kerja',
-                    'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                    'fileName_pdf' => $header->file_lhp,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s')
-                ];
+                $cek = GenerateLink::where('fileName_pdf', $header->file_lhp)->first();
+                if ($cek) {
+                    $cek->id_quotation = $header->id;
+                    $cek->expired = Carbon::now()->addYear()->format('Y-m-d');
+                    $cek->created_by = $this->karyawan;
+                    $cek->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $cek->save();
 
-                $insert = GenerateLink::insertGetId($insertData);
+                    $header->id_token = $cek->id;
+                } else {
+                    $insertData = [
+                        'token' => $token,
+                        'key' => $gen,
+                        'id_quotation' => $header->id,
+                        'quotation_status' => 'draft_ambient',
+                        'type' => 'draft',
+                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                        'fileName_pdf' => $header->file_lhp,
+                        'created_by' => $this->karyawan,
+                        'created_at' => Carbon::now()->format('Y-m-d H:i:s')
+                    ];
 
-                $header->id_token = $insert;
+                    $insert = GenerateLink::insertGetId($insertData);
+
+                    $header->id_token = $insert;
+                }
+
                 $header->is_generated = true;
                 $header->generated_by = $this->karyawan;
                 $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -696,26 +820,19 @@ class DraftUlkController extends Controller
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
                 'line' => $e->getLine(),
-                'getFile' => $th->getFile(),
-
                 'status' => false
             ], 500);
         }
     }
 
     // Amang
-    public function getUser(Request $request)
-    {
-        $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
-
-        return response()->json($users);
-    }
+ 
 
     // Amang
-      public function getLink(Request $request)
+    public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_ling_kerja', 'type' => 'draft_ling_kerja'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_ambient', 'type' => 'draft'])->first();
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
@@ -724,45 +841,37 @@ class DraftUlkController extends Controller
             return response()->json(['message' => $e->getMessage()], 400);
         }
     }
+    public function getUser(Request $request)
+    {
+        $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
 
+        return response()->json($users);
+    }
     // Amang
-  public function sendEmail(Request $request)
+   public function handleRevisi(Request $request)
     {
         DB::beginTransaction();
         try {
-            if ($request->id != '' || isset($request->id)) {
-                 LhpsLingHeader::where('id', $request->id)->update([
-                    'is_emailed' => true,
-                    'emailed_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'emailed_by' => $this->karyawan
-                ]);
-            }
-            $email = SendEmail::where('to', $request->to)
-                ->where('subject', $request->subject)
-                ->where('body', $request->content)
-                ->where('cc', $request->cc)
-                ->where('bcc', $request->bcc)
-                ->where('attachments', $request->attachments)
-                ->where('karyawan', $this->karyawan)
-                ->noReply()
-                ->send();
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
 
-            if ($email) {
-                DB::commit();
-                return response()->json([
-                    'message' => 'Email berhasil dikirim'
-                ], 200);
-            } else {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Email gagal dikirim'
-                ], 400);
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
             }
-        } catch (\Exception $th) {
-            DB::rollBack();
-            dd($th);
+
+            DB::commit();
             return response()->json([
-                'message' => $th->getMessage()
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -779,7 +888,9 @@ class DraftUlkController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'line' => $th->getLine()
+                'line' => $th->getLine(),
+                'getFile' => $th->getFile(),
+
             ], 500);
         }
     }
