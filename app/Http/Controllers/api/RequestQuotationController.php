@@ -4646,7 +4646,7 @@ class RequestQuotationController extends Controller
                             'parameter' => $pengujian->parameter,
                             'regulasi'    => $pengujian->regulasi,
                             'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'parameter' => $pengujian->parameter,
                             'jumlah_titik' => $pengujian->jumlah_titik,
                             'total_parameter' => $pengujian->total_parameter,
                         ];
