@@ -179,7 +179,7 @@ class SendEmail
 
             $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->emailConfig[$this->fromType]['name']);
             $emailto = trim(preg_replace('/\s+/u', '', $this->to));
-            Log::info('Email to: ' . $emailto);
+            
             $mail->addAddress($emailto);
 
             if (!empty($this->cc)) {
