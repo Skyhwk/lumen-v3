@@ -142,7 +142,7 @@
                         <tr>
                             <td>{{ $personal->no_lhp }}</td>
                             <td>{{ $personal->no_sampel }}</td>
-                            <td>Ergonomi</td>
+                            <td>Gotrak</td>
                         </tr>
                     </tbody>
                 </table>
@@ -176,7 +176,7 @@
                         </tr>
                         <tr>
                             <td>Periode Analisis</td>
-                            <td> <div class="text-input-space">{{ $personal->periode_analis }}</div>
+                            <td> <div class="text-input-space">{{ $personal->periode_analisis }}</div>
                             </td>
                         </tr>
                         <tr>
@@ -307,4 +307,3 @@
     </div>
 </body>
 </html>
-
