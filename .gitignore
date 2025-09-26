@@ -11,3 +11,4 @@ Homestead.yaml
 .phpunit.result.cache
 composer.lock
 docker-compose.yml
+app/Cache/

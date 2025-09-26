@@ -381,6 +381,21 @@ class PortalController extends Controller
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
                             }
+                        } else if ($cek->quotation_status == 'draft_lhp_getaran'){
+                            $data = LhpsGetaranHeader::with('link','order_detail')
+                            ->where('id',$cek->id_quotation)
+                            ->first();
+                            $uri = env('APP_URL') . '/public/dokumen/LHPS/';
+                            if($data !== null){
+                                $data->type = $cek->quotation_status;
+                                $data->chekjadwal =null;
+                                if ($data->link) {
+                                    $data->link->fileName_pdf = $cek->fileName_pdf;
+                                }
+                                if($data->order_detail->cfr){
+                                    $data->no_lhp = $data->order_detail->cfr;
+                                }
+                            }
                         }
 
                         if (DATE('Y-m-d') > $cek->expired) {
