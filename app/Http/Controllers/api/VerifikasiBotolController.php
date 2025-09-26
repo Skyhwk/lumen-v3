@@ -96,10 +96,10 @@ class VerifikasiBotolController extends Controller
                 $parameters = json_decode($persiapan->parameters);
 
                 foreach ($dataDisplay as $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
                     if (isset($parameters->air->$type)) {
@@ -112,11 +112,15 @@ class VerifikasiBotolController extends Controller
                         if ($item->koding == $request->no_sampel) {
                             $item->jumlah = 1;
                         }
+                    } else if (isset($parameters->padatan->$type)) {
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->jumlah = 1;
+                        }
                     } else {
                         $item->disiapkan = null;
                     }
                 }
-
             } else {
 
                 $data = OrderDetail::whereNotNull('persiapan')
@@ -134,10 +138,10 @@ class VerifikasiBotolController extends Controller
                 $parameters = json_decode($persiapan->parameters) ?? null;
 
                 foreach ($dataDisplay as $key => $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
                     $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
@@ -164,10 +168,16 @@ class VerifikasiBotolController extends Controller
                         if ($item->koding == $request->no_sampel) {
                             $item->scanned = 1;
                         }
+                    } else if (isset($parameters->padatan->$type)) {
+
+
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->scanned = 1;
+                        }
                     } else {
                         $item->disiapkan = null;
                     }
-
                 }
             }
 
@@ -200,7 +210,6 @@ class VerifikasiBotolController extends Controller
                 'no_sampel' => $request->no_sampel,
                 'kategori' => $categoris
             ], 200);
-
         } catch (\Exception $th) {
             return response()->json([
                 "message" => $th->getMessage(),

@@ -8,12 +8,14 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="240">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP</sup></td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Iklim Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
@@ -56,18 +58,15 @@
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @foreach($methode_sampling as $index => $item)
-                                    <tr>
-                                        @if (count($methode_sampling) > 1)
-                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                            <td class="custom5">{{ $item ?? '-' }}</td>
-                                        @else
-                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                        @endif
-                                    </tr>
-                                @endforeach
-                            </table>
+                            @if (count($header->metode_sampling) > 1)
+                                <ol>
+                                    @foreach($header->metode_sampling as $index => $item)
+                                        <li>{{ $item ?? '-' }}</li>
+                                    @endforeach
+                                </ol>
+                            @else
+                                {{ $header->metode_sampling[0] ?? '-' }}
+                            @endif
                         </td>
                     </tr>
                    

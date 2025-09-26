@@ -1,5 +1,16 @@
 @php
-  
+  $satuan = '';
+  $regulasi = json_decode($header->regulasi)[0];
+  $arrRegulasi = explode('-', $regulasi);
+  if(count($arrRegulasi) > 1){
+      $idRegulasi = $arrRegulasi[0];
+        if(in_array($idRegulasi, [61, 204, 60])) {
+            $satuan = '(mm/detik)';
+        } else if (in_array($idRegulasi, [228])) {
+            $satuan = '(10^-6 m)';
+        }
+  }
+
 @endphp
 
 @if (!empty($detail))
@@ -9,7 +20,7 @@
                 <tr>
                     <th width="8%" class="custom" rowspan="2">NO</th>
                     <th width="40%"  class="custom" rowspan="2" colspan="2">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="21%"  class="custom" colspan="2">HASIL UJI (dBA)</th>
+                    <th width="21%"  class="custom" colspan="2">HASIL UJI {{ $satuan }}</th>
                     <th width="21%" class="custom" rowspan="2">JUMLAH JAM PEMAPARAN PER HARI</th>
                     <th width="21%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>

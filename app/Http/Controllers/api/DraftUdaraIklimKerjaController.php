@@ -125,7 +125,7 @@ class DraftUdaraIklimKerjaController extends Controller
                     $header = LhpsIklimHeader::find($request->id_lhp);
 
                     if ($header) {
-                        $headerMetode = $header->metode_sampling ?? [];
+                        $headerMetode = is_array($header->metode_sampling) ? $header->metode_sampling : json_decode($header->metode_sampling, true) ?? [];
 
                         foreach ($data as $key => $value) {
                             $valueMetode = array_map('trim', explode(',', $value->method));

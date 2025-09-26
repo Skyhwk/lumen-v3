@@ -33,7 +33,7 @@ use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class TqcGetaranController extends Controller
+class TqcGetaranPersonalController extends Controller
 {
     public function index(Request $request)
     {
@@ -53,7 +53,7 @@ class TqcGetaranController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
+            ->whereIn('kategori_3',[ "17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 

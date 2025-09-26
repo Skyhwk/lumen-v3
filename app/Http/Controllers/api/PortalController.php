@@ -21,18 +21,22 @@ use App\Models\{
     Jadwal,
     Invoice,
     LhpsAirHeader,
-    LhpsKebisinganHeader, 
+    LhpsKebisinganHeader,
     LhpsPencahayaanHeader,
     LhpUdaraPsikologiHeader,
     LhpsEmisiHeader,
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
-     LhpsAirCustom, LhpsAirDetail, Printers};
+    LhpsAirCustom,
+    LhpsAirDetail,
+    MasterRegulasi,
+    Printers
+};
 //services
-use App\Services\{GeneratePraSampling,GetBawahan, LhpTemplate, SendTelegram,SamplingPlanServices,Printing,PrintLhp};
+use App\Services\{GeneratePraSampling, GetBawahan, LhpTemplate, SendTelegram, SamplingPlanServices, Printing, PrintLhp};
 //jobs
-use App\Jobs\{RenderSamplingPlan,JobPrintLhp};
+use App\Jobs\{RenderSamplingPlan, JobPrintLhp};
 use Illuminate\Support\Facades\Log;
 
 class PortalController extends Controller
@@ -41,18 +45,18 @@ class PortalController extends Controller
     {
         try {
             if ($request->token != null) {
-                
+
                 $cek = GenerateLink::where('token', $request->token)
                     ->where('key', $request->key)
                     ->first();
-                
+
                 $uri = env('APP_URL');
                 if ($cek != null) {
                     if ($request->mode == 'GETDATA') {
                         $combi = [];
                         $data = [];
                         if ($cek->quotation_status == 'non_kontrak') {
-                            
+
                             $data = QuotationNonKontrak::with([
                                 'sampling' => function ($q) {
                                     $q->where('is_active', true);
@@ -353,7 +357,7 @@ class PortalController extends Controller
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
                                 ->first();
-                            
+
                             $uri = env('APP_URL') . '/public/dokumen/LHP/';
                             if ($data) {
                                 $data->flag_status = 'lhpp';
@@ -361,19 +365,19 @@ class PortalController extends Controller
                                 $data->filename = $cek->fileName_pdf;
                                 $data->chekjadwal = null;
                             }
-                        } else if ($cek->quotation_status == 'draft_ergonomi'){
-                            $data = DraftErgonomiFile::with('link','order_detail')
-                            ->where('id',$cek->id_quotation)
-                            ->first();
+                        } else if ($cek->quotation_status == 'draft_ergonomi') {
+                            $data = DraftErgonomiFile::with('link', 'order_detail')
+                                ->where('id', $cek->id_quotation)
+                                ->first();
                             $uri = env('APP_URL') . '/public/draft_ergonomi/draft/';
-                            if($data !== null){
+                            if ($data !== null) {
                                 $data->flag_status = 'draft';
                                 $data->type = $cek->quotation_status;
-                                $data->chekjadwal =null;
+                                $data->chekjadwal = null;
                                 if ($data->link) {
                                     $data->link->fileName_pdf = $cek->fileName_pdf;
                                 }
-                                if($data->order_detail->cfr){
+                                if ($data->order_detail->cfr) {
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
                             }
@@ -440,8 +444,8 @@ class PortalController extends Controller
                     ->json(['message' => 'Token not found.!', 'status' => '404'], 200);
             }
         } catch (\Exception $ex) {
-        //throw $th;
-        return response()->json(["message"=>$ex->getMessage(),"line"=>$ex->getLine(),"file"=>$ex->getFile()],500);
+            //throw $th;
+            return response()->json(["message" => $ex->getMessage(), "line" => $ex->getLine(), "file" => $ex->getFile()], 500);
         }
     }
 
@@ -561,7 +565,6 @@ class PortalController extends Controller
                             ];
                             DB::table('record_permintaan_barang')->insert($body);
                             array_push($QEY, array(($key + 1), $cekBarang->kode_barang, $cekBarang->nama_barang, $request->jumlah[$key]));
-
                         }
                         //DB::table('link_extend')->where('token', $request->token)->delete();
 
@@ -587,7 +590,6 @@ class PortalController extends Controller
                             'file' => $ex->getFile()
                         ], 500);
                     }
-
                 } else {
                     return response()->json([
                         'message' => 'Missing Cabang.!'
@@ -857,7 +859,6 @@ class PortalController extends Controller
                     $spServices = SamplingPlanServices::on('insertNon', $dataArray)->insertSPPortal();
                     return response()->json($spServices, 200);
                 }
-
             }
 
             if ($spServices) {
@@ -1027,7 +1028,6 @@ class PortalController extends Controller
                 'message' => 'Data berhasil disimpan',
                 'data' => $konfirmasi,
             ], 200);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -1133,13 +1133,14 @@ class PortalController extends Controller
         $konfirmasi->type = explode('/', $request->no_quotation)[1] == 'QTC' ? 'kontrak' : 'non_kontrak';
     }
 
-    public function handlePrintLhp(Request $request ) {
+    public function handlePrintLhp(Request $request)
+    {
         // $job = new JobPrintLhp($request->no_sampel);
         $services = new PrintLhp();
         try {
             // $run = $this->dispatch($job);
             $run = $services->print($request->no_sampel);
-            if(!$run) {
+            if (!$run) {
                 return response()->json(['message' => 'Failed to dispatch printing job', 'status' => '401'], 200);
             }
             return response()->json(['message' => 'Printing LHP job has been dispatched successfully', 'status' => '201'], 200);
@@ -1151,153 +1152,110 @@ class PortalController extends Controller
     public function renderLhp(Request $request)
     {
         $orderDetails = OrderDetail::select('id', 'cfr', 'no_sampel', 'kategori_2', 'kategori_3')
-            ->with([
-                'lhps_air',
-                'lhps_emisi',
-                'lhps_emisi_c',
-                'lhps_getaran',
-                'lhps_kebisingan',
-                'lhps_ling',
-                'lhps_medanlm',
-                'lhps_pencahayaan',
-                'lhps_sinaruv',
-                'lhps_iklim',
-                'lhps_ergonomi',
-            ])
+            ->with(['lhps_air', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'])
             ->where(['cfr' => $request->lhp_number, 'is_active' => true])
             ->get();
 
         $grouped = $orderDetails->map(function ($detail) {
-            $allLhps = collect([
-                $detail->lhps_air,
-                $detail->lhps_emisi,
-                $detail->lhps_emisi_c,
-                $detail->lhps_getaran,
-                $detail->lhps_kebisingan,
-                $detail->lhps_ling,
-                $detail->lhps_medanlm,
-                $detail->lhps_pencahayaan,
-                $detail->lhps_sinaruv,
-                $detail->lhps_iklim,
-                $detail->lhps_ergonomi,
-            ])->flatten(1);
-
-            $validLhps = $allLhps->filter(function ($lhp) {
-                if (!$lhp) return false;
-
-                return $lhp->is_active == 1
-                    && !empty($lhp->nama_karyawan)
-                    && !empty($lhp->jabatan_karyawan)
-                    && !empty($lhp->file_qr)
-                    && !empty($lhp->file_lhp)
-                    && !empty($lhp->tanggal_lhp);
-            });
+            $validLhps = collect([$detail->lhps_air, $detail->lhps_emisi, $detail->lhps_emisi_c, $detail->lhps_getaran, $detail->lhps_kebisingan, $detail->lhps_ling, $detail->lhps_medanlm, $detail->lhps_pencahayaan, $detail->lhps_sinaruv, $detail->lhps_iklim, $detail->lhps_ergonomi])
+                ->flatten(1)
+                ->filter(fn($lhp) => $lhp && $lhp->is_active == 1 && $lhp->nama_karyawan && $lhp->jabatan_karyawan && $lhp->file_qr && $lhp->file_lhp && $lhp->tanggal_lhp);
 
             return [
                 'kategori_2' => $detail->kategori_2,
                 'kategori_3' => $detail->kategori_3,
-                'lhps'       => $validLhps->sortByDesc('id')->values(),
+                'lhps' => $validLhps->sortByDesc('id')->values(),
             ];
-        })->filter(fn($row) => $row['lhps']->isNotEmpty())->values()->first();
+        })->filter(fn($row) => $row['lhps']->isNotEmpty())->first();
 
         if (!$grouped) return response()->json(['message' => 'LHP tidak ditemukan atau belum dirilis'], 404);
 
-        $kategori_2 = $grouped['kategori_2'];
-        $kategori_3 = $grouped['kategori_3'];
         $lhps = $grouped['lhps']->first();
+        $kategori2 = $grouped['kategori_2'];
+        $kategori3 = $grouped['kategori_3'];
+        $lampiran = false;
+        $view = null;
+        $detail = null;
+        $custom = null;
 
-        if ($kategori_2 == '1-Air') {
-            $custom = $lhps->lhpsAirCustom;
-            $detail = $lhps->lhpsAirDetail;
+        if ($kategori2 == '1-Air') {
             $view = 'DraftAir';
-        } 
-        
-        // else if ($kategori_2 == '4-Udara') {
-        //     $custom = $lhps->lhpsEmisiCustom;
-        //     $detail = $lhps->lhpsEmisiDetail;
-        //     $view = 'DraftEmisi';
-        // } else if ($kategori_2 == '5-Emisi') {
-        //     $custom = $lhps->lhpsEmisiCustom;
-        //     $detail = $lhps->lhpsEmisiDetail;
-        //     $view = 'DraftEmisi';
-        // } else if ($kategori_2 == '6-Padatan') {
-        //     $custom = $lhps->lhpsEmisiCustom;
-        //     $detail = $lhps->lhpsEmisiDetail;
-        //     $view = 'DraftEmisi';
-        // } else if ($kategori_2 == '9-Pangan') {
-        //     $custom = $lhps->lhpsEmisiCustom;
-        //     $detail = $lhps->lhpsEmisiDetail;
-        //     $view = 'DraftEmisi';
-        // }
+            $detail = $lhps->lhpsAirDetail;
+            $custom = $lhps->lhpsAirCustom;
+        }
 
-        // if ($data->id_kategori_3 == 32) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->DirectESBSolar($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     return true;
-        // } else if ($data->id_kategori_3 == 31) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->DirectESBBensin($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     return true;
-        // } else if ($data->id_kategori_2 == 34) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->emisisumbertidakbergerak($data, $data_detail, $mode_download, $data_custom, null, $mpdf);
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [11, 27])) {
-        //     $parameter = json_decode($data->parameter_uji);
+        if ($kategori2 == '4-Udara') {
+            $lampiran = true;
+            $parameter = json_decode($lhps->parameter_uji) ?: [];
 
-        //     if (in_array("Sinar UV", $parameter)) {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpSinarUV($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     } else if (in_array("Medan Magnit Statis", $parameter) || in_array("Medan Listrik", $parameter) || in_array("Power Density", $parameter)) {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpMagnet($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     } else {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpLingkungan($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     }
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [28])) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->lhpPencahayaan($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [23, 24, 25])) {
-        //     $parameter = json_decode($data->parameter_uji);
-        //     if (is_array($parameter) && in_array("Kebisingan (P8J)", $parameter)) {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpKebisinganPersonal($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     } else {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpKebisinganSesaat($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     }
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [21])) {
-        //     $parameter = json_decode($data->parameter_uji);
-        //     if (is_array($parameter) && (in_array("ISBB", $parameter) || in_array("ISBB (8 Jam)", $parameter))) {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpIklimPanas($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     } else {
-        //         $render = new BundledTemplateLhps;
-        //         $render->lhpIklimDingin($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     }
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [13, 14, 15, 16, 18, 19])) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->lhpGetaran($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     return true;
-        // } else if (in_array($data->id_kategori_3, [17, 20])) {
-        //     $render = new BundledTemplateLhps;
-        //     $render->lhpGetaranPersonal($data, $data_detail, $mode_download, $data_custom, $custom2, $mpdf);
-        //     return true;
-        // }
+            if (in_array($kategori3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])) {
+                if (in_array("Sinar UV", $parameter)) {
+                    $view = 'DraftUlkSinarUv';
+                    $detail = $lhps->lhpsSinaruvDetail;
+                    $custom = $lhps->lhpsSinaruvCustom;
+                } elseif (array_intersect($parameter, ["Medan Magnit Statis", "Medan Listrik", "Power Density"])) {
+                    $view = 'DraftUlkMedanMagnet';
+                    $detail = $lhps->lhpsMedanLMDetail;
+                    $custom = $lhps->lhpsMedanLMCustom;
+                } else {
+                    $view = 'DraftUdaraAmbient';
+                    $detail = $lhps->lhpsLingDetail;
+                    $custom = $lhps->lhpsLingCustom;
+                }
+            } elseif ($kategori3 == '28-Pencahayaan') {
+                $view = 'DraftPencahayaan';
+                $detail = $lhps->lhpsPencahayaanDetail;
+                $custom = $lhps->lhpsPencahayaanCustom;
+            } elseif (in_array($kategori3, ['23-Kebisingan', '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)'])) {
+                $regulasi = json_decode($lhps->regulasi);
+                $idRegulasi = $regulasi ? explode('-', $regulasi[0])[0] : '';
+                $view = 'DraftKebisingan';
 
-        $groupedByPage = collect($custom)
-            ->groupBy('page')
-            ->toArray();
-            
+                if (in_array($idRegulasi, [54, 151, 167, 168, 382])) {
+                    $masterRegulasi = MasterRegulasi::find($idRegulasi);
+                    $deskripsi = $masterRegulasi ? $masterRegulasi->deskripsi : '';
+
+                    $view = $deskripsi == 'Kebisingan LH - 24 Jam' ? 'DraftKebisinganLh24Jam' : 'DraftKebisinganLh';
+                }
+
+                $detail = $lhps->lhpsKebisinganDetail;
+                $custom = $lhps->lhpsKebisinganCustom;
+            } elseif ($kategori3 == '21-Iklim Kerja') {
+                $view = array_intersect($parameter, ["ISBB", "ISBB (8 Jam)"]) ? 'DraftIklimPanas' : 'DraftIklimDingin';
+                $detail = $lhps->lhpsIklimDetail;
+                $custom = $lhps->lhpsIklimCustom;
+            } elseif (in_array($kategori3, ['13-Getaran', '14-Getaran (Bangunan)', '15-Getaran (Kejut Bangunan)', '18-Getaran (Lingkungan)', '19-Getaran (Mesin)'])) {
+                $view = 'DraftGetaran';
+                $detail = $lhps->lhpsGetaranDetail;
+                $custom = $lhps->lhpsGetaranCustom;
+            } elseif (in_array($kategori3, ['17-Getaran (Lengan & Tangan)', '20-Getaran (Seluruh Tubuh)'])) {
+                $view = 'DraftGetaranPersonal';
+                $detail = $lhps->lhpsGetaranDetail;
+                $custom = $lhps->lhpsGetaranCustom;
+            }
+        }
+
+        if ($kategori2 == '5-Emisi') {
+            if ($kategori3 == '34-Emisi Sumber Tidak Bergerak') {
+                $view = 'DraftEmisiC';
+                $detail = $lhps->lhpsEmisiCDetail;
+                $custom = $lhps->lhpsEmisiCCustom;
+            } else {
+                $view = 'DraftEmisi';
+                $detail = $lhps->lhpsEmisiDetail;
+                $custom = $lhps->lhpsEmisiCustom;
+            }
+        }
+
+        if (!$view) return response()->json(['message' => 'LHP tidak ditemukan atau belum dirilis'], 404);
+
+        $groupedByPage = collect($custom)->groupBy('page')->toArray();
+
         $fileName = LhpTemplate::setDataDetail($detail)
             ->setDataHeader($lhps)
             ->setDataCustom($groupedByPage)
             ->whereView($view)
+            ->useLampiran($lampiran)
             ->render();
 
         return response()->json(['file' => $fileName], 200);
