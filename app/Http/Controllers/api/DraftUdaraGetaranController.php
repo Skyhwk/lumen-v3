@@ -242,7 +242,7 @@ class DraftUdaraGetaranController extends Controller
                 'nama_karyawan'   => $nama_perilis,
                 'is_revisi'       => false,
                 'count_revisi'    => $newCountRevisi,
-                'is_generated'    => $is_revisi ? false : $header->is_generated,
+                'is_generated'    => $is_revisi ? false : $header->is_generated ?? 0,
                 'jabatan_karyawan'=> $jabatan_perilis,
                 'regulasi'        => $request->regulasi ? json_encode($request->regulasi) : null,
                 'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
@@ -843,7 +843,7 @@ class DraftUdaraGetaranController extends Controller
                 $lhps->delete();
             }
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+            OrderDetail::where('cfr', $request->no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1

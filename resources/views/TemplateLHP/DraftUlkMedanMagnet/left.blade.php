@@ -1,50 +1,14 @@
-@if (!empty($custom))
-    @foreach ($data as $key => $value)
-        <div class="left">
-            <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
-                <thead>
-                    <tr>
-                        <th width="25" class="custom">NO</th>
-                        <th width="170" class="custom">PARAMETER</th>
-                        <th width="210" class="custom">HASIL UJI </th>
-                        <th width="50" class="custom">NAB **</th>
-                        <th width="50" class="custom">SATUAN</th>
-                        <th width="120" class="custom">SPESIFIKASI METODE</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @php 
-                        $totdat = count($value); 
-                    @endphp
-                    @foreach ($value as $kk => $yy)
-                        @php
-                            $p = $kk + 1;
-                        @endphp
-                        <tr>
-                            <td class="pd-5-solid-center">{{$p}}</td>
-                            <td class="pd-5-solid-left">{{$yy['parameter']}}</td>
-                            <td class="pd-5-solid-center">{{$yy['hasil']}}</td>
-                            <td class="pd-5-solid-center">{{$yy['nab']}}</td>
-                            <td class="pd-5-solid-center">{{$yy['satuan']}}</td>
-                            <td class="pd-5-solid-center">{{$yy['methode']}}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-    @endforeach
 
-@else
     <div class="left">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
             <thead>
                 <tr>
-                    <th width="25" class="custom">NO</th>
-                    <th width="170" class="custom">PARAMETER</th>
-                    <th width="210" class="custom">HASIL UJI </th>
-                    <th width="50" class="custom">NAB **</th>
-                    <th width="50" class="custom">SATUAN</th>
-                    <th width="120" class="custom">SPESIFIKASI METODE</th>
+                    <th width="6%" class="custom">NO</th>
+                    <th width="20%" class="custom" >PARAMETER</th>
+                    <th width="20%" class="custom">HASIL UJI </th>
+                    <th width="15%" class="custom">NAB **</th>
+                    <th width="15%" class="custom">SATUAN</th>
+                    <th width="24%" class="custom">TANGGAL SAMPLING</th>
                 </tr>
             </thead>
             <tbody>
@@ -55,11 +19,13 @@
                     @endphp
                     <tr>
                         <td class="pd-5-solid-center">{{$p}}</td>
-                        <td class="pd-5-solid-left">{{$yy['parameter']}}</td>
+                    <td class="pd-5-solid-left"><sup
+                            style="font-size:5px; !important; margin-top:-10px;">{{ $yy['no_sampel'] }}</sup>{{ $yy['parameter'] }}
+                    </td>
                         <td class="pd-5-solid-center">{{$yy['hasil']}}</td>
                         <td class="pd-5-solid-center">{{$yy['nab']}}</td>
                         <td class="pd-5-solid-center">{{$yy['satuan']}}</td>
-                        <td class="pd-5-solid-center">{{$yy['methode']}}</td>
+                        <td class="pd-5-solid-center">{{$yy['tanggal_sampling']}}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -103,18 +69,21 @@
             </thead>
             <tbody>
                 @php
-                    $hasilObservasi = json_decode($header->hasil_observasi, true);
+                    $hasilObservasi = json_decode($header->hasil_observasi, true) ?? null;
                 @endphp
+                @if($hasilObservasi)
+                    @if (is_array($hasilObservasi))
+                        @foreach ($hasilObservasi as $key => $note)
+                            @php $p = $key + 1; @endphp
+                            <tr>
+                                <td width="4%" class="pd-5-solid-left" style="font-weight: bold; text-align: center;">{{$p}}</td>
+                                <td width="36%" class="pd-5-solid-left" style="text-align: center;">{{$note}}</td>
+                            </tr>
+                        @endforeach
+                    @endif
+                @endif 
 
-                @if (is_array($hasilObservasi))
-                    @foreach ($hasilObservasi as $key => $note)
-                        @php $p = $key + 1; @endphp
-                        <tr>
-                            <td width="4%" class="pd-5-solid-left" style="font-weight: bold; text-align: center;">{{$p}}</td>
-                            <td width="36%" class="pd-5-solid-left" style="text-align: center;">{{$note}}</td>
-                        </tr>
-                    @endforeach
-                @endif
+            
             </tbody>
         </table>
         <br />
@@ -126,9 +95,11 @@
             </thead>
             <tbody>
                 @php
-                    $kesimpulan = json_decode($header->kesimpulan, true);
+                    $kesimpulan = json_decode($header->kesimpulan, true) ?? null;
                 @endphp
-                @if (is_array($kesimpulan))
+
+                  @if($kesimpulan)
+                  @if (is_array($kesimpulan))
                     @foreach ($kesimpulan as $key => $note)
                         @php
                             $p = $key + 1;
@@ -139,10 +110,11 @@
                         </tr>
                     @endforeach
                 @endif
+                @endif 
+               
             </tbody>
         </table>
     </div>
-@endif
 
 
 

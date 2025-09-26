@@ -28,6 +28,7 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\KonfirmasiLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -288,14 +289,14 @@ class DraftUlkSinarUvController extends Controller
                 $header->is_generated = 0;
                 $header->count_revisi++;
                 if ($header->count_revisi > 2) {
-                    $this->handleApprove($request);
+                    $this->handleApprove($request, false);
                 }
             }
             $header->save();
 
             DB::commit();
             return response()->json([
-                'message' => "Data draft lhps air no LHP {$request->no_lhp} berhasil disimpan",
+                'message' => "Data draft lhps sinar uv no LHP {$request->no_lhp} berhasil disimpan",
                 'status'  => true
             ], 201);
 
@@ -574,17 +575,40 @@ class DraftUlkSinarUvController extends Controller
                     ], 500);
                 }
             }
-      public function handleApprove(Request $request)
+      public function handleApprove(Request $request, $isManual = true)
         {
             try {
-                $data = LhpsSinarUVHeader::where('id', $request->id)
+                if ($isManual) {
+                    $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+        
+                    if (!$konfirmasiLhp) {
+                        $konfirmasiLhp = new KonfirmasiLhp();
+                        $konfirmasiLhp->created_by = $this->karyawan;
+                        $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    } else {
+                        $konfirmasiLhp->updated_by = $this->karyawan;
+                        $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                    }
+        
+                    $konfirmasiLhp->no_lhp = $request->cfr;
+                    $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                    $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                    $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                    $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                    $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                    $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                    $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+        
+                    $konfirmasiLhp->save();
+                }
+                $data = LhpsSinarUVHeader::where('no_lhp', $request->no_lhp)
                     ->where('is_active', true)
                     ->first();
-                $noSampel = array_map('trim', explode(',', $request->no_sampel));
+                $noSampel = array_map('trim', explode(',', $request->noSampel));
                 $no_lhp = $data->no_lhp;
             
                 $qr = QrDocument::where('id_document', $data->id)
-                    ->where('type_document', 'LHP_IKLIM')
+                    ->where('type_document', 'LHP_SINAR_UV')
                     ->where('is_active', 1)
                     ->where('file', $data->file_qr)
                     ->orderBy('id', 'desc')
@@ -606,10 +630,14 @@ class DraftUlkSinarUvController extends Controller
                     $data->approved_by = $this->karyawan;
                     $data->nama_karyawan = $this->karyawan;
                     $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                    if ($data->count_print < 1) {
+                        $data->is_printed = 1;
+                        $data->count_print = $data->count_print + 1;
+                    }
                     $data->save();
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
-                        'no_sampel' => $request->no_sampel,
+                        'no_sampel' => $request->noSampel,
                         'kategori_2' => $data->id_kategori_2,
                         'kategori_3' => $data->id_kategori_3,
                         'menu' => 'Draft Udara',
@@ -631,7 +659,7 @@ class DraftUlkSinarUvController extends Controller
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP Iklim dengan no LHP ' . $no_lhp . ' berhasil diapprove'
+                    'message' => 'Data draft LHP sinar uv dengan no LHP ' . $no_lhp . ' berhasil diapprove'
                 ], 201);
             } catch (\Exception $th) {
                 DB::rollBack();
@@ -651,7 +679,7 @@ class DraftUlkSinarUvController extends Controller
             $lhps = LhpsSinarUVHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
-            $no_lhp = $lhps->no_lhp;
+            $no_lhp = $lhps->no_lhp ?? null;
             if ($lhps) {
                 HistoryAppReject::insert([
                     'no_lhp' => $lhps->no_lhp,
@@ -693,11 +721,21 @@ class DraftUlkSinarUvController extends Controller
                 $lhps->delete();
             }
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+
+            if ($no_lhp) {
+                OrderDetail::where('cfr', $no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1
                     ]);
+            } else {
+                // kalau tidak ada LHP, update tetap bisa dilakukan dengan kriteria lain
+                // contoh: berdasarkan no_sampel saja
+                OrderDetail::whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            }
 
 
             DB::commit();
@@ -720,7 +758,7 @@ class DraftUlkSinarUvController extends Controller
         try {
             $header = LhpsSinarUVHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
-                ->where('id', $request->id)
+                // ->where('id', $request->id)
                 ->first();
                if ($header != null) {
                 $key = $header->no_lhp . str_replace('.', '', microtime(true));
@@ -742,8 +780,8 @@ class DraftUlkSinarUvController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_sinar_uv',
+                        'type' => 'draft',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,
@@ -774,6 +812,33 @@ class DraftUlkSinarUvController extends Controller
             ], 500);
         }
     }
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsSinarUVHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 
     // Amang
     public function getUser(Request $request)
@@ -787,7 +852,7 @@ class DraftUlkSinarUvController extends Controller
      public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_sinar_uv', 'type' => 'draft_sinar_uv'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_sinar_uv', 'type' => 'draft'])->first();
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
