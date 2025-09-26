@@ -8,12 +8,14 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Pencahayaan Lingkungan Kerja <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
@@ -57,10 +59,10 @@
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
                     </tr> -->
                     <tr>
-                        <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
+                        <td class="custom5" width="120">Metode Sampling</td>
+                        <td class="custom5" width="12">:</td>
                         <td class="custom5"> 
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif; padding: 10px 0px 0px 0px;">
                                 @foreach($methode_sampling as $index => $item)
                                     <tr>
                                         @if (count($methode_sampling) > 1)
@@ -71,7 +73,8 @@
                                         @endif
                                     </tr>
                                 @endforeach
-                            </table></td>
+                            </table>
+                        </td>
                         
                     </tr>
                     <!-- <tr>

@@ -53,7 +53,7 @@ class TqcGetaranController extends Controller
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
+            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 

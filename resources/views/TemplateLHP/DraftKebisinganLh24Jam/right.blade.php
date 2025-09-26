@@ -1,8 +1,10 @@
+
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
+<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"></div> -->
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
@@ -18,10 +20,11 @@
                 </table>
             </td>
         </tr>
+
+        {{-- Informasi Pelanggan --}}
         <tr>
             <td>
-                {{-- Informasi Pelanggan --}}
-                <table style="padding: 20px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 20px;" width="100%">
                     <tr>
                         <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
@@ -33,7 +36,7 @@
                 </table>
 
                 {{-- Alamat Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
@@ -42,18 +45,19 @@
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr> 
+                        <td class="custom5" width="120" colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                        </td>
+                    </tr>
+                    <tr>
                     @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
+                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
                     @endphp
-
-                    <tr>
-                     <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5"> 
+                        <td class="custom5" width="120">Metode Sampling</td>
+                        <td class="custom5" width="12">:</td>
+                        <td class="custom5">
                             <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
                                 @foreach($methode_sampling as $index => $item)
                                     <tr>
@@ -65,36 +69,22 @@
                                         @endif
                                     </tr>
                                 @endforeach
-                            </table></td>
+                            </table>
+                        </td>
                     </tr>
-                    <tr>
-                        <td class="custom5" width="120">Tanggal Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>   
-                    @php
-                            $periode = explode(' - ', $header['periode_analisa']);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
-                        @endphp
-                      <!-- <tr>
-                        <td class="custom5" width="120">Periode Analisa</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
-                    </tr> -->
-                   
-                    
                 </table>
 
                 {{-- Regulasi --}}
                 @if (!empty($header->regulasi))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
-                            </tr>
-                        @endforeach
-                         @php
+                
+                    @foreach (json_decode($header->regulasi) as $y)
+                            <table style="padding-top: 10px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            </table>
+                    @endforeach
+                        @php
                             $regulasiId = explode('-', $y)[0];
                             $regulasiName = explode('-', $y)[1] ?? '';
                             $regulasi = MasterRegulasi::find($regulasiId);
@@ -108,7 +98,6 @@
                                 </tr>
                         </table>
                         @endif
-                    </table>
                 @endif
             </td>
         </tr>

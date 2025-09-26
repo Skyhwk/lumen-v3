@@ -304,10 +304,10 @@ class DraftUdaraKebisinganController extends Controller
                     $header->is_revisi = 0;
                     $header->is_generated = 0;
                     $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request, false);
+                    if ($header->count_revisi > 2) {
+                        $this->handleApprove($request, false);
+                    }
                 }
-            }
                 $header->save();
             }
 
@@ -660,7 +660,7 @@ class DraftUdaraKebisinganController extends Controller
             if ($lhps) {
                 HistoryAppReject::insert([
                     'no_lhp' => $lhps->no_lhp,
-                    'no_sampel' => $request->no_sampel,
+                    'no_sampel' => $request->noSampel,
                     'kategori_2' => $lhps->id_kategori_2,
                     'kategori_3' => $lhps->id_kategori_3,
                     'menu' => 'Draft Udara',
@@ -753,8 +753,8 @@ class DraftUdaraKebisinganController extends Controller
                             'token' => $token,
                             'key' => $gen,
                             'id_quotation' => $header->id,
-                            'quotation_status' => 'draft_lhp_kebisingan',
-                            'type' => 'draft_kebisingan',
+                            'quotation_status' => 'draft_kebisingan',
+                            'type' => 'draft',
                             'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                             'fileName_pdf' => $header->file_lhp,
                             'created_by' => $this->karyawan,
@@ -800,7 +800,7 @@ class DraftUdaraKebisinganController extends Controller
     public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_kebisingan', 'type' => 'draft_kebisingan'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_kebisingan', 'type' => 'draft'])->first();
 
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
