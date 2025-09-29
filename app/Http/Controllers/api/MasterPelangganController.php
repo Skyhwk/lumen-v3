@@ -14,7 +14,14 @@ use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\AlamatPelangganBlacklist;
+use App\Models\KontakPelangganBlacklist;
+use App\Models\MasterPelangganBlacklist;
+use App\Models\PelangganBlacklist;
+use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
+use Carbon\Carbon;
+Carbon::setLocale('id');
 
 class MasterPelangganController extends Controller
 {
@@ -444,5 +451,63 @@ class MasterPelangganController extends Controller
             'message' => 'Data Sales berhasil ditampilkan',
             'data' => $data
         ], 200);
+    }
+
+    public function blacklist(Request $request) 
+    {
+        DB::beginTransaction();
+        try {
+            // Master Pelanggan
+            $masterPelanggan = MasterPelanggan::find($request->id);
+            if (!$masterPelanggan) return response()->json(['message' => 'Pelanggan tidak ditemukan'], 404);
+
+            $blacklist = new PelangganBlacklist();
+            $blacklist->id_pelanggan = $masterPelanggan->id;
+            $blacklist->alasan_blacklist = $request->alasan;
+            $blacklist->blacklisted_by = $this->karyawan;
+            $blacklist->blacklisted_at = Carbon::now();
+            $blacklist->save();
+    
+            $a = $masterPelanggan->replicate();
+            $a->setTable((new MasterPelangganBlacklist())->getTable());
+            $a->id = $masterPelanggan->id;
+            $a->save();
+
+            // Kontak Pelanggan
+            $kontakPelanggan = KontakPelanggan::where('pelanggan_id', $masterPelanggan->id)->get();
+            foreach ($kontakPelanggan as $kp) {
+                $b = $kp->replicate();
+                $b->setTable((new KontakPelangganBlacklist())->getTable());
+                $b->id = $kp->id;
+                $b->save();
+            }
+
+            // PIC Pelanggan
+            $picPelanggan = PicPelanggan::where('pelanggan_id', $masterPelanggan->id)->get();
+            foreach ($picPelanggan as $pp) {
+                $c = $pp->replicate();
+                $c->setTable((new PicPelangganBlacklist())->getTable());
+                $c->id = $pp->id;
+                $c->save();
+            }
+
+            // Alamat Pelanggan
+            $alamatPelanggan = AlamatPelanggan::where('pelanggan_id', $masterPelanggan->id)->get();
+            foreach ($alamatPelanggan as $ap) {
+                $d = $ap->replicate();
+                $d->setTable((new AlamatPelangganBlacklist())->getTable());
+                $d->id = $ap->id;
+                $d->save();
+            }
+
+            $masterPelanggan->delete();
+
+            DB::commit();
+    
+            return response()->json(['message' => 'Pelanggan berhasil diblacklist'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => $th->getMessage()], 500);
+        }
     }
 }
