@@ -1026,9 +1026,14 @@ class ReadyOrderController extends Controller
 
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
-                                return response()->json([
-                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
-                                ], 400);
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
                             }
                             $koding = $no_sampling . strtoupper(Str::random(5));
                             // Hitung jumlah botol yang dibutuhkan
@@ -1437,9 +1442,14 @@ class ReadyOrderController extends Controller
                         ];
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
-                                return response()->json([
-                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
-                                ], 400);
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
                             }
 
                             $koding = $no_sampling . strtoupper(Str::random(5));
@@ -1882,9 +1892,14 @@ class ReadyOrderController extends Controller
 
                                     foreach ($botol_volumes as $type => $volume) {
                                         if (empty($type)) {
-                                            return response()->json([
-                                                'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
-                                            ], 400);
+                                            foreach ($param_map as $p) {
+                                                if ($p->regen == '' || $p->regen == null) {
+                                                    DB::rollBack();
+                                                    return response()->json([
+                                                        'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                                    ], 400);
+                                                }
+                                            }
                                         }
 
                                         $koding = $no_sampling . strtoupper(Str::random(5));
@@ -2306,9 +2321,14 @@ class ReadyOrderController extends Controller
 
                         foreach ($botol_volumes as $type => $volume) {
                             if (empty($type)) {
-                                return response()->json([
-                                    'message' => 'Terdapat botol parameter yang belum di set, silahkan hubungi teknis.!'
-                                ], 400);
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
                             }
 
                             $koding = $no_sampling . strtoupper(Str::random(5));
