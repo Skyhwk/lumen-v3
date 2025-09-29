@@ -134,47 +134,8 @@ class LhpEmisiController extends Controller
         $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
         $custom = LhpsEmisiCustom::where('id_header', $header->id)->get();
 
-        if ($header != null) {
-            if ($header->file_qr == null) {
-                $file_qr = new GenerateQrDocumentLhp();
-                $file_qr_path = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
-                if ($file_qr_path) {
-                    $header->file_qr = $file_qr_path;
-                    $header->save();
-                }
-            }
-
-            $groupedByPage = [];
-            if (!empty($custom)) {
-                foreach ($custom->toArray() as $item) {
-                    $page = $item['page'];
-                    if (!isset($groupedByPage[$page])) {
-                        $groupedByPage[$page] = [];
-                    }
-                    $groupedByPage[$page][] = $item;
-                }
-            }
-
-            if ($header->id_kategori_3 == 31) {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($header)
-                    ->setDataCustom($groupedByPage)
-                    ->whereView('DraftEmisiBensin')
-                    ->render('downloadLHP');
-            } else {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($header)
-                    ->setDataCustom($groupedByPage)
-                    ->whereView('DraftEmisiSolar')
-                    ->render('downloadLHP');
-            }
-
-            $header->file_lhp = $fileName;
-            $header->save();
-        }
-
         $servicePrint = new PrintLhp();
-        $servicePrint->print($request->no_sampel);
+        $servicePrint->printByFilename($header->file_lhp, $detail);
 
         if (!$servicePrint) {
             DB::rollBack();
