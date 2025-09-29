@@ -13,12 +13,16 @@ use Yajra\Datatables\Datatables;
 class LhpUdaraPencahayaanController extends Controller
 {
     public function index(Request $request){
+         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with('lhps_pencahayaan','orderHeader','dataLapanganCahaya')
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
             ->where('is_approve', true)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', '28-Pencahayaan')
-            ->orderBy('tanggal_terima', 'desc');
+            ->where('kategori_3', "28-Pencahayaan")
+            ->groupBy('cfr')
+            ->where('status', 2)
+            ->get();
         
         return Datatables::of($data)->make(true);
     }
