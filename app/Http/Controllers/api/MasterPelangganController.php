@@ -109,6 +109,39 @@ class MasterPelangganController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    private function checkForBlacklistedCustomer($id = null, $nama_pelanggan, $kontak_pelanggan)
+    {
+        $blacklistedByName = MasterPelangganBlacklist::where('nama_pelanggan', $nama_pelanggan)
+            ->when($id, fn($q) => $q->where('id', '!=', $id))
+            ->exists();
+
+        if ($blacklistedByName) return response()->json(['message' => 'Pelanggan dengan nama: ' . $nama_pelanggan . ' telah terdaftar di daftar hitam'],  401);
+
+        foreach ($kontak_pelanggan['no_tlp_perusahaan'] as $i => $telNumber) {
+            if ($telNumber) {
+                $telNumber = preg_replace("/[^0-9]/", "", $telNumber);
+
+                if (substr($telNumber, 0, 2) === "62") {
+                    $telNumber = "0" . substr($telNumber, 2);
+                }
+
+                $blacklistedByTelNumber = KontakPelangganBlacklist::where('no_tlp_perusahaan', $telNumber)
+                    ->when($id, fn($q) => $q->where('pelanggan_id', '!=', $id))
+                    ->exists();
+
+                if ($blacklistedByTelNumber) return response()->json(['message' => 'Pelanggan dengan nomor telepon: ' . $telNumber . ' telah terdaftar di daftar hitam'], 401);
+            }
+
+            if (isset($kontak_pelanggan['email_perusahaan'][$i])) {
+                $blacklistedByEmail = KontakPelangganBlacklist::where('email_perusahaan', $kontak_pelanggan['email_perusahaan'][$i])
+                    ->when($id, fn($q) => $q->where('pelanggan_id', '!=', $id))
+                    ->exists();
+
+                if ($blacklistedByEmail) return response()->json(['message' => 'Pelanggan dengan email: ' . $kontak_pelanggan['email_perusahaan'][$i] . ' telah terdaftar di daftar hitam'], 401);
+            };
+        }
+    }
+
     public function store(Request $request)
     {
         DB::beginTransaction();
@@ -116,6 +149,9 @@ class MasterPelangganController extends Controller
             $timestamp = DATE('Y-m-d H:i:s');
 
             if ($request->id != '') {
+                $response = $this->checkForBlacklistedCustomer($request->id, $request->nama_pelanggan, $request->kontak_pelanggan);
+                if ($response) return $response;
+
                 // Update existing customer
                 $pelanggan = MasterPelanggan::find($request->id);
 
@@ -263,6 +299,9 @@ class MasterPelangganController extends Controller
                     }
                 }
             } else {
+                $response = $this->checkForBlacklistedCustomer(null, $request->nama_pelanggan, $request->kontak_pelanggan);
+                if ($response) return $response;
+                
                 // Create new customer
                 $no_tlp_perusahaan = preg_replace("/[^0-9]/", "", $request->no_tlp_perusahaan); // bersihin non-angka
 
