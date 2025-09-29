@@ -91,6 +91,9 @@ class RekapKategoriAnalisaController extends Controller
 
             $listSales = array_values($allSales);
 
+            // Urutkan result berdasarkan index (nama kategori) A-Z
+            ksort($result);
+
             return response()->json([
                 'sales' => $listSales,
                 'data' => (object) $result
@@ -210,8 +213,20 @@ class RekapKategoriAnalisaController extends Controller
 
                 $excelData[] = $row;
             }
+            // Urutkan excelData dari key ke 1, dan di dalam key 1 gunakan key ke 0 sebagai acuan urutan A-Z
+            // Ambil header
+            $header = $excelData[0];
 
-            // dd($excelData);
+            // Ambil data (tanpa header)
+            $dataRows = array_slice($excelData, 1);
+
+            // Urutkan dataRows berdasarkan kolom pertama (nama sub kategori) A-Z
+            usort($dataRows, function($a, $b) {
+                return strcmp($a[0], $b[0]);
+            });
+
+            // Gabungkan kembali header dan data yang sudah diurutkan
+            $excelData = array_merge([$header], $dataRows);
             // Generate Excel file
             $document = $this->generateExcelFile($excelData, $request->tanggal_awal, $request->tanggal_akhir, true);
             return response()->json([
@@ -244,7 +259,8 @@ class RekapKategoriAnalisaController extends Controller
         // Header utama
         // $sheet->mergeCells("B1:{$lastColumn}1");
         $sheet->getStyle('A1:'.$lastColumn.'1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('A1:'.$lastColumn.'1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('B1:'.$lastColumn.'1')->getFont()->setBold(true)->setSize(12);
 
         // Header sales (baris 1)
         // $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
@@ -253,10 +269,10 @@ class RekapKategoriAnalisaController extends Controller
             ->getStartColor()->setRGB('DDEBF7');
 
         // Baris total
-        $sheet->getStyle("A{$totalRowIndex}:{$lastColumn}{$totalRowIndex}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$totalRowIndex}:{$lastColumn}{$totalRowIndex}")->getFill()
-            ->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setRGB('FFF2CC');
+        // $sheet->getStyle("A{$totalRowIndex}:{$lastColumn}{$totalRowIndex}")->getFont()->setBold(true);
+        // $sheet->getStyle("A{$totalRowIndex}:{$lastColumn}{$totalRowIndex}")->getFill()
+        //     ->setFillType(Fill::FILL_SOLID)
+            // ->getStartColor()->setRGB('FFF2CC');
 
         // Border
         $sheet->getStyle("A1:{$lastColumn}{$totalRowIndex}")->getBorders()
