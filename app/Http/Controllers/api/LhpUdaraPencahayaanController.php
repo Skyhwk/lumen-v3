@@ -18,7 +18,7 @@ class LhpUdaraPencahayaanController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', '28-Pencahayaan')
-            ->orderBy('tanggal_terima', 'desc')->get();
+            ->orderBy('tanggal_terima', 'desc');
         
         return Datatables::of($data)->make(true);
     }
