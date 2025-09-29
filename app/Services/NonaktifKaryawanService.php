@@ -100,17 +100,45 @@ class NonaktifKaryawanService
 
     private function deleteUnOrderedQuotations(int $karyawanId, string $updatedBy)
     {
-        collect([QuotationKontrakH::class, QuotationNonKontrak::class])
-            ->each(
-                fn($model) => $model::where('sales_id', $karyawanId)
-                    ->where('is_active', true)
-                    ->whereNotIn('flag_status', ['ordered', 'rejected', 'void'])
-                    ->update([
+        $newSales = MasterKaryawan::find(783);
+        $newSalesId = $newSales->id; // Sisca Wulandari (Sales Executive)
+        $newSalesName = $newSales->nama_lengkap; // Sisca Wulandari (Sales Executive)
+
+        $models = [QuotationKontrakH::class, QuotationNonKontrak::class];
+
+        $qtsWithOrder = collect();
+
+        foreach ($models as $model) {
+            $qts = $model::where('sales_id', $karyawanId)
+                ->where('is_active', true)
+                ->whereNotIn('flag_status', ['rejected', 'void'])
+                ->get();
+
+            foreach ($qts as $qt) {
+                $dataLama = $qt->data_lama ? json_decode($qt->data_lama) : null;
+
+                if ($qt->flag_status == 'ordered' || (isset($dataLama->no_order) && !empty($dataLama->no_order))) {
+                    $qtsWithOrder->push($qt->no_document);
+                    $qt->update([
+                        'sales_id' => $newSalesId,
+                        'sales_penanggung_jawab' => $newSalesName,
+                        'updated_by' => $updatedBy,
+                        'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                } else {
+                    $qt->update([
                         'deleted_by' => $updatedBy,
                         'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'is_active' => false,
-                    ])
-            );
+                        'is_active'  => false,
+                    ]);
+                }
+            }
+        }
+
+        // kirim notif ke sales baru
+        if ($qtsWithOrder->isNotEmpty()) {
+            // Notification::send($newSales, new QuotationNonKontrakNotification($qtsWithOrder));
+        }
     }
 
     private function deleteDfusHistory(string $karyawanName)
