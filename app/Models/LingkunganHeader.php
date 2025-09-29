@@ -44,4 +44,8 @@ class LingkunganHeader extends Sector
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('id_kategori', 4)->where('is_active', true);
     }
+         public function baku_mutu()
+    {
+        return $this->belongsTo('App\Models\MasterBakumutu', 'parameter', 'parameter');
+    }
 }

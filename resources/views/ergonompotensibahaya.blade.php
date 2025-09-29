@@ -448,7 +448,7 @@
                             <tr>
                                 <td>{{$personal->no_lhp}}</td>
                                 <td>{{$personal->no_sampel}}</td>
-                                <td>Ergonomi</td>
+                                <td>Ergonomi Potensi Bahaya</td>
                             </tr>
                         </tbody>
                     </table>

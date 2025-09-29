@@ -1302,7 +1302,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($e->getMessage(), 'Connection timed out') ||
-                str_contains($e->getMessage(), 'MySQL server has gone away')
+                str_contains($e->getMessage(), 'MySQL server has gone away') ||
+                str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -2285,7 +2286,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($e->getMessage(), 'Connection timed out') ||
-                str_contains($e->getMessage(), 'MySQL server has gone away')
+                str_contains($e->getMessage(), 'MySQL server has gone away') ||
+                str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -4058,7 +4060,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -4646,7 +4649,7 @@ class RequestQuotationController extends Controller
                             'parameter' => $pengujian->parameter,
                             'regulasi'    => $pengujian->regulasi,
                             'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'parameter' => $pengujian->parameter,
                             'jumlah_titik' => $pengujian->jumlah_titik,
                             'total_parameter' => $pengujian->total_parameter,
                         ];
@@ -5092,7 +5095,7 @@ class RequestQuotationController extends Controller
                         'data_sampling' => array_values($data_sampling)
                         // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
                     ];
-                    dump($datas[$j]);
+                    // dump($datas[$j]);
 
                     // if($per = '2025-08' || $per = '2026-01') {
                     //     dump($datas[$j]);
@@ -6059,7 +6062,7 @@ class RequestQuotationController extends Controller
                 // if ($orderConfirmation)
                 //     $orderConfirmation->update(['no_quotation' => $no_document]);
                 // ===========================================
-                dd('=====================');
+                // dd('=====================');
 
                 JobTask::insert([
                     'job' => 'RenderPdfPenawaran',
@@ -6108,7 +6111,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([

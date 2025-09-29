@@ -863,6 +863,7 @@ class StpsController extends Controller
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
+            
             // dd($psHeader, $request->sampler);
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
@@ -872,7 +873,7 @@ class StpsController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-                
+               
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {
