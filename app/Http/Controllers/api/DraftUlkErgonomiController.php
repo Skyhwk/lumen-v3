@@ -1537,11 +1537,11 @@ class DraftUlkErgonomiController extends Controller
         
         DB::beginTransaction();
         $categoryLingkunganKerja = [11, 27, 53];
-        $category = explode('-', $request->kategori_3)[0];
-        $sub_category = explode('-', $request->kategori_3)[1];
         $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
-            ->where('is_active', true)
-            ->first();
+        ->where('is_active', true)
+        ->first();
+        $sub_category = explode('-', $data_order->kategori_3)[1];
+        $category = explode('-', $data_order->kategori_3)[0];
         
         if (in_array($category, $categoryLingkunganKerja)) {
             try {
