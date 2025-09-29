@@ -38,7 +38,7 @@ class FdlKebisinganController extends Controller
         if (isset($request->no_sample) && $request->no_sample != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where('kategori_2', '4-Udara')
-                ->where('kategori_3', '23-Kebisingan')
+                ->where('kategori_3', 'LIKE', '%-Kebisingan%')
                 ->where('is_active', 1)->first();
             if (is_null($data)) {
                 return response()->json([
