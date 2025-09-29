@@ -2734,6 +2734,12 @@ class RequestQuotationController extends Controller
                     $rawDetail = json_decode($detail->data_pendukung_sampling, true);
                     $resetDetail = reset($rawDetail);
                     $dataOldSampling = $resetDetail['data_sampling'];
+                    // Kalau data JSON string, decode dulu
+                    if (is_string($dataOldSampling)) {
+                        $decoded = json_decode($dataOldSampling, true);
+                        $dataOldSampling = is_array($decoded) ? $decoded : [];
+                    }
+                    
                     foreach ($dataOldSampling as $key => $sampling) {
                         $coreData = [
                             'kategori_1' => $sampling['kategori_1'] ?? null,
