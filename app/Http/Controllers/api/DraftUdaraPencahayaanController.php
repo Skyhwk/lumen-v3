@@ -25,6 +25,7 @@ use App\Models\PencahayaanHeader;
 
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
 use App\Services\GenerateQrDocumentLhp;
