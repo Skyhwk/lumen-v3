@@ -94,7 +94,8 @@ class AppsBasController extends Controller
                 ->where('kategori_1', '!=', 'SD');
             if ($isProgrammer) {
                 $orderDetail->whereBetween('tanggal_sampling', [
-                    '2025-08-19', '2025-08-20'
+                    Carbon::now()->subDays(8)->toDateString(),
+                    Carbon::now()->toDateString()
                 ]);
             } else {
                 $orderDetail->whereBetween('tanggal_sampling', [
@@ -2304,6 +2305,7 @@ class AppsBasController extends Controller
 
 
         $parameters = array_filter($parameters, function ($param) {
+            if($param == null) return false;
             if($param['category'] == '6-Padatan'){
                 return is_array($param);
             }
