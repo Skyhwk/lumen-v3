@@ -97,7 +97,7 @@ class ReleaseAttendanceController extends Controller
             $lastData = ReleaseSystem::where('system', 'Attendance')->where('is_main', true)->orderBy('id', 'desc')->first();
 
             $projectDir = '/var/www/javascript/greatday';
-            $buildDir   = "$projectDir/build";
+            $buildDir   = "$projectDir/dist";
             $deployDir  = '/var/www/javascript/frontend/attendance';
             $backupDir  = '/mnt/backup/file/attendance/' . ($lastData && $lastData->patch ? str_replace('.', '-', $lastData->patch) : str_replace('.', '-', $numberPatch));
 
