@@ -363,7 +363,7 @@ class DokumenFdlController extends Controller
                 ->sortBy('no_sampel')
                 ->values()
                 ->toArray();
-            dd($flatData,$data,$sorted);
+            
             return DataTables::of($sorted)->make(true);
 
         } catch (\Throwable $th) {

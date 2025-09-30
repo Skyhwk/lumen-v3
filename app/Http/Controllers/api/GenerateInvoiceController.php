@@ -1272,18 +1272,18 @@ class GenerateInvoiceController extends Controller
                 }
                 $valSampling->invoiceDetails = $collectionDetail;
                 // Hapus data duplikat dari $collectionDetail
-                $uniqueCollection = [];
-                $uniqueKeys = [];
+                // $uniqueCollection = [];
+                // $uniqueKeys = [];
 
-                foreach ($collectionDetail as $detail) {
-                    $key = $detail->keterangan . '|' . $detail->titk . '|' . $detail->harga_satuan . '|' . $detail->total_harga;
-                    if (!in_array($key, $uniqueKeys)) {
-                        $uniqueKeys[] = $key;
-                        $uniqueCollection[] = $detail;
-                    }
-                }
+                // foreach ($collectionDetail as $detail) {
+                //     $key = $detail->keterangan . '|' . $detail->titk . '|' . $detail->harga_satuan . '|' . $detail->total_harga;
+                //     if (!in_array($key, $uniqueKeys)) {
+                //         $uniqueKeys[] = $key;
+                //         $uniqueCollection[] = $detail;
+                //     }
+                // }
 
-                $valSampling->invoiceDetails = $uniqueCollection;
+                // $valSampling->invoiceDetails = $uniqueCollection;
             }
             $dataReturn = array_map(function ($item) {
                 // dd($item['invoiceDetails']);

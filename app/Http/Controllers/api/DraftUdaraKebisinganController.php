@@ -26,6 +26,7 @@ use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
+use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -580,6 +581,8 @@ class DraftUdaraKebisinganController extends Controller
                     ->first();
             $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp = $data->no_lhp;
+
+            $detail = LhpsKebisinganDetail::where('id_header', $data->id)->get();
         
             $qr = QrDocument::where('id_document', $data->id)
                 ->where('type_document', 'LHP_KEBISINGAN')
@@ -622,6 +625,7 @@ class DraftUdaraKebisinganController extends Controller
                     'approved_at' => Carbon::now(),
                     'approved_by' => $this->karyawan
                 ]);
+
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
@@ -629,6 +633,14 @@ class DraftUdaraKebisinganController extends Controller
                     $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
+                }
+
+                $servicePrint = new PrintLhp();
+                $servicePrint->printByFilename($data->file_lhp, $detail);
+                
+                if (!$servicePrint) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
                 }
             }
 
