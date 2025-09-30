@@ -21,7 +21,7 @@ class LhpUdaraPencahayaanController extends Controller
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "28-Pencahayaan")
             ->groupBy('cfr')
-            ->where('status', 2)
+            ->where('status', 3)
             ->get();
         
         return Datatables::of($data)->make(true);
