@@ -163,8 +163,8 @@ class LhpIklimController extends Controller
             }
 
             return response()->json([
-                // 'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'file_name' =>  'http://localhost/v3' . '/public/dokumen/LHP/' . $fileName,
+                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
+                // 'file_name' =>  'http://localhost/v3' . '/public/dokumen/LHP/' . $fileName,
                 'message' => 'Download file '.$request->no_lhp.' berhasil!'
             ]);
         } catch (\Throwable $th) {
