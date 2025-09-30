@@ -431,6 +431,7 @@ class FdlLingkunganHidupController extends Controller
                 }
             }
             
+            
             if(isset($request->param) && $request->param != null){
                 foreach ($request->param as $in => $a) {
                     $pengukuran = array();
@@ -664,34 +665,6 @@ class FdlLingkunganHidupController extends Controller
                         $fdlvalue->created_by = $this->karyawan;
                         $fdlvalue->created_at = Carbon::now()->format('Y-m-d H:i:s');
                         $fdlvalue->save();
-
-                        $fdl = DataLapanganLingkunganHidup::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-                        if (is_null($fdl)) {
-                            $data = new DataLapanganLingkunganHidup();
-                            if ($request->categori != '') $data->kategori_3                 = $request->categori;
-                            $data->no_sampel                                                = strtoupper(trim($request->no_sample));
-                            $data->permission                                               = $request->permission;
-                            $data->created_by                                               = $this->karyawan;
-                            $data->created_at                                               = Carbon::now()->format('Y-m-d H:i:s');
-                            $data->save();
-                        }
-
-                        DB::table('order_detail')
-                            ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                            ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
-
-                        $header = DB::table('lingkungan_header')
-                            ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                            ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
-
-                        InsertActivityFdl::by($this->user_id)->action('input')->target(" nomor sampel $request->no_sample")->save();
-                        
-                        DB::commit();
-                        
-
-                        return response()->json([
-                            'message' => "Data Sampling LINGKUNGAN HIDUP Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"
-                        ], 200);
                     }
                 }else{
                     DB::rollBack();
@@ -701,11 +674,36 @@ class FdlLingkunganHidupController extends Controller
                 }
             }
             
+            if (is_null($fdl)) {
+                $data = new DataLapanganLingkunganHidup();
+                if ($request->categori != '') $data->kategori_3                 = $request->categori;
+                $data->no_sampel                                                = strtoupper(trim($request->no_sample));
+                $data->permission                                               = $request->permission;
+                $data->created_by                                               = $this->karyawan;
+                $data->created_at                                               = Carbon::now()->format('Y-m-d H:i:s');
+                $data->save();
+            }
+
+            DB::table('order_detail')
+                ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+
+            $header = DB::table('lingkungan_header')
+                ->where('no_sampel', strtoupper(trim($request->no_sample)))
+                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+
+            InsertActivityFdl::by($this->user_id)->action('input')->target(" nomor sampel $request->no_sample")->save();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => "Data Sampling LINGKUNGAN HIDUP Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"
+            ], 200);
+            
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'Terjadi kesalahan: ' . $e->getMessage().$e->getLine()], 401);
         }
-        
     }
 
     public function delete(Request $request)
