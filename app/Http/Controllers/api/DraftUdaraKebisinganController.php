@@ -23,6 +23,7 @@ use App\Models\KebisinganHeader;
 use App\Models\Parameter;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -611,7 +612,6 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 // dd($data->id_kategori_2);
 
-                $data->save();
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,
                     'no_sampel' => $request->noSampel,
@@ -630,6 +630,19 @@ class DraftUdaraKebisinganController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+                $data->count_print = $data->count_print + 1; 
+                $data->save();
+
+                $detail = LhpsKebisinganDetail::where('id_header', $data->id)->get();
+         
+                $servicePrint = new PrintLhp();
+                 $servicePrint->printByFilename($data->file_lhp, $detail);
+                
+                if (!$servicePrint) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                }
+
             }
 
             DB::commit();

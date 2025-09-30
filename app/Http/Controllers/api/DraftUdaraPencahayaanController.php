@@ -25,6 +25,7 @@ use App\Models\PencahayaanHeader;
 
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
 use App\Services\GenerateQrDocumentLhp;
@@ -676,6 +677,18 @@ class DraftUdaraPencahayaanController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+                    $data->count_print = $data->count_print + 1; 
+                    $data->save();
+
+                    $detail = LhpsPencahayaanDetail::where('id_header', $data->id)->get();
+            
+                    $servicePrint = new PrintLhp();
+                    $servicePrint->printByFilename($data->file_lhp, $detail);
+                    
+                    if (!$servicePrint) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                    }
             }
 
             DB::commit();
