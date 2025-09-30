@@ -1944,6 +1944,7 @@ class BasOnlineController extends Controller
         }, []);
 
         $parameters = array_filter($parameters, function ($param) {
+            if($param == null) return false;
             if($param['category'] == '6-Padatan'){
                 return is_array($param);
             }
