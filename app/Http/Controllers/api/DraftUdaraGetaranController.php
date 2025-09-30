@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
 
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
@@ -24,6 +25,7 @@ use App\Models\QrDocument;
 use App\Models\GetaranHeader;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -778,6 +780,18 @@ class DraftUdaraGetaranController extends Controller
                         $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
+                    }
+                    $data->count_print = $data->count_print + 1; 
+                    $data->save();
+
+                    $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
+            
+                    $servicePrint = new PrintLhp();
+                    $servicePrint->printByFilename($data->file_lhp, $detail);
+                    
+                    if (!$servicePrint) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
                     }
                 }
 

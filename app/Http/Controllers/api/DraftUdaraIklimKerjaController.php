@@ -21,6 +21,7 @@ use App\Models\QrDocument;
 use App\Models\IklimHeader;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -748,6 +749,16 @@ class DraftUdaraIklimKerjaController extends Controller
                     $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
+                }
+
+                $detail = LhpsIklimDetail::where('id_header', $data->id)->get();
+         
+                $servicePrint = new PrintLhp();
+                 $servicePrint->printByFilename($data->file_lhp, $detail);
+                
+                if (!$servicePrint) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
                 }
             }
 
