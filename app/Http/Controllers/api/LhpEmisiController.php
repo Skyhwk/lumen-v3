@@ -30,11 +30,14 @@ class LhpEmisiController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
+        $data = OrderDetail::select('nama_perusahaan', 'no_order', 'cfr', DB::raw("GROUP_CONCAT(no_sampel SEPARATOR ', ') as no_sampel"), 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
+            ->with('lhps_emisi', 'orderHeader:no_document', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
             ->where('is_approve', true)
             ->where('is_active', true)
+            ->where('kategori_2', '5-Emisi')
             ->where('status', 3)
-            ->where('kategori_2', '5-Emisi');
+            ->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
+            ->orderBy('tanggal_terima', 'desc');
 
         return Datatables::of($data)->make(true);
     }
@@ -44,10 +47,7 @@ class LhpEmisiController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsEmisiHeader::where('no_lhp', $request->no_sampel)->where('is_active', true)->first();
-            $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-            $custom = LhpsEmisiCustom::where('id_header', $header->id)->get();
-
+            $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             if ($header != null) {
 
                 $header->is_approve = 0;
@@ -57,7 +57,7 @@ class LhpEmisiController extends Controller
                 // $header->file_qr = null;
                 $header->save();
 
-                $data_order = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
+                OrderDetail::where('cfr', $request->cfr)->where('is_active', true)->update([
                     'status' => 2,
                     'is_approve' => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -67,7 +67,7 @@ class LhpEmisiController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel ' . $request->no_sampel . ' berhasil!'
+                'message' => 'Reject no cfr ' . $request->cfr . ' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();
@@ -80,42 +80,13 @@ class LhpEmisiController extends Controller
     public function handleDownload(Request $request)
     {
         try {
-            $header = LhpsEmisiHeader::where('no_lhp', $request->no_sampel)->where('is_active', true)->first();
-            if ($header != null && $header->file_lhp == null) {
-                $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-                $custom = LhpsEmisiCustom::where('id_header', $header->id)->get();
+            $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $fileName = $header->file_lhp;
 
-                if ($header->file_qr == null) {
-                    $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
-                    $header->save();
-                    GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
-                }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
-                }
-
-                $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-                $this->dispatch($job);
-
-                $data = LhpsEmisiHeader::where('no_lhp', $request->no_sampel)->where('is_active', true)->first();
-                $data->file_lhp = $fileName;
-                $data->save();
-
-            } else if ($header != null && $header->file_lhp != null) {
-                $fileName = $header->file_lhp;
-            }
 
             return response()->json([
                 'file_name' => env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file ' . $request->no_sampel . ' berhasil!'
+                'message' => 'Download file ' . $request->cfr . ' berhasil!'
             ]);
         } catch (\Throwable $th) {
             return response()->json([
@@ -128,11 +99,10 @@ class LhpEmisiController extends Controller
     public function rePrint(Request $request)
     {
         DB::beginTransaction();
-        $header = LhpsEmisiHeader::where('no_lhp', $request->no_sampel)->where('is_active', true)->first();
+        $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1;
-
+        $header->save();
         $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-        $custom = LhpsEmisiCustom::where('id_header', $header->id)->get();
 
         $servicePrint = new PrintLhp();
         $servicePrint->printByFilename($header->file_lhp, $detail);
@@ -145,7 +115,7 @@ class LhpEmisiController extends Controller
         DB::commit();
 
         return response()->json([
-            'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
+            'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
         ], 200);
     }
 }
