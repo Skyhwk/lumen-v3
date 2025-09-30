@@ -140,15 +140,14 @@ class PrintLhp
         try {
             $kan = $this->cekAkreditasi($detail);
             // dd($kan);
-            $id_printer = 47; // Default printer ID
+            $id_printer = 67; // Default printer ID
             if ($kan)
-                $id_printer = 47;
+                $id_printer = 68;
 
             $cek_printer = Printers::where('id', $id_printer)->first();
             // return $cek_printer;
             if ($kan) {
-                // $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
-                $print = Printing::where('pdf', "http://localhost/v3" . '/public/dokumen/LHP/' . $filename)
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
                     ->where('printer', $cek_printer->full_path)
                     ->where('karyawan', 'System')
                     ->where('filename', 'dokumen/LHP/' . $filename)
@@ -157,8 +156,7 @@ class PrintLhp
                     // ->where('pages', $request->pages)
                     ->print();
             } else {
-                // $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
-                $print = Printing::where('pdf', "http://localhost/v3" . '/public/dokumen/LHP/' . $filename)
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
                     ->where('printer', $cek_printer->full_path)
                     ->where('karyawan', 'System')
                     ->where('filename', 'dokumen/LHP/' . $filename)
