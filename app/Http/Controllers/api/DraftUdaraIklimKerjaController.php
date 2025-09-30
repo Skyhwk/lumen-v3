@@ -750,7 +750,6 @@ class DraftUdaraIklimKerjaController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-                $data->count_print = $data->count_print + 1; 
 
                 $detail = LhpsIklimDetail::where('id_header', $data->id)->get();
          
