@@ -11,7 +11,7 @@
                     <th width="25%" class="pd-5-solid-top-center" rowspan="2" colspan="2">KETERANGAN</th>
                     <th width="15%" class="pd-5-solid-top-center" rowspan="2">SUMBER GETARAN</th>
                     <th width="13%" class="pd-5-solid-top-center" rowspan="2">DUARSI JAM PEMAPARAN PER HARI</th>
-                    <th width="13%" class="pd-5-solid-top-center">HASIL UJI (m/s<sup>2</sup>)</th>
+                    <th width="13%" class="pd-5-solid-top-center">HASIL UJI</th>
                     <th width="11%" class="pd-5-solid-top-center">NAB <sup>**</sup></th>
                     <th width="15%" class="pd-5-solid-top-center" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>
