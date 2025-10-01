@@ -1413,7 +1413,7 @@ class RenderInvoice
 
                 }
             };
-            
+            // dd($sub_total, $diskon, $ppn, $pph, $total_harga, $nilai_tagihan, $total_tagihan, $sisa_tagihan, $pajak);
             
             $pdf->writeHTML('
             <tr><td style="height: 7px;" colspan="5"></td></tr>
@@ -1592,7 +1592,7 @@ class RenderInvoice
             ');
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
-            $sisa_tagihan = $total_tagihan - $nilai_tagihan;
+            $sisa_tagihan = $total_harga - $nilai_tagihan;
             if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr class="line_">
