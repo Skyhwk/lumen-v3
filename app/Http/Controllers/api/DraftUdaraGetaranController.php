@@ -608,12 +608,12 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
-
-                    return response()->json([
-                        'status' => true,
-                        'data' => $data_entry,
-                        'next_page' => $data_custom,
-                    ], 201);
+                $data_entry = collect($data_entry)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                return response()->json([
+                    'status' => true,
+                    'data' => $data_entry,
+                    'next_page' => $data_custom,
+                ], 201);
             } else {
                 $mainData = [];
                 $otherRegulations = [];
@@ -644,6 +644,8 @@ class DraftUdaraGetaranController extends Controller
                         return mb_strtolower($item['param']);
                     })->values()->toArray();
                 }   
+
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
            
                 return response()->json([
                     'status' => true,

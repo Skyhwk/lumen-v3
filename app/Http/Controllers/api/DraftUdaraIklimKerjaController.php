@@ -102,65 +102,65 @@ class DraftUdaraIklimKerjaController extends Controller
     }
 
 
-  public function handleMetodeSampling(Request $request)
-        {
-            try {
-                $subKategori = explode('-', $request->kategori_3);
-                $param = explode(';', (json_decode($request->parameter)[0]))[0];
-                $result = [];
-                // Data utama
-                $data = Parameter::where('id_kategori', '4')
-                    ->where('id', $param)
-                    ->get();
-                $resultx = $data->toArray();
-                foreach ($resultx as $key => $value) {
-                    $result[$key]['id'] = $value['id'];
-                    $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                    $result[$key]['kategori'] = $value['nama_kategori'];
-                    $result[$key]['sub_kategori'] = $subKategori[1];
-                }
+    public function handleMetodeSampling(Request $request)
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
+            $param = explode(';', (json_decode($request->parameter)[0]))[0];
+            $result = [];
+            // Data utama
+            $data = Parameter::where('id_kategori', '4')
+                ->where('id', $param)
+                ->get();
+            $resultx = $data->toArray();
+            foreach ($resultx as $key => $value) {
+                $result[$key]['id'] = $value['id'];
+                $result[$key]['metode_sampling'] = $value['method'] ?? '';
+                $result[$key]['kategori'] = $value['nama_kategori'];
+                $result[$key]['sub_kategori'] = $subKategori[1];
+            }
 
-                // $result = $resultx;
+            // $result = $resultx;
 
-                if ($request->filled('id_lhp')) {
-                    $header = LhpsIklimHeader::find($request->id_lhp);
+            if ($request->filled('id_lhp')) {
+                $header = LhpsIklimHeader::find($request->id_lhp);
 
-                    if ($header) {
-                        $headerMetode = is_array($header->metode_sampling) ? $header->metode_sampling : json_decode($header->metode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = is_array($header->metode_sampling) ? $header->metode_sampling : json_decode($header->metode_sampling, true) ?? [];
 
-                        foreach ($data as $key => $value) {
-                            $valueMetode = array_map('trim', explode(',', $value->method));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->method));
 
-                            $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                            if (!empty($missing)) {
-                                foreach ($missing as $miss) {
-                                    $result[] = [
-                                        'id' => null,
-                                        'metode_sampling' => $miss ?? '',
-                                        'kategori' => $value->kategori,
-                                        'sub_kategori' => $value->sub_kategori,
-                                    ];
-                                }
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss ?? '',
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
                             }
                         }
                     }
                 }
-
-                return response()->json([
-                    'status' => true,
-                    'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-                    'data' => $result,
-                ], 200);
-
-            } catch (\Exception $e) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                    'line' => $e->getLine(),
-                ], 500);
             }
+
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
+    }
 
 
     public function store(Request $request)
@@ -412,7 +412,7 @@ class DraftUdaraIklimKerjaController extends Controller
     }
 
 
-     public function handleDatadetail(Request $request)
+    public function handleDatadetail(Request $request)
     {
          $id_category = explode('-', $request->kategori_3)[0];
         try {
@@ -511,6 +511,11 @@ class DraftUdaraIklimKerjaController extends Controller
                     $custom[] = $detail;
                 }
 
+                $detail = collect($detail)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                foreach ($custom as $idx => $cstm) {
+                    $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                }
+
                 return response()->json([
                     'data' => $cekLhp,
                     'detail' => $detail,
@@ -583,6 +588,11 @@ class DraftUdaraIklimKerjaController extends Controller
                     for ($i = 0; $i < $jumlah_custom; $i++) {
                         $custom[$i + 1] = $data_all;
                     }
+                }
+
+                $data_all = collect($data_all)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                foreach ($custom as $idx => $cstm) {
+                    $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
                 }
 
                 return response()->json([

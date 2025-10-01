@@ -1412,7 +1412,11 @@ class AppsBasController extends Controller
                 $requestedSampelsSorted = $requestedSampels;
                 sort($requestedSampelsSorted);
 
-                if ($detailNoSampelSorted === $requestedSampelsSorted) {
+                // if ($detailNoSampelSorted === $requestedSampelsSorted) {
+                //     $selectedDetail = $detail;
+                //     break;
+                // }
+                if (!empty(array_intersect($detail['no_sampel'], $requestedSampels))) {
                     $selectedDetail = $detail;
                     break;
                 }
