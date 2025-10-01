@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
-
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
@@ -27,6 +27,7 @@ use App\Models\GenerateLink;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
+use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -736,6 +737,7 @@ class DraftUdaraGetaranController extends Controller
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
                 $no_lhp = $data->no_lhp;
+                $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
                     ->where('type_document', 'LHP_GETARAN')
                     ->where('is_active', 1)
@@ -753,12 +755,14 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by' => $this->karyawan
                     ]);
+
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
                     $data->nama_karyawan = $this->karyawan;
                     $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
+
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
                         'no_sampel' => is_array($request->no_sampel) 
@@ -771,6 +775,7 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+
                     if ($qr != null) {
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
@@ -778,6 +783,14 @@ class DraftUdaraGetaranController extends Controller
                         $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
+                    }
+
+                    $servicePrint = new PrintLhp();
+                    $servicePrint->printByFilename($data->file_lhp, $detail);
+                    
+                    if (!$servicePrint) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
                     }
                 }
 
