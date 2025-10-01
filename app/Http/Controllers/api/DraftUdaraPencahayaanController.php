@@ -581,6 +581,7 @@ class DraftUdaraPencahayaanController extends Controller
         if (in_array($val->parameter, ["Pencahayaan"])) {
             $cahaya = isset($val->lapangan_cahaya) ? $val->lapangan_cahaya : null;
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+            $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
             
             return array_merge($entry, [
                 'hasil_uji' => ($wsUdara && $wsUdara->hasil1) 
@@ -593,7 +594,8 @@ class DraftUdaraPencahayaanController extends Controller
                 'sumber_cahaya'     => $cahaya ? $cahaya->jenis_cahaya : null,
                 'jenis_pengukuran'  => $cahaya->kategori == 'Pencahayaan Umum' ? 'Umum' : 'Lokal',
                 'lokasi_keterangan' => trim((($cahaya && $cahaya->keterangan) ? $cahaya->keterangan : '')),
-                'nab'               => $wsUdara ? $wsUdara->nab : null
+                'nab'               => $wsUdara ? $wsUdara->nab : null,
+                'tanggal_sampling'  => $tanggal_sampling
             ]);
         }
     }
