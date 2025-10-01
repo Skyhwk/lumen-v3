@@ -35,13 +35,13 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class DraftUdaraGetaranController extends Controller
+class DraftUdaraGetaranPersonalController extends Controller
 {
     // done if status = 2
     // AmanghandleDatadetail
     public function index(Request $request)
     {
-        $kategori = ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"];
+        $kategori = [ "17-Getaran (Lengan & Tangan)",  "20-Getaran (Seluruh Tubuh)"];
 
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
@@ -738,7 +738,6 @@ class DraftUdaraGetaranController extends Controller
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
                 $no_lhp = $data->no_lhp;
-                $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
                     ->where('type_document', 'LHP_GETARAN')
                     ->where('is_active', 1)
@@ -756,14 +755,12 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by' => $this->karyawan
                     ]);
-
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
                     $data->nama_karyawan = $this->karyawan;
                     $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
-
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
                         'no_sampel' => is_array($request->no_sampel) 
@@ -776,7 +773,6 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
-
                     if ($qr != null) {
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
