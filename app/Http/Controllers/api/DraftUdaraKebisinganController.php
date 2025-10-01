@@ -511,7 +511,13 @@ class DraftUdaraKebisinganController extends Controller
                 if (count($custom) < $jumlah_custom) {
                     $custom[] = $detail;
                 }
-
+                
+                
+                $detail = collect($detail)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                foreach ($custom as $idx => $cstm) {
+                    $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                }
+                
                 return response()->json([
                     'data'    => $cekLhp,
                     'detail'  => $detail,
@@ -528,6 +534,11 @@ class DraftUdaraKebisinganController extends Controller
                 for ($i = 0; $i < $jumlah_custom; $i++) {
                     $custom[$i + 1] = $mappedData;
                 }
+            }
+
+            $mappedData = collect($mappedData)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
             }
 
             return response()->json([
