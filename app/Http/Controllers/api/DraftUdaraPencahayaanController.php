@@ -547,11 +547,11 @@ class DraftUdaraPencahayaanController extends Controller
             }
 
             // Sort mainData
-            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
 
             // Sort otherRegulations
             foreach ($otherRegulations as $id => $regulations) {
-                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['param']))->values()->toArray();
+                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
             }
 
             return response()->json([
