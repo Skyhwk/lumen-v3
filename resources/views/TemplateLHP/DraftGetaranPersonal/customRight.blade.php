@@ -7,13 +7,22 @@
         <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
-                    <tr>
-                        <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                     <tr>
+                        <td class="custom" width="33%">No. LHP</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        @php
+                        @endphp
+                            @if($header->sub_kategori == "Getaran (Seluruh Tubuh)")
+                            <td class="custom">Getaran Seluruh Tubuh <sup style="font-size: 8px;"><u>a</u></sup></td>
+                            @else
+                            <td class="custom">Getaran Lengan Tangan <sup style="font-size: 8px;"><u>a</u></sup></td>
+                           @endif
+                      
                     </tr>
                 </table>
             </td>
