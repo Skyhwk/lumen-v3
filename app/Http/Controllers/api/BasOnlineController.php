@@ -3941,6 +3941,13 @@ class BasOnlineController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
+            ],
+            [
+                "parameter" => "HC (sebagai CH4)",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];
