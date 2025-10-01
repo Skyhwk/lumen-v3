@@ -35,13 +35,13 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class DraftUdaraGetaranController extends Controller
+class DraftUdaraGetaranPersonalController extends Controller
 {
     // done if status = 2
     // AmanghandleDatadetail
     public function index(Request $request)
     {
-        $kategori = ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"];
+        $kategori = [ "17-Getaran (Lengan & Tangan)",  "20-Getaran (Seluruh Tubuh)"];
 
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([

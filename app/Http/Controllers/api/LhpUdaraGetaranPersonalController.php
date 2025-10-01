@@ -18,7 +18,7 @@ use App\Models\OrderDetail;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
 
-class LhpUdaraGetaranController extends Controller
+class LhpUdaraGetaranPersonalController extends Controller
 {
     public function index()
     {
@@ -28,11 +28,8 @@ class LhpUdaraGetaranController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', [
-                '13-Getaran',
-                '19-Getaran (Mesin)',
-                '15-Getaran (Kejut Bangunan)',
-                '14-Getaran (Bangunan)',
-                '18-Getaran (Lingkungan)'
+                '20-Getaran (Seluruh Tubuh)',
+                '17-Getaran (Lengan & Tangan)'
             ])
             ->where('status', 3)
             ->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
