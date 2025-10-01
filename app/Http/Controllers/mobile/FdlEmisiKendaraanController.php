@@ -162,7 +162,7 @@ class FdlEmisiKendaraanController extends Controller
                         'message'=>'No Sampel sudah terinput'
                     ],401);
                 }
-
+                $id_regulasi = explode('-',  $request->regulasi[0])[0];
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
                 if ($cek_qr->id_kendaraan != null) {
                     $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
@@ -171,8 +171,6 @@ class FdlEmisiKendaraanController extends Controller
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
                     $keterangan = $request->merk . ', ' . $request->tahun;
-                    $id_regulasi = explode('-',  $request->regulasi[0])[0];
-
 
                     $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                     if ($cek_po != null) {
