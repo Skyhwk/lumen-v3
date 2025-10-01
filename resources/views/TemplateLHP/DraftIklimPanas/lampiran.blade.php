@@ -36,8 +36,8 @@
                             '/<td([^>]*)>\s*<div\s+style="text-align:\s*center"[^>]*>(.*?)<\/div>\s*<\/td>/is',
                         ],
                         [
-                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
-                            '<td$1 style="text-align:center;"><div style="text-align:center;">$2</div></td>',
+                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;  font-family:Arial, Helvetica, sans-serif; font-size:10px; float: Left; width: 59%;"$1',
+                            '<td$1 style="text-align:center;"><div style="text-align:center; ">$2</div></td>',
                         ],
                         $table
                     ) !!}
@@ -83,30 +83,17 @@
                         </tr>
                     </table>
 
-                    {!! preg_replace(
+                   {!! preg_replace(
                         [
                             '/<table(\s|>)/i',
                             '/<td([^>]*)>\s*<div\s+style="text-align:\s*center"[^>]*>(.*?)<\/div>\s*<\/td>/is',
                         ],
                         [
-                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;"$1',
-                            '<td$1 style="text-align:center;"><div style="text-align:center;">$2</div></td>',
+                            '<table border="1" cellspacing="0" cellpadding="2" style="border: 1px solid #000;  font-family:Arial, Helvetica, sans-serif; font-size:10px; float: Left; width: 59%;"$1',
+                            '<td$1 style="text-align:center;"><div style="text-align:center; ">$2</div></td>',
                         ],
                         $table
                     ) !!}
-                 {{-- {!! preg_replace(
-                    '/<th(\s|>)/i',
-                    '<th style="background:#f2f2f2; font-weight:bold; text-align:center;"$1',
-                    preg_replace(
-                        '/<td(\s|>)/i',
-                        '<td class="pd-5-solid-center',
-                        preg_replace(
-                            '/<table(\s|>)/i',
-                            '<table border="1" cellspacing="0" cellpadding="2" style="border:1px solid #000; border-collapse:collapse; font-family:Arial, Helvetica, sans-serif; font-size:10px;"$1',
-                            $table
-                        )
-                    )
-                ) !!} --}}
 
 
                 </div>
