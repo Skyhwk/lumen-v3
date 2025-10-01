@@ -1766,14 +1766,13 @@ class DraftUlkErgonomiController extends Controller
                     'id' => $saveFilePDF->id,
                     'no_lhp' => $dataLHP->detail->cfr,
                     'nama_pelanggan' => $dataLHP->detail->nama_perusahaan,
-                    'no_order' => substr($dataLHP->detail->no_order, 0, 6),
-                    'tanggal_lhp' => Carbon::parse($tanggalLhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'no_order' => $dataLHP->detail->no_order,
+                    'tanggal_lhp' => $tanggalLhp,
                     'nama_karyawan' => $pengesahan->nama_karyawan,
                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan
                 ];
                 $file_qr = new GenerateQrDocumentLhp();
                 $pathQr = $file_qr->insert('LHP_ERGONOMI', $dataQr, $this->karyawan);
-                
                 $pdfFile->file_qr = $pathQr;
                 $pdfFile->save();
             }
