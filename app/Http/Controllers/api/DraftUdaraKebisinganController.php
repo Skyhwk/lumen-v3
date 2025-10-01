@@ -23,6 +23,7 @@ use App\Models\KebisinganHeader;
 use App\Models\Parameter;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -614,7 +615,6 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 // dd($data->id_kategori_2);
 
-                $data->save();
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,
                     'no_sampel' => $request->noSampel,

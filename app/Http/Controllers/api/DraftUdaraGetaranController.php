@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
+
 use App\Models\KonfirmasiLhp;
 use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
@@ -24,10 +25,10 @@ use App\Models\QrDocument;
 use App\Models\GetaranHeader;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
-use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -784,7 +785,11 @@ class DraftUdaraGetaranController extends Controller
                         $qr->data = json_encode($dataQr);
                         $qr->save();
                     }
+                    $data->count_print = $data->count_print + 1; 
+                    $data->save();
 
+                    $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
+            
                     $servicePrint = new PrintLhp();
                     $servicePrint->printByFilename($data->file_lhp, $detail);
                     

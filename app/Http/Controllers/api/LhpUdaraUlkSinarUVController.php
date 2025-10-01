@@ -72,7 +72,7 @@ class LhpUdaraUlkSinarUVController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no cfr ' . $request->cfr . ' berhasil!'
+                'message' => 'Reject no LHP ' . $request->cfr . ' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();

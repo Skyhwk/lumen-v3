@@ -231,6 +231,11 @@ class QtApproveController extends Controller
             'amin@intilab.com',
             'daud@intilab.com',
             'faidhah@intilab.com',
+            'budiono@intilab.com',
+            'yeni@intilab.com',
+            'riri@intilab.com',
+            'shalsa@intilab.com',
+            'rudi@intilab.com',
         ];
 
         if ($request->email_cc) {
