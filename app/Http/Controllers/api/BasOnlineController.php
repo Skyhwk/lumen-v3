@@ -1369,12 +1369,12 @@ class BasOnlineController extends Controller
         // Group sampling data by combined samplers
         $samplingBySampler = [];
         $sampleSamplerMap = []; // Track samplers per sample
-
+        
+        
         foreach ($dataSampling as $sampling) {
             $sampleParts = explode('/', $sampling->no_sample);
             if (count($sampleParts) >= 2) {
                 $sampleNumber = end($sampleParts);
-
                 if (isset($samplerKategoriMap[$sampleNumber])) {
                     $assignedSamplers = $samplerKategoriMap[$sampleNumber];
                     $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
@@ -1387,7 +1387,10 @@ class BasOnlineController extends Controller
                     }
                     $samplingBySampler[$samplerKey][] = $sampling;
                 } else {
-                    $assignedSamplers = $samplerKategoriMap['001'];
+                    $keyFirst = array_key_first($samplerKategoriMap);
+                    // $assignedSamplers = $samplerKategoriMap['001'];
+                    $assignedSamplers = $samplerKategoriMap[$keyFirst];
+                    
                     $sampleSamplerMap[$sampling->no_sample] = $assignedSamplers;
 
                     // Create combined key for samplers working together
