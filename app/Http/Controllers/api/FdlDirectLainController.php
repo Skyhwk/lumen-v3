@@ -580,7 +580,6 @@ class FdlDirectLainController extends Controller
             $data->approved_by = null;
             $data->approved_at = null;
             $data->save();
-            // dd($data);
 
             // if($cek_sampler->pin_user!=null){
             //     $nama = $this->name;
