@@ -110,9 +110,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 			$item['method'] = null;
 			$item['baku_mutu'] = null;
 			$item['satuan'] = null;
-			$od = OrderDetail::where('no_sampel', $request->no_sampel)->first();
-			if (isset($request->regulasi)) {
-				$bakuMutu = MasterBakumutu::where('id_regulasi', explode('-', $$request->regulasi)[0])
+			$item['jenis_persyaratan'] = null;
+			if ($request->regulasi) {
+				$bakuMutu = MasterBakumutu::where('id_regulasi', explode('-', $request->regulasi)[0])
 					->where('parameter', $item['parameter'])
 					->where('is_active', 1)
 					->first();
@@ -121,6 +121,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 					$item['method'] = $bakuMutu->method;
 					$item['baku_mutu'] = $bakuMutu->baku_mutu;
 					$item['satuan'] = $bakuMutu->satuan;
+					$item['jenis_persyaratan'] = $bakuMutu->nama_header;
 				}
 			}
 		}
