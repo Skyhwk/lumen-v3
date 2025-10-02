@@ -94,28 +94,7 @@ class TqcGetaranController extends Controller
         }
     }
 
-    // public function rejectData(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         $data = OrderDetail::where('id', $request->id)->first();
-    //         if ($data) {
-    //             $data->status = 0;
-    //             $data->save();
-    //             DB::commit();
-    //             return response()->json([
-    //                 'status' => 'success',
-    //                 'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
-    //             ]);
-    //         }
-    //     } catch (\Throwable $th) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Terjadi kesalahan ' . $th->getMessage()
-    //         ]);
-    //     }
-    // }
+
     public function rejectData(Request $request)
     {
         DB::beginTransaction();
