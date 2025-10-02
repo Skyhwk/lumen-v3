@@ -107,6 +107,7 @@ class WsFinalUdaraPencahayaanController extends Controller
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
                     ->where('status', 0)
+                    ->where('is_active', 1)
                     ->get();
 
                 $method = Parameter::where('id', $idParameter)->first()->method ?? '-';

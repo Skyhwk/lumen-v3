@@ -85,6 +85,7 @@ class WsFinalUdaraIklimKerjaController extends Controller
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->where('status', 0)
+				->where('is_active', 1)
 				->get();
 			foreach ($data as $item) {
 				if (isset($item->iklim_dingin)) {
