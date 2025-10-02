@@ -13,7 +13,7 @@ use App\Models\Parameter;
 use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
-
+use App\Models\ParameterFdl;
 use App\Services\InsertActivityFdl;
 
 use App\Http\Controllers\Controller;
@@ -34,6 +34,23 @@ class FdlEmisiCerobongController extends Controller
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
             ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
             ->where('is_active', 1)->first();
+            
+            $partikulat = json_decode(
+                ParameterFdl::where('is_active', 1)
+                    ->where('nama_fdl', 'partikulat_emisi')
+                    ->where('kategori', '5-Emisi')
+                    ->value('parameters'),
+                true
+            );
+
+            $lokasi_sampling = json_decode(
+                ParameterFdl::where('is_active', 1)
+                    ->where('nama_fdl', 'lokasi_sampling_emisi')
+                    ->where('kategori', '5-Emisi')
+                    ->value('parameters'),
+                true
+            );
+
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan..'
@@ -51,13 +68,15 @@ class FdlEmisiCerobongController extends Controller
                 $emisiC = DataLapanganEmisiCerobong::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
                 $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
                 return response()->json([
-                    'no_sample'     => $data->no_sampel,
-                    'jenis'         => $cek->nama_sub_kategori,
-                    'keterangan'    => $data->keterangan_1,
-                    'id_ket'        => explode('-', $data->kategori_3)[0],
-                    'id_ket2'       => explode('-', $data->kategori_2)[0],
-                    'data'          => $emisiC,
-                    'param'     => $cleanedParams
+                    'no_sample'         => $data->no_sampel,
+                    'jenis'             => $cek->nama_sub_kategori,
+                    'keterangan'        => $data->keterangan_1,
+                    'id_ket'            => explode('-', $data->kategori_3)[0],
+                    'id_ket2'           => explode('-', $data->kategori_2)[0],
+                    'data'              => $emisiC,
+                    'partikulat'        => $partikulat,
+                    'lokasi_sampling'   => $lokasi_sampling,
+                    'param'             => $cleanedParams
                 ], 200);
                 
             }
