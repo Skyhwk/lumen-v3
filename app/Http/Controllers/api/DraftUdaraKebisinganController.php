@@ -274,7 +274,7 @@ class DraftUdaraKebisinganController extends Controller
                     $header->save();
                 }
                 $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
-                if(in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+                if(in_array($id_regulasii, [46,54, 151, 167, 168, 382])) {
                     
                     $master_regulasi = MasterRegulasi::find($id_regulasii);
                     // dd($master_regulasi);

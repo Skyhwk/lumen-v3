@@ -680,6 +680,7 @@ class DraftUdaraGetaranController extends Controller
         ];
 
         // Cek apakah getaran personal
+        $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
         if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
             $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
@@ -695,6 +696,7 @@ class DraftUdaraGetaranController extends Controller
                 ),
                 'nab'          => $wsUdara ? $wsUdara->nab : null,
                 'tipe_getaran' => 'getaran personal',
+                'tanggal_sampling'  => $tanggal_sampling
             ]);
         }
 
@@ -712,6 +714,7 @@ class DraftUdaraGetaranController extends Controller
             'tipe_getaran' => 'getaran',
             'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
             'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
+            'tanggal_sampling'  => $tanggal_sampling
         ]);
     }
 
