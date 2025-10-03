@@ -70,34 +70,91 @@ class FdlLingkunganHidupController extends Controller
     }
 
     public function approve(Request $request){
-        if (isset($request->id) && $request->id != null) {
-            $data = DataLapanganLingkunganHidup::where('id', $request->id)->first();
-            if ($data != null) {
-                $data->is_approve = true;
-                $data->approved_by = $this->karyawan;
-                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->save();
+        DB::beginTransaction();
+        try {
+            if (isset($request->id) && $request->id != null) {
+                $data = DataLapanganLingkunganHidup::where('id', $request->id)->first();
 
-                $data_detail = DetailLingkunganHidup::where('no_sampel', $data->no_sampel)->update([
-                    'is_approve' => true,
-                    'approved_by' => $this->karyawan,
-                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
-                ]);
+                if ($data != null) {
+                    $data->is_approve   = true;
+                    $data->approved_by  = $this->karyawan;
+                    $data->approved_at  = Carbon::now();
+                    $data->save();
 
-                app(NotificationFdlService::class)->sendApproveNotification('Lingkungan Hidup', $data->no_sampel, $this->karyawan, $data->created_by);
+                    DetailLingkunganHidup::where('no_sampel', $data->no_sampel)->update([
+                        'is_approve'  => true,
+                        'approved_by' => $this->karyawan,
+                        'approved_at' => Carbon::now()
+                    ]);
 
-                DB::commit();
+                    app(NotificationFdlService::class)->sendApproveNotification(
+                        'Lingkungan Hidup',
+                        $data->no_sampel,
+                        $this->karyawan,
+                        $data->created_by
+                    );
+
+                    DB::commit();
+
+                    return response()->json([
+                        'status'  => 'success',
+                        'message' => 'Data no sampel ' . $data->no_sampel . ' berhasil diapprove'
+                    ], 200);
+                }
+
+                // kalau data tidak ditemukan
+                DB::rollBack();
                 return response()->json([
-                    'status' => 'success',
-                    'message' => 'Data no sampel ' . $data->no_sampel . ' berhasil diapprove'
-                ]);
+                    'status'  => 'error',
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
             }
-        } else {
+
+            // kalau request->id null
+            DB::rollBack();
             return response()->json([
-                'message' => 'Gagal Approve'
-            ], 401);
+                'status'  => 'error',
+                'message' => 'Gagal Approve, ID tidak valid'
+            ], 400);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal Approve: ' . $e->getMessage(),
+                'line'    => $e->getLine()
+            ], 500);
         }
     }
+    // public function approve(Request $request){
+    //     if (isset($request->id) && $request->id != null) {
+    //         $data = DataLapanganLingkunganHidup::where('id', $request->id)->first();
+    //         if ($data != null) {
+    //             $data->is_approve = true;
+    //             $data->approved_by = $this->karyawan;
+    //             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+    //             $data->save();
+
+    //             $data_detail = DetailLingkunganHidup::where('no_sampel', $data->no_sampel)->update([
+    //                 'is_approve' => true,
+    //                 'approved_by' => $this->karyawan,
+    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
+    //             ]);
+
+    //             app(NotificationFdlService::class)->sendApproveNotification('Lingkungan Hidup', $data->no_sampel, $this->karyawan, $data->created_by);
+
+    //             DB::commit();
+    //             return response()->json([
+    //                 'status' => 'success',
+    //                 'message' => 'Data no sampel ' . $data->no_sampel . ' berhasil diapprove'
+    //             ]);
+    //         }
+    //     } else {
+    //         return response()->json([
+    //             'message' => 'Gagal Approve'
+    //         ], 401);
+    //     }
+    // }
 
     public function updateNoSampel(Request $request){
         if (isset($request->id) && $request->id != null) {
