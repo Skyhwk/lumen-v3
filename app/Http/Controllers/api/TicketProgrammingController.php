@@ -265,6 +265,40 @@ class TicketProgrammingController extends Controller
         }
     }
 
+    public function reOpen(Request $request)
+    {
+        // dd($request->all());
+        DB::beginTransaction();
+        try {
+            $data = TicketProgramming::find($request->id);
+            $data->status = 'REOPEN';
+            $data->reopened_by = $this->karyawan;
+            $data->reopened_time = Carbon::now();
+            $data->reopened_notes = $request->notes;
+            // $data->is_active = false;
+            $message = 'Ticket Programming telah di re-open';
+
+            $data->save();
+
+            Notification::where('nama_lengkap', $data->solve_by)
+                ->title('Ticket Programming Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-programming')
+                ->send();
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal Proses reject Ticket Programming: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
     // Pending by Worker
     public function pending(Request $request)
     {
