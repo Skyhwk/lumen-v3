@@ -121,10 +121,9 @@ class FdlDebuPersonalController extends Controller
     }
 
     public function approve(Request $request){
-        if (isset($request->id) && $request->id != null) {
-
+        try{
+            DB::beginTransaction();
             $data = DataLapanganDebuPersonal::where('id', $request->id)->first();
-            // $no_sample = $data->no_sample;
             
             $data->is_approve  = true;
             $data->approved_by = $this->karyawan;
@@ -137,11 +136,14 @@ class FdlDebuPersonalController extends Controller
                 'message' => 'Data berhasil di Approve',
                 'master_kategori' => 1
             ], 200);
-        } else {
+        }catch(\Exception $th){
+            DB::rollBack();
             return response()->json([
-                'message' => 'Gagal Approve'
+                'message' => 'Gagal approve ' . $th->getMessage(),
+                'line'    => $th->getLine()
             ], 401);
         }
+        
     }
 
     public function rejectData(Request $request)
