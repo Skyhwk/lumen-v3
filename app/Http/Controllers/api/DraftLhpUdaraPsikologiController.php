@@ -519,7 +519,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 				$lhpsHistory = $data->replicate();
                 $lhpsHistory->setTable((new LhpUdaraPsikologiHeaderHistory())->getTable());
-                $lhpsHistory->id = $data->id;
+                // $lhpsHistory->id = $data->id;
                 $lhpsHistory->created_at = $data->created_at;
                 $lhpsHistory->updated_at = $data->updated_at;
                 $lhpsHistory->deleted_at = Carbon::now();
@@ -531,7 +531,7 @@ class DraftLhpUdaraPsikologiController extends Controller
                     foreach ($oldDetails as $detail) {
                         $detailHistory = $detail->replicate();
                         $detailHistory->setTable((new LhpUdaraPsikologiDetailHistory())->getTable());
-                        $detailHistory->id = $detail->id;
+                        // $detailHistory->id = $detail->id;
                         $detailHistory->created_by = $this->karyawan;
                         $detailHistory->created_at = Carbon::now();
                         $detailHistory->save();
