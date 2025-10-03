@@ -5107,7 +5107,7 @@ class RequestQuotationController extends Controller
                         'data_sampling' => array_values($data_sampling)
                         // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
                     ];
-                    dump($datas[$j]);
+                    // dump($datas[$j]);
 
                     // if($per = '2025-08' || $per = '2026-01') {
                     //     dump($datas[$j]);
@@ -6074,7 +6074,7 @@ class RequestQuotationController extends Controller
                 // if ($orderConfirmation)
                 //     $orderConfirmation->update(['no_quotation' => $no_document]);
                 // ===========================================
-                dd('=====================');
+                // dd('=====================');
 
                 JobTask::insert([
                     'job' => 'RenderPdfPenawaran',
