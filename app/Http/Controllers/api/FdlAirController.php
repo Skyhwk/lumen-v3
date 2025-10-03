@@ -82,23 +82,32 @@ class FdlAirController extends Controller
     public function approve(Request $request)
     {
         if (isset($request->id) && $request->id != null) {
-
-            $data = DataLapanganAir::where('id', $request->id)->first();
-            $data->rejected_at = null;
-            $data->rejected_by = null;
-            $data->is_approve = true;
-            $data->approved_by = $this->karyawan;
-            $data->approved_at = Carbon::now();
-            $data->save();
-
-            app(NotificationFdlService::class)->sendApproveNotification($data->jenis_sampel, $data->no_sampel, $this->karyawan, $data->created_by);
-
-            return response()->json([
-                'message' => 'Data no sample ' . $data->no_sampel . ' telah di approve'
-            ], 200);
+            DB::beginTransaction();
+            try {
+                $data = DataLapanganAir::where('id', $request->id)->first();
+                $data->rejected_at = null;
+                $data->rejected_by = null;
+                $data->is_approve = true;
+                $data->approved_by = $this->karyawan;
+                $data->approved_at = Carbon::now();
+                $data->save();
+                
+                app(NotificationFdlService::class)->sendApproveNotification($data->jenis_sampel, $data->no_sampel, $this->karyawan, $data->created_by);
+                
+                DB::commit();
+                return response()->json([
+                    'message' => 'Data no sample ' . $data->no_sampel . ' telah di approve'
+                ], 200);
+            } catch (\Throwable $th) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Gagal approve ' . $th->getMessage(),
+                    'line' => $th->getLine()
+                ], 401);
+            }
         } else {
             return response()->json([
-                'message' => 'Gagal Approve'
+                'message' => 'Gagal approve'
             ], 401);
         }
     }

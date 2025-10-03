@@ -1149,6 +1149,11 @@ class PortalController extends Controller
         }
     }
 
+    public function renderPenawaran(Request $request)
+    {
+        dd('belum kelar bos');
+    }
+
     public function renderLhp(Request $request)
     {
         $orderDetails = OrderDetail::select('id', 'cfr', 'no_sampel', 'kategori_2', 'kategori_3')
@@ -1259,5 +1264,10 @@ class PortalController extends Controller
             ->render();
 
         return response()->json(['file' => $fileName], 200);
+    }
+
+    public function renderInvoice(Request $request)
+    {
+        dd('belum kelar bos');
     }
 }
