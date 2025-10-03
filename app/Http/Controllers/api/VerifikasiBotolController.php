@@ -58,31 +58,31 @@ class VerifikasiBotolController extends Controller
 
     public function dashboard(Request $request)
     {
-        try{
+        try {
             $today = Carbon::today();
             $month = Carbon::now()->month;
 
             $data = ScanSampelTc::selectRaw("
-                    SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
-                    SUM(CASE WHEN MONTH(created_at) = ? THEN 1 ELSE 0 END) as total_bulan_ini
-                ", [$today, $month])
+                SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
+                SUM(CASE WHEN MONTH(created_at) = ? THEN 1 ELSE 0 END) as total_bulan_ini
+            ", [$today, $month])
                 ->where('created_by', $this->karyawan)
                 ->first();
 
             [$categories, $todo_samples] = $this->getTodoFromScanSampler();
 
             return response()->json([
-                'today' => $data->total_hari_ini ?? 0,
-                'thisMonth' => $data->total_bulan_ini ?? 0,
-                'todo_count' => count($todo_samples) ?? 0,
+                'today'       => $data->total_hari_ini ?? 0,
+                'thisMonth'   => $data->total_bulan_ini ?? 0,
+                'todo_count'  => count($todo_samples),
                 'todo_samples' => $todo_samples ?? [],
-                'categories' => $categories ?? null,
+                'categories'  => $categories ?? [],
             ], 200);
-        } catch (Exception $th) {
+        } catch (\Throwable $th) {
             return response()->json([
                 'message' => $th->getMessage(),
-                'line' => $th->getLine(),
-                'file' => $th->getFile(),
+                'line'    => $th->getLine(),
+                'file'    => $th->getFile(),
             ], 500);
         }
     }
@@ -97,20 +97,19 @@ class VerifikasiBotolController extends Controller
                         ->whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()]);
                 })
                 ->pluck('no_sampel')
+                ->unique()
                 ->toArray();
 
-            $todo_samples = array_unique($todo_samples);
+            $order_detail = OrderDetail::whereIn('no_sampel', $todo_samples)
+                ->where('is_active', true)
+                ->pluck('kategori_3')
+                ->toArray();
 
-            $order_detail = OrderDetail::whereIn('no_sampel', $todo_samples)->where('is_active', true)->get()->pluck('kategori_3')->toArray();
+            $categories = array_count_values($order_detail);
 
-            $categories = array_count_values(array_values($order_detail));
-
-            return [
-                $categories,
-                $todo_samples
-            ];
+            return [$categories, $todo_samples];
         } catch (\Throwable $th) {
-            throw new Exception($th);
+            throw new Exception($th->getMessage(), $th->getCode(), $th);
         }
     }
 
