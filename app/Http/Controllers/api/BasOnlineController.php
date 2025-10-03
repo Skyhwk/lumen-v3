@@ -1623,7 +1623,7 @@ class BasOnlineController extends Controller
                 }
             }
         }
-        dd($pelanggans,$selectedDetail);
+        // dd($pelanggans,$selectedDetail);
         $samplerHtml = '';
         if (!empty($samplers)) {
             foreach ($samplers as $index => $sampler) {
