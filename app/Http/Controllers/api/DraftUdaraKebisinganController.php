@@ -274,10 +274,10 @@ class DraftUdaraKebisinganController extends Controller
                     $header->save();
                 }
                 $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
+                $fileName = null;
                 if(in_array($id_regulasii, [46,54, 151, 167, 168, 382])) {
                     
                     $master_regulasi = MasterRegulasi::find($id_regulasii);
-                    // dd($master_regulasi);
                     if($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
                           $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
@@ -285,7 +285,7 @@ class DraftUdaraKebisinganController extends Controller
                             ->useLampiran(true)
                             ->whereView('DraftKebisinganLh')
                             ->render();
-                    } else if($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                    } else if($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
                           $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
                             ->setDataCustom($custom)
@@ -294,6 +294,7 @@ class DraftUdaraKebisinganController extends Controller
                             ->render();
                     }
                 } else {
+                    
                       $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)  
                         ->setDataCustom($custom)
