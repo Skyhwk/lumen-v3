@@ -4092,6 +4092,7 @@ class RequestQuotationController extends Controller
         try {
             $informasi_pelanggan = $payload->informasi_pelanggan;
             $data_pendukung = $payload->data_pendukung;
+            // dd($data_pendukung);
             $data_wilayah = $payload->data_wilayah;
             $syarat_ketentuan = $payload->syarat_ketentuan;
             $data_diskon = $payload->data_diskon;
@@ -4592,6 +4593,7 @@ class RequestQuotationController extends Controller
                             'kategori_2' => $sampling['kategori_2'] ?? null,
                             'regulasi' => $sampling['regulasi'] ?? null,
                             'parameter' => $sampling['parameter'] ?? null,
+                            'penamaan_titik' => $sampling['penamaan_titik'] ?? null
                         ];
 
                         $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -4647,7 +4649,7 @@ class RequestQuotationController extends Controller
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 // dump($data_pendukung);
                 $pengujian_group_by_per = [];
-                foreach ($data_pendukung as $pengujian) {
+                foreach ($data_pendukung as $key => $pengujian) {
                     foreach ($pengujian->periode as $sel_per) {
                         // dd($pengujian);
                         $pengujian_group_by_per[$sel_per][] = [
@@ -4660,6 +4662,7 @@ class RequestQuotationController extends Controller
                             'parameter' => $pengujian->parameter,
                             'jumlah_titik' => $pengujian->jumlah_titik,
                             'total_parameter' => $pengujian->total_parameter,
+                            'pengujian' =>$key
                         ];
                     }
                 }
@@ -4827,7 +4830,6 @@ class RequestQuotationController extends Controller
 
                 foreach ($period as $k => $per) {
                     // dump($per);
-                    $lower_per = (int) substr($per, 0, 4) . substr($per, 5, 2) < (int) date('Ym');
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -5035,18 +5037,20 @@ class RequestQuotationController extends Controller
                                     }
                                 }*/
                             }
-                            foreach ($pengujian_group_by_per[$per] as $pengujian) {
+                            foreach ($pengujian_group_by_per[$per] as $key => $pengujian) {
                                 $match = (
                                     $pengujian['kategori_1'] === $xyz->kategori_1 &&
                                     $pengujian['kategori_2'] === $xyz->kategori_2 &&
                                     $pengujian['regulasi'] === $xyz->regulasi &&
                                     $pengujian['parameter'] === $xyz->parameter &&
-                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik
+                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik &&
+                                    $pengujian['pengujian'] === $m
                                 );
 
                                 if ($match) {
-                                    // dump($pengujian['penamaan_titik']);
+                                    // dump($pengujian['title_names']);
                                     $penamaan_titik_fixed = $pengujian['penamaan_titik'];
+                                    unset($pengujian_group_by_per[$per][$key]);
                                 }
                             }
 
@@ -5103,7 +5107,7 @@ class RequestQuotationController extends Controller
                         'data_sampling' => array_values($data_sampling)
                         // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
                     ];
-                    // dump($datas[$j]);
+                    dump($datas[$j]);
 
                     // if($per = '2025-08' || $per = '2026-01') {
                     //     dump($datas[$j]);
@@ -6070,7 +6074,7 @@ class RequestQuotationController extends Controller
                 // if ($orderConfirmation)
                 //     $orderConfirmation->update(['no_quotation' => $no_document]);
                 // ===========================================
-                // dd('=====================');
+                dd('=====================');
 
                 JobTask::insert([
                     'job' => 'RenderPdfPenawaran',
