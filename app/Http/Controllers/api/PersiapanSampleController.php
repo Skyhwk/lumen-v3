@@ -523,7 +523,7 @@ class PersiapanSampleController extends Controller
                 // Jika ada banyak header, pilih yang memiliki detail_bas_document
                 $getHeaderFix = PersiapanSampelHeader::where('is_active', 1)
                     ->whereIn('id', $existingPsd)
-                    ->whereNotNull('detail_bas_document')
+                    ->whereNotNull('detail_bas_documents')
                     ->first();
 
                 if ($getHeaderFix) {
