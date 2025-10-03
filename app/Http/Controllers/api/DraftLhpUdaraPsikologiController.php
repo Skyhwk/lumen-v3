@@ -297,7 +297,7 @@ class DraftLhpUdaraPsikologiController extends Controller
             $data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)
                     ->where('is_active', true)
                     ->first();
-            $noSampel = array_map('trim', explode(',', $request->no_sampel));
+            
             $no_lhp = $data->no_cfr;
 
             $detail = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
@@ -311,8 +311,9 @@ class DraftLhpUdaraPsikologiController extends Controller
 // dd($data, $noSampel, $detail);
             if ($data != null) {
                 OrderDetail::where('cfr', $request->cfr)
-                ->whereIn('no_sampel', $noSampel)
+                // ->whereIn('no_sampel', $noSampel)
                 ->where('is_active', true)
+                ->where('status', 2)
                 ->update([
                     'is_approve' => 1,
                     'status' => 3,
