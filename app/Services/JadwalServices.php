@@ -714,13 +714,14 @@ class JadwalServices
                             // Ambil namanya aja, sesuai format 'id,nama'
                             $newSamplers[] = explode(',', $s)[1]; 
                         }
-
+                        
                         // Cek apakah ada perubahan antara oldSamplers dan newSamplers
                         $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($oldSamplers, $newSamplers);
+                        $diff = array_diff($newSamplers, $oldSamplers);
                         // 4. Update field sampler_jadwal dan save
                         if (count($diff) > 0) {
                             $psh->no_sampel = json_encode($array_no_samples);
+                            $psh->tanggal_sampling = $dataUpdate->tanggal;
                             $psh->sampler_jadwal = implode(',', $newSamplers);
                             $psh->updated_by = $dataUpdate->karyawan;
                             $psh->updated_at = $this->timestamp; // atau Carbon::now()
@@ -1108,10 +1109,11 @@ class JadwalServices
 
                         // Cek apakah ada perubahan antara oldSamplers dan newSamplers
                         $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($oldSamplers, $newSamplers);
+                        $diff = array_diff($newSamplers, $oldSamplers);
                         // 4. Update field sampler_jadwal dan save
                         if (count($diff) > 0) {
                             $psh->no_sampel = json_encode($array_no_samples);
+                            $psh->tanggal_sampling = $dataUpdate->tanggal;
                             $psh->sampler_jadwal = implode(',', $newSamplers);
                             $psh->updated_by = $dataUpdate->karyawan;
                             $psh->updated_at = $this->timestamp; // atau Carbon::now()
