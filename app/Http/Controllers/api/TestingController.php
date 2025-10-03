@@ -53,7 +53,7 @@ class TestingController extends Controller
     {
         try {
             //code...
-        
+
             switch ($request->menu) {
                 case 'this':
                     dd($this);
@@ -2977,7 +2977,7 @@ class TestingController extends Controller
             foreach ($order_detail as $od) {
                 $needIncrement = false;
 
-                if ($od->kategori_2 == '1-Air') {
+                if ($od->kategori_2 == '1-Air' || in_array($od->kategori_3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja'])) {
                     // ✅ Aturan 1: Air -> selalu increment
                     $needIncrement = true;
                 } else {
