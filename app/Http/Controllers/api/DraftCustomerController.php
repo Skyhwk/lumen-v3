@@ -58,7 +58,7 @@ class DraftCustomerController extends Controller
                 if ($blacklistedByTelNumber) return response()->json(['message' => 'Pelanggan dengan nomor telepon: ' . $telNumber . ' telah terdaftar di daftar hitam'], 401);
             }
 
-            if (isset($kontak_pelanggan['email_perusahaan'][$i])) {
+            if ($kontak_pelanggan['email_perusahaan'][$i]) {
                 $blacklistedByEmail = KontakPelangganBlacklist::where('email_perusahaan', $kontak_pelanggan['email_perusahaan'][$i])
                     ->when($id, fn($q) => $q->where('pelanggan_id', '!=', $id))
                     ->exists();
