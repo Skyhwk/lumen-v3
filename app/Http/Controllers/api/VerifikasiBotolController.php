@@ -58,25 +58,33 @@ class VerifikasiBotolController extends Controller
 
     public function dashboard(Request $request)
     {
-        $today = Carbon::today();
-        $month = Carbon::now()->month;
+        try{
+            $today = Carbon::today();
+            $month = Carbon::now()->month;
 
-        $data = ScanSampelTc::selectRaw("
-                SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
-                SUM(CASE WHEN MONTH(created_at) = ? THEN 1 ELSE 0 END) as total_bulan_ini
-            ", [$today, $month])
-            ->where('created_by', $this->karyawan)
-            ->first();
+            $data = ScanSampelTc::selectRaw("
+                    SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
+                    SUM(CASE WHEN MONTH(created_at) = ? THEN 1 ELSE 0 END) as total_bulan_ini
+                ", [$today, $month])
+                ->where('created_by', $this->karyawan)
+                ->first();
 
-        [$categories, $todo_samples] = $this->getTodoFromScanSampler();
+            [$categories, $todo_samples] = $this->getTodoFromScanSampler();
 
-        return response()->json([
-            'today' => $data->total_hari_ini ?? 0,
-            'thisMonth' => $data->total_bulan_ini ?? 0,
-            'todo_count' => count($todo_samples),
-            'todo_samples' => $todo_samples,
-            'categories' => $categories
-        ], 200);
+            return response()->json([
+                'today' => $data->total_hari_ini ?? 0,
+                'thisMonth' => $data->total_bulan_ini ?? 0,
+                'todo_count' => count($todo_samples) ?? 0,
+                'todo_samples' => $todo_samples ?? [],
+                'categories' => $categories ?? null,
+            ], 200);
+        } catch (Exception $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
     }
 
     private function getTodoFromScanSampler()
@@ -102,7 +110,7 @@ class VerifikasiBotolController extends Controller
                 $todo_samples
             ];
         } catch (\Throwable $th) {
-            throw new Exception($th->getMessage());
+            throw new Exception($th);
         }
     }
 
