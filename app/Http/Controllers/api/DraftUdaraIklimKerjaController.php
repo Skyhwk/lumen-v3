@@ -511,9 +511,19 @@ class DraftUdaraIklimKerjaController extends Controller
                     $custom[] = $detail;
                 }
 
-                $detail = collect($detail)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                $detail = collect($detail)->sortBy(function($item) {
+                    if (is_array($item)) {
+                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                    }
+                    return '';
+                })->values()->toArray();
                 foreach ($custom as $idx => $cstm) {
-                    $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                    $custom[$idx] = collect($cstm)->sortBy(function($item) {
+                        if (is_array($item)) {
+                            return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        }
+                        return '';
+                    })->values()->toArray();
                 }
 
                 return response()->json([
@@ -590,9 +600,19 @@ class DraftUdaraIklimKerjaController extends Controller
                     }
                 }
 
-                $data_all = collect($data_all)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                $data_all = collect($data_all)->sortBy(function($item) {
+                    if (is_array($item)) {
+                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                    }
+                    return '';
+                })->values()->toArray();
                 foreach ($custom as $idx => $cstm) {
-                    $custom[$idx] = collect($cstm)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                    $custom[$idx] = collect($cstm)->sortBy(function($item) {
+                        if (is_array($item)) {
+                            return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        }
+                        return '';
+                    })->values()->toArray();
                 }
 
                 return response()->json([
