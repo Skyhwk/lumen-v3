@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\View;
 
 use Carbon\Carbon;
 
@@ -21,6 +22,7 @@ use App\Models\DFUS;
 use App\Models\DFUSBackup;
 use App\Models\LogWebphone;
 use App\Models\LogWebphoneBackup;
+use App\Services\SendEmail;
 
 class NonaktifKaryawanService
 {
@@ -74,10 +76,10 @@ class NonaktifKaryawanService
             return [
                 'customer' => $customer,
                 'newSales' => $newSales,
-                'history'  => [
-                    'id_pelanggan'   => $customer->id_pelanggan,
-                    'id_sales_lama'  => $karyawan->id,
-                    'id_sales_baru'  => $newSales->id,
+                'history' => [
+                    'id_pelanggan' => $customer->id_pelanggan,
+                    'id_sales_lama' => $karyawan->id,
+                    'id_sales_baru' => $newSales->id,
                     'tanggal_rotasi' => $now,
                 ]
             ];
@@ -88,11 +90,11 @@ class NonaktifKaryawanService
         $customers->groupBy(fn($item) => $item['newSales']->id)
             ->each(function ($group, $salesId) {
                 $sales = $group->first()['newSales'];
-                $ids   = $group->pluck('customer.id_pelanggan');
+                $ids = $group->pluck('customer.id_pelanggan');
 
                 MasterPelanggan::whereIn('id_pelanggan', $ids)
                     ->update([
-                        'sales_id'              => $sales->id,
+                        'sales_id' => $sales->id,
                         'sales_penanggung_jawab' => $sales->nama_lengkap,
                     ]);
             });
@@ -100,17 +102,49 @@ class NonaktifKaryawanService
 
     private function deleteUnOrderedQuotations(int $karyawanId, string $updatedBy)
     {
-        collect([QuotationKontrakH::class, QuotationNonKontrak::class])
-            ->each(
-                fn($model) => $model::where('sales_id', $karyawanId)
-                    ->where('is_active', true)
-                    ->whereNotIn('flag_status', ['ordered', 'rejected', 'void'])
-                    ->update([
+        $newSales = MasterKaryawan::find(783);  // Sisca Wulandari (Sales Executive)
+        $oldSales = MasterKaryawan::find($karyawanId);
+
+        $models = [QuotationKontrakH::class, QuotationNonKontrak::class];
+
+        $qtsWithOrder = collect();
+
+        foreach ($models as $model) {
+            $qts = $model::where('sales_id', $karyawanId)
+                ->where('is_active', true)
+                ->whereNotIn('flag_status', ['rejected', 'void'])
+                ->get();
+
+            foreach ($qts as $qt) {
+                $dataLama = $qt->data_lama ? json_decode($qt->data_lama) : null;
+
+                if ($qt->flag_status == 'ordered' || (isset($dataLama->no_order) && !empty($dataLama->no_order))) {
+                    $qtsWithOrder->push($qt->no_document);
+                    $qt->update([
+                        'sales_id' => $newSales->id,
+                        'sales_penanggung_jawab' => $newSales->nama_lengkap,
+                        // 'updated_by' => $updatedBy,
+                        // 'updated_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
+                } else {
+                    $qt->update([
                         'deleted_by' => $updatedBy,
                         'deleted_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'is_active' => false,
-                    ])
-            );
+                    ]);
+                }
+            }
+        }
+
+        // kirim notif ke sales baru
+        if ($qtsWithOrder->isNotEmpty()) {
+            $sales = [
+                'to' => $newSales->email,
+                'new' => $newSales->nama_lengkap,
+                'old' => $oldSales->nama_lengkap
+            ];
+            // Notification::send($newSales, new QuotationNonKontrakNotification($qtsWithOrder));
+        }
     }
 
     private function deleteDfusHistory(string $karyawanName)
@@ -163,5 +197,17 @@ class NonaktifKaryawanService
 
             LogWebphone::where('karyawan_id', $karyawanId)->delete();
         }
+    }
+
+    private function emailNonaktifKaryawan($quotation, $sales, $bcc = [])
+    {
+        // SendEmail::where('to', trim($sales->to))
+        SendEmail::where('to', "ranggamanggala@intilab.com")
+            ->where('subject', "Pengalihan Tanggung Jawab Quotation")
+            ->where('bcc', $bcc)
+            ->where('body', View::make('NonAktifKaryawan', compact('quotation', 'sales'))->render())
+            ->where('karyawan', env('MAIL_NOREPLY_USERNAME'))
+            ->noReply()
+            ->send();
     }
 }

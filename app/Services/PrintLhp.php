@@ -20,7 +20,7 @@ class PrintLhp
         try {
             $header = LhpsAirHeader::where('no_sampel', $no_sampel)->where('is_active', true)->first();
             $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-            $kan = $this->cekAkreditasi($detail, $no_sampel);
+            $kan = $this->cekAkreditasi($detail);
             // dd($kan);
             $id_printer = 67; // Default printer ID
             if ($kan)
@@ -102,7 +102,7 @@ class PrintLhp
         }
     }
 
-    private function cekAkreditasi($data, $no_sampel)
+    private function cekAkreditasi($data)
     {
         // $dataDecode = json_decode($data);
 
@@ -133,5 +133,47 @@ class PrintLhp
         }
 
 
+    }
+
+    public function printByFilename($filename, $detail){
+        DB::beginTransaction();
+        try {
+            $kan = $this->cekAkreditasi($detail);
+            // dd($kan);
+            $id_printer = 67; // Default printer ID
+            if ($kan)
+                $id_printer = 68;
+
+            $cek_printer = Printers::where('id', $id_printer)->first();
+            // return $cek_printer;
+            if ($kan) {
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
+                    ->where('printer', $cek_printer->full_path)
+                    ->where('karyawan', 'System')
+                    ->where('filename', 'dokumen/LHP/' . $filename)
+                    ->where('printer_name', $cek_printer->name)
+                    ->where('destination', $cek_printer->full_path)
+                    // ->where('pages', $request->pages)
+                    ->print();
+            } else {
+                $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $filename)
+                    ->where('printer', $cek_printer->full_path)
+                    ->where('karyawan', 'System')
+                    ->where('filename', 'dokumen/LHP/' . $filename)
+                    ->where('printer_name', $cek_printer->name)
+                    ->where('destination', $cek_printer->full_path)
+                    // ->where('pages', $request->pages)
+                    ->print();
+            }
+            DB::commit();
+            return true;
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            // Handle the exception and return an error response
+            return response()->json([
+                'status' => false,
+                'message' => 'Error printing LHP: ' . $th->getMessage()
+            ], 500);
+        }
     }
 }

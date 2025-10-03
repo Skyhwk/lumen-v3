@@ -207,6 +207,7 @@ class FdlLingkunganKerjaController extends Controller
             ];
 
             $data = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
+            // dd($data);
             $lk_parameter = DetailLingkunganKerja::where('no_sampel', $request->no_sample);
             if($request->shift == 'L1'){
                 $data = $data->where(function ($query) {
@@ -220,10 +221,10 @@ class FdlLingkunganKerjaController extends Controller
                 })->pluck('parameter')->toArray();
 
             }else{
-                $data = $data->where('shift_pengambilan', $request->shift)
-                    ->orWhere('shift_pengambilan', 'Sesaat')
-                    ->first();
-
+                $data = $data->where(function ($q) {
+                    $q->where('shift_pengambilan', 'L1')
+                    ->orWhere('shift_pengambilan', 'Sesaat');
+                })->first();
                 $lk_parameter = $lk_parameter->where('shift_pengambilan', $request->shift)
                     ->orWhere('shift_pengambilan', 'Sesaat')
                     ->pluck('parameter')

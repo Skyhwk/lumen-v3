@@ -245,9 +245,11 @@ class RequestQuotationController extends Controller
 
     public function getSales(Request $request)
     {
-        $data = MasterKaryawan::whereIn('id_jabatan', [140, 15, 21, 22, 23, 24, 25]) // Sales
-            ->where('is_active', true)
-            ->orWhere('id', 41) // Novva Novita Ayu Putri Rukmana
+        $data = MasterKaryawan::where('is_active', true)
+            ->where(function ($query) {
+                $query->whereIn('id_jabatan', [140, 15, 21, 22, 23, 24, 25, 148]) // Sales
+                    ->orWhere('id', 41); // Novva Novita Ayu Putri Rukmana
+            })
             ->get();
 
         return response()->json($data);
@@ -541,7 +543,7 @@ class RequestQuotationController extends Controller
 
         $job = new CreateNonKontrakJob($payload, $this->idcabang, $this->karyawan, $sales_id);
         $this->dispatch($job);
-        
+
         sleep(3);
 
         return response()->json([
@@ -1302,7 +1304,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($e->getMessage(), 'Connection timed out') ||
-                str_contains($e->getMessage(), 'MySQL server has gone away')
+                str_contains($e->getMessage(), 'MySQL server has gone away') ||
+                str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -2285,7 +2288,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($e->getMessage(), 'Connection timed out') ||
-                str_contains($e->getMessage(), 'MySQL server has gone away')
+                str_contains($e->getMessage(), 'MySQL server has gone away') ||
+                str_contains($e->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Non Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -2732,21 +2736,27 @@ class RequestQuotationController extends Controller
                     $rawDetail = json_decode($detail->data_pendukung_sampling, true);
                     $resetDetail = reset($rawDetail);
                     $dataOldSampling = $resetDetail['data_sampling'];
+                    // Kalau data JSON string, decode dulu
+                    if (is_string($dataOldSampling)) {
+                        $decoded = json_decode($dataOldSampling, true);
+                        $dataOldSampling = is_array($decoded) ? $decoded : [];
+                    }
+                    
                     foreach ($dataOldSampling as $key => $sampling) {
                         $coreData = [
                             'kategori_1' => $sampling['kategori_1'] ?? null,
                             'kategori_2' => $sampling['kategori_2'] ?? null,
-                            'regulasi'   => $sampling['regulasi'] ?? null,
-                            'parameter'  => $sampling['parameter'] ?? null,
+                            'regulasi' => $sampling['regulasi'] ?? null,
+                            'parameter' => $sampling['parameter'] ?? null,
                         ];
 
-                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
                         $dataOldSampling[$key]['fingerprint'] = $fingerprint;
                     }
                     $allOldPengujianByPeriode[$resetDetail['periode_kontrak']] = $dataOldSampling;
                 }
-                
+
                 $id_order_header = null;
                 $periodNow = $allDetailQuotNow->pluck('periode_kontrak')->toArray();
                 $alreadyOrdered = false;
@@ -2794,20 +2804,21 @@ class RequestQuotationController extends Controller
                         // dd($pengujian);
                         $pengujian_group_by_per[$sel_per][] = [
                             'fingerprint' => $pengujian->fingerprint,
-                            'kategori_1'  => $pengujian->kategori_1,
+                            'kategori_1' => $pengujian->kategori_1,
                             'penamaan_titik' => $pengujian->penamaan_titik,
-                            'regulasi'    => $pengujian->regulasi,
-                            'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'jumlah_titik' => $pengujian->jumlah_titik,
+                            'regulasi' => $pengujian->regulasi,
+                            'kategori_2' => $pengujian->kategori_2,
+                            'parameter' => $pengujian->parameter,
                             'total_parameter' => $pengujian->total_parameter,
                         ];
                     }
                 }
 
-                uksort($pengujian_group_by_per, function($a, $b) {
+                uksort($pengujian_group_by_per, function ($a, $b) {
                     return strtotime($a) <=> strtotime($b);
                 });
-                uksort($allOldPengujianByPeriode, function($a, $b) {
+                uksort($allOldPengujianByPeriode, function ($a, $b) {
                     return strtotime($a) <=> strtotime($b);
                 });
 
@@ -2846,20 +2857,20 @@ class RequestQuotationController extends Controller
                                     //         }
                                     //     }
                                     // }
-                                    
-                                    if($validSample){  
+
+                                    if ($validSample) {
                                         $penamaan_titik_fixed = [];
                                         foreach ($pengujianBaru['penamaan_titik'] as $i => $pt) {
                                             $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                             if ($alreadyOrdered) {
                                                 if ($i < count($keysOldFoundPenamaanTitik)) {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 } else {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                     $biggestNumberOfSampel++;
                                                 }
                                             } else {
-                                                $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         }
@@ -2893,7 +2904,7 @@ class RequestQuotationController extends Controller
                     foreach ($pengujianList as &$pengujianBaru) {
                         // dd($pengujianBaru);
                         $foundMatch = false;
-                        if(!$pengujianBaru['executed']) {
+                        if (!$pengujianBaru['executed']) {
                             $keysOldFoundPenamaanTitik = [];
                             foreach ($allOldPengujianByPeriode as $idx => $pengujianLamaPer) {
                                 foreach ($pengujianLamaPer as $idx2 => $pengujianLama) {
@@ -2905,9 +2916,9 @@ class RequestQuotationController extends Controller
 
                                     $regulasiSame = $this->sameRegulasi($regulasiLama, $regulasiBaru);
 
-                                    if ($kategori1Same  && $regulasiSame && $kategori2Same) {
+                                    if ($kategori1Same && $regulasiSame && $kategori2Same) {
                                         $matchedOldPenamaan = $pengujianLama['penamaan_titik'] ?? [];
-                                        
+
                                         $penamaan_titik_fixed = [];
 
                                         foreach ($matchedOldPenamaan as $item) {
@@ -2924,13 +2935,13 @@ class RequestQuotationController extends Controller
                                                     // if($keysOldFoundPenamaanTitik[$i] == '309') {
                                                     //     dd('ketemu', $per, $pengujianLama, $pengujianBaru);
                                                     // }
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 } else {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                     $biggestNumberOfSampel++;
                                                 }
                                             } else {
-                                                $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         }
@@ -2941,15 +2952,15 @@ class RequestQuotationController extends Controller
 
                                         unset($allOldPengujianByPeriode[$idx][$idx2]);
                                         break 2;
-                                    } 
+                                    }
                                 }
                             }
                             if (!$foundMatch) {
                                 $penamaan_titik_fixed = [];
                                 foreach ($pengujianBaru['penamaan_titik'] as $i => $pt) {
                                     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                    
-                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+
+                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                     $biggestNumberOfSampel++;
                                 }
                                 $pengujianBaru['penamaan_titik'] = $penamaan_titik_fixed;
@@ -2960,7 +2971,7 @@ class RequestQuotationController extends Controller
                 }
 
                 foreach ($period as $k => $per) {
-                    
+
                     // dd($data_detail);
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
@@ -2983,11 +2994,11 @@ class RequestQuotationController extends Controller
                     }
                     $tempUsedOldData = [];
                     $checkOldQtRemaining = [];
-                    if($alreadyOrdered){
+                    if ($alreadyOrdered) {
                         $checkOldQtRemaining = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataH->id)
                             ->whereIn('periode_kontrak', $diffOldPeriod)
                             ->get();
-                    } 
+                    }
 
 
                     // dd($period);
@@ -3112,7 +3123,9 @@ class RequestQuotationController extends Controller
                                 $match = (
                                     $pengujian['kategori_1'] === $xyz->kategori_1 &&
                                     $pengujian['kategori_2'] === $xyz->kategori_2 &&
-                                    $pengujian['regulasi'][0] === $xyz->regulasi[0] // kalau yakin 1 aja
+                                    $pengujian['regulasi'] === $xyz->regulasi &&
+                                    $pengujian['parameter'] === $xyz->parameter &&
+                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik
                                 );
 
                                 if ($match) {
@@ -4055,7 +4068,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Update Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -4078,6 +4092,7 @@ class RequestQuotationController extends Controller
         try {
             $informasi_pelanggan = $payload->informasi_pelanggan;
             $data_pendukung = $payload->data_pendukung;
+            // dd($data_pendukung);
             $data_wilayah = $payload->data_wilayah;
             $syarat_ketentuan = $payload->syarat_ketentuan;
             $data_diskon = $payload->data_diskon;
@@ -4576,11 +4591,12 @@ class RequestQuotationController extends Controller
                         $coreData = [
                             'kategori_1' => $sampling['kategori_1'] ?? null,
                             'kategori_2' => $sampling['kategori_2'] ?? null,
-                            'regulasi'   => $sampling['regulasi'] ?? null,
-                            'parameter'  => $sampling['parameter'] ?? null,
+                            'regulasi' => $sampling['regulasi'] ?? null,
+                            'parameter' => $sampling['parameter'] ?? null,
+                            'penamaan_titik' => $sampling['penamaan_titik'] ?? null
                         ];
 
-                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+                        $fingerprint = md5(json_encode($coreData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
                         $dataOldSampling[$key]['fingerprint'] = $fingerprint;
                     }
@@ -4633,24 +4649,28 @@ class RequestQuotationController extends Controller
                 $diffOldPeriod = array_diff($oldPeriod, $period);
                 // dump($data_pendukung);
                 $pengujian_group_by_per = [];
-                foreach ($data_pendukung as $pengujian) {
+                foreach ($data_pendukung as $key => $pengujian) {
                     foreach ($pengujian->periode as $sel_per) {
                         // dd($pengujian);
                         $pengujian_group_by_per[$sel_per][] = [
                             'fingerprint' => $pengujian->fingerprint,
-                            'kategori_1'  => $pengujian->kategori_1,
+                            'kategori_1' => $pengujian->kategori_1,
                             'penamaan_titik' => $pengujian->penamaan_titik,
-                            'regulasi'    => $pengujian->regulasi,
-                            'kategori_2'  => $pengujian->kategori_2,
-                            'parameters' => $pengujian->parameter,
+                            'parameter' => $pengujian->parameter,
+                            'regulasi' => $pengujian->regulasi,
+                            'kategori_2' => $pengujian->kategori_2,
+                            'parameter' => $pengujian->parameter,
+                            'jumlah_titik' => $pengujian->jumlah_titik,
                             'total_parameter' => $pengujian->total_parameter,
+                            'pengujian' =>$key
                         ];
                     }
                 }
-                uksort($pengujian_group_by_per, function($a, $b) {
+                // dd($pengujian_group_by_per);
+                uksort($pengujian_group_by_per, function ($a, $b) {
                     return strtotime($a) <=> strtotime($b);
                 });
-                uksort($allOldPengujianByPeriode, function($a, $b) {
+                uksort($allOldPengujianByPeriode, function ($a, $b) {
                     return strtotime($a) <=> strtotime($b);
                 });
 
@@ -4690,20 +4710,20 @@ class RequestQuotationController extends Controller
                                     //         }
                                     //     }
                                     // }
-                                    
-                                    if($validSample){  
+
+                                    if ($validSample) {
                                         $penamaan_titik_fixed = [];
                                         foreach ($pengujianBaru['penamaan_titik'] as $i => $pt) {
                                             $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
                                             if ($alreadyOrdered) {
                                                 if ($i < count($keysOldFoundPenamaanTitik)) {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 } else {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                     $biggestNumberOfSampel++;
                                                 }
                                             } else {
-                                                $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         }
@@ -4737,7 +4757,7 @@ class RequestQuotationController extends Controller
                     foreach ($pengujianList as &$pengujianBaru) {
                         // dd($pengujianBaru);
                         $foundMatch = false;
-                        if(!$pengujianBaru['executed']) {
+                        if (!$pengujianBaru['executed']) {
                             $keysOldFoundPenamaanTitik = [];
                             foreach ($allOldPengujianByPeriode as $idx => $pengujianLamaPer) {
                                 foreach ($pengujianLamaPer as $idx2 => $pengujianLama) {
@@ -4746,14 +4766,14 @@ class RequestQuotationController extends Controller
 
                                     $regulasiLama = is_string($pengujianLama['regulasi']) ? [] : $pengujianLama['regulasi'];
                                     $regulasiBaru = is_string($pengujianBaru['regulasi']) ? [] : $pengujianBaru['regulasi'];
-                                  
+
                                     $regulasiSame = $this->sameRegulasi($regulasiLama, $regulasiBaru);
 
-                                    if ($kategori1Same  && $regulasiSame && $kategori2Same) {
+                                    if ($kategori1Same && $regulasiSame && $kategori2Same) {
                                         $matchedOldPenamaan = $pengujianLama['penamaan_titik'] ?? [];
-                                        
-                                        $penamaan_titik_fixed = [];
 
+                                        $penamaan_titik_fixed = [];
+                                        $pengujianBaru['foundOld'] = true;
                                         foreach ($matchedOldPenamaan as $item) {
                                             $keysOldFoundPenamaanTitik = array_merge(
                                                 $keysOldFoundPenamaanTitik,
@@ -4768,13 +4788,13 @@ class RequestQuotationController extends Controller
                                                     // if($keysOldFoundPenamaanTitik[$i] == '309') {
                                                     //     dd('ketemu', $per, $pengujianLama, $pengujianBaru);
                                                     // }
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($keysOldFoundPenamaanTitik[$i], 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 } else {
-                                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                     $biggestNumberOfSampel++;
                                                 }
                                             } else {
-                                                $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+                                                $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                                 $biggestNumberOfSampel++;
                                             }
                                         }
@@ -4785,15 +4805,17 @@ class RequestQuotationController extends Controller
 
                                         unset($allOldPengujianByPeriode[$idx][$idx2]);
                                         break 2;
-                                    } 
+                                    }
                                 }
                             }
                             if (!$foundMatch) {
+
+                                // $pengujianBaru['foundOld'] = false;
                                 $penamaan_titik_fixed = [];
                                 foreach ($pengujianBaru['penamaan_titik'] as $i => $pt) {
                                     $namaTitik = is_object($pt) ? current(get_object_vars($pt)) : $pt;
-                                    
-                                    $penamaan_titik_fixed[] = (object)[str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
+
+                                    $penamaan_titik_fixed[] = (object) [str_pad($biggestNumberOfSampel, 3, '0', STR_PAD_LEFT) => $namaTitik];
                                     $biggestNumberOfSampel++;
                                 }
                                 $pengujianBaru['penamaan_titik'] = $penamaan_titik_fixed;
@@ -4808,7 +4830,6 @@ class RequestQuotationController extends Controller
 
                 foreach ($period as $k => $per) {
                     // dump($per);
-                    $lower_per = (int) substr($per, 0, 4) . substr($per, 5, 2) < (int) date('Ym');
                     if (!isset($data_detail[$k]->id)) {
                         $id_detail = '';
                     } else {
@@ -4817,7 +4838,7 @@ class RequestQuotationController extends Controller
                             array_push($id_det, $id_detail);
                         }
                     }
-                    
+
                     $cek = QuotationKontrakD::where('id', $id_detail)->first();
 
                     if (!is_null($cek)) {
@@ -4836,11 +4857,11 @@ class RequestQuotationController extends Controller
                         $first = reset($oldData)['data_sampling'];
                     }
                     $checkOldQtRemaining = [];
-                    if($alreadyOrdered){
+                    if ($alreadyOrdered) {
                         $checkOldQtRemaining = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)
                             ->whereIn('periode_kontrak', $diffOldPeriod)
                             ->get();
-                    } 
+                    }
 
                     $data_sampling = [];
                     $datas = [];
@@ -5016,21 +5037,24 @@ class RequestQuotationController extends Controller
                                     }
                                 }*/
                             }
-
-                            foreach ($pengujian_group_by_per[$per] as $pengujian) {
+                            foreach ($pengujian_group_by_per[$per] as $key => $pengujian) {
                                 $match = (
                                     $pengujian['kategori_1'] === $xyz->kategori_1 &&
                                     $pengujian['kategori_2'] === $xyz->kategori_2 &&
-                                    $pengujian['regulasi'][0] === $xyz->regulasi[0] // kalau yakin 1 aja
+                                    $pengujian['regulasi'] === $xyz->regulasi &&
+                                    $pengujian['parameter'] === $xyz->parameter &&
+                                    $pengujian['jumlah_titik'] === $xyz->jumlah_titik &&
+                                    $pengujian['pengujian'] === $m
                                 );
 
                                 if ($match) {
-                                    // dump($pengujian['penamaan_titik']);
+                                    // dump($pengujian['title_names']);
                                     $penamaan_titik_fixed = $pengujian['penamaan_titik'];
+                                    unset($pengujian_group_by_per[$per][$key]);
                                 }
                             }
-                            
-                            
+
+
 
                             $data_sampling[$n++] = [
                                 'kategori_1' => $xyz->kategori_1,
@@ -5077,13 +5101,13 @@ class RequestQuotationController extends Controller
                         }
                     }
 
-                    
+
                     $datas[$j] = [
                         'periode_kontrak' => $per,
                         'data_sampling' => array_values($data_sampling)
                         // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
                     ];
-                    // dump($datas[$j]);
+                    dump($datas[$j]);
 
                     // if($per = '2025-08' || $per = '2026-01') {
                     //     dump($datas[$j]);
@@ -6050,7 +6074,7 @@ class RequestQuotationController extends Controller
                 // if ($orderConfirmation)
                 //     $orderConfirmation->update(['no_quotation' => $no_document]);
                 // ===========================================
-                // dd('=====================');
+                dd('=====================');
 
                 JobTask::insert([
                     'job' => 'RenderPdfPenawaran',
@@ -6099,7 +6123,8 @@ class RequestQuotationController extends Controller
             DB::rollback();
             if (
                 str_contains($th->getMessage(), 'Connection timed out') ||
-                str_contains($th->getMessage(), 'MySQL server has gone away')
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
             ) {
                 Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan Revisi Kontrak atau di Controller Request Quotation bermasalah.!')->url('/monitor-database')->send();
                 return response()->json([
@@ -6496,11 +6521,11 @@ class RequestQuotationController extends Controller
                             foreach ($dataSampling as &$detailSampling) {
                                 if (
                                     !isset(
-                                        $detailSampling['kategori_1'],
-                                        $detailSampling['kategori_2'],
-                                        $detailSampling['parameter'],
-                                        $detailSampling['jumlah_titik']
-                                    )
+                                    $detailSampling['kategori_1'],
+                                    $detailSampling['kategori_2'],
+                                    $detailSampling['parameter'],
+                                    $detailSampling['jumlah_titik']
+                                )
                                 ) {
                                     continue;
                                 }

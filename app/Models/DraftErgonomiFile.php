@@ -21,7 +21,7 @@ class DraftErgonomiFile extends Sector
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
 
-    public function link ()
+    public function link()
     {
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
         ->where('quotation_status', 'draft_ergonomi');

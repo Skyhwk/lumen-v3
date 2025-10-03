@@ -44,7 +44,7 @@ use Carbon\Carbon;
 class WsFinalUdaraGetaranController extends Controller
 {
 
-	private $categoryGetaran = [13, 14, 15, 16, 18, 19, 20];
+	private $categoryGetaran = [13, 14, 15, 16, 18, 19];
 
 
 	// public function index(Request $request)

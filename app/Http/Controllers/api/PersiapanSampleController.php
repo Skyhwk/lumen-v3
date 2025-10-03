@@ -356,14 +356,17 @@ class PersiapanSampleController extends Controller
             }
 
             // --- 7. Ambil data psDetail jika ada ---
-            $psHeader = PersiapanSampelHeader::with(['psDetail' => fn($q) => $q->whereIn('no_sampel', (array)$request->no_sampel)])
+            $psHeader = PersiapanSampelHeader::with([
+                    'psDetail' => fn($q) => $q->whereIn('no_sampel', (array)$request->no_sampel)
+                ])
                 ->where('no_quotation', $request->no_document)
                 ->where('no_order', $request->no_order)
-               
                 ->where('is_active', 1)
-                ->whereHas('psDetail', fn($q) => $q->whereIn('no_sampel', (array)$request->no_sampel))
+                ->whereHas('psDetail', fn($q) =>
+                    $q->whereIn('no_sampel', (array)$request->no_sampel)
+                    ->where('is_active', 0)
+                )
                 ->first();
-
             $psDetail = $psHeader ? $psHeader->psDetail->map(fn($item) => [
                 'no_sampel' => $item->no_sampel,
                 'parameters' => json_decode($item->parameters, true)

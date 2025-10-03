@@ -1413,7 +1413,7 @@ class RenderInvoice
 
                 }
             };
-            
+            // dd($sub_total, $diskon, $ppn, $pph, $total_harga, $nilai_tagihan, $total_tagihan, $sisa_tagihan, $pajak);
             
             $pdf->writeHTML('
             <tr><td style="height: 7px;" colspan="5"></td></tr>
@@ -1592,7 +1592,7 @@ class RenderInvoice
             ');
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
-            $sisa_tagihan = $total_tagihan - $nilai_tagihan;
+            $sisa_tagihan = $total_harga - $nilai_tagihan;
             if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr class="line_">
@@ -1819,9 +1819,9 @@ class RenderInvoice
                             
                             foreach ($invoice->invoiceDetails as $k => $itemInvoice) {
                                 // Handle empty values
-                                $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : 'N/A';  // Default to 'N/A' if empty
+                                $titk = !empty($itemInvoice->titk) ? $itemInvoice->titk : ' ';  // Default to 'N/A' if empty
                                 $keterangan = !empty($itemInvoice->keterangan) ? $itemInvoice->keterangan : 'No Description'; // Default text if empty
-                                $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : '0'; // Default to '0' if empty
+                                $hargaSatuan = !empty($itemInvoice->harga_satuan) ? self::rupiah($itemInvoice->harga_satuan) : ''; // Default to '0' if empty
                                 $totalHarga = !empty($itemInvoice->total_harga) ? self::rupiah($itemInvoice->total_harga) : '0'; // Default to '0' if empty
                                 
                                 $pdf->writeHTML('

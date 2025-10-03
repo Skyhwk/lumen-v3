@@ -57,6 +57,7 @@ use App\Models\DetailSenyawaVolatile;
 use App\Models\SampelTidakSelesai;
 use App\Models\QrDocument;
 use DateTime;
+use Exception;
 
 class BasOnlineController extends Controller
 {
@@ -896,7 +897,6 @@ class BasOnlineController extends Controller
                 return $matches[1] ?? null;
             }, $requestSamples);
             $requestSamples = array_filter($requestSamples);
-            // dd($requestSamples);
 
             $persiapanHeaderKategori = PersiapanSampelHeader::where('no_order', $request->no_order)
             ->where('no_quotation', $request->no_document)
@@ -907,13 +907,12 @@ class BasOnlineController extends Controller
                     $q->orWhere('no_sampel', 'like', '%/' . $sample . '%');
                 }
             })->first();
-
+            
             if ($persiapanHeaderKategori && $persiapanHeaderKategori->is_emailed_bas == 1) {
                 $dataBas = json_decode($persiapanHeaderKategori->detail_bas_documents, true);
-                // dd($dataBas);
+                
                 return $dataBas[0]["filename"];
             }
-            
             $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
             
             // Get No Sample
@@ -1927,52 +1926,62 @@ class BasOnlineController extends Controller
     private function getStatusSampling($sample) // return selesai / blm selesai
     {
         // dump($sample->no_sample);
-        $parametersRaw = json_decode($sample->parameter);
-        $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample) {
-            $parameterName = explode(";", $item)[1] ?? null;
+        try {
+            $parametersRaw = json_decode($sample->parameter);
+            $parameters = array_reduce($parametersRaw, function ($carry, $item) use ($sample) {
+                $parameterName = explode(";", $item)[1] ?? null;
 
-            if (!$parameterName) {
+                if (!$parameterName) {
+                    return $carry;
+                }
+
+                $matchedParameter = collect($this->getRequiredParameters())
+                    ->where('category', $sample->kategori_2)
+                    ->where('parameter', $parameterName)
+                    ->first();
+
+                if($matchedParameter == null){
+                    throw new Exception("Kemungkinan Parameter.$parameterName. Belum Terdaftar di RequiredParameters Hub IT");
+                }
+                $carry[] = $matchedParameter;
                 return $carry;
-            }
-
-            $matchedParameter = collect($this->getRequiredParameters())
-                ->where('category', $sample->kategori_2)
-                ->where('parameter', $parameterName)
-                ->first();
-
-            $carry[] = $matchedParameter;
-            return $carry;
-        }, []);
-
-        $parameters = array_filter($parameters, function ($param) {
-            if($param['category'] == '6-Padatan'){
-                return is_array($param);
-            }
-            return is_array($param) && isset($param['model']);
-        });
-        // dd($parameters);
-
-        $status = 'selesai';
-        if (!empty($parameters)) {
-            foreach ($parameters as $parameter) {
-                // dump($sample->no_sample);
-                if($parameter['category'] == '6-Padatan'){
-                    continue; // Skip Padatan
+            }, []);
+            $parameters = array_filter($parameters, function ($param) {
+                if($param == null){
+                    return false;
                 }
-                if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
-                    continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
+                if($param['category'] == '6-Padatan'){
+                    return is_array($param);
                 }
-                
-                $verified = $this->verifyStatus($sample->no_sample, $parameter);
-                if (!$verified) {
-                    $status = 'belum selesai';
-                    break;
+                return is_array($param) && isset($param['model']);
+            });
+        
+
+            $status = 'selesai';
+            if (!empty($parameters)) {
+                foreach ($parameters as $parameter) {
+                    // dump($sample->no_sample);
+                    if($parameter['category'] == '6-Padatan'){
+                        continue; // Skip Padatan
+                    }
+                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
+                        continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
+                    }
+                    
+                    $verified = $this->verifyStatus($sample->no_sample, $parameter);
+                    if (!$verified) {
+                        $status = 'belum selesai';
+                        break;
+                    }
                 }
+            } else {
+                $status = 'belum selesai';
             }
-        } else {
-            $status = 'belum selesai';
+            return $status;
+        } catch (\Exception $th) {
+            //throw $th;
+            throw new Exception($th->getMessage());
         }
-        return $status;
     }
     private function verifyStatus($sample_number, $parameter)
     {
@@ -3925,6 +3934,13 @@ class BasOnlineController extends Controller
                 "category" => "4-Udara",
                 "model" => DataLapanganMedanLM::class,
                 "model2" => null
+            ],
+            [
+                "parameter" => "Asetaldehid (SC)",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailLingkunganKerja::class,
+                "model2" => DetailLingkunganHidup::class
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];

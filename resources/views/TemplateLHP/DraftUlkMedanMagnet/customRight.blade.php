@@ -1,64 +1,29 @@
+
 @php
-    $methode_sampling = $header->metode_sampling ? $header->metode_sampling : '-';
-    $period = explode(" - ", $header->periode_analisa);
-    $period = array_filter($period);
-    $period1 = '';
-    $period2 = '';
-    $temptArrayPush = [];
-
-    if(!empty($custom)){
-        foreach ($custom as $key => $value) {
-            foreach ($value as $kk => $yy) {
-                 if (!empty($yy['akr']) && !in_array($yy['akr'], $temptArrayPush)) {
-                    $temptArrayPush[] = $yy['akr'];
-                }
-                if (!empty($yy['attr']) && !in_array($yy['attr'], $temptArrayPush)) {
-                    $temptArrayPush[] = $yy['attr'];
-                }
-            }
-        }
-    } else {
-        foreach ($detail as $kk => $yy) {
-                $p = $kk + 1;
-                if (!empty($yy['akr']) && !in_array($yy['akr'], $temptArrayPush)) {
-                    $temptArrayPush[] = $yy['akr'];
-                }
-                if (!empty($yy['attr']) && !in_array($yy['attr'], $temptArrayPush)) {
-                    $temptArrayPush[] = $yy['attr'];
-                }
-        }
-    }
-
-    if (!empty($period)) {
-        $period1 = \App\Helpers\Helper::tanggal_indonesia($period[0]);
-        $period2 = \App\Helpers\Helper::tanggal_indonesia($period[1]);
-    }
-
-    $data_keterangan = implode(", ", json_decode($header->keterangan, true));
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
 @endphp
-
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="120">No. SAMPEL</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="200">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
+                        <td class="custom" width="240">JENIS SAMPEL</td>
                     </tr>
                     <tr>
-                        <td class="custom" width="120">{{ $header->no_lhp }}</td>
-                        <td class="custom" width="120">{{ $header->no_sampel }}</td>
-                        <td class="custom" width="200">{{ $header->sub_kategori }}</td>
+                        <td class="custom">{{ $header->no_lhp }}</td>
+                        <td class="custom">{{ $header->sub_kategori }}</td>
                     </tr>
                 </table>
             </td>
         </tr>
+
+        {{-- Informasi Pelanggan --}}
         <tr>
             <td>
-                {{-- Informasi Pelanggan --}}
-                <table style="padding: 20px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 20px;" width="100%">
                     <tr>
                         <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
                     </tr>
@@ -70,7 +35,7 @@
                 </table>
 
                 {{-- Alamat Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
                         <td class="custom5" width="120">Alamat / Lokasi Sampling</td>
                         <td class="custom5" width="12">:</td>
@@ -79,71 +44,60 @@
                 </table>
 
                 {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                <table style="padding-top: 10px;" width="100%">
                     <tr>
-                        <td class="custom5" colspan="7"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr>
-                    <tr>
-                        <td class="custom5">Metode Sampling</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @if(!empty($header->metode_sampling))
-                                    @foreach($header->metode_sampling as $index => $item)
-                                        <tr>
-                                            @if (count($header->metode_sampling) > 1)
-                                                <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                                <td class="custom5">{{ $item ?? '-' }}</td>
-                                            @else
-                                                <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                            @endif
-                                        </tr>
-                                    @endforeach
-                                @else
-                                    <tr>
-                                        <td class="custom5" colspan="2">-</td>
-                                    </tr>
-                                @endif
-                            </table>
+                        <td class="custom5" width="120" colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
                     </tr>
                     <tr>
-                        <td class="custom5">Tanggal Sampling</td>
+                    @php
+                         $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : [];
+                    @endphp
+                        <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5" colspan="5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
+                        <td class="custom5">
+                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                                @foreach($methode_sampling as $index => $item)
+                                    <tr>
+                                        @if (count($methode_sampling) > 1)
+                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
+                                            <td class="custom5">{{ $item ?? '-' }}</td>
+                                        @else
+                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
+                                        @endif
+                                    </tr>
+                                @endforeach
+                            </table>
+                        </td>
                     </tr>
                 </table>
 
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
-                    @if ($header->regulasi != null)
-                        @foreach (json_decode($header->regulasi) as $key => $value)
-                            <tr>
-                                <td class="custom5" colspan="3">**  {{ $value }}</td>
-                            </tr>
-                        @endforeach
-                    @endif
-                </table>
-
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
-                    @if ($header->keterangan != null)
-                        @foreach (json_decode($header->keterangan) as $key => $value)
+                {{-- Regulasi --}}
+                @if (!empty($header->regulasi))
+                
+                    @foreach (json_decode($header->regulasi) as $y)
+                            <table style="padding-top: 10px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                </tr>
+                            </table>
+                    @endforeach
                         @php
-                            $found = false;
-                            foreach ($temptArrayPush as $symbol) {
-                                if (strpos($vx, $symbol) === 0) {
-                                    $found = true;
-                                    break;
-                                }
-                            }
+                            $regulasiId = explode('-', $y)[0];
+                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
                         @endphp
-                        @if ($found)
-                            <tr>
-                                <td class="custom5" colspan="3">{{ $value }}</td>
-                            </tr>
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
                         @endif
-                        @endforeach
-                    @endif
-                </table>
+                @endif
             </td>
         </tr>
     </table>
