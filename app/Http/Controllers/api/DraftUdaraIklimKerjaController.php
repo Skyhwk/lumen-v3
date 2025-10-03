@@ -454,6 +454,8 @@ class DraftUdaraIklimKerjaController extends Controller
                 $i = 0;
                 if ($data->isNotEmpty()) {
                     foreach ($data as $key => $val) {
+                        $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
+
                         $data1[$i]['id'] = $val->id;
                         $data1[$i]['no_sampel'] = $val->no_sampel;
                         $data1[$i]['hasil'] = round($val->ws_udara->hasil1, 1);
@@ -474,7 +476,7 @@ class DraftUdaraIklimKerjaController extends Controller
                         }
 
                         $data1[$i]['parameter'] = $val->parameter;
-                        $data1[$i]['tanggal_sampling'] = $val->tanggal_sampling;
+                        $data1[$i]['tanggal_sampling'] = $tanggal_sampling;
 
                         $i++;
                     }
@@ -544,6 +546,8 @@ class DraftUdaraIklimKerjaController extends Controller
                 $i = 0;
                 if ($data->isNotEmpty()) {
                    foreach ($data as $key => $val) {
+                    $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
+
                     $data1[$i]['id'] = $val->id;
                     $data1[$i]['no_sampel'] = $val->no_sampel;
                     $data1[$i]['hasil'] = round($val->ws_udara->hasil1, 1);
@@ -564,7 +568,7 @@ class DraftUdaraIklimKerjaController extends Controller
                     }
 
                     $data1[$i]['parameter'] = $val->parameter;
-                    $data1[$i]['tanggal_sampling'] = $val->tanggal_sampling;
+                    $data1[$i]['tanggal_sampling'] = $tanggal_sampling;
 
                     $i++;
                 }

@@ -228,6 +228,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$item->satuan = $bakuMutu->satuan ?? null;
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
 				$item->method = $bakuMutu->method ?? null;
+				$item->nama_header = $bakuMutu->nama_header ?? null;
 			
 			}
 

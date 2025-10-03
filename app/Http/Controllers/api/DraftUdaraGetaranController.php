@@ -670,6 +670,7 @@ class DraftUdaraGetaranController extends Controller
         ];
 
         // Cek apakah getaran personal
+        $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
         if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
             $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
@@ -685,6 +686,7 @@ class DraftUdaraGetaranController extends Controller
                 ),
                 'nab'          => $wsUdara ? $wsUdara->nab : null,
                 'tipe_getaran' => 'getaran personal',
+                'tanggal_sampling'  => $tanggal_sampling
             ]);
         }
 
@@ -702,6 +704,7 @@ class DraftUdaraGetaranController extends Controller
             'tipe_getaran' => 'getaran',
             'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
             'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
+            'tanggal_sampling'  => $tanggal_sampling
         ]);
     }
 
@@ -740,6 +743,7 @@ class DraftUdaraGetaranController extends Controller
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
                 $no_lhp = $data->no_lhp;
+                $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
                     ->where('type_document', 'LHP_GETARAN')
                     ->where('is_active', 1)
@@ -757,12 +761,14 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by' => $this->karyawan
                     ]);
+
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
                     $data->nama_karyawan = $this->karyawan;
                     $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
+
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
                         'no_sampel' => is_array($request->no_sampel) 
@@ -775,6 +781,7 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+
                     if ($qr != null) {
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
