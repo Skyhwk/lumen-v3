@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\PsikologiHeader;
 use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\LhpUdaraPsikologiDetail;
 use App\Models\LhpUdaraPsikologiDetailHistory;
 use App\Models\LhpUdaraPsikologiHeaderHistory;
+use App\Models\QrDocument;
 use App\Services\GenerateQrDocumentLhpp;
 use App\Http\Controllers\Controller;
+use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -27,20 +30,29 @@ class DraftLhpUdaraPsikologiController extends Controller
 {
 	public function index(Request $request)
 	{
-		$data = OrderDetail::with('dataPsikologi', 'lhp_psikologi')
+			$data = OrderDetail::with('dataPsikologi', 'lhp_psikologi')
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->where('status', 2)
-			->whereJsonContains('parameter', [
-				"318;Psikologi"
-			])
+			->whereJsonContains('parameter', ["318;Psikologi"])
 			->whereNotNull('tanggal_terima')
-			->select('no_order', 'no_quotation', 'cfr', "nama_perusahaan", DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling ORDER BY tanggal_sampling SEPARATOR ",") as tanggal_sampling'), DB::raw('COUNT(*) as total'))
-			->groupBy('no_order', 'no_quotation', 'cfr', "nama_perusahaan")
+			->select(
+				'no_order',
+				'no_quotation',
+				'cfr',
+				'nama_perusahaan',
+				DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling ORDER BY tanggal_sampling SEPARATOR ", ") as tanggal_sampling'),
+				DB::raw('GROUP_CONCAT(DISTINCT no_sampel ORDER BY no_sampel SEPARATOR ", ") as no_sampel'),
+				DB::raw('COUNT(*) as total')
+			)
+			->groupBy('no_order', 'no_quotation', 'cfr', 'nama_perusahaan')
 			->get();
+
 
 		return Datatables::of($data)->make(true);
 	}
+	
+
 
 	public function getOrder(Request $request)
 	{
@@ -277,88 +289,93 @@ class DraftLhpUdaraPsikologiController extends Controller
 		}
 	}
 
-	// public function handleApprove(Request $request)
-	// {
-	// 	DB::beginTransaction();
-	// 	try {
-	// 		$data = OrderDetail::where('no_sampel', $request->no_sampel)
-	// 			->where('kategori_2', '4-Udara')
-	// 			->where('status', 0)
-	// 			->where('is_active', true)
-	// 			->first();
-	// 		$data->status = 2;
-	// 		$data->save();
-	// 		DB::commit();
-	// 		return response()->json([
-	// 			'message' => 'success',
-	// 			'status' => 200,
-	// 			'success' => true
-	// 		], 200);
-	// 	} catch (Exception $e) {
-	// 		DB::rollBack();
-	// 		return response()->json([
-	// 			'message' => $e->getMessage(),
-	// 			'line' => $e->getLine(),
-	// 			'menu' => $e->getFile(),
-	// 			'status' => 401
-	// 		], 401);
-	// 	}
-	// }
-	public function handleApprove(Request $request)
-	{
-		DB::beginTransaction();
-		try {
-			$data = OrderDetail::where('no_order', $request->no_order)
-				->where('cfr', $request->cfr)
-				->where('kategori_2', '4-Udara')
-				->where('status', 2)
-				->whereJsonContains('parameter', ["318;Psikologi"])
-				->whereNotNull('tanggal_terima')
-				->get();
-			if ($data->isEmpty()) {
-				return response()->json([
-					'message' => 'Data tidak ditemukan',
-					'status' => 404
-				], 200);
-			}
+	
+	  public function handleApprove(Request $request)
+    {
+        try {
+         
+            $data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)
+                    ->where('is_active', true)
+                    ->first();
+            $noSampel = array_map('trim', explode(',', $request->no_sampel));
+            $no_lhp = $data->no_cfr;
 
-			$header = LhpUdaraPsikologiHeader::where('no_order', $request->no_order)->where('is_active', true)->first();
-			$header->approve_at = Carbon::now();
-			$header->approve_by = $this->karyawan;
-			$header->save();
+            $detail = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
+        
+            $qr = QrDocument::where('id_document', $data->id)
+                ->where('type_document', 'LHP_PSIKOLOGI')
+                ->where('is_active', 1)
+                ->where('file', $data->file_qr)
+                ->orderBy('id', 'desc')
+                ->first();
+// dd($data, $noSampel, $detail);
+            if ($data != null) {
+                OrderDetail::where('cfr', $request->cfr)
+                ->whereIn('no_sampel', $noSampel)
+                ->where('is_active', true)
+                ->update([
+                    'is_approve' => 1,
+                    'status' => 3,
+                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'approved_by' => $this->karyawan
+                ]);
 
-			try {
-				$this->dispatch(new JobPrintLhp($request->cfr, 'draftPsikologi'));
-			} catch (\Exception $e) {
-				DB::rollBack();
-				return response()->json([
-					'message' => 'Gagal mengirim job cetak: ' . $e->getMessage(),
-					'status' => 500
-				], 200);
-			}
-			foreach ($data as $item) {
-				// Update status dulu sebelum dispatch
-				$item->status = 3;
-				$item->save();
-			}
+                
+                $data->is_approve = 1;
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_by = $this->karyawan;
+                $data->nama_karyawan = $this->karyawan;
+                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                 if ($data->count_print < 1) {
+                    $data->is_printed = 1;
+                    $data->count_print = $data->count_print + 1;
+                }
+                // dd($data->id_kategori_2);
 
-			DB::commit();
-			return response()->json([
-				'message' => 'Semua job print berhasil dikirim.',
-				'status' => 201,
-				'success' => true
-			], 200);
+                HistoryAppReject::insert([
+                    'no_lhp' => $data->no_cfr,
+                    'no_sampel' => $request->noSampel,
+                    'kategori_2' => $data->id_kategori_2,
+                    'kategori_3' => $data->id_kategori_3,
+                    'menu' => 'Draft Udara',
+                    'status' => 'approved',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
 
-		} catch (\Exception $e) {
-			DB::rollBack();
-			return response()->json([
-				'message' => $e->getMessage(),
-				'line' => $e->getLine(),
-				'file' => $e->getFile(),
-				'status' => 500
-			], 500);
-		}
-	}
+                if ($qr != null) {
+                    $dataQr = json_decode($qr->data);
+                    $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
+                    $dataQr->Disahkan_Oleh = $this->karyawan;
+                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $qr->data = json_encode($dataQr);
+                    $qr->save();
+                }
+
+                $servicePrint = new PrintLhp();
+                $servicePrint->printByFilename($data->file_lhp, $detail);
+                
+                if (!$servicePrint) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                }
+            }
+
+            DB::commit();
+            return response()->json([
+                'data' => $data,
+                'status' => true,
+                'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove'
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            dd($th);
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'status' => false
+            ], 500);
+        }
+    }
 
 
 	public function handleGenerateLink(Request $request)
@@ -435,19 +452,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 		return response()->json($users);
 	}
 
-	// public function getLink(Request $request)
-	// {
-	// 	try {
-	// 		$link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'lhp_psikologi', 'type' => 'lhpp'])->first();
 
-	// 		if (!$link) {
-	// 			return response()->json(['message' => 'Link not found'], 404);
-	// 		}
-	// 		return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
-	// 	} catch (Exception $e) {
-	// 		return response()->json(['message' => $e->getMessage()], 400);
-	// 	}
-	// }
 	public function getLink(Request $request)
 	{
 		try {
@@ -533,7 +538,7 @@ class DraftLhpUdaraPsikologiController extends Controller
                     LhpUdaraPsikologiDetail::where('id_header', $data->id)->delete();
                 }
 
-				$order = OrderDetail::where('no_order', $data->no_order)
+				 OrderDetail::where('no_order', $data->no_order)
 					->where('cfr', $data->no_cfr)
 					->where('kategori_2', '4-Udara')
 					->where('status', 2)
