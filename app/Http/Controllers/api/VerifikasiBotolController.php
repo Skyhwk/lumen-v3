@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Http\Controllers\Controller;
 use App\Models\{QcLapangan, OrderDetail, Ftc, ScanSampelTc, ScanBotol, PersiapanSampelDetail, DataLapanganAir};
+use Exception;
 use Illuminate\Support\Facades\DB;
 
 class VerifikasiBotolController extends Controller
@@ -67,13 +68,43 @@ class VerifikasiBotolController extends Controller
             ->where('created_by', $this->karyawan)
             ->first();
 
+        [$categories, $todo_samples] = $this->getTodoFromScanSampler();
+
         return response()->json([
             'today' => $data->total_hari_ini ?? 0,
-            'thisMonth' => $data->total_bulan_ini ?? 0
+            'thisMonth' => $data->total_bulan_ini ?? 0,
+            'todo_count' => count($todo_samples),
+            'todo_samples' => $todo_samples,
+            'categories' => $categories
         ], 200);
     }
 
+    private function getTodoFromScanSampler()
+    {
+        try {
+            $todo_samples = ScanBotol::whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()])
+                ->whereNotIn('no_sampel', function ($query) {
+                    $query->select('no_sampel')
+                        ->from('scan_sampel_tc')
+                        ->whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()]);
+                })
+                ->pluck('no_sampel')
+                ->toArray();
 
+            $todo_samples = array_unique($todo_samples);
+
+            $order_detail = OrderDetail::whereIn('no_sampel', $todo_samples)->where('is_active', true)->get()->pluck('kategori_3')->toArray();
+
+            $categories = array_count_values(array_values($order_detail));
+
+            return [
+                $categories,
+                $todo_samples
+            ];
+        } catch (\Throwable $th) {
+            throw new Exception($th->getMessage());
+        }
+    }
 
     public function scan(Request $request)
     {
