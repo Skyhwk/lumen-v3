@@ -87,9 +87,8 @@ class LhpUdaraPsikologiController extends Controller
                 }
             }
 
-            $noSampel = array_map('trim', explode(",", $request->noSampel));
 				OrderDetail::where('cfr', $request->no_lhp)
-                    ->whereIn('no_sampel', $noSampel)
+                    ->where('status', 3)
                     ->update([
                         'status' => 2
                     ]);
