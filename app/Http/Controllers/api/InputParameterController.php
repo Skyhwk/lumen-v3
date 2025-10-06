@@ -51,6 +51,7 @@ use App\Services\AnalystRender;
 use App\Services\AnalystFormula;
 use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
+use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
