@@ -513,14 +513,14 @@ class DraftUdaraIklimKerjaController extends Controller
 
                 $detail = collect($detail)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
                 foreach ($custom as $idx => $cstm) {
                     $custom[$idx] = collect($cstm)->sortBy(function($item) {
                         if (is_array($item)) {
-                            return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                            return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                         }
                         return '';
                     })->values()->toArray();
@@ -602,14 +602,14 @@ class DraftUdaraIklimKerjaController extends Controller
 
                 $data_all = collect($data_all)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
                 foreach ($custom as $idx => $cstm) {
                     $custom[$idx] = collect($cstm)->sortBy(function($item) {
                         if (is_array($item)) {
-                            return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                            return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                         }
                         return '';
                     })->values()->toArray();

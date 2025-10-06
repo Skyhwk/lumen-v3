@@ -515,7 +515,7 @@ class DraftUdaraPencahayaanController extends Controller
 
                 $data_entry = collect($data_entry)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
@@ -554,11 +554,10 @@ class DraftUdaraPencahayaanController extends Controller
             // Sort mainData
             $mainData = collect($mainData)->sortBy(function($item) { 
                 if (is_array($item)) {
-                    return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                    return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                 }
                 return '';
             })->values()->toArray();
-
             // Sort otherRegulations
             foreach ($otherRegulations as $id => $regulations) {
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
