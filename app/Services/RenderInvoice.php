@@ -1131,6 +1131,7 @@ class RenderInvoice
 
                         } else { // kondisi object
                             // dd('bawah');
+                            
                             foreach (json_decode($values->data_pendukung_sampling) as $keys => $dataSampling) {
 
                                 $tambah = 0;
@@ -1155,9 +1156,11 @@ class RenderInvoice
                                     $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                                 }
                                 //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
-                                for ($i = 0; $i < count(array_chunk($dataSampling->data_sampling, 12)); $i++) {
+                                $chunks = self::chunkByContentHeight($dataSampling->data_sampling);
 
-                                    foreach (array_chunk($dataSampling->data_sampling, 12)[$i] as $key => $datasp) {
+                                for ($i = 0; $i < count($chunks); $i++) {
+
+                                    foreach ($chunks[$i] as $key => $datasp) {
 
                                         if ($values->periode != null) {
                                             $pr = self::tanggal_indonesia($values->periode, 'period');
@@ -1168,8 +1171,8 @@ class RenderInvoice
                                         if ($key == 0) {
 
 
-                                            if ($i == count(array_chunk($dataSampling->data_sampling, 12)) - 1) {
-                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 12)[$i]) + 1 + $tambah;
+                                            if ($i == count($chunks) - 1) {
+                                                $rowspan = count($chunks[$i]) + 1 + $tambah;
 
                                                 $pdf->writeHTML(
                                                     '<tr style="border: 1px solid; font-size: 9px;">
@@ -1177,7 +1180,7 @@ class RenderInvoice
                                                         <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
                                             } else {
-                                                $rowspan = count(array_chunk($dataSampling->data_sampling, 12)[$i]) + 1;
+                                                $rowspan = count($chunks[$i]) + 1;
                                                 $pdf->writeHTML(
                                                     '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                         <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
@@ -1240,7 +1243,7 @@ class RenderInvoice
 
                                     }
 
-                                    $isLastElement = $i == count(array_chunk($dataSampling->data_sampling, 12)) - 1;
+                                    $isLastElement = $i == count($chunks) - 1;
 
                                     if ($isLastElement) {
 
@@ -2009,4 +2012,35 @@ class RenderInvoice
         $hasil_rupiah = "Rp " . number_format($angka, 0, ".", ",");
         return $hasil_rupiah;
     }
+
+    private static function chunkByContentHeight($data, $maxHeight = 1000)
+    {
+        $chunks = [];
+        $currentChunk = [];
+        $currentHeight = 0;
+
+        foreach ($data as $row) {
+            // Estimasi tinggi berdasarkan panjang teks
+            $textLength = strlen($row->keterangan_pengujian ?? '') +
+                        strlen(json_encode($row->regulasi ?? ''));
+            $rowHeight = 40 + ceil($textLength / 120) * 20;
+
+            // Kalau udah mentok halaman, bikin chunk baru
+            if ($currentHeight + $rowHeight > $maxHeight) {
+                $chunks[] = $currentChunk;
+                $currentChunk = [];
+                $currentHeight = 0;
+            }
+
+            $currentChunk[] = $row;
+            $currentHeight += $rowHeight;
+        }
+
+        if (!empty($currentChunk)) {
+            $chunks[] = $currentChunk;
+        }
+
+        return $chunks;
+    }
+
 }
