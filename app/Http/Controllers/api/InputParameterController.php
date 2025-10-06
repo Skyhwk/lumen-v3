@@ -68,13 +68,22 @@ class InputParameterController extends Controller
 			}
 
 			$join = OrderDetail::with('TrackingSatu')
-				->whereHas('TrackingSatu', function($q) use ($request) {
-					$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-				})
-				->where('kategori_2', $request->category)
-				->where('is_active', true)
-				->orderBy('no_sampel', 'asc');
+                ->whereHas('TrackingSatu', function($q) use ($request) {
+                    $q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+                })
+                ->where('kategori_2', $request->category)
+                ->where('is_active', true)
+                ->orderByRaw("JSON_LENGTH(parameter) = 1 DESC")
+                ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
+
+            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+                ->where('kategori', $request->category)
+                ->where('is_active', true)
+                ->get()
+                ->pluck('quota','parameter_name')
+                ->toArray();
+
 			// dd($join);
 			if($join->isEmpty()) {
 				return response()->json([
@@ -89,6 +98,8 @@ class InputParameterController extends Controller
 			$inter = [];
 			$ftc = [];
 
+            $quota_count = collect();
+
 			foreach($join as $key => $val) {
 				$param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
 					return explode(';', $item)[1];
@@ -96,8 +107,18 @@ class InputParameterController extends Controller
 
 				$diff = array_diff($select, $param);
 
+                // dd($select, $diff , array_diff($select, $diff), $param, $quota);
+
 				$row = array_fill_keys($diff, '-');
 				foreach(array_diff($select, $diff) as $p) {
+                    if(isset($quota[$p]) && $quota_count->has($p) && $quota_count[$p] >= $quota[$p]) {
+                        continue;
+                    }
+                    if(isset($quota[$p]) && $quota_count->has($p)) {
+                        $quota_count[$p] = $quota_count[$p] + 1;
+                    } elseif(isset($quota[$p])) {
+                        $quota_count[$p] = 1;
+                    }
 					$row[$p] = $val->no_sampel;
 				}
 
