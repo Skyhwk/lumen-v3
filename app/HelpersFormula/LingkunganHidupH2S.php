@@ -49,6 +49,8 @@ class LingkunganHidupH2S
         $C = \str_replace(",", "", number_format(floatval($C_) * (34 / 24.45), 4));
         $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
         $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 34, 5));
+
+        
         if (floatval($C) < 1.39)
             $C = '<1.39';
         if (floatval($C1) < 0.0014)
