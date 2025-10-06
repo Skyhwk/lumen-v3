@@ -21,7 +21,7 @@
                             <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas Kebisingan :</td>
                         </tr>
                     </table>
-                    <table style="padding-top: 5px; font-size: 10px;" width="100%">
+                    <table style="padding-top: 5px; font-size: 10px; width: 59%;" >
                         @if ($key + 1 == $page)
                             <tr>
                                 <td class="custom5" colspan="3"><strong>{{ $regulasiName }}</strong></td>
@@ -62,7 +62,7 @@
                             <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas Kebisingan :</td>
                         </tr>
                     </table>
-                    <table style="padding-top: 5px; font-size: 10px;" width="100%">
+                    <table style="padding-top: 5px; font-size: 10px; width: 59%;">
                         <tr>
                             <td class="custom5" colspan="3"><strong>{{ $regulasiName }}</strong></td>
                         </tr>

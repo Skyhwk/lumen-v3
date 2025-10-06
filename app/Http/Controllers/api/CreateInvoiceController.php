@@ -184,7 +184,13 @@ class CreateInvoiceController extends Controller
                         
                         // cek kontrak atau non kontrak
                         $noDoc = \explode("/", $getDetail->no_document);
-                        
+                        $tertagih = 0;
+                        $invoice_sebelumnya = Invoice::where('no_order', $item)->get();
+                        if(count($invoice_sebelumnya) > 0){
+                            foreach($invoice_sebelumnya as $inv){
+                                $tertagih += $inv->nilai_tagihan;
+                            }
+                        }
                         if ($noDoc[1] == 'QTC') {
                             $periode = $request->periode_kontrak;
                             // jika "all" maka semua periode
@@ -277,7 +283,7 @@ class CreateInvoiceController extends Controller
                             'jabatan_pic' => $request->jabatan_pic,
                             'ppnbm' => $total_diskon,
                             'ppn' => $getDetail->total_ppn,
-                            'piutang' => $getDetail->biaya_akhir,
+                            'piutang' => $getDetail->biaya_akhir - $tertagih,
                             'created_by' => $this->karyawan,
                             'created_at' => DATE('Y-m-d H:i:s'),
                             'is_emailed' => 0,
