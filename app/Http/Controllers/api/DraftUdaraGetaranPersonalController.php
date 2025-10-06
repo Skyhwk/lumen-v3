@@ -611,7 +611,7 @@ class DraftUdaraGetaranPersonalController extends Controller
 
                 $data_entry = collect($data_entry)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
@@ -654,7 +654,7 @@ class DraftUdaraGetaranPersonalController extends Controller
                 
                 $mainData = collect($mainData)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
