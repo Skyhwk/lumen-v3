@@ -468,7 +468,7 @@ class DraftUdaraIklimKerjaController extends Controller
                             $data1[$i]['keterangan'] = $val->iklim_dingin->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_dingin->aktifitas_kerja;
                             $data1[$i]['kondisi'] = $val->ws_udara->interpretasi;
-                        } else if ($val->parameter == "ISBB" || $val->parameter == "ISBB (8 jam)") {
+                        } else {
                             $data1[$i]['keterangan'] = $val->iklim_panas->keterangan;
                             $data1[$i]['indeks_suhu_basah'] = $val->iklim_panas->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_panas->aktifitas;
