@@ -6,19 +6,18 @@ use Carbon\Carbon;
 
 class LingkunganHidupH2S
 {
-    public function index($data, $id_parameter, $mdl)
-    {
+    public function index($data, $id_parameter, $mdl) {
         $ks = null;
         // dd(count($data->ks));
         if (is_array($data->ks)) {
             $ks = number_format(array_sum($data->ks) / count($data->ks), 4);
-        } else {
+        }else {
             $ks = $data->ks;
         }
         $kb = null;
         if (is_array($data->kb)) {
             $kb = number_format(array_sum($data->kb) / count($data->kb), 4);
-        } else {
+        }else {
             $kb = $data->kb;
         }
 
@@ -39,22 +38,17 @@ class LingkunganHidupH2S
         $st = null;
         $satuan = null;
 
-        $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-        if ($Vu != 0.0) {
+        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+        if($Vu != 0.0) {
             $C_ = \str_replace(",", "", number_format(($ks - $kb) / floatval($Vu), 4));
-        } else {
+        }else {
             $C_ = 0;
         }
-
+        
         $C_ = \str_replace(",", "", number_format((floatval($ks) - floatval($kb)) / (floatval($Vu) != 0.0 ? floatval($Vu) : 1), 4));
         $C = \str_replace(",", "", number_format(floatval($C_) * (34 / 24.45), 4));
         $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        // $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 34, 5));
-        // $C2 = \str_replace(",", "", number_format(floatval($C_), 5));
-        $C2 = $C_;
-
-
-
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 34, 5));
         if (floatval($C) < 1.39)
             $C = '<1.39';
         if (floatval($C1) < 0.0014)
