@@ -41,7 +41,7 @@ class FdlLingkunganKerjaController extends Controller
             $listParameter = json_decode($parameter->parameters, true);
 
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-            ->where('kategori_3', '27-Udara Lingkungan Kerja')
+            ->whereIn('kategori_3', ['27-Udara Lingkungan Kerja', '29-Udara Umum'])
             ->where(function ($q) use ($listParameter) {
                 foreach ($listParameter as $keyword) {
                     $q->orWhere('parameter', 'like', "%$keyword%");
