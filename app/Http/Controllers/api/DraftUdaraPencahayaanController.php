@@ -512,10 +512,30 @@ class DraftUdaraPencahayaanController extends Controller
                     }
                 }
 
-                $data_entry = collect($data_entry)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
-                ])->values()->toArray();
+                $bulanMap = [
+                    'Januari' => 'January',
+                    'Februari' => 'February',
+                    'Maret' => 'March',
+                    'April' => 'April',
+                    'Mei' => 'May',
+                    'Juni' => 'June',
+                    'Juli' => 'July',
+                    'Agustus' => 'August',
+                    'September' => 'September',
+                    'Oktober' => 'October',
+                    'November' => 'November',
+                    'Desember' => 'December',
+                ];
+
+
+
+                $data_entry = collect($data_entry)
+                ->sortBy(function ($item) use ($bulanMap) {
+                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
+                })
+                ->values()
+                ->toArray();
 
                 return response()->json([
                     'status'    => true,
