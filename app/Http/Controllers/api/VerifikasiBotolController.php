@@ -58,38 +58,31 @@ class VerifikasiBotolController extends Controller
 
     public function dashboard(Request $request)
     {
-        try {
-            $today = Carbon::today();
-            $month = Carbon::now()->month;
+        $today = Carbon::today();
+        $month = Carbon::now()->month;
 
-            $data = ScanSampelTc::selectRaw("
+        $data = ScanSampelTc::selectRaw("
                 SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
                 SUM(CASE WHEN MONTH(created_at) = ? THEN 1 ELSE 0 END) as total_bulan_ini
             ", [$today, $month])
-                ->where('created_by', $this->karyawan)
-                ->first();
+            ->where('created_by', $this->karyawan)
+            ->first();
 
-            [$categories, $todo_samples] = $this->getTodoFromScanSampler();
+        $scanSamplers = $this->getTodoFromScanSampler();
 
-            return response()->json([
-                'today'       => $data->total_hari_ini ?? 0,
-                'thisMonth'   => $data->total_bulan_ini ?? 0,
-                'todo_count'  => count($todo_samples),
-                'todo_samples' => $todo_samples ?? [],
-                'categories'  => $categories ?? [],
-            ], 200);
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => $th->getMessage(),
-                'line'    => $th->getLine(),
-                'file'    => $th->getFile(),
-            ], 500);
-        }
+        return response()->json([
+            'today' => $data->total_hari_ini ?? 0,
+            'thisMonth' => $data->total_bulan_ini ?? 0,
+            'todo_count' => count($scanSamplers['todo_samples']),
+            'todo_samples' => $scanSamplers['todo_samples'],
+            'categories' => $scanSamplers['categories'],
+        ], 200);
     }
 
     private function getTodoFromScanSampler()
     {
         try {
+            // Ambil daftar no sampel yang sudah di-scan botol tapi belum masuk ke scan_sampel_tc
             $todo_samples = ScanBotol::whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()])
                 ->whereNotIn('no_sampel', function ($query) {
                     $query->select('no_sampel')
@@ -100,16 +93,25 @@ class VerifikasiBotolController extends Controller
                 ->unique()
                 ->toArray();
 
-            $order_detail = OrderDetail::whereIn('no_sampel', $todo_samples)
+            // Ambil data order detail berdasarkan daftar no_sampel tersebut
+            $order_detail = OrderDetail::select('no_sampel', 'kategori_3')
+                ->whereIn('no_sampel', $todo_samples)
                 ->where('is_active', true)
-                ->pluck('kategori_3')
-                ->toArray();
+                ->get();
 
-            $categories = array_count_values($order_detail);
+            // Kelompokkan berdasarkan kategori_3
+            $categories = [];
+            foreach ($order_detail as $item) {
+                $kategori = $item->kategori_3 ?? 'Tidak Diketahui';
+                $categories[$kategori][] = $item->no_sampel;
+            }
 
-            return [$categories, $todo_samples];
+            return [
+                'categories' => $categories,
+                'todo_samples' => $todo_samples,
+            ];
         } catch (\Throwable $th) {
-            throw new Exception($th->getMessage(), $th->getCode(), $th);
+            throw new Exception($th);
         }
     }
 
