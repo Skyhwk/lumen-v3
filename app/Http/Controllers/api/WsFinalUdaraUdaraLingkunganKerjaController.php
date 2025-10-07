@@ -40,7 +40,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 	{
 		$data = OrderDetail::where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ['27-Udara Lingkungan Kerja'])
+			->whereIn('kategori_3', ["27-Udara Lingkungan Kerja", "29-Udara Umum"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
