@@ -316,8 +316,14 @@ class DraftUdaraPencahayaanController extends Controller
             $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            $renderDetail = LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get();
 
-            $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get())
+            $renderDetail = collect($renderDetail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+            ])->values()->toArray();
+            
+            $fileName = LhpTemplate::setDataDetail($renderDetail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)

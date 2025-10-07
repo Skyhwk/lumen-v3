@@ -345,9 +345,19 @@ class DraftUdaraIklimKerjaController extends Controller
             }
 
             $details = LhpsIklimDetail::where('id_header', $header->id)->get();
+            $details = collect($details)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
             if ($header) {
                 $file_qr = new GenerateQrDocumentLhp();
                 $file_qr = $file_qr->insert('LHP_IKLIM', $header, $this->karyawan);

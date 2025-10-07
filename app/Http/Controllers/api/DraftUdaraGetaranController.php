@@ -330,19 +330,32 @@ class DraftUdaraGetaranController extends Controller
                     $header->save();
                 }
             }
+            $renderDetail = LhpsGetaranDetail::where('id_header', $header->id)->get();
+            $renderDetail = collect($renderDetail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
 
             $groupedByPage = collect(LhpsGetaranCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
+            foreach ($groupedByPage as $idx => $cstm) {
+                $groupedByPage[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+            
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
+                $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
                             ->render();
             } else {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
+                $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)

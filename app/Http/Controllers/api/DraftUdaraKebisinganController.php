@@ -370,9 +370,20 @@ class DraftUdaraKebisinganController extends Controller
 
             // Render ulang file LHP
             $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
+            $detail = collect($detail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsKebisinganCustom::where('id_header', $dataHeader->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
 
             $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
             if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
