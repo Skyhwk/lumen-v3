@@ -265,7 +265,7 @@ class FdlEmisiKendaraanController extends Controller
                     $data_fdl->save();
 
                     $emisi_order = DataLapanganEmisiOrder::where('id_fdl', $request->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
-                    $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    // $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
                 }
                 DB::commit();
                 return response()->json([
