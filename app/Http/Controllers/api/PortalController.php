@@ -23,6 +23,7 @@ use App\Models\{
     LhpsAirHeader,
     LhpsKebisinganHeader,
     LhpsPencahayaanHeader,
+    LhpsIklimHeader,
     LhpUdaraPsikologiHeader,
     LhpsEmisiHeader,
     OrderDetail,
@@ -32,6 +33,7 @@ use App\Models\{
     LhpsAirDetail,
     MasterRegulasi,
     Printers
+    
 };
 //services
 use App\Services\{GeneratePraSampling, GetBawahan, LhpTemplate, SendTelegram, SamplingPlanServices, Printing, PrintLhp};
@@ -395,6 +397,18 @@ class PortalController extends Controller
                                 if($data->order_detail->cfr){
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
+                            }
+                        }else if ($cek->quotation_status == 'draft_iklim'){
+                             $data = LhpsIklimHeader::with('link')
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+                            $uri = env('APP_URL') . '/public/dokumen/LHPS/';
+                            if ($data) {
+                                $data->flag_status = 'draft';
+                                $data->type = $cek->quotation_status;
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = null;
                             }
                         }
 
