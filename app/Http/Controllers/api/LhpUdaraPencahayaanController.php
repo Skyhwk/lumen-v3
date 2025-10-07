@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\{LhpsPencahayaanHeader,LhpsPencahayaanDetail,LhpsPencahayaanCustom,OrderDetail,MetodeSampling,MasterBakumutu,Colorimetri,Gravimetri,Titrimetri,Parameter,GenerateLink};
-use App\Services\{TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,PrintLhp};
+use App\Models\{LhpsPencahayaanHeader,LhpsPencahayaanDetail,LhpsPencahayaanCustom,OrderDetail};
+use App\Services\{GenerateQrDocumentLhp,LhpTemplate,PrintLhp};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
