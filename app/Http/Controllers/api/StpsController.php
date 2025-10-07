@@ -594,7 +594,7 @@ class StpsController extends Controller
                                     $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
                                     $totalParameterSame = count($orderParameter) === count($inputParameter);
 
-                                    if ($parameterMatch || $totalParameterSame) {
+                                    if ($parameterMatch && $totalParameterSame) {
                                         $sampleNumbers[] = $orderDetail->no_sampel;
                                     }
                                 } else {
@@ -604,7 +604,7 @@ class StpsController extends Controller
                                     $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
                                     $totalParameterSame = count($orderParameter) === count($inputParameter);
 
-                                    if ($parameterMatch || $totalParameterSame) {
+                                    if ($parameterMatch && $totalParameterSame) {
                                         $sampleNumbers[] = $orderDetail->no_sampel;
                                     }
                                 }

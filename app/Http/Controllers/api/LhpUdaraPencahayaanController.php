@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\{LhpsPencahayaanHeader,LhpsPencahayaanDetail,LhpsPencahayaanCustom,OrderDetail,MetodeSampling,MasterBakumutu,Colorimetri,Gravimetri,Titrimetri,Parameter,GenerateLink};
-use App\Services\{TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,PrintLhp};
+use App\Models\{LhpsPencahayaanHeader,LhpsPencahayaanDetail,LhpsPencahayaanCustom,OrderDetail};
+use App\Services\{GenerateQrDocumentLhp,LhpTemplate,PrintLhp};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -31,8 +31,7 @@ class LhpUdaraPencahayaanController extends Controller
         DB::beginTransaction();
         try {
             $header = LhpsPencahayaanHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-            $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
-            $custom = LhpsPencahayaanCustom::where('id_header', $header->id)->get();
+       
 
             if($header != null) {
 
@@ -42,14 +41,16 @@ class LhpUdaraPencahayaanController extends Controller
                 
                 // $header->file_qr = null;
                 $header->save();
-
-                $data_order = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
+             OrderDetail::where('cfr', $request->no_lhp)
+                    ->whereIn('no_sampel', explode(', ',$request->no_sampel))
+                    ->where('is_active', true)
+                    ->update([
                     'status' => 2,
                     'is_approve' => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'rejected_by' => $this->karyawan
-                ]);
-            }
+                    ]);
+                }
 
             DB::commit();
             return response()->json([
