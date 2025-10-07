@@ -671,7 +671,7 @@ class JadwalServices
                             ->where('is_active', true)
                             ->whereIn('no_sampel', $array_no_samples);
 
-                            $exists = $query->exists();;
+                            $exists = $query->exists();
 
                             if(!$exists){
                                 throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");

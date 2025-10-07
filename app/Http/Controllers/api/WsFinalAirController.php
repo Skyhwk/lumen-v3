@@ -13,6 +13,7 @@ use App\Models\HistoryWsValueAir;
 use App\Models\HistoryAppReject;
 use App\Models\CategorySample;
 use App\Http\Controllers\Controller;
+use App\Models\DataLimbah;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -778,11 +779,20 @@ class WsFinalAirController extends Controller
 		DB::beginTransaction();
 		try {
 			if ($request->id) {
+
 				$data = OrderDetail::where('id', $request->id)->first();
 				$data->status = 1;
 				$data->keterangan_1 = $request->keterangan_1;
 				$data->save();
 
+				if($request->data_limbah){
+					DataLimbah::create([
+						'no_sampel' => $data->no_sampel,
+						'status_limbah' => $request->status_limbah == '1' ? 'Memenuhi Baku Mutu' : 'Tidak Memenuhi Baku Mutu',
+						'created_by' => $this->karyawan,
+						'created_at' => Carbon::now()
+					]);
+				}
 
 				HistoryAppReject::insert([
 					'no_lhp' => $data->cfr,
@@ -794,7 +804,6 @@ class WsFinalAirController extends Controller
 					'approved_at' => Carbon::now(),
 					'approved_by' => $this->karyawan
 				]);
-
 				DB::commit();
 				$this->resultx = 'Data hasbeen Approved.!';
 				return response()->json([
