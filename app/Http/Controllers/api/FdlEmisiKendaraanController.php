@@ -778,7 +778,7 @@ class FdlEmisiKendaraanController extends Controller
                             $data_kendaraan->id_bbm              = $request->jenis_kendaraan;
                             $data_kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
                             $data_kendaraan->plat_nomor          = $request->no_plat;
-                            $data_kendaraan->bobot_kendaraan     = $request->bobot_kendaraan;
+                            $data_kendaraan->bobot_kendaraan     = $request->bobot;
                             $data_kendaraan->tahun_pembuatan     = $request->tahun;
                             $data_kendaraan->no_mesin            = $request->no_mesin;
                             $data_kendaraan->transmisi           = $request->transmisi;
