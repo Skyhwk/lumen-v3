@@ -30,9 +30,7 @@ class LhpUdaraPencahayaanController extends Controller
     public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $header = LhpsPencahayaanHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-       
-
+            $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
             if($header != null) {
 
                 $header->is_approve = 0;
@@ -54,7 +52,7 @@ class LhpUdaraPencahayaanController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel '.$request->no_sampel.' berhasil!'
+                'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();
