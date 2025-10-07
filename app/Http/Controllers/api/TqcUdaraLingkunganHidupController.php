@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\DetailLingkunganHidup;
-use App\Models\DetailLingkunganKerja;
 use App\Models\DirectLainHeader;
 use App\Models\HistoryAppReject;
 
@@ -20,7 +19,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class TqcUdaraLingkunganKerjaController extends Controller
+class TqcUdaraLingkunganHidupController extends Controller
 
 {
     public function index(Request $request)
@@ -28,14 +27,7 @@ class TqcUdaraLingkunganKerjaController extends Controller
         $data = OrderDetail::where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3', ["27-Udara Lingkungan Kerja"])
-            ->where(function ($query) {
-                $query->where('parameter', 'not like', '%Power Density%')
-                    ->orWhere('parameter', 'not like', '%Medan Magnit Statis%')
-                    ->orWhere('parameter', 'not like', '%Medan Listrik%');
-            })
-            ->where('parameter', 'not like', '%Sinar UV%')
-            ->where('parameter', 'not like', '%Ergonomi%');
+            ->whereIn('kategori_3', ["11-Udara Ambient"]);
 
         return Datatables::of($data)->make(true);
     }
@@ -178,7 +170,7 @@ class TqcUdaraLingkunganKerjaController extends Controller
 	public function detailLapangan(Request $request)
 	{
 			try {
-                $data = DetailLingkunganKerja::where('no_sampel', $request->no_sampel)->first();
+                $data = DetailLingkunganHidup::where('no_sampel', $request->no_sampel)->first();
                 if ($data) {
                     return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
                 } else {
