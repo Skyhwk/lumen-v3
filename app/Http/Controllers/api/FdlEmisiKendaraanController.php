@@ -265,7 +265,7 @@ class FdlEmisiKendaraanController extends Controller
                     $data_fdl->save();
 
                     $emisi_order = DataLapanganEmisiOrder::where('id_fdl', $request->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
-                    $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    // $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
                 }
                 DB::commit();
                 return response()->json([
@@ -778,7 +778,7 @@ class FdlEmisiKendaraanController extends Controller
                             $data_kendaraan->id_bbm              = $request->jenis_kendaraan;
                             $data_kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
                             $data_kendaraan->plat_nomor          = $request->no_plat;
-                            $data_kendaraan->bobot_kendaraan     = $request->bobot_kendaraan;
+                            $data_kendaraan->bobot_kendaraan     = $request->bobot;
                             $data_kendaraan->tahun_pembuatan     = $request->tahun;
                             $data_kendaraan->no_mesin            = $request->no_mesin;
                             $data_kendaraan->transmisi           = $request->transmisi;
