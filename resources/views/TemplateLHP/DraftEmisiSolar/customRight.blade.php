@@ -53,11 +53,11 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $header->sub_kategori }}</td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5">Parameter</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $parame }}</td>
-                    </tr>
+                    </tr> -->
                     @if (count($methode_sampling) > 0)
                         @php $i = 1; @endphp
                         @foreach ($methode_sampling as $key => $value)
