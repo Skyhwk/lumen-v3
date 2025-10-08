@@ -50,8 +50,8 @@ class DraftEmisiSumberBergerakController extends Controller
             ->where('is_active', true)
             ->where('status', 2)
             ->where('kategori_2', '5-Emisi')
-            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak']);
-        // ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
+            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
+            ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
 
         // if ($request->kategori == 'ESTB') {
         //     $data1 = OrderDetail::with('orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')

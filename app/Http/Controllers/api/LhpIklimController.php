@@ -2,26 +2,22 @@
 
 namespace App\Http\Controllers\api;
 
-// use App\Models\LhpsAirHeader;
-// use App\Models\LhpsAirDetail;
-// use App\Models\LhpsAirCustom;
 
-use App\Models\LhpsIklimCustom;
-use App\Models\LhpsIklimDetail;
-use App\Models\LhpsIklimHeader;
 
-use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\Colorimetri;
-use App\Models\Gravimetri;
-use App\Models\Titrimetri;
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
-use App\Services\LhpTemplate;
-use App\Services\PrintLhp;
+use App\Models\{
+    LhpsIklimCustom, 
+    LhpsIklimDetail,
+    LhpsIklimHeader, 
+    OrderDetail
+};
+
+use App\Services\{
+    GenerateQrDocumentLhp,
+    LhpTemplate,
+    PrintLhp
+};
+
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
