@@ -151,7 +151,7 @@ class DraftEmisiSumberBergerakController extends Controller
                     $header->type_sampling = $request->kategori_1 ?: NULL;
                     $header->metode_sampling = isset($request->metode_sampling) ? json_encode($request->metode_sampling) : NULL;
                     $header->tgl_lhp = $request->tanggal_terima;
-                    $header->tanggal_sampling = $request->tanggal_tugas ?: NULL;
+                    // $header->tanggal_sampling = $request->tanggal_tugas ?: NULL;
                     $header->periode_analisa = $request->periode_analisa ?: NULL;
                     $header->konsultan = $request->konsultan != '' ? $request->konsultan : NULL;
                     $header->nama_pic = $request->nama_pic ?: NULL;
@@ -202,7 +202,9 @@ class DraftEmisiSumberBergerakController extends Controller
                                 'baku_mutu' => json_encode(array(
                                     "HC" => $request->baku_mutu_hc[$key],
                                     "CO" => $request->baku_mutu_co[$key]
-                                ))
+                                )),
+                                'tanggal_sampling' => $request->tanggal_sampling[$key],
+
                             ]);
                             array_push($idDetail, $detail);
                         }
@@ -223,7 +225,9 @@ class DraftEmisiSumberBergerakController extends Controller
                                     'baku_mutu' => json_encode(array(
                                         "HC" => $request->custom_baku_mutu_hc[$page],
                                         "CO" => $request->custom_baku_mutu_co[$page]
-                                    ))
+                                    )),
+                                'tanggal_sampling' => $request->tanggal_sampling[$key],
+
                                 ]);
                             }
                         }
@@ -240,7 +244,8 @@ class DraftEmisiSumberBergerakController extends Controller
                                 )),
                                 'baku_mutu' => json_encode(array(
                                     "OP" => $request->baku_mutu[$key]
-                                ))
+                                )),
+                                'tanggal_sampling' => $request->tanggal_sampling[$key],
                             ]);
                             array_push($idDetail, $detail);
                         }
@@ -259,7 +264,9 @@ class DraftEmisiSumberBergerakController extends Controller
                                     )),
                                     'baku_mutu' => json_encode(array(
                                         "OP" => $request->custom_baku_mutu[$page]
-                                    ))
+                                    )),
+                                'tanggal_sampling' => $request->tanggal_sampling[$key],
+
                                 ]);
                             }
                         }
@@ -423,6 +430,7 @@ class DraftEmisiSumberBergerakController extends Controller
                         'baku_hc' => $hc,
                         'baku_op' => $op,
                         'regulasi' => $value->peraturan,
+                        'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
                     ]);
 
                     $reqOtherRegs = $request->other_regulasi;
@@ -439,6 +447,7 @@ class DraftEmisiSumberBergerakController extends Controller
                                     'tahun_kendaraan' => $val['tahun_kendaraan'],
                                     'hasil_uji' => $val['hasil_uji'],
                                     'baku_mutu' => $val['baku_mutu'],
+                                    'tanggal_sampling' => $val['tanggal_sampling'] ?? $values->tanggal_sampling ?? null,
                                 ];
                             } else {
                                 $dataTable2["id_$idReg"][] = [
@@ -452,6 +461,7 @@ class DraftEmisiSumberBergerakController extends Controller
                                     'baku_co' => $co,
                                     'baku_hc' => $hc,
                                     'baku_op' => $op,
+                                    'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
                                 ];
                             }
                         }
