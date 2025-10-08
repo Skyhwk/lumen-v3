@@ -10,6 +10,7 @@ class DataLimbah extends Sector
     use HasFactory;
 
     protected $table = 'data_limbah';
+    protected $guarded = [];
 
     public function order(){
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');

@@ -20,6 +20,7 @@
         "guzzlehttp/guzzle": "^7.5",
         "illuminate/cache": "^8.83",
         "illuminate/redis": "^8.83",
+        "intervention/image": "^2.7",
         "irazasyed/telegram-bot-sdk": "^3.9",
         "laravel/lumen-framework": "^8.0",
         "maatwebsite/excel": "^3.1",

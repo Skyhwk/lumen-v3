@@ -345,9 +345,19 @@ class DraftUdaraIklimKerjaController extends Controller
             }
 
             $details = LhpsIklimDetail::where('id_header', $header->id)->get();
+            $details = collect($details)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
             if ($header) {
                 $file_qr = new GenerateQrDocumentLhp();
                 $file_qr = $file_qr->insert('LHP_IKLIM', $header, $this->karyawan);
@@ -566,7 +576,7 @@ class DraftUdaraIklimKerjaController extends Controller
                             $data1[$i]['keterangan'] = $val->iklim_dingin->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_dingin->aktifitas_kerja;
                             $data1[$i]['kondisi'] = $val->ws_udara->interpretasi;
-                        } else if ($val->parameter == "ISBB" || $val->parameter == "ISBB (8 jam)") {
+                        } else  {
                             $data1[$i]['keterangan'] = $val->iklim_panas->keterangan;
                             $data1[$i]['indeks_suhu_basah'] = $val->iklim_panas->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_panas->aktifitas;

@@ -1,19 +1,20 @@
 <div class="left">
-    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px; width: 100%;">
         <thead>
             <tr>
-                <th rowspan="2" width="25" class="pd-5-solid-top-center">NO</th>
-                <th rowspan="2" width="250" class="pd-5-solid-top-center">JENIS / NAMA KENDARAAN</th>
-                <th rowspan="2" width="75" class="pd-5-solid-top-center">BOBOT</th>
-                <th rowspan="2" width="75" class="pd-5-solid-top-center">TAHUN</th>
-                <th colspan="2" class="pd-5-solid-top-center">HASIL UJI</th>
-                <th colspan="2" class="pd-5-solid-top-center">BAKU MUTU **</th>
+                <th rowspan="2" width="6%" class="custom">NO</th>
+                <th rowspan="2" width="20%" class="custom">JENIS / NAMA KENDARAAN</th>
+                <th rowspan="2" width="10%" class="custom">BOBOT</th>
+                <th rowspan="2" width="10%" class="custom">TAHUN</th>
+                <th colspan="2" class="custom">HASIL UJI</th>
+                <th colspan="2" class="custom">BAKU MUTU **</th>
+                <th colspan="2" width="14%" class="custom">TANGGAL SAMPLING</th>
             </tr>
             <tr>
-                <th class="pd-5-solid-top-center" width="75">CO (%)</th>
-                <th class="pd-5-solid-top-center" width="75">HC (ppm)</th>
-                <th class="pd-5-solid-top-center" width="75">CO (%)</th>
-                <th class="pd-5-solid-top-center" width="75">HC (ppm)</th>
+                <th class="custom" width="10%">CO (%)</th>
+                <th class="custom" width="10%">HC (ppm)</th>
+                <th class="custom" width="10%">CO (%)</th>
+                <th class="custom" width="10%">HC (ppm)</th>
             </tr>
         </thead>
         <tbody>
@@ -41,6 +42,8 @@
                     <td class="pd-5-{{ $rowClass }}-center">{{ $hasil->HC ?? '' }}</td>
                     <td class="pd-5-{{ $rowClass }}-center">{{ $baku->CO ?? '' }}</td>
                     <td class="pd-5-{{ $rowClass }}-center">{{ $baku->HC ?? '' }}</td>
+                    <td class="pd-5-{{ $rowClass }}-center">{{ \App\Helpers\Helper::tanggal_indonesia($value->tanggal_sampling) ?? '' }}</td>
+
                 </tr>
             @endforeach
 
