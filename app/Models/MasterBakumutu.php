@@ -16,6 +16,8 @@ class MasterBakumutu extends Sector
         'satuan',
         'method',
         'baku_mutu',
+        'nama_header',
+        'is_active',
     ];
 
     public $timestamps = false;

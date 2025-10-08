@@ -48,7 +48,8 @@ class MasterRegulasiController extends Controller
                         'id_parameter' => $id_parameter,
                         'satuan' => $request->bakumutu['satuan'][$index],
                         'method' => $request->bakumutu['method'][$index],
-                        'baku_mutu' => $request->bakumutu['baku_mutu'][$index]
+                        'baku_mutu' => $request->bakumutu['baku_mutu'][$index],
+                        'nama_header' => $request->bakumutu['nama_header'][$index] ?? null
                     ];
 
                     if (isset($request->bakumutu['id'][$index]) && in_array($request->bakumutu['id'][$index], $existingBakumutuIds)) {
@@ -96,6 +97,7 @@ class MasterRegulasiController extends Controller
                                 'satuan' => $request->bakumutu['satuan'][$index],
                                 'method' => $request->bakumutu['method'][$index],
                                 'baku_mutu' => $request->bakumutu['baku_mutu'][$index],
+                                'nama_header' => $request->bakumutu['nama_header'][$index],
                                 'created_by' => $this->karyawan,
                                 'created_at' => $timestamp,
                             ];
