@@ -106,31 +106,40 @@
                         <td>{{ $dataLapangan->shift_pengambilan }}</td>
                     </tr>
                 @endif
+                @php
+                    $fotos = [];
+                    if (optional($dataLapangan)->webp_path_lokasi && file_exists(public_path($dataLapangan->webp_path_lokasi))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_lokasi), 'label' => 'Kegiatan Sampling'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_kondisi && file_exists(public_path($dataLapangan->webp_path_kondisi))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_kondisi), 'label' => 'Kondisi Sampel'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_lainnya && file_exists(public_path($dataLapangan->webp_path_lainnya))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_lainnya), 'label' => 'Foto Lainnya'];
+                    }
+
+                    $colWidth = count($fotos) > 0 ? 100 / count($fotos) : 100;
+                @endphp
+
                 <tr>
                     <td></td>
                     <td colspan="2">
                         <table width="100%" border="0" cellpadding="5">
                             <tr>
-                                <td width="50%" align="center">
-                                    @if (optional($dataLapangan)->webp_path_lokasi && file_exists(public_path($dataLapangan->webp_path_lokasi)))
-                                        <img src="{{ public_path($dataLapangan->webp_path_lokasi) }}" alt="Kegiatan Sampling" style="width: auto; height: 200px;">
-                                        <div>Kegiatan Sampling</div>
-                                    @else
+                                @forelse ($fotos as $foto)
+                                    <td width="{{ $colWidth }}%" align="center">
+                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="width: auto; height: 200px;">
+                                        <div>{{ $foto['label'] }}</div>
+                                    </td>
+                                @empty
+                                    <td width="100%" align="center">
                                         <div style="width: 100%; height: 200px; border: 1px solid #ccc; display: table;">
-                                            <span style="display: table-cell; vertical-align: middle;">Gambar Tidak Tersedia</span>
+                                            <span style="display: table-cell; vertical-align: middle;">Dokumentasi Tidak Tersedia</span>
                                         </div>
-                                    @endif
-                                </td>
-                                <td width="50%" align="center">
-                                    @if (optional($dataLapangan)->webp_path_kondisi && file_exists(public_path($dataLapangan->webp_path_kondisi)))
-                                        <img src="{{ public_path($dataLapangan->webp_path_kondisi) }}" alt="Kondisi Sampel" style="width: auto; height: 200px;">
-                                        <div>Kondisi Sampel</div>
-                                    @else
-                                        <div style="width: 100%; height: 200px; border: 1px solid #ccc; display: table;">
-                                            <span style="display: table-cell; vertical-align: middle;">Gambar Tidak Tersedia</span>
-                                        </div>
-                                    @endif
-                                </td>
+                                    </td>
+                                @endforelse
                             </tr>
                         </table>
                     </td>
