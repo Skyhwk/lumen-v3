@@ -40,14 +40,7 @@
                 {{-- Informasi Sampling --}}
                 @php
                     $methode_sampling = $header->metode_sampling != null ? json_decode($header->metode_sampling) : [];
-                    $period = explode(" - ", $header->periode_analisa);
-                    $period = array_filter($period);
-                    $period1 = '';
-                    $period2 = '';
-                    if (!empty($period)) {
-                        $period1 = \App\Helpers\Helper::tanggal_indonesia($period[0]);
-                        $period2 = \App\Helpers\Helper::tanggal_indonesia($period[1]);
-                    }
+                   
 
                     $parame = str_replace(['[', ']', '"'], '', $header->parameter_uji);
                 @endphp
@@ -91,11 +84,11 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $period1 }} - {{ $period2 }}</td>
-                    </tr>
+                    </tr> -->
                 </table>
 
                 {{-- Regulasi --}}

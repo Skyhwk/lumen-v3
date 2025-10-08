@@ -2,20 +2,21 @@
     <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
             <thead>
-                <tr>
-                    <th rowspan="2" width="25" class="pd-5-solid-top-center">NO</th>
-                    <th rowspan="2" width="250" class="pd-5-solid-top-center">JENIS / NAMA KENDARAAN</th>
-                    <th rowspan="2" width="75" class="pd-5-solid-top-center">BOBOT</th>
-                    <th rowspan="2" width="75" class="pd-5-solid-top-center">TAHUN</th>
-                    <th colspan="2" class="pd-5-solid-top-center">HASIL UJI</th>
-                    <th colspan="2" class="pd-5-solid-top-center">BAKU MUTU **</th>
-                </tr>
-                <tr>
-                    <th class="pd-5-solid-top-center" width="75">CO (%)</th>
-                    <th class="pd-5-solid-top-center" width="75">HC (ppm)</th>
-                    <th class="pd-5-solid-top-center" width="75">CO (%)</th>
-                    <th class="pd-5-solid-top-center" width="75">HC (ppm)</th>
-                </tr>
+          <tr>
+                <th rowspan="2" width="6%" class="custom">NO</th>
+                <th rowspan="2" width="20%" class="custom">JENIS / NAMA KENDARAAN</th>
+                <th rowspan="2" width="10%" class="custom">BOBOT</th>
+                <th rowspan="2" width="10%" class="custom">TAHUN</th>
+                <th colspan="2" class="custom">HASIL UJI</th>
+                <th colspan="2" class="custom">BAKU MUTU **</th>
+                <th colspan="2" width="14%" class="custom">TANGGAL SAMPLING</th>
+            </tr>
+            <tr>
+                <th class="custom" width="10%">CO (%)</th>
+                <th class="custom" width="10%">HC (ppm)</th>
+                <th class="custom" width="10%">CO (%)</th>
+                <th class="custom" width="10%">HC (ppm)</th>
+            </tr>
             </thead>
             <tbody>
                 @foreach ($custom as $k => $v)
@@ -26,6 +27,7 @@
                         $nama_kendaraan = isset($v['nama_kendaraan']) ? $v['nama_kendaraan'] : '';
                         $bobot_kendaraan = isset($v['bobot_kendaraan']) ? $v['bobot_kendaraan'] : '';
                         $tahun_kendaraan = isset($v['tahun_kendaraan']) ? $v['tahun_kendaraan'] : '';
+                        $tanggal_sampling = isset($v['tanggal_sampling']) ? $v['tanggal_sampling'] : '';
 
                         $hasil = json_decode($v['hasil_uji'] ?? '{}');
                         $hasil_co = isset($hasil->CO) ? $hasil->CO : '';
@@ -46,6 +48,7 @@
                         <td class="{{ $k == $totdat - 1 ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $hasil_hc }}</td>
                         <td class="{{ $k == $totdat - 1 ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $baku_co }}</td>
                         <td class="{{ $k == $totdat - 1 ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $baku_hc }}</td>
+                        <td class="{{ $k == $totdat - 1 ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}</td>
                     </tr>
                 @endforeach
             </tbody>
