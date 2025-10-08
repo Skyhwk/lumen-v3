@@ -146,6 +146,13 @@ class RenderPermintaanDokumentasiSampling
                     if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_kondisi_sampel, $outputPathKondisi, $watermarkData)) {
                         $dataLapangan->webp_path_kondisi = "request/temp_img/{$noOrder}/{$outputNameKondisi}";
                     }
+
+                    // Proses gambar 'foto_lainnya'
+                    $outputNameKondisi = "{$noSampelClean}-lainnya.webp";
+                    $outputPathKondisi = "{$outputDir}/{$outputNameKondisi}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_lainnya, $outputPathKondisi, $watermarkData)) {
+                        $dataLapangan->webp_path_kondisi = "request/temp_img/{$noOrder}/{$outputNameKondisi}";
+                    }
                 }
             }
 
