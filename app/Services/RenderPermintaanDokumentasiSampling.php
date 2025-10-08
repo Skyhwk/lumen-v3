@@ -16,9 +16,9 @@ class RenderPermintaanDokumentasiSampling
 {
     private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
     {
-        $originalPath = public_path('dokumentasi/sampling/' . $originalFileName);
+        $originalPath = public_path("dokumentasi/sampling/$originalFileName");
 
-        if (!$originalFileName || !File::exists($originalPath)) {
+        if (!$originalFileName || !file_exists($originalPath)) {
             Log::warning("File gambar sumber tidak ditemukan: " . $originalPath);
             return false;
         }
