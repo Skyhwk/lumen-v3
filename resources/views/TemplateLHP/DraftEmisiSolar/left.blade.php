@@ -1,16 +1,16 @@
 <div class="left">
-    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+     <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; width: 100%;">
         <thead>
             <tr>
-                <th rowspan="2" width="25" class="pd-5-solid-top-center">NO</th>
-                <th rowspan="2" width="310" class="pd-5-solid-top-center">JENIS / NAMA KENDARAAN</th>
-                <th rowspan="2" width="85" class="pd-5-solid-top-center">BOBOT</th>
-                <th rowspan="2" width="85" class="pd-5-solid-top-center">TAHUN</th>
-                <th width="105" class="pd-5-solid-top-center">HASIL UJI</th>
-                <th width="105" class="pd-5-solid-top-center">BAKU MUTU **</th>
+                <th rowspan="2" width="6%" class="custom">NO</th>
+                <th rowspan="2" width="30%" class="custom">JENIS / NAMA KENDARAAN</th>
+                <th rowspan="2" width="12%" class="custom">BOBOT</th>
+                <th rowspan="2" width="12%" class="custom">TAHUN</th>
+                <th width="20%" class="custom">HASIL UJI</th>
+                <th width="20%" class="custom">BAKU MUTU **</th>
             </tr>
             <tr>
-                <th class="pd-5-solid-top-center" colspan="2">Satuan = Opasitas (%)</th>
+                <th class="custom" colspan="2">Satuan = Opasitas (%)</th>
             </tr>
         </thead>
         <tbody>
@@ -25,14 +25,14 @@
                     $hasil = json_decode($value->hasil_uji ?? '{}');
                 @endphp
                 <tr>
-                    <td class="pd-5-{{ $rowClass }}-center">{{ $p }}</td>
-                    <td class="pd-5-{{ $rowClass }}-left">
+                    <td class="custom">{{ $p }}</td>
+                    <td class="custom3">
                         <sup style="font-size:5px; !important; margin-top:-10px;">{{ $value->no_sampel ?? '' }}</sup>{{ $value->nama_kendaraan ?? '' }}
                     </td>
-                    <td class="pd-5-{{ $rowClass }}-center">{{ $value->bobot_kendaraan ?? '' }} TON</td>
-                    <td class="pd-5-{{ $rowClass }}-center">{{ $value->tahun_kendaraan ?? '' }}</td>
-                    <td class="pd-5-{{ $rowClass }}-center">{{ $hasil->OP ?? '' }}</td>
-                    <td class="pd-5-{{ $rowClass }}-center">{{ $baku->OP ?? '' }}</td>
+                    <td class="custom">{{ $value->bobot_kendaraan ?? '' }} TON</td>
+                    <td class="custom">{{ $value->tahun_kendaraan ?? '' }}</td>
+                    <td class="custom">{{ $hasil->OP ?? '' }}</td>
+                    <td class="custom">{{ $baku->OP ?? '' }}</td>
                 </tr>
             @endforeach
         </tbody>

@@ -1,11 +1,11 @@
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
-    <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+    <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif; width: 100%;">
         <tr>
             <td>
-                <table style="border-collapse: collapse; text-align: center;" width="100%">
+                <table style="border-collapse: collapse; text-align: center; width: 100%;">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="50%">No. LHP</td>
+                        <td class="custom" width="50%">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
@@ -40,15 +40,6 @@
                 {{-- Informasi Sampling --}}
                 @php
                     $methode_sampling = $header->metode_sampling != null ? json_decode($header->metode_sampling) : [];
-                    $period = explode(" - ", $header->periode_analisa);
-                    $period = array_filter($period);
-                    $period1 = '';
-                    $period2 = '';
-                    if (!empty($period)) {
-                        $period1 = \App\Helpers\Helper::tanggal_indonesia($period[0]);
-                        $period2 = \App\Helpers\Helper::tanggal_indonesia($period[1]);
-                    }
-
                     $parame = str_replace(['[', ']', '"'], '', $header->parameter_uji);
                 @endphp
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
@@ -91,11 +82,7 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
                     </tr>
-                    <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ $period1 }} - {{ $period2 }}</td>
-                    </tr>
+              
                 </table>
 
                 {{-- Regulasi --}}
