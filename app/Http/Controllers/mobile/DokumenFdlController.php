@@ -168,9 +168,17 @@ class DokumenFdlController extends Controller
             });
         } else {
             // Programmer, tidak difilter
-            $arrayFinal = $final;
+            // $arrayFinal = $final;
+            // Programmer, ambil semua data tapi pilih salah satu sampler
+            $arrayFinal = array_map(function ($item) {
+                if (!empty($item['sampler'])) {
+                    $samplerArray = array_map('trim', explode(',', $item['sampler']));
+                    // Ambil sampler pertama (atau bisa diubah ke random jika mau)
+                    $item['sampler'] = $samplerArray[0];
+                }
+                return $item;
+            }, $final);
         }
-        // dd($arrayFinal);
         // Ambil no_order untuk query selanjutnya
         $orderNos = array_column($arrayFinal, 'no_order');
 
@@ -243,61 +251,123 @@ class DokumenFdlController extends Controller
                 },
             ])
             ->where('is_active', true)
-            ->where('no_quotation', $request->no_quotation);
+            ->where('no_order', $request->no_order);
 
             // Jika kontrak, filter juga berdasarkan periode
             if ($isKontrak) {
-                $data->where('periode', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
+                $data = $data->where('tanggal_sampling', $request->tangal_sampling);
+                // $data->where('tanggal_sampling', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
             }
 
             // Eksekusi query
             $data = $data->get();
-
+            // dd($data);
             $flatData = [];
 
+            // foreach ($data as $orderDetail) {
+            //     if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
+            //         continue;
+            //     }
+
+            //     $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
+            //         $jadwals = $samplingPlan->jadwal ?? collect();
+
+            //         $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
+            //             if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
+            //                 $allowPush = false;
+
+            //                 if ($isProgrammer) {
+            //                     // Programmer bisa lihat semua
+            //                     // $allowPush = true;
+            //                     // Programmer bisa lihat semua, tapi ambil salah satu sampler
+            //                     $allowPush = true;
+
+            //                     if (!empty($jadwal->sampler)) {
+            //                         $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+            //                         // Ambil satu sampler (pertama)
+            //                         $loggedInUser = $samplerList[0];
+            //                         // Jika mau acak: $loggedInUser = $samplerList[array_rand($samplerList)];
+            //                     }
+            //                 } else {
+            //                     // Non-programmer hanya kalau termasuk dalam sampler
+            //                     $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+            //                     if (in_array($loggedInUser, $samplerList)) {
+            //                         $allowPush = true;
+            //                     }
+            //                 }
+
+            //                 if ($allowPush) {
+            //                     $crf = explode("-", $orderDetail->kategori_3);
+            //                     $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
+
+            //                     $flatData[] = [
+            //                         'sampler' => $loggedInUser,
+            //                         'nomor_quotation' => $orderDetail->no_quotation,
+            //                         'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
+            //                         'no_order' => $orderDetail->no_order,
+            //                         'deskripsi' => $orderDetail->keterangan_1,
+            //                         'no_sampel' => $orderDetail->no_sampel,
+            //                         'tanggal_sampling' => $orderDetail->tanggal_sampling,
+            //                         'sample' => $nama_kategori[1] ?? ''
+            //                     ];
+            //                 }
+            //             }
+            //         });
+            //     });
+            // }
             foreach ($data as $orderDetail) {
                 if (!$orderDetail->orderHeader || !$orderDetail->orderHeader->samplingPlan) {
                     continue;
                 }
 
-                $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
-                    $jadwals = $samplingPlan->jadwal ?? collect();
+                $allowPush = false;
+                $samplerTerpilih = $loggedInUser;
 
-                    $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
-                        if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
-                            $allowPush = false;
+                if ($isProgrammer) {
+                    // Programmer bisa lihat semua, ambil salah satu sampler
+                    $allowPush = true;
 
-                            if ($isProgrammer) {
-                                // Programmer bisa lihat semua
-                                $allowPush = true;
-                            } else {
-                                // Non-programmer hanya kalau termasuk dalam sampler
+                    foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+                        $jadwal = $samplingPlan->jadwal->first() ?? null;
+                        if ($jadwal && !empty($jadwal->sampler)) {
+                            $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+                            $samplerTerpilih = $samplerList[0]; // ambil yang pertama
+                            // atau pakai acak:
+                            // $samplerTerpilih = $samplerList[array_rand($samplerList)];
+                            break;
+                        }
+                    }
+                } else {
+                    // Non-programmer: cek apakah user termasuk di sampler jadwal
+                    foreach ($orderDetail->orderHeader->samplingPlan as $samplingPlan) {
+                        foreach ($samplingPlan->jadwal ?? [] as $jadwal) {
+                            if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
                                 $samplerList = array_map('trim', explode(',', $jadwal->sampler));
                                 if (in_array($loggedInUser, $samplerList)) {
                                     $allowPush = true;
+                                    break 2; // keluar dari dua loop
                                 }
                             }
-
-                            if ($allowPush) {
-                                $crf = explode("-", $orderDetail->kategori_3);
-                                $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
-
-                                $flatData[] = [
-                                    'sampler' => $loggedInUser,
-                                    'nomor_quotation' => $orderDetail->no_quotation,
-                                    'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
-                                    'no_order' => $orderDetail->no_order,
-                                    'deskripsi' => $orderDetail->keterangan_1,
-                                    'no_sampel' => $orderDetail->no_sampel,
-                                    'tanggal_sampling' => $orderDetail->tanggal_sampling,
-                                    'sample' => $nama_kategori[1] ?? ''
-                                ];
-                            }
                         }
-                    });
-                });
-            }
+                    }
+                }
 
+                if ($allowPush) {
+                    $crf = explode("-", $orderDetail->kategori_3);
+                    $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
+
+                    $flatData[] = [
+                        'sampler' => $samplerTerpilih,
+                        'nomor_quotation' => $orderDetail->no_quotation,
+                        'kategori' => implode(" - ", [($crf[1] ?? ''), ($nama_kategori[1] ?? '')]),
+                        'no_order' => $orderDetail->no_order,
+                        'deskripsi' => $orderDetail->keterangan_1,
+                        'no_sampel' => $orderDetail->no_sampel,
+                        'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                        'sample' => $nama_kategori[1] ?? ''
+                    ];
+                }
+            }
             
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
