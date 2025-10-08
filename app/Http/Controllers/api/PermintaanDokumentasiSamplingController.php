@@ -25,9 +25,9 @@ class PermintaanDokumentasiSamplingController extends Controller
     public function index()
     {
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::latest()
-            ->where('is_rejected', 0)
+            // ->where('is_rejected', 0)
             ->where('is_active', 1)
-            ->where('is_approved', 0)
+            // ->where('is_approved', 0)
             ->get();
 
         return DataTables::of($permintaanDokumentasiSampling)->make(true);
@@ -59,22 +59,6 @@ class PermintaanDokumentasiSamplingController extends Controller
         return response()->json($results, 200);
     }
 
-    private function generateQr($noDocument)
-    {
-        $filename = str_replace("/", "_", $noDocument);
-        $dir = public_path("qr_documents");
-
-        if (!file_exists($dir)) mkdir($dir, 0755, true);
-
-        $path = $dir . "/$filename.svg";
-        $link = 'https://www.intilab.com/validation/';
-        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-        QrCode::size(200)->generate($link . $unique, $path);
-
-        return $unique;
-    }
-
     public function save(Request $request)
     {
         DB::beginTransaction();
@@ -97,30 +81,6 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $permintaanDokumentasiSampling->save();
 
-            $qr = new QrDocument();
-
-            $qr->id_document = $permintaanDokumentasiSampling->id;
-            $qr->type_document = 'permintaan_dokumentasi_sampling';
-            $qr->kode_qr = $this->generateQr($no_document);
-            $qr->file = str_replace("/", "_", $no_document);
-
-            $qr->data = json_encode([
-                'no_document' => $no_document,
-                'type_document' => 'permintaan_dokumentasi_sampling',
-                'no_quotation' => $request->no_quotation,
-                'no_order' => $request->no_order,
-                'periode' => Carbon::parse($request->periode)->translatedFormat('F Y'),
-                'tanggal_sampling' => Carbon::parse($request->tanggal_sampling)->translatedFormat('d F Y'),
-                'nama_perusahaan' => $request->nama_perusahaan
-            ]);
-
-            $qr->created_by = $this->karyawan;
-            $qr->created_at = Carbon::now();
-
-            $qr->save();
-
-            $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
-
             DB::commit();
 
             Notification::whereIn('id', [13, 127, 599])
@@ -141,6 +101,22 @@ class PermintaanDokumentasiSamplingController extends Controller
         }
     }
 
+    private function generateQr($noDocument)
+    {
+        $filename = str_replace("/", "_", $noDocument);
+        $dir = public_path("qr_documents");
+
+        if (!file_exists($dir)) mkdir($dir, 0755, true);
+
+        $path = $dir . "/$filename.svg";
+        $link = 'https://www.intilab.com/validation/';
+        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+        QrCode::size(200)->generate($link . $unique, $path);
+
+        return $unique;
+    }
+
     public function approve(Request $request)
     {
         if (in_array($request->attributes->get('user')->karyawan->id, [13, 127, 599])) {
@@ -151,6 +127,30 @@ class PermintaanDokumentasiSamplingController extends Controller
             $permintaanDokumentasiSampling->approved_at = Carbon::now();
 
             $permintaanDokumentasiSampling->save();
+
+            $qr = new QrDocument();
+
+            $qr->id_document = $permintaanDokumentasiSampling->id;
+            $qr->type_document = 'permintaan_dokumentasi_sampling';
+            $qr->kode_qr = $this->generateQr($permintaanDokumentasiSampling->no_document);
+            $qr->file = str_replace("/", "_", $permintaanDokumentasiSampling->no_document);
+
+            $qr->data = json_encode([
+                'no_document' => $permintaanDokumentasiSampling->no_document,
+                'type_document' => 'permintaan_dokumentasi_sampling',
+                'no_quotation' => $request->no_quotation,
+                'no_order' => $request->no_order,
+                'periode' => Carbon::parse($request->periode)->translatedFormat('F Y'),
+                'tanggal_sampling' => Carbon::parse($request->tanggal_sampling)->translatedFormat('d F Y'),
+                'nama_perusahaan' => $request->nama_perusahaan
+            ]);
+
+            $qr->created_by = $this->karyawan;
+            $qr->created_at = Carbon::now();
+
+            $qr->save();
+
+            $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
 
             Notification::whereIn('id', [13, 127, 599])
                 ->title('Berhasil approve permintaan')
