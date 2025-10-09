@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\lhpsSinarUVCustom;
-use App\Models\LhpsSinarUVDetail;
-use App\Models\LhpsSinarUVHeader;
+use App\Models\LhpsMedanLMCustom;
+use App\Models\LhpsMedanLMDetail;
+use App\Models\LhpsMedanLMHeader;
 use App\Models\OrderDetail;
 
 use App\Services\LhpTemplate;
@@ -15,13 +15,13 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class LhpUdaraUlkSinarUVController extends Controller
+class LhpUdaraUkMedanMagnetController extends Controller
 {
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
-            'lhps_sinaruv',
+            'lhps_medanlm',
             'orderHeader' => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
@@ -31,7 +31,11 @@ class LhpUdaraUlkSinarUVController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->where('parameter', 'like', '%Sinar UV%')
+            ->where(function ($query) {
+                $query->where('parameter', 'like', '%Power Density%')
+                    ->orWhere('parameter', 'like', '%Medan Magnit Statis%')
+                    ->orWhere('parameter', 'like', '%Medan Listrik%');
+            })
             ->groupBy('cfr')
             ->where('status', 3)
             ->get();
@@ -43,7 +47,7 @@ class LhpUdaraUlkSinarUVController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
 
             if ($header != null) {
 
@@ -77,7 +81,7 @@ class LhpUdaraUlkSinarUVController extends Controller
     public function handleDownload(Request $request)
     {
         try {
-            $header = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
 
             $fileName = $header->file_lhp;
 
@@ -96,19 +100,19 @@ class LhpUdaraUlkSinarUVController extends Controller
     public function rePrint(Request $request)
     {
         DB::beginTransaction();
-        $header = LhpsSinarUVHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+        $header = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1;
         $header->save();
 
-        $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
-        $groupedByPage = collect(lhpsSinarUVCustom::where('id_header', $header->id)->get())
+        $detail = LhpsMedanLMDetail::where('id_header', $header->id)->get();
+        $groupedByPage = collect(LhpsMedanLMCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
 
-        LhpTemplate::setDataDetail(LhpsSinarUVDetail::where('id_header', $header->id)->get())
+        LhpTemplate::setDataDetail(LhpsMedanLMDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-                ->whereView('DraftUlkSinarUv')
+                ->whereView('DraftUlkMedanMagnet')
                 ->render();
         $servicePrint = new PrintLhp();
         $servicePrint->printByFilename($header->file_lhp, $detail);

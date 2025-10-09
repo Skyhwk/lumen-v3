@@ -16,7 +16,6 @@ use App\Models\LhpsGetaranDetailHistory;
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
@@ -87,7 +86,7 @@ class DraftUdaraGetaranController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $header = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
 
             if ($header != null) {
                 if ($header->is_revisi == 1) {
@@ -324,6 +323,7 @@ class DraftUdaraGetaranController extends Controller
 
             // === 7. Generate QR & File ===
             if (!$header->file_qr) {
+                
                 $file_qr = new GenerateQrDocumentLhp();
                 if ($path = $file_qr->insert('LHP_Getaran', $header, $this->karyawan)) {
                     $header->file_qr = $path;
@@ -933,8 +933,8 @@ class DraftUdaraGetaranController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_getaran',
+                        'type' => 'draft',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,

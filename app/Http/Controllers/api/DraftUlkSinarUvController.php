@@ -13,7 +13,6 @@ use App\Models\LhpsSinarUVDetailHistory;
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
