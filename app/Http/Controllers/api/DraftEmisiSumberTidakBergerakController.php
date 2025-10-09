@@ -43,60 +43,60 @@ use App\Services\SendEmail;
 
 class DraftEmisiSumberTidakBergerakController extends Controller
 {
-    // public function index(Request $request)
-    // {
-    //     $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
-    //         // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
-    //         ->where('is_approve', 0)
-    //         ->where('is_active', true)
-    //         ->where('status', 2)
-    //         ->where('kategori_2', '5-Emisi')
-    //         ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
-    //         ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
-
-    //     // if ($request->kategori == 'ESTB') {
-    //     //     $data1 = OrderDetail::with('orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
-    //     //         ->where('is_approve', 0)
-    //     //         ->where('is_active', true)
-    //     //         ->where('status', 2)
-    //     //         ->where('kategori_2', '5-Emisi')
-    //     //         ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak');
-    //     // }
-    //     return Datatables::of($data1)->make(true);
-    // }
-
     public function index(Request $request)
     {
-        DB::statement("SET SESSION sql_mode = ''");
-        $data = OrderDetail::with([
-            'lhps_emisi',
-            'dataLapanganEmisiCerobong',
-            'lhps_emisi_c',
-            'orderHeader'
-            => function ($query) {
-                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
-            }
-        ])
-            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+        $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
+            // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
             ->where('is_approve', 0)
             ->where('is_active', true)
-            ->where('kategori_2', '5-Emisi')
-            ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
-            ->groupBy('cfr')
             ->where('status', 2)
-            ->get();
+            ->where('kategori_2', '5-Emisi')
+            ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak']);
+        // ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
 
-        return Datatables::of($data)
-            ->editColumn('lhps_emisi_c', function ($data) {
-                if (is_null($data->lhps_emisi_c)) {
-                    return null;
-                } else {
-                    $data->lhps_emisi_c->metode_sampling = $data->lhps_emisi_c->metode_sampling != null ? json_decode($data->lhps_emisi_c->metode_sampling) : null;
-                    return json_decode($data->lhps_emisi_c, true);
-                }
-            })
-            ->make(true);
+        // if ($request->kategori == 'ESTB') {
+        //     $data1 = OrderDetail::with('orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
+        //         ->where('is_approve', 0)
+        //         ->where('is_active', true)
+        //         ->where('status', 2)
+        //         ->where('kategori_2', '5-Emisi')
+        //         ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak');
+        // }
+        return Datatables::of($data1)->make(true);
     }
+
+    // public function index(Request $request)
+    // {
+    //     DB::statement("SET SESSION sql_mode = ''");
+    //     $data = OrderDetail::with([
+    //         'lhps_emisi',
+    //         'dataLapanganEmisiCerobong',
+    //         'lhps_emisi_c',
+    //         'orderHeader'
+    //         => function ($query) {
+    //             $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
+    //         }
+    //     ])
+    //         ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+    //         ->where('is_approve', 0)
+    //         ->where('is_active', true)
+    //         ->where('kategori_2', '5-Emisi')
+    //         ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
+    //         ->groupBy('cfr')
+    //         ->where('status', 2)
+    //         ->get();
+
+    //     return Datatables::of($data)
+    //         ->editColumn('lhps_emisi_c', function ($data) {
+    //             if (is_null($data->lhps_emisi_c)) {
+    //                 return null;
+    //             } else {
+    //                 $data->lhps_emisi_c->metode_sampling = $data->lhps_emisi_c->metode_sampling != null ? json_decode($data->lhps_emisi_c->metode_sampling) : null;
+    //                 return json_decode($data->lhps_emisi_c, true);
+    //             }
+    //         })
+    //         ->make(true);
+    // }
 
     public function handleSubmitDraft(Request $request)
     {
@@ -268,6 +268,12 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                             ->render();
 
                         $header->file_lhp = $fileName;
+
+                        if ($header->is_revisi == 1) {
+                            $header->is_revisi = 0;
+                            $header->is_generated = 0;
+                            $header->count_revisi++;
+                        }
                         $header->save();
                     }
                 } catch (\Exception $e) {
@@ -760,7 +766,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     $lhps->delete();
                 }
             } else if ($category2 === 34) {
-                $lhps = LhpsEmisiCHeader::where('no_lhp', $data->no_sampel)->where('is_active', true)->first();
+                $lhps = LhpsEmisiCHeader::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
 
                 if ($lhps) {
                     $lhpsHistory = $lhps->replicate();
@@ -806,6 +812,35 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     }
 
 
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     public function handleGenerateLink(Request $request)
     {
         DB::beginTransaction();
@@ -825,7 +860,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => "draft_emisi",
+                        'quotation_status' => "draft_emisi_cerobong",
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $fileName,
                         'type' => 'draft',
@@ -855,7 +890,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             }
         } else if ($request->category == 34) {
             try {
-                $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
+                $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', 1)->first();
                 $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
                 $fileName = $header->file_lhp;
                 if ($header != null) {

@@ -9,7 +9,7 @@
                 <th rowspan="2" width="10%" class="custom">TAHUN</th>
                 <th colspan="2" class="custom">HASIL UJI</th>
                 <th colspan="2" class="custom">BAKU MUTU **</th>
-                <th colspan="2" width="14%" class="custom">TANGGAL SAMPLING</th>
+                <th rowspan="2" width="14%" class="custom">TANGGAL SAMPLING</th>
             </tr>
             <tr>
                 <th class="custom" width="10%">CO (%)</th>
