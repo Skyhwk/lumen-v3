@@ -17,31 +17,31 @@ class HCO3 {
 			$co3 = 0;
 			$t_convert = $t;
 
-			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 2);
+			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 4);
 		} else if ($p < $half){
 			$data->vth = 0;
 			$co3 = 2 * $p;
 			$t_convert = (($t - (2 * $p)) + (pow(10, ($ph - 14))));
 
-			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 2);
+			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 4);
 		} else if ($p == $half){
 			$data->vth = 0;
 			$co3 = 2 * $p;
 			$t_convert = 0;
 
-			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 2);
+			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 4);
 		} else if ($p > $half){
 			$data->vth = (2 * $p) - $t;
 			$co3 = 2 * ($t - $p);
 			$t_convert = 0;
 
-			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 2);
+			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 4);
 		} else if($p == $data->vth){
 			$data->vth = $t;
 			$co3 = 0;
 			$t_convert = 0;
 
-			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 2);
+			$rumus = number_format(($t_convert * $kt * 50000) / $vs, 4);
 		}
 
         if(!is_null($mdl) && $rumus < $mdl){
@@ -66,7 +66,7 @@ class HCO3 {
     //     $V = $data->vs;
     //     // (((M-P)xNx50000)/V)x(61/50)x Fp
     //     $rumus = str_replace(',', '', (number_format(((($a - $b) * $N * 50000) / $V) * (61/50) * $data->fp, 4)));
-        
+
     //     if(!is_null($mdl) && $rumus < $mdl){
     //         $rumus = '<' . $mdl;
     //     }

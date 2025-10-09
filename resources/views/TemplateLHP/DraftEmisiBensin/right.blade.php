@@ -47,8 +47,8 @@
                         <td class="custom5" width="120"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
                     <tr>
-                        <td class="custom5">Kategori</td>
-                        <td class="custom5">:</td>
+                        <td class="custom5" width="120">Kategori</td>
+                        <td class="custom5"  width="12">:</td>
                         <td class="custom5">{{ $header->sub_kategori }}</td>
                     </tr>
                     <!-- <tr>
@@ -64,16 +64,16 @@
                                 $metode = implode(' - ', array_slice(explode(';', $value), 1, 2));
                             @endphp
                             <tr>
-                                <td class="custom5">{{ $key == 0 ? 'Metode Sampling' : '' }}</td>
-                                <td class="custom5">{{ $key == 0 ? ':' : '' }}</td>
+                                <td class="custom5" width="120">{{ $key == 0 ? 'Metode Sampling' : '' }}</td>
+                                <td class="custom5" width="12">{{ $key == 0 ? ':' : '' }}</td>
                                 <td class="custom5">{{ $i . '. ' . $metode . $akre }}</td>
                             </tr>
                             @php $i++; @endphp
                         @endforeach
                     @else
                         <tr>
-                            <td class="custom5">Metode Sampling</td>
-                            <td class="custom5">:</td>
+                            <td class="custom5" width="120">Metode Sampling</td>
+                            <td class="custom5" width="12">:</td>
                             <td class="custom5">-</td>
                         </tr>
                     @endif
