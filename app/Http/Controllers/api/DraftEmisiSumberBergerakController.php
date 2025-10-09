@@ -300,6 +300,13 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->render();
 
                         $header->file_lhp = $fileName;
+
+                        if ($header->is_revisi == 1) {
+                            $header->is_revisi = 0;
+                            $header->is_generated = 0;
+                            $header->count_revisi++;
+                        }
+
                         $header->save();
                     }
                 } catch (\Exception $e) {
@@ -766,6 +773,35 @@ class DraftEmisiSumberBergerakController extends Controller
         }
     }
 
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     public function encrypt($data)
     {
         $ENCRYPTION_KEY = 'intilab_jaya';
@@ -909,7 +945,7 @@ class DraftEmisiSumberBergerakController extends Controller
                     $qr->save();
                 }
 
-                OrderDetail::where('no_sampel', $request->no_sampel)
+                OrderDetail::where('cfr', $request->cfr)
                     ->where('is_active', true)
                     ->update([
                         'status' => 3,
@@ -920,7 +956,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                 DB::commit();
                 return response()->json([
-                    'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!',
+                    'message' => 'Approve no LHP ' . $request->cfr . ' berhasil!',
                     // 'file_name' => $fileName
                 ]);
             } else {
