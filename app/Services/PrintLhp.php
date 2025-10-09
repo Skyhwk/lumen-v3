@@ -140,9 +140,9 @@ class PrintLhp
         try {
             $kan = $this->cekAkreditasi($detail);
             // dd($kan);
-            $id_printer = 67; // Default printer ID
+            $id_printer = 71; // Default printer ID
             if ($kan)
-                $id_printer = 68;
+                $id_printer = 71;
 
             $cek_printer = Printers::where('id', $id_printer)->first();
             // return $cek_printer;
