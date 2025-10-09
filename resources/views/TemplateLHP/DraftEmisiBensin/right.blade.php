@@ -40,15 +40,6 @@
                 {{-- Informasi Sampling --}}
                 @php
                     $methode_sampling = $header->metode_sampling != null ? json_decode($header->metode_sampling) : [];
-                    $period = explode(" - ", $header->periode_analisa);
-                    $period = array_filter($period);
-                    $period1 = '';
-                    $period2 = '';
-                    if (!empty($period)) {
-                        $period1 = \App\Helpers\Helper::tanggal_indonesia($period[0]);
-                        $period2 = \App\Helpers\Helper::tanggal_indonesia($period[1]);
-                    }
-
                     $parame = str_replace(['[', ']', '"'], '', $header->parameter_uji);
                 @endphp
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
@@ -60,11 +51,11 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $header->sub_kategori }}</td>
                     </tr>
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5">Parameter</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $parame }}</td>
-                    </tr>
+                    </tr> -->
                     @if (count($methode_sampling) > 0)
                         @php $i = 1; @endphp
                         @foreach ($methode_sampling as $key => $value)
@@ -86,16 +77,12 @@
                             <td class="custom5">-</td>
                         </tr>
                     @endif
-                    <tr>
+                    <!-- <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) }}</td>
-                    </tr>
-                    <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ $period1 }} - {{ $period2 }}</td>
-                    </tr>
+                    </tr> -->
+                   
                 </table>
 
                 {{-- Regulasi --}}

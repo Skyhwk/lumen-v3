@@ -26,7 +26,6 @@ use App\Models\Subkontrak;
 use App\Models\Parameter;
 use App\Models\GenerateLink;
 use App\Services\LhpTemplate;
-use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;

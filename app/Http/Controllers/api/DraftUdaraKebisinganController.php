@@ -370,9 +370,20 @@ class DraftUdaraKebisinganController extends Controller
 
             // Render ulang file LHP
             $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
+            $detail = collect($detail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsKebisinganCustom::where('id_header', $dataHeader->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
 
             $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
             if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
@@ -513,17 +524,41 @@ class DraftUdaraKebisinganController extends Controller
                     $custom[] = $detail;
                 }
 
+                $bulanMap = [
+                    'Januari' => 'January',
+                    'Februari' => 'February',
+                    'Maret' => 'March',
+                    'April' => 'April',
+                    'Mei' => 'May',
+                    'Juni' => 'June',
+                    'Juli' => 'July',
+                    'Agustus' => 'August',
+                    'September' => 'September',
+                    'Oktober' => 'October',
+                    'November' => 'November',
+                    'Desember' => 'December',
+                ];
 
-                $detail = collect($detail)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
-                ])->values()->toArray();
+
+
+                $detail = collect($detail)
+                ->sortBy(function ($item) use ($bulanMap) {
+                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
+                })
+                ->values()
+                ->toArray();
 
                 foreach ($custom as $idx => $cstm) {
-                    $custom[$idx] = collect($cstm)->sortBy([
-                        ['tanggal_sampling', 'asc'],
-                        ['no_sampel', 'asc']
-                    ])->values()->toArray();
+                    $custom[$idx] = collect($cstm)
+                        ->sortBy(function ($item) use ($bulanMap) {
+                            $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                            $timestamp = Carbon::parse($tgl)->timestamp;
+
+                            return sprintf('%010d-%s', $timestamp, $item['no_sampel']);
+                        })
+                        ->values()
+                        ->toArray();
                 }
 
 
