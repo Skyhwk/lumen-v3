@@ -415,13 +415,14 @@ class FdlKebisinganController extends Controller
                         $data_header->created_by = $this->karyawan;
                         $data_header->created_at = Carbon::now();
                         $data_header->save();
-        
+                    
                         $ws->id_kebisingan_header = $data_header->id;
                         $ws->no_sampel = $request->no_sampel;
                         $ws->id_po = $po->id;
                         $ws->hasil1 = $calculate['hasil'];
                         $ws->satuan = $calculate['satuan'] ?? null;
                         $ws->save();
+
                         $data_lapangan->is_approve = true;
                         $data_lapangan->approved_by = $this->karyawan;
                         $data_lapangan->approved_at = Carbon::now();
@@ -430,8 +431,8 @@ class FdlKebisinganController extends Controller
                     } catch (Exception $e) {
                         DB::rollBack();
                         return response()->json([
-                            'message' => $e . getMessage(),
-                            'line' => $e . getLine(),
+                            'message' => $e->getMessage(),
+                            'line' => $e->getLine(),
                         ], 500);
                     }
                 }else{
@@ -544,12 +545,7 @@ class FdlKebisinganController extends Controller
                     ], 500);
                 }
             }
-            app(NotificationFdlService::class)->sendApproveNotification(
-                "Kebisingan pada shift ($data->jenis_durasi_sampling)",
-                $data->no_sampel,
-                $this->karyawan,
-                $data->created_by
-            );
+            app(NotificationFdlService::class)->sendApproveNotification("Kebisingan pada Shift $data_lapangan->jenis_durasi_sampling", $data_lapangan->no_sampel, $this->karyawan, $data_lapangan->created_by);
 
             DB::commit();
 
