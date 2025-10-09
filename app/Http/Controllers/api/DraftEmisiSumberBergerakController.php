@@ -896,8 +896,6 @@ class DraftEmisiSumberBergerakController extends Controller
                 $header->is_approve = 1;
                 $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->approved_by = $this->karyawan;
-                $header->nama_karyawan = $this->karyawan;
-                $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                 $header->save();
 
                 if ($qr != null) {
