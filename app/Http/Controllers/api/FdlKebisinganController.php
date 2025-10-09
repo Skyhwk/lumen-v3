@@ -78,486 +78,671 @@ class FdlKebisinganController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    // public function approve(Request $request)
+    // {
+    //     DB::beginTransaction();
+    //     try {
+    //     if (isset($request->id) && $request->id != null) {
+    //         $po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+    //         if ($po) {
+    //             // Decode parameter jika dalam format JSON
+    //             $decoded = json_decode($po->parameter, true);
+
+    //             // Pastikan JSON ter-decode dengan benar dan berisi data
+    //             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+    //                 // Ambil elemen pertama dari array hasil decode
+    //                 $parts = explode(';', $decoded[0] ?? '');
+
+    //                 // Pastikan elemen kedua tersedia setelah explode
+    //                 $parameterValue = $parts[1] ?? 'Data tidak valid';
+
+    //                 // dd($parameterValue); // Output: "Kebisingan"
+    //             } else {
+    //                 dd("Parameter tidak valid atau bukan JSON");
+    //             }
+    //         } else {
+    //             dd("OrderDetail tidak ditemukan");
+    //         }
+
+    //         $param = Parameter::where('nama_lab', $parameterValue)->where('id_kategori', 4)->where('is_active', true)->first();
+    //         $cekLap = Kebisinganheader::where('no_sampel', $request->no_sampel)->first();
+    //         $cekWs = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+    //         $data = DataLapanganKebisingan::where('id', $request->id)->first();
+    //         $no_sample = $data->no_sampel;
+    //         $jenis_durasi = explode('-', $data->jenis_durasi_sampling)[0];
+    //         $countL = DataLapanganKebisingan::where('no_sampel', $no_sample)
+    //             ->select('no_sampel', 'value_kebisingan', 'jenis_durasi_sampling')
+    //             ->orderBy('jenis_durasi_sampling', 'asc')
+    //             ->orderBy('value_kebisingan')
+    //             ->get();
+    //         $totalL = $countL->count();
+    //         $total = [];
+    //         $totSesaat = [];
+
+    //         $jumsuhu = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('suhu_udara');
+    //         $jumkelemb = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('kelembapan_udara');
+    //         $reratasuhu = round(floatval($jumsuhu) / $totalL, 1);
+    //         $reratakelemb = round(floatval($jumkelemb) / $totalL, 1);
+    //         // dd($reratakelemb);
+    //         foreach ($countL as $data) {
+    //             $total[] = json_decode($data->value_kebisingan);
+    //             $totSesaat = json_decode($data->value_kebisingan);
+    //         }
+
+
+    //         for ($i = 0; $i < count($total); $i++) {
+    //             $nilaiMin[$i] = min($total[$i]);
+    //             $nilaiMax[$i] = max($total[$i]);
+
+    //             $nilai_min = min($nilaiMin);
+    //             $nilai_max = max($nilaiMax);
+    //         }
+
+    //         if ($jenis_durasi == "24 Jam") {
+    //             $getTotalApprove = DataLapanganKebisingan::where('no_sampel', $no_sample)
+    //                 ->select(DB::raw('COUNT(no_sampel) AS total'))
+    //                 ->where('is_approve', 1)
+    //                 ->first();
+
+    //             $LSTotal = [];
+    //             $LMTotal = [];
+    //             if ($getTotalApprove->total == 6) {
+    //                 DB::beginTransaction();
+    //                 try {
+                        
+    //                     $function = 'DirectKebisingan24L7';
+    //                     $data_parsing = $request->all();
+    //                     $data_parsing = (object) $data_parsing;
+    //                     $data_parsing->total = $total;
+
+    //                     // Mulai Kalkulasi
+    //                     $data_kalkulasi = AnalystFormula::where('function', $function)
+    //                         ->where('data', $data_parsing)
+    //                         ->where('id_parameter', $param->id)
+    //                         ->process();
+
+
+    //                     if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+    //                         return (object) [
+    //                             'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+    //                             'status' => 404
+    //                         ];
+    //                     }
+
+    //                     $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
+    //                     $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+    //                     $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+    //                     if (empty($data_header)) {
+    //                         $data_header = new KebisinganHeader;
+    //                         $ws = new WsValueUdara;
+    //                     }
+
+    //                     $data_header->no_sampel = $request->no_sampel;
+    //                     $data_header->id_parameter = $param->id;
+    //                     $data_header->parameter = $param->nama_lab;
+    //                     $data_header->ls = $data_kalkulasi['totalLSM'];
+    //                     $data_header->lm = $data_kalkulasi['rerataLSM'];
+    //                     $data_header->leq_ls = $data_kalkulasi['leqLS'];
+    //                     $data_header->leq_lm = $data_kalkulasi['leqLM'];
+    //                     $data_header->min = $nilai_min;
+    //                     $data_header->max = $nilai_max;
+    //                     $data_header->suhu_udara = $reratasuhu;
+    //                     $data_header->kelembapan_udara = $reratakelemb;
+    //                     $data_header->is_approved = true;
+    //                     // $data_header->lhps = 1;
+    //                     $data_header->approved_by = $this->karyawan;
+    //                     $data_header->approved_at = Carbon::now();
+    //                     $data_header->created_by = $this->karyawan;
+    //                     $data_header->created_at = Carbon::now();
+    //                     $data_header->save();
+
+    //                     $ws->id_kebisingan_header = $data_header->id;
+    //                     $ws->no_sampel = $request->no_sampel;
+    //                     $ws->id_po = $po->id;
+    //                     $ws->hasil1 = $data_kalkulasi['hasil'];
+    //                     $ws->satuan = $data_kalkulasi['satuan'] ?? null;
+    //                     $ws->save();
+
+    //                     $data_lapangan->is_approve = true;
+    //                     $data_lapangan->approved_by = $this->karyawan;
+    //                     $data_lapangan->approved_at = Carbon::now();
+    //                     $data_lapangan->save();
+
+    //                     DB::commit();
+
+    //                     return response()->json([
+    //                         'status' => "Berhasil Di Approve",
+    //                     ]);
+    //                 } catch (Exception $e) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'message' => $e . getMessage(),
+    //                         'line' => $e . getLine(),
+    //                     ]);
+    //                 }
+    //             } else if ($getTotalApprove->total == 23) {
+    //                 try {
+    //                     $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+
+    //                     $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+
+    //                     $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first()->function;
+    //                     $data_parsing = $request->all();
+    //                     $data_parsing = (object) $data_parsing;
+    //                     $data_parsing->total = $total;
+    //                     $data_kalkulasi = AnalystFormula::where('function', $function)
+    //                         ->where('data', $data_parsing)
+    //                         ->where('id_parameter', $param->id)
+    //                         ->process();
+
+    //                     $updateHeader = [
+    //                         'ls' => $data_kalkulasi['leqLS'],
+    //                         'lm' => $data_kalkulasi['leqLM'],
+    //                         // 'leq_ls' => $data_kalkulasi['leqLS'],
+    //                         // 'leq_lm' => $data_kalkulasi['leqLM'],
+    //                         'min' => $nilai_min,
+    //                         'max' => $nilai_max,
+    //                         // 'suhu_udara' => $request->suhu_udara,
+    //                         // 'kelembapan_udara' => $request->kelembapan_udara,
+    //                         'suhu_udara' => $reratasuhu,
+    //                         'kelembapan_udara' => $reratakelemb,
+    //                         'created_by' => $this->karyawan,
+    //                         'created_at' => Carbon::now(),
+
+    //                     ];
+    //                     $updateWs = [
+    //                         'hasil1' => $data_kalkulasi['hasil'],
+    //                         'hasil2' => $data_kalkulasi['hasil'],
+    //                         'satuan' => $data_kalkulasi['satuan'] ?? null,
+    //                         'id_kebisingan_header' => $cekLap->id,
+    //                         'id_po' => $po->id
+    //                     ];
+    //                     // Update or Create untuk Header
+    //                     KebisinganHeader::updateOrCreate(
+    //                         ['no_sampel' => $request->no_sampel], // Kondisi pencarian
+    //                         $updateHeader // Data untuk pembaruan atau pembuatan
+    //                     );
+
+    //                     // Update or Create untuk WsValueUdara
+    //                     WsValueUdara::updateOrCreate(
+    //                         ['no_sampel' => $request->no_sampel], // Kondisi pencarian
+    //                         $updateWs // Data untuk pembaruan atau pembuatan
+    //                     );
+    //                     // $no_sample = $dat->no_sample;
+    //                     $data_lapangan->is_approve = true;
+    //                     $data_lapangan->approved_by = $this->karyawan;
+    //                     $data_lapangan->approved_at = Carbon::now();
+    //                     $data_lapangan->save();
+
+    //                     DB::commit();
+
+    //                     return response()->json([
+    //                         'status' => "Berhasil Di Approve",
+    //                         'data' => $data_lapangan,
+    //                     ]);
+    //                 } catch (Exception $e) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'message' => $e . getMessage(),
+    //                         'line' => $e . getLine(),
+    //                     ], 500);
+    //                 }
+
+    //             } else {
+    //                 DB::beginTransaction();
+    //                 try {
+    //                     $data = DataLapanganKebisingan::where('id', $request->id)->first();
+
+    //                     if ($data) {
+    //                         $data->is_approve = true;
+    //                         $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
+    //                         $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
+    //                         $data->save();
+    //                     } else {
+    //                         // Tangani jika data tidak ditemukan
+    //                         Log::error('Data dengan ID ' . $request->id . ' tidak ditemukan.');
+    //                         dd('Data tidak ditemukan');
+    //                     }
+    //                     DB::commit();
+
+    //                     return response()->json([
+    //                         'status' => "Berhasil Di Approve",
+    //                         'data' => $data,
+    //                     ]);
+
+    //                 } catch (Exception $e) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'message' => $e . getMessage(),
+    //                         'line' => $e . getLine(),
+    //                     ], 500);
+    //                 }
+    //             }
+    //         } else if ($jenis_durasi == "8 Jam") {
+    //             // $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first();
+    //             // if($function == null){
+    //             //     return response()->json([
+    //             //         'message' => "Formula Tidak Ditemukan",
+    //             //     ], 404);
+    //             // }else{
+    //             //     $function = $function->function;
+    //             // }
+    //             // $data_parsing = $request->all();
+    //             // $data_parsing = (object) $data_parsing;
+    //             // $data_parsing->total = $total;
+    //             // $calculate = AnalystFormula::where('function', $function)
+    //             //     ->where('data', $data_parsing)
+    //             //     ->where('id_parameter', $param->id)
+    //             //     ->process();
+
+    //             // $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
+    //             // $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+    //             // $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+    //             // if (empty($data_header)) {
+    //             //     $data_header = new KebisinganHeader;
+    //             //     $ws = new WsValueUdara;
+    //             // }
+    //             // $data_header->no_sampel = $request->no_sampel;
+    //             // // $data_header->id_po = $po->id;
+    //             // $data_header->id_parameter = $param->id;
+    //             // $data_header->parameter = $param->nama_lab;
+    //             // $data_header->ls = null;
+    //             // $data_header->lm = null;
+    //             // $data_header->min = $nilai_min;
+    //             // $data_header->max = $nilai_max;
+    //             // $data_header->suhu_udara = $reratasuhu;
+    //             // $data_header->kelembapan_udara = $reratakelemb;
+    //             // // $data_header->lhps = 1;
+    //             // $data_header->is_approved = true;
+    //             // $data_header->approved_by = $this->karyawan;
+    //             // $data_header->approved_at = Carbon::now();
+    //             // $data_header->created_by = $this->karyawan;
+    //             // $data_header->created_at = Carbon::now();
+    //             // $data_header->save();
+
+    //             // $ws->id_kebisingan_header = $data_header->id;
+    //             // $ws->no_sampel = $request->no_sampel;
+    //             // $ws->id_po = $po->id;
+    //             // $ws->hasil1 = $calculate['hasil'];
+    //             // $ws->save();
+    //             // $data_lapangan->is_approve = true;
+    //             // $data_lapangan->approved_by = $this->karyawan;
+    //             // $data_lapangan->approved_at = Carbon::now();
+    //             // $data_lapangan->save();
+    //             // 19-06-2025 - pembacaan total approve dan setting is_approve jika total approve sudah 7
+    //             $getTotalApprove = DataLapanganKebisingan::where('no_sampel', $no_sample)
+    //                 ->select(DB::raw('COUNT(no_sampel) AS total'))
+    //                 ->where('is_approve', 1)
+    //                 ->first();
+    //             if($getTotalApprove->total == 7){
+    //                 DB::beginTransaction();
+    //                 try {
+    //                     $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first();
+    //                     if($function == null){
+    //                         throw new Exception("Formula Tidak Ditemukan");
+    //                     }else{
+    //                         $function = $function->function;
+    //                     }
+    //                     $data_parsing = $request->all();
+    //                     $data_parsing = (object) $data_parsing;
+    //                     $data_parsing->total = $total;
+    //                     $calculate = AnalystFormula::where('function', $function)
+    //                         ->where('data', $data_parsing)
+    //                         ->where('id_parameter', $param->id)
+    //                         ->process();
+        
+    //                     $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
+    //                     $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+    //                     $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+    //                     if (empty($data_header)) {
+    //                         $data_header = new KebisinganHeader;
+    //                         $ws = new WsValueUdara;
+    //                     }
+    //                     $data_header->no_sampel = $request->no_sampel;
+    //                     // $data_header->id_po = $po->id;
+    //                     $data_header->id_parameter = $param->id;
+    //                     $data_header->parameter = $param->nama_lab;
+    //                     $data_header->ls = null;
+    //                     $data_header->lm = null;
+    //                     $data_header->min = $nilai_min;
+    //                     $data_header->max = $nilai_max;
+    //                     $data_header->suhu_udara = $reratasuhu;
+    //                     $data_header->kelembapan_udara = $reratakelemb;
+    //                     // $data_header->lhps = 1;
+    //                     $data_header->is_approved = true;
+    //                     $data_header->approved_by = $this->karyawan;
+    //                     $data_header->approved_at = Carbon::now();
+    //                     $data_header->created_by = $this->karyawan;
+    //                     $data_header->created_at = Carbon::now();
+    //                     $data_header->save();
+                    
+    //                     $ws->id_kebisingan_header = $data_header->id;
+    //                     $ws->no_sampel = $request->no_sampel;
+    //                     $ws->id_po = $po->id;
+    //                     $ws->hasil1 = $calculate['hasil'];
+    //                     $ws->satuan = $calculate['satuan'] ?? null;
+    //                     $ws->save();
+
+    //                     $data_lapangan->is_approve = 1;
+    //                     $data_lapangan->approved_by = $this->karyawan;
+    //                     $data_lapangan->approved_at = Carbon::now();
+    //                     $data_lapangan->save();
+    //                     DB::commit();
+    //                 } catch (Exception $e) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'message' => $e->getMessage(),
+    //                         'line' => $e->getLine(),
+    //                     ], 500);
+    //                 }
+    //             }else{
+    //                 DB::beginTransaction();
+    //                 try {
+    //                     $data = DataLapanganKebisingan::where('id', $request->id)->first();
+    //                     if ($data) {
+    //                         $data->is_approve = 1;
+    //                         $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
+    //                         $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
+    //                         $data->save();
+
+    //                         DB::commit();
+
+    //                         return response()->json([
+    //                             'status' => "Berhasil Di Approve",
+    //                             'data' => $data,
+    //                         ]);
+    //                     } else {
+    //                         DB::rollBack();
+    //                         // Tangani jika data tidak ditemukan
+    //                         return response()->json([
+    //                             'message' => 'Data dengan ID ' . $request->id . ' tidak ditemukan.'
+    //                         ], 404);
+    //                     }
+                        
+
+    //                 } catch (Exception $e) {
+    //                     DB::rollBack();
+    //                     return response()->json([
+    //                         'message' => $e->getMessage(),
+    //                         'line' => $e->getLine(),
+    //                     ], 500);
+    //                 }
+    //             }
+    //         } else if ($jenis_durasi == "Sesaat") {
+                
+    //             $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first()->function;
+    //             $data_parsing = $request->all();
+    //                     $data_parsing = (object) $data_parsing;
+    //                     $data_parsing->totSesaat = $totSesaat;
+    //                     $calculate = AnalystFormula::where('function', $function)
+    //                         ->where('data', $data_parsing)
+    //                         ->where('id_parameter', $param->id)
+    //                         ->process();
+
+    //             $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
+    //             $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+    //             $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
+
+    //             if (empty($data_header)) {
+    //                 $data_header = new KebisinganHeader;
+    //                 $ws = new WsValueUdara;
+    //             }
+
+    //             $data_header->no_sampel = $request->no_sampel;
+    //             // $data_header->id_po = $po->id;
+    //             $data_header->id_parameter = $param->id;
+    //             $data_header->parameter = $param->nama_lab;
+    //             $data_header->min = $nilai_min;
+    //             $data_header->max = $nilai_max;
+    //             $data_header->ls = null;
+    //             $data_header->lm = null;
+    //             // $data_header->lhps = 1;
+    //             $data_header->suhu_udara = $reratasuhu;
+    //             $data_header->kelembapan_udara = $reratakelemb;
+    //             $data_header->is_approved = true;
+    //             $data_header->approved_by = $this->karyawan;
+    //             $data_header->approved_at = Carbon::now();
+    //             $data_header->created_by = $this->karyawan;
+    //             $data_header->created_at = Carbon::now();
+    //             $data_header->save();
+
+    //             $ws->id_kebisingan_header = $data_header->id;
+    //             $ws->no_sampel = $request->no_sampel;
+    //             $ws->id_po = $po->id;
+    //             $ws->hasil1 = $calculate['hasil'];
+    //             $ws->save();
+
+    //             $data_lapangan->is_approve = true;
+    //             $data_lapangan->approved_by = $this->karyawan;
+    //             $data_lapangan->approved_at = Carbon::now();
+    //             $data_lapangan->save();
+    //             // dd($data);
+    //         } else {
+    //             DB::beginTransaction();
+    //             try {
+    //                 $data = DataLapanganKebisingan::where('id', $request->id)->first();
+
+    //                 if ($data) {
+    //                     $data->is_approve = true;
+    //                     $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
+    //                     $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
+    //                     $data->save();
+    //                 } else {
+    //                     // Tangani jika data tidak ditemukan
+    //                     Log::error('Data dengan ID ' . $request->id . ' tidak ditemukan.');
+    //                     dd('Data tidak ditemukan');
+    //                 }
+    //                 app(NotificationFdlService::class)->sendApproveNotification("Kebisingan pada shift ($data->jenis_durasi_sampling)", $data->no_sampel, $this->karyawan, $data->created_by);
+    //                 DB::commit();
+
+    //                 return response()->json([
+    //                     'status' => "Berhasil Di Approve",
+    //                     'data' => $data,
+    //                 ]);
+
+    //             } catch (Exception $e) {
+    //                 DB::rollBack();
+    //                 return response()->json([
+    //                     'message' => $e . getMessage(),
+    //                     'line' => $e . getLine(),
+    //                 ], 500);
+    //             }
+    //         }
+    //         app(NotificationFdlService::class)->sendApproveNotification("Kebisingan pada Shift $data_lapangan->jenis_durasi_sampling", $data_lapangan->no_sampel, $this->karyawan, $data_lapangan->created_by);
+
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}",
+    //             'cat' => 1
+    //         ], 200);
+    //     } else {
+    //         return response()->json([
+    //             'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}"
+    //         ], 401);
+    //     }
+    //     } catch (Exception $e) {
+    //         DB::rollBack();
+    //         return response()->json([
+    //             'message' => $e->getMessage(),
+    //             'line' => $e->getLine(),
+    //         ], 500);
+    //     }
+
+    // }
+
     public function approve(Request $request)
     {
         DB::beginTransaction();
         try {
-        if (isset($request->id) && $request->id != null) {
-            $po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-            if ($po) {
-                // Decode parameter jika dalam format JSON
-                $decoded = json_decode($po->parameter, true);
-
-                // Pastikan JSON ter-decode dengan benar dan berisi data
-                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                    // Ambil elemen pertama dari array hasil decode
-                    $parts = explode(';', $decoded[0] ?? '');
-
-                    // Pastikan elemen kedua tersedia setelah explode
-                    $parameterValue = $parts[1] ?? 'Data tidak valid';
-
-                    // dd($parameterValue); // Output: "Kebisingan"
-                } else {
-                    dd("Parameter tidak valid atau bukan JSON");
-                }
-            } else {
-                dd("OrderDetail tidak ditemukan");
+            // ==== Validasi Awal ====
+            if (empty($request->id)) {
+                return response()->json([
+                    'message' => "ID tidak ditemukan.",
+                ], 400);
             }
 
-            $param = Parameter::where('nama_lab', $parameterValue)->where('id_kategori', 4)->where('is_active', true)->first();
-            $cekLap = Kebisinganheader::where('no_sampel', $request->no_sampel)->first();
-            $cekWs = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-            $data = DataLapanganKebisingan::where('id', $request->id)->first();
-            $no_sample = $data->no_sampel;
-            $jenis_durasi = explode('-', $data->jenis_durasi_sampling)[0];
+            $po = OrderDetail::where('no_sampel', $request->no_sampel)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$po) {
+                throw new Exception("OrderDetail tidak ditemukan untuk no sampel {$request->no_sampel}");
+            }
+
+            // ==== Ambil Parameter ====
+            $decoded = json_decode($po->parameter, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+                throw new Exception("Parameter tidak valid atau bukan JSON");
+            }
+
+            $parts = explode(';', $decoded[0] ?? '');
+            $parameterValue = $parts[1] ?? null;
+            if (!$parameterValue) {
+                throw new Exception("Parameter tidak valid di data order detail");
+            }
+
+            $param = Parameter::where('nama_lab', $parameterValue)
+                ->where('id_kategori', 4)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$param) {
+                throw new Exception("Parameter {$parameterValue} tidak ditemukan pada kategori 4");
+            }
+
+            // ==== Data Lapangan ====
+            $dataLapangan = DataLapanganKebisingan::find($request->id);
+            if (!$dataLapangan) {
+                throw new Exception("Data Lapangan tidak ditemukan");
+            }
+
+            $no_sample = $dataLapangan->no_sampel;
+            $jenis_durasi = explode('-', $dataLapangan->jenis_durasi_sampling)[0];
+
             $countL = DataLapanganKebisingan::where('no_sampel', $no_sample)
-                ->select('no_sampel', 'value_kebisingan', 'jenis_durasi_sampling')
                 ->orderBy('jenis_durasi_sampling', 'asc')
-                ->orderBy('value_kebisingan')
                 ->get();
+
             $totalL = $countL->count();
+            if ($totalL == 0) {
+                throw new Exception("Tidak ada data lapangan untuk no sampel {$no_sample}");
+            }
+
+            // ==== Hitung Rata-rata ====
+            $reratasuhu = round($countL->avg('suhu_udara'), 1);
+            $reratakelemb = round($countL->avg('kelembapan_udara'), 1);
+
+            // ==== Ambil Nilai Min dan Max ====
             $total = [];
-            $totSesaat = [];
-
-            $jumsuhu = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('suhu_udara');
-            $jumkelemb = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('kelembapan_udara');
-            $reratasuhu = round(floatval($jumsuhu) / $totalL, 1);
-            $reratakelemb = round(floatval($jumkelemb) / $totalL, 1);
-            // dd($reratakelemb);
-            foreach ($countL as $data) {
-                $total[] = json_decode($data->value_kebisingan);
-                $totSesaat = json_decode($data->value_kebisingan);
-            }
-
-
-            for ($i = 0; $i < count($total); $i++) {
-                $nilaiMin[$i] = min($total[$i]);
-                $nilaiMax[$i] = max($total[$i]);
-
-                $nilai_min = min($nilaiMin);
-                $nilai_max = max($nilaiMax);
-            }
-
-            if ($jenis_durasi == "24 Jam") {
-                $getTotalApprove = DataLapanganKebisingan::where('no_sampel', $no_sample)
-                    ->select(DB::raw('COUNT(no_sampel) AS total'))
-                    ->where('is_approve', 1)
-                    ->first();
-
-                $LSTotal = [];
-                $LMTotal = [];
-                if ($getTotalApprove->total == 6) {
-                    DB::beginTransaction();
-                    try {
-                        
-                        $function = 'DirectKebisingan24L7';
-                        $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->total = $total;
-
-                        // Mulai Kalkulasi
-                        $data_kalkulasi = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $param->id)
-                            ->process();
-
-
-                        if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
-                            return (object) [
-                                'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
-                                'status' => 404
-                            ];
-                        }
-
-                        $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
-                        $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-                        $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-                        if (empty($data_header)) {
-                            $data_header = new KebisinganHeader;
-                            $ws = new WsValueUdara;
-                        }
-
-                        $data_header->no_sampel = $request->no_sampel;
-                        $data_header->id_parameter = $param->id;
-                        $data_header->parameter = $param->nama_lab;
-                        $data_header->ls = $data_kalkulasi['totalLSM'];
-                        $data_header->lm = $data_kalkulasi['rerataLSM'];
-                        $data_header->leq_ls = $data_kalkulasi['leqLS'];
-                        $data_header->leq_lm = $data_kalkulasi['leqLM'];
-                        $data_header->min = $nilai_min;
-                        $data_header->max = $nilai_max;
-                        $data_header->suhu_udara = $reratasuhu;
-                        $data_header->kelembapan_udara = $reratakelemb;
-                        $data_header->is_approved = true;
-                        // $data_header->lhps = 1;
-                        $data_header->approved_by = $this->karyawan;
-                        $data_header->approved_at = Carbon::now();
-                        $data_header->created_by = $this->karyawan;
-                        $data_header->created_at = Carbon::now();
-                        $data_header->save();
-
-                        $ws->id_kebisingan_header = $data_header->id;
-                        $ws->no_sampel = $request->no_sampel;
-                        $ws->id_po = $po->id;
-                        $ws->hasil1 = $data_kalkulasi['hasil'];
-                        $ws->satuan = $data_kalkulasi['satuan'] ?? null;
-                        $ws->save();
-
-                        $data_lapangan->is_approve = true;
-                        $data_lapangan->approved_by = $this->karyawan;
-                        $data_lapangan->approved_at = Carbon::now();
-                        $data_lapangan->save();
-
-                        DB::commit();
-
-                        return response()->json([
-                            'status' => "Berhasil Di Approve",
-                        ]);
-                    } catch (Exception $e) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => $e . getMessage(),
-                            'line' => $e . getLine(),
-                        ]);
-                    }
-                } else if ($getTotalApprove->total == 23) {
-                    try {
-                        $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                        $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                        $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first()->function;
-                        $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->total = $total;
-                        $data_kalkulasi = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $param->id)
-                            ->process();
-
-                        $updateHeader = [
-                            'ls' => $data_kalkulasi['leqLS'],
-                            'lm' => $data_kalkulasi['leqLM'],
-                            // 'leq_ls' => $data_kalkulasi['leqLS'],
-                            // 'leq_lm' => $data_kalkulasi['leqLM'],
-                            'min' => $nilai_min,
-                            'max' => $nilai_max,
-                            // 'suhu_udara' => $request->suhu_udara,
-                            // 'kelembapan_udara' => $request->kelembapan_udara,
-                            'suhu_udara' => $reratasuhu,
-                            'kelembapan_udara' => $reratakelemb,
-                            'created_by' => $this->karyawan,
-                            'created_at' => Carbon::now(),
-
-                        ];
-                        $updateWs = [
-                            'hasil1' => $data_kalkulasi['hasil'],
-                            'hasil2' => $data_kalkulasi['hasil'],
-                            'satuan' => $data_kalkulasi['satuan'] ?? null,
-                            'id_kebisingan_header' => $cekLap->id,
-                            'id_po' => $po->id
-                        ];
-                        // Update or Create untuk Header
-                        KebisinganHeader::updateOrCreate(
-                            ['no_sampel' => $request->no_sampel], // Kondisi pencarian
-                            $updateHeader // Data untuk pembaruan atau pembuatan
-                        );
-
-                        // Update or Create untuk WsValueUdara
-                        WsValueUdara::updateOrCreate(
-                            ['no_sampel' => $request->no_sampel], // Kondisi pencarian
-                            $updateWs // Data untuk pembaruan atau pembuatan
-                        );
-                        // $no_sample = $dat->no_sample;
-                        $data_lapangan->is_approve = true;
-                        $data_lapangan->approved_by = $this->karyawan;
-                        $data_lapangan->approved_at = Carbon::now();
-                        $data_lapangan->save();
-
-                        DB::commit();
-
-                        return response()->json([
-                            'status' => "Berhasil Di Approve",
-                            'data' => $data_lapangan,
-                        ]);
-                    } catch (Exception $e) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => $e . getMessage(),
-                            'line' => $e . getLine(),
-                        ], 500);
-                    }
-
-                } else {
-                    DB::beginTransaction();
-                    try {
-                        $data = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                        if ($data) {
-                            $data->is_approve = true;
-                            $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
-                            $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
-                            $data->save();
-                        } else {
-                            // Tangani jika data tidak ditemukan
-                            Log::error('Data dengan ID ' . $request->id . ' tidak ditemukan.');
-                            dd('Data tidak ditemukan');
-                        }
-                        DB::commit();
-
-                        return response()->json([
-                            'status' => "Berhasil Di Approve",
-                            'data' => $data,
-                        ]);
-
-                    } catch (Exception $e) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => $e . getMessage(),
-                            'line' => $e . getLine(),
-                        ], 500);
-                    }
-                }
-            } else if ($jenis_durasi == "8 Jam") {
-                // $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first();
-                // if($function == null){
-                //     return response()->json([
-                //         'message' => "Formula Tidak Ditemukan",
-                //     ], 404);
-                // }else{
-                //     $function = $function->function;
-                // }
-                // $data_parsing = $request->all();
-                // $data_parsing = (object) $data_parsing;
-                // $data_parsing->total = $total;
-                // $calculate = AnalystFormula::where('function', $function)
-                //     ->where('data', $data_parsing)
-                //     ->where('id_parameter', $param->id)
-                //     ->process();
-
-                // $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
-                // $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-                // $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-                // if (empty($data_header)) {
-                //     $data_header = new KebisinganHeader;
-                //     $ws = new WsValueUdara;
-                // }
-                // $data_header->no_sampel = $request->no_sampel;
-                // // $data_header->id_po = $po->id;
-                // $data_header->id_parameter = $param->id;
-                // $data_header->parameter = $param->nama_lab;
-                // $data_header->ls = null;
-                // $data_header->lm = null;
-                // $data_header->min = $nilai_min;
-                // $data_header->max = $nilai_max;
-                // $data_header->suhu_udara = $reratasuhu;
-                // $data_header->kelembapan_udara = $reratakelemb;
-                // // $data_header->lhps = 1;
-                // $data_header->is_approved = true;
-                // $data_header->approved_by = $this->karyawan;
-                // $data_header->approved_at = Carbon::now();
-                // $data_header->created_by = $this->karyawan;
-                // $data_header->created_at = Carbon::now();
-                // $data_header->save();
-
-                // $ws->id_kebisingan_header = $data_header->id;
-                // $ws->no_sampel = $request->no_sampel;
-                // $ws->id_po = $po->id;
-                // $ws->hasil1 = $calculate['hasil'];
-                // $ws->save();
-                // $data_lapangan->is_approve = true;
-                // $data_lapangan->approved_by = $this->karyawan;
-                // $data_lapangan->approved_at = Carbon::now();
-                // $data_lapangan->save();
-                // 19-06-2025 - pembacaan total approve dan setting is_approve jika total approve sudah 7
-                $getTotalApprove = DataLapanganKebisingan::where('no_sampel', $no_sample)
-                    ->select(DB::raw('COUNT(no_sampel) AS total'))
-                    ->where('is_approve', 1)
-                    ->first();
-                if($getTotalApprove->total == 7){
-                    DB::beginTransaction();
-                    try {
-                        $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first();
-                        if($function == null){
-                            throw new Exception("Formula Tidak Ditemukan");
-                        }else{
-                            $function = $function->function;
-                        }
-                        $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->total = $total;
-                        $calculate = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $param->id)
-                            ->process();
-        
-                        $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
-                        $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-                        $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-                        if (empty($data_header)) {
-                            $data_header = new KebisinganHeader;
-                            $ws = new WsValueUdara;
-                        }
-                        $data_header->no_sampel = $request->no_sampel;
-                        // $data_header->id_po = $po->id;
-                        $data_header->id_parameter = $param->id;
-                        $data_header->parameter = $param->nama_lab;
-                        $data_header->ls = null;
-                        $data_header->lm = null;
-                        $data_header->min = $nilai_min;
-                        $data_header->max = $nilai_max;
-                        $data_header->suhu_udara = $reratasuhu;
-                        $data_header->kelembapan_udara = $reratakelemb;
-                        // $data_header->lhps = 1;
-                        $data_header->is_approved = true;
-                        $data_header->approved_by = $this->karyawan;
-                        $data_header->approved_at = Carbon::now();
-                        $data_header->created_by = $this->karyawan;
-                        $data_header->created_at = Carbon::now();
-                        $data_header->save();
-                    
-                        $ws->id_kebisingan_header = $data_header->id;
-                        $ws->no_sampel = $request->no_sampel;
-                        $ws->id_po = $po->id;
-                        $ws->hasil1 = $calculate['hasil'];
-                        $ws->satuan = $calculate['satuan'] ?? null;
-                        $ws->save();
-
-                        $data_lapangan->is_approve = true;
-                        $data_lapangan->approved_by = $this->karyawan;
-                        $data_lapangan->approved_at = Carbon::now();
-                        $data_lapangan->save();
-                        DB::commit();
-                    } catch (Exception $e) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => $e->getMessage(),
-                            'line' => $e->getLine(),
-                        ], 500);
-                    }
-                }else{
-                    DB::beginTransaction();
-                    try {
-                        $data = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                        if ($data) {
-                            $data->is_approve = true;
-                            $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
-                            $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
-                            $data->save();
-                        } else {
-                            // Tangani jika data tidak ditemukan
-                            Log::error('Data dengan ID ' . $request->id . ' tidak ditemukan.');
-                            dd('Data tidak ditemukan');
-                        }
-                        DB::commit();
-
-                        return response()->json([
-                            'status' => "Berhasil Di Approve",
-                            'data' => $data,
-                        ]);
-
-                    } catch (Exception $e) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => $e . getMessage(),
-                            'line' => $e . getLine(),
-                        ], 500);
-                    }
-                }
-            } else if ($jenis_durasi == "Sesaat") {
-                
-                $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first()->function;
-                $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->totSesaat = $totSesaat;
-                        $calculate = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $param->id)
-                            ->process();
-
-                $data_header = KebisinganHeader::where('no_sampel', $request->no_sampel)->first();
-                $ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-                $data_lapangan = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                if (empty($data_header)) {
-                    $data_header = new KebisinganHeader;
-                    $ws = new WsValueUdara;
-                }
-
-                $data_header->no_sampel = $request->no_sampel;
-                // $data_header->id_po = $po->id;
-                $data_header->id_parameter = $param->id;
-                $data_header->parameter = $param->nama_lab;
-                $data_header->min = $nilai_min;
-                $data_header->max = $nilai_max;
-                $data_header->ls = null;
-                $data_header->lm = null;
-                // $data_header->lhps = 1;
-                $data_header->suhu_udara = $reratasuhu;
-                $data_header->kelembapan_udara = $reratakelemb;
-                $data_header->is_approved = true;
-                $data_header->approved_by = $this->karyawan;
-                $data_header->approved_at = Carbon::now();
-                $data_header->created_by = $this->karyawan;
-                $data_header->created_at = Carbon::now();
-                $data_header->save();
-
-                $ws->id_kebisingan_header = $data_header->id;
-                $ws->no_sampel = $request->no_sampel;
-                $ws->id_po = $po->id;
-                $ws->hasil1 = $calculate['hasil'];
-                $ws->save();
-
-                $data_lapangan->is_approve = true;
-                $data_lapangan->approved_by = $this->karyawan;
-                $data_lapangan->approved_at = Carbon::now();
-                $data_lapangan->save();
-                // dd($data);
-            } else {
-                DB::beginTransaction();
-                try {
-                    $data = DataLapanganKebisingan::where('id', $request->id)->first();
-
-                    if ($data) {
-                        $data->is_approve = true;
-                        $data->approved_by = $this->karyawan; // Pastikan $this->karyawan valid
-                        $data->approved_at = Carbon::now();   // Pastikan tipe data untuk approved_at sesuai
-                        $data->save();
-                    } else {
-                        // Tangani jika data tidak ditemukan
-                        Log::error('Data dengan ID ' . $request->id . ' tidak ditemukan.');
-                        dd('Data tidak ditemukan');
-                    }
-                    app(NotificationFdlService::class)->sendApproveNotification("Kebisingan pada shift ($data->jenis_durasi_sampling)", $data->no_sampel, $this->karyawan, $data->created_by);
-                    DB::commit();
-
-                    return response()->json([
-                        'status' => "Berhasil Di Approve",
-                        'data' => $data,
-                    ]);
-
-                } catch (Exception $e) {
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => $e . getMessage(),
-                        'line' => $e . getLine(),
-                    ], 500);
+            foreach ($countL as $row) {
+                $decodedVal = json_decode($row->value_kebisingan, true);
+                if (is_array($decodedVal)) {
+                    $total[] = $decodedVal;
                 }
             }
-            app(NotificationFdlService::class)->sendApproveNotification("Kebisingan pada Shift $data_lapangan->jenis_durasi_sampling", $data_lapangan->no_sampel, $this->karyawan, $data_lapangan->created_by);
+
+            $nilaiMin = collect($total)->map(fn($t) => min($t))->min();
+            $nilaiMax = collect($total)->map(fn($t) => max($t))->max();
+
+            // ==== Tentukan Fungsi Formula Berdasarkan Durasi ====
+            $function = null;
+            $dataParsing = (object) $request->all();
+            $dataParsing->total = $total;
+
+            if ($jenis_durasi === "24 Jam") {
+                $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
+                    ->where('is_approve', true)
+                    ->count();
+
+                if ($approvedCount >= 6) {
+                    $function = 'DirectKebisingan24L7';
+                }
+            } elseif ($jenis_durasi === "8 Jam") {
+                $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
+                    ->where('is_approve', true)
+                    ->count();
+
+                if ($approvedCount >= 7) {
+                    $function = Formula::where('id_parameter', $param->id)
+                        ->where('is_active', true)
+                        ->value('function');
+                }
+            } elseif ($jenis_durasi === "Sesaat") {
+                $function = Formula::where('id_parameter', $param->id)
+                    ->where('is_active', true)
+                    ->value('function');
+                $dataParsing->totSesaat = json_decode($dataLapangan->value_kebisingan, true);
+            }
+
+            // ==== Jika ada formula, jalankan perhitungan ====
+            $calculate = null;
+            if ($function) {
+                $calculate = AnalystFormula::where('function', $function)
+                    ->where('data', $dataParsing)
+                    ->where('id_parameter', $param->id)
+                    ->process();
+
+                if (!is_array($calculate)) {
+                    throw new Exception("Formula tidak valid atau belum diimplementasikan");
+                }
+            }
+
+            // ==== Update atau Buat Header dan WS ====
+            $dataHeader = KebisinganHeader::firstOrNew(['no_sampel' => $no_sample]);
+            $ws = WsValueUdara::firstOrNew(['no_sampel' => $no_sample]);
+
+            $dataHeader->fill([
+                'id_parameter' => $param->id,
+                'parameter' => $param->nama_lab,
+                'min' => $nilaiMin,
+                'max' => $nilaiMax,
+                'suhu_udara' => $reratasuhu,
+                'kelembapan_udara' => $reratakelemb,
+                'ls' => $calculate['totalLSM'] ?? null,
+                'lm' => $calculate['rerataLSM'] ?? null,
+                'leq_ls' => $calculate['leqLS'] ?? null,
+                'leq_lm' => $calculate['leqLM'] ?? null,
+                'is_approved' => true,
+                'approved_by' => $this->karyawan,
+                'approved_at' => Carbon::now(),
+                'created_by' => $this->karyawan,
+                'created_at' => Carbon::now(),
+            ]);
+            $dataHeader->save();
+
+            $ws->fill([
+                'id_kebisingan_header' => $dataHeader->id,
+                'id_po' => $po->id,
+                'hasil1' => $calculate['hasil'] ?? null,
+                'hasil2' => $calculate['hasil2'] ?? null,
+                'satuan' => $calculate['satuan'] ?? null,
+            ]);
+            $ws->save();
+
+            // ==== Update status Approve ====
+            $dataLapangan->update([
+                'is_approve' => true,
+                'approved_by' => $this->karyawan,
+                'approved_at' => Carbon::now(),
+            ]);
+
+            // ==== Kirim Notifikasi ====
+            app(NotificationFdlService::class)
+                ->sendApproveNotification(
+                    "Kebisingan pada Shift ({$dataLapangan->jenis_durasi_sampling})",
+                    $dataLapangan->no_sampel,
+                    $this->karyawan,
+                    $dataLapangan->created_by
+                );
 
             DB::commit();
 
             return response()->json([
-                'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}",
-                'cat' => 1
+                'status' => "Berhasil Di Approve",
+                'message' => "Data Lapangan Kebisingan {$no_sample} berhasil diapprove oleh {$this->karyawan}",
             ], 200);
-        } else {
-            return response()->json([
-                'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}"
-            ], 401);
-        }
+
         } catch (Exception $e) {
             DB::rollBack();
             return response()->json([
@@ -565,8 +750,8 @@ class FdlKebisinganController extends Controller
                 'line' => $e->getLine(),
             ], 500);
         }
-
     }
+
 
     public function reject(Request $request)
     {
