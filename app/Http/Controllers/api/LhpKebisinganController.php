@@ -19,15 +19,21 @@ use Yajra\Datatables\Datatables;
 class LhpKebisinganController extends Controller
 {
     public function index(Request $request){
-        $data = OrderDetail::select('nama_perusahaan', 'no_order', 'cfr', DB::raw("GROUP_CONCAT(no_sampel SEPARATOR ', ') as no_sampel"), 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
-            ->with('lhps_kebisingan', 'orderHeader:no_document', 'dataLapanganKebisingan')
-            ->where('is_approve', true)
+        DB::statement("SET SESSION sql_mode = ''");
+        $data = OrderDetail::with([
+            'lhps_iklim',
+            'orderHeader' => function ($query) {
+                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
+            }
+        ])
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel, GROUP_CONCAT(regulasi SEPARATOR "||") as regulasi_all')
+            ->where('is_approve', 1)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', 'LIKE', '%-Kebisingan%')
             ->where('status', 3)
-            ->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
-            ->orderBy('tanggal_terima', 'desc');
+            ->groupBy('cfr')
+            ->get();
 
         return Datatables::of($data)->make(true);
     }
