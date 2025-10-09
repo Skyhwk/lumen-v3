@@ -85,60 +85,60 @@ class DraftUlkController extends Controller
         ], 201);
     }
 
-  public function handleMetodeSampling(Request $request)
-{
-    try {
-        $subKategori = explode('-', $request->kategori_3);
+    public function handleMetodeSampling(Request $request)
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
 
-        // Data utama
-        $data = MetodeSampling::where('kategori', '4-UDARA')
-            ->where('sub_kategori', strtoupper($subKategori[1]))
-            ->get();
+            // Data utama
+            $data = MetodeSampling::where('kategori', '4-UDARA')
+                ->where('sub_kategori', strtoupper($subKategori[1]))
+                ->get();
 
-        $result = $data->toArray();
+            $result = $data->toArray();
 
-        // Jika ada id_lhp, lakukan perbandingan array
-        if ($request->filled('id_lhp')) {
-            $header = LhpsLingHeader::find($request->id_lhp);
+            // Jika ada id_lhp, lakukan perbandingan array
+            if ($request->filled('id_lhp')) {
+                $header = LhpsLingHeader::find($request->id_lhp);
 
-            if ($header) {
-                $headerMetode = json_decode($header->methode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = json_decode($header->methode_sampling, true) ?? [];
 
-                foreach ($data as $key => $value) {
-                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                    $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                    if (!empty($missing)) {
-                        foreach ($missing as $miss) {
-                            $result[] = [
-                                'id' => null,
-                                'metode_sampling' => $miss,
-                                'kategori' => $value->kategori,
-                                'sub_kategori' => $value->sub_kategori,
-                            ];
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss,
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
+                            }
                         }
                     }
                 }
             }
+
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
-
-        return response()->json([
-            'status' => true,
-            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-            'data' => $result,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            'line' => $e->getLine(),
-        ], 500);
     }
-}
 
-   public function store(Request $request)
+    public function store(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -307,9 +307,7 @@ class DraftUlkController extends Controller
     }
 
 
- 
-         public function handleDatadetail(Request $request)
-    {
+    public function handleDatadetail(Request $request){
         try {
             $noSampel = explode(', ', $request->no_sampel);
 
@@ -560,7 +558,7 @@ class DraftUlkController extends Controller
         }
     }
 
-  private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+    private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
         $entry = [
@@ -590,15 +588,11 @@ class DraftUlkController extends Controller
         return $entry;
     }
 
-
- 
-  
-
-   public function handleApprove(Request $request, $isManual = true)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
             if($isManual) {
-                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
+                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
 
             if (!$konfirmasiLhp) {
                 $konfirmasiLhp = new KonfirmasiLhp();
@@ -644,12 +638,10 @@ class DraftUlkController extends Controller
                 ]);
 
                 
-                $data->is_approve = 1;
+                $data->is_approved = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-                 if ($data->count_print < 1) {
+                if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;
                 }
@@ -693,7 +685,7 @@ class DraftUlkController extends Controller
     }
 
     // Amang
-   public function handleReject(Request $request)
+    public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -825,7 +817,6 @@ class DraftUlkController extends Controller
     }
 
     // Amang
- 
 
     // Amang
     public function getLink(Request $request)
@@ -847,7 +838,7 @@ class DraftUlkController extends Controller
         return response()->json($users);
     }
     // Amang
-   public function handleRevisi(Request $request)
+    public function handleRevisi(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -916,5 +907,78 @@ class DraftUlkController extends Controller
         $data = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
         $extand = explode("|", $data);
         return $extand;
+    }
+
+    public function updateTanggalLhp(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dataHeader = LhpsLingHeader::find($request->id);
+
+            if (!$dataHeader) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            // Update tanggal LHP dan data pengesahan
+            $dataHeader->tanggal_lhp = $request->value;
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
+            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+            // Update QR Document jika ada
+            $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+            if ($qr) {
+                $dataQr = json_decode($qr->data, true);
+                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                $qr->data = json_encode($dataQr);
+                $qr->save();
+            }
+
+            // Render ulang file LHP
+            $detail = LhpsLingDetail::where('id_header', $dataHeader->id)->get();
+            $custom = LhpsLingCustom::where('id_header', $dataHeader->id)->get();
+
+            $groupedByPage = [];
+            foreach ($custom as $item) {
+                $page = $item->page;
+                $groupedByPage[$page][] = $item->toArray();
+            }
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($dataHeader)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUdaraAmbient')
+                ->render();
+
+            if ($dataHeader->file_lhp != $fileName) {
+                // ada perubahan nomor lhp yang artinya di token harus di update
+                GenerateLink::where('id_quotation', $dataHeader->id_token)->update(['fileName_pdf' => $fileName]);
+            }
+
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Tanggal LHP berhasil diubah',
+                'data' => $dataHeader
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
     }
 }
