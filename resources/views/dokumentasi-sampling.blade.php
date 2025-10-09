@@ -130,12 +130,12 @@
                             <tr>
                                 @forelse ($fotos as $foto)
                                     <td width="{{ $colWidth }}%" align="center">
-                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="width: auto; height: 200px;">
+                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="width: auto; height: 300px;">
                                         <div>{{ $foto['label'] }}</div>
                                     </td>
                                 @empty
                                     <td width="100%" align="center">
-                                        <div style="width: 100%; height: 200px; border: 1px solid #ccc; display: table;">
+                                        <div style="width: 100%; height: 300px; border: 1px solid #ccc; display: table;">
                                             <span style="display: table-cell; vertical-align: middle;">Dokumentasi Tidak Tersedia</span>
                                         </div>
                                     </td>
