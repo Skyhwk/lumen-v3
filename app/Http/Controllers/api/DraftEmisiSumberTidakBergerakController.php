@@ -273,9 +273,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                             $header->is_revisi = 0;
                             $header->is_generated = 0;
                             $header->count_revisi++;
-                            if ($header->count_revisi > 2) {
-                                $this->handleApprove($request, false);
-                            }
                         }
                         $header->save();
                     }
