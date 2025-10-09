@@ -12,6 +12,7 @@ use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\MasterRegulasi;
 use Carbon\Carbon;
 use Exception;
 use Yajra\Datatables\Datatables;
@@ -21,7 +22,7 @@ class LhpKebisinganController extends Controller
     public function index(Request $request){
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
-            'lhps_iklim',
+            'lhps_kebisingan',
             'orderHeader' => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
@@ -96,6 +97,53 @@ class LhpKebisinganController extends Controller
         $header->count_print = $header->count_print + 1; 
         $header->save();
         $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+
+        $detail = collect($detail)->sortBy([
+            ['tanggal_sampling', 'asc'],
+            ['no_sampel', 'asc']
+        ])->values()->toArray();
+        $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
+            ->groupBy('page')
+            ->toArray();
+
+        foreach ($custom as $idx => $cstm) {
+            $custom[$idx] = collect($cstm)->sortBy([
+                ['tanggal_sampling', 'asc'],
+                ['no_sampel', 'asc']
+            ])->values()->toArray();
+        }
+
+        $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
+        if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
+
+            $master_regulasi = MasterRegulasi::find($id_regulasii);
+            if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                $fileName = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($header)
+                    ->setDataCustom($custom)
+                    ->useLampiran(true)
+                    ->whereView('DraftKebisinganLh')
+                    ->render();
+            } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                $fileName = LhpTemplate::setDataDetail($detail)
+                    ->setDataHeader($header)
+                    ->setDataCustom($custom)
+                    ->useLampiran(true)
+                    ->whereView('DraftKebisinganLh24Jam')
+                    ->render();
+            }
+        } else {
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($header)
+                ->setDataCustom($custom)
+                ->useLampiran(true)
+                ->whereView('DraftKebisingan')
+                ->render();
+        }
+
+
+        $header->file_lhp = $fileName;
+        $header->save();
 
         $servicePrint = new PrintLhp();
         $servicePrint->printByFilename($header->file_lhp, $detail);
