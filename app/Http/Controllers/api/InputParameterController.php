@@ -1215,7 +1215,9 @@ class InputParameterController extends Controller
 						if($result->status) {
 							return response()->json([
 								'message'=> $result->message,
-								'status' => $result->status
+								'status' => $result->status,
+								'line' => $result->line ?? '',
+								'file' => $result->file ?? ''
 							], $result->status);
 						}
 					}
@@ -2921,7 +2923,9 @@ class InputParameterController extends Controller
 			DB::rollBack();
 			return (object)[
 				'message' => 'Gagal input data: '.$e->getMessage(),
-				'status' => 500
+				'status' => 500,
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
 			];
 		}
 	}
@@ -4631,7 +4635,7 @@ class InputParameterController extends Controller
 		}else if($suhu >= 60.5 && $suhu < 61) {
 			$nil_pv = 152.8;
 		} else {
-			throw new Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
+			throw new \Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
 		}
 
 		return $nil_pv;
