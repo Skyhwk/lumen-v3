@@ -37,14 +37,8 @@ class LingkunganKerjaHF
         $vl = null;
         $st = null;
 
-        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-        if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format((floatval($ks) / floatval($Vu)) * 1000, 4));
-        }else {
-            $C = 0;
-        }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 64.46, 5));
+        $C2 = number_format(((((20 / 19) * ($ks - $kb) * $data->fp) / $data->vs) * 24.45) / 20.01,5, '.', '');
+
 
         $satuan = 'ppm';
 
@@ -62,9 +56,9 @@ class LingkunganKerjaHF
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $C,
+            'hasil1' => null,
             'hasil2' => null,
-            'hasil3' => null,
+            'hasil3' => $C2,
             'hasil4' => null,
             'satuan' => $satuan,
             'vl' => $vl,

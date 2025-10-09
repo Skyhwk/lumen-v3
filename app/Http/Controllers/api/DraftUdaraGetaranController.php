@@ -346,7 +346,7 @@ class DraftUdaraGetaranController extends Controller
                     ['no_sampel', 'asc']
                 ])->values()->toArray();
             }
-            
+
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
                 $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
@@ -786,8 +786,6 @@ class DraftUdaraGetaranController extends Controller
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
-                    $data->nama_karyawan = $this->karyawan;
-                    $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
