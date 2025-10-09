@@ -217,7 +217,7 @@ class CreateKontrakJob extends Job
             $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
 
             $dataH->save();
-
+            
             foreach ($data_pendukung as $x => $pengujian){
                 $dataD = new QuotationKontrakD;
                 $dataD->id_request_quotation_kontrak_h = $dataH->id;
@@ -268,7 +268,7 @@ class CreateKontrakJob extends Job
                         if (count($ambil_data) > 1) {
                             $found = false;
                             foreach ($ambil_data as $xc => $zx) {
-                                if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
+                                if (\explode(' ', $zx->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran) {
                                     $harga_parameter[] = $zx->harga;
                                     $volume_parameter[] = $zx->volume;
                                     $found = true;
