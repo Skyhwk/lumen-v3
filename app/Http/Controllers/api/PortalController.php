@@ -29,16 +29,17 @@ use App\Models\{
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
+    JobTask,
     LhpsAirCustom,
     LhpsAirDetail,
     MasterRegulasi,
+    OrderHeader,
     Printers
-    
 };
 //services
-use App\Services\{GeneratePraSampling, GetBawahan, LhpTemplate, SendTelegram, SamplingPlanServices, Printing, PrintLhp};
+use App\Services\{GeneratePraSampling, GetBawahan, LhpTemplate, SendTelegram, SamplingPlanServices, Printing, PrintLhp, RenderInvoice, RenderInvoiceTitik, RenderKontrakCopy, RenderNonKontrakCopy};
 //jobs
-use App\Jobs\{RenderSamplingPlan, JobPrintLhp};
+use App\Jobs\{RenderSamplingPlan, JobPrintLhp, RenderPdfPenawaran};
 use Illuminate\Support\Facades\Log;
 
 class PortalController extends Controller
@@ -383,23 +384,23 @@ class PortalController extends Controller
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
                             }
-                        } else if ($cek->quotation_status == 'draft_lhp_getaran'){
-                            $data = LhpsGetaranHeader::with('link','order_detail')
-                            ->where('id',$cek->id_quotation)
-                            ->first();
+                        } else if ($cek->quotation_status == 'draft_lhp_getaran') {
+                            $data = LhpsGetaranHeader::with('link', 'order_detail')
+                                ->where('id', $cek->id_quotation)
+                                ->first();
                             $uri = env('APP_URL') . '/public/dokumen/LHPS/';
-                            if($data !== null){
+                            if ($data !== null) {
                                 $data->type = $cek->quotation_status;
-                                $data->chekjadwal =null;
+                                $data->chekjadwal = null;
                                 if ($data->link) {
                                     $data->link->fileName_pdf = $cek->fileName_pdf;
                                 }
-                                if($data->order_detail->cfr){
+                                if ($data->order_detail->cfr) {
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
                             }
-                        }else if ($cek->quotation_status == 'draft_iklim'){
-                             $data = LhpsIklimHeader::with('link')
+                        } else if ($cek->quotation_status == 'draft_iklim') {
+                            $data = LhpsIklimHeader::with('link')
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
                                 ->first();
@@ -1163,9 +1164,43 @@ class PortalController extends Controller
         }
     }
 
-    public function renderPenawaran(Request $request)
+    public function renderQuotation(Request $request)
     {
-        dd('belum kelar bos');
+        if ($request->is_copy) {
+            if ($request->type == 'contract') {
+                $render = new RenderKontrakCopy();
+                $render->renderDataQuotation($request->quotation_id, 'id');
+            } else {
+                $render = new RenderNonKontrakCopy();
+                $render->renderHeader($request->quotation_id, 'id');
+            }
+        } else {
+            if ($request->type == 'contract') {
+                $data = QuotationKontrakH::where('id', $request->quotation_id)->first();
+                JobTask::insert([
+                    'job' => 'RenderPdfPenawaran',
+                    'status' => 'processing',
+                    'no_document' => $data->no_document,
+                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+
+                $job = new RenderPdfPenawaran($request->quotation_id, 'contract');
+                $this->dispatch($job);
+            } else {
+                $data = QuotationNonKontrak::where('id', $request->quotation_id)->first();
+                JobTask::insert([
+                    'job' => 'RenderPdfPenawaran',
+                    'status' => 'processing',
+                    'no_document' => $data->no_document,
+                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+
+                $job = new RenderPdfPenawaran($request->quotation_id, 'non kontrak');
+                $this->dispatch($job);
+            }
+        }
+
+        return response()->json(['message' => 'Job has been queued successfully'], 200);
     }
 
     public function renderLhp(Request $request)
@@ -1282,6 +1317,100 @@ class PortalController extends Controller
 
     public function renderInvoice(Request $request)
     {
-        dd('belum kelar bos');
+        if ($request->is_copy) {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoiceTitik();
+                $render->renderInvoice($item);
+            }
+        } else {
+            foreach ($request->invoice_numbers as $item) {
+                $render = new RenderInvoice();
+                $render->renderInvoice($item);
+            }
+        }
+
+        return response()->json(['message' => 'Invoice has been rendered successfully'], 200);
+    }
+
+    public function getQuotation(Request $request)
+    {
+        if (str_contains($request->quotation_number, 'QTC')) {
+            $quotation = QuotationKontrakH::where('no_document', $request->quotation_number)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+
+            if (!$quotation) return response()->json(['message' => 'Quotation not found'], 404);
+
+            return response()->json([
+                'customer_name' => $quotation->nama_perusahaan, 
+                'consultant_name' => $quotation->konsultan
+            ], 200);
+        } else if (str_contains($request->quotation_number, 'QT/')) {
+            $quotation = QuotationNonKontrak::where('no_document', $request->quotation_number)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+
+            if (!$quotation) return response()->json(['message' => 'Quotation not found'], 404);
+
+            return response()->json([
+                'customer_name' => $quotation->nama_perusahaan, 
+                'consultant_name' => $quotation->konsultan
+            ], 200);
+        }
+
+        return response()->json(['message' => 'Invalid quotation number'], 500);
+    }
+
+    public function updateCustomer(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            if (str_contains($request->quotation_number, 'QTC')) {
+                $quotation = QuotationKontrakH::where('no_document', $request->quotation_number)
+                    ->where('is_active', true)
+                    ->latest('id')
+                    ->first();
+            } else if (str_contains($request->quotation_number, 'QT/')) {
+                $quotation = QuotationNonKontrak::where('no_document', $request->quotation_number)
+                    ->where('is_active', true)
+                    ->latest('id')
+                    ->first();
+            }
+
+            if (!$quotation) return response()->json(['message' => 'Quotation not found'], 404);
+
+            $quotation->nama_perusahaan = $request->customer_name;
+            $quotation->konsultan = $request->consultant_name ?? null;
+            $quotation->save();
+
+            $orderHeader = OrderHeader::where('no_document', $quotation->no_document)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+
+            if ($orderHeader) {
+                $orderHeader->nama_perusahaan = $request->customer_name;
+                $orderHeader->konsultan = $request->consultant_name ?? null;
+                $orderHeader->save();
+
+                OrderDetail::where('id_order_header', $orderHeader->id)
+                    ->update([
+                        'nama_perusahaan' => $request->customer_name, 
+                        'konsultan' => $request->consultant_name ?? null
+                    ]);
+            }
+
+            Jadwal::where('no_quotation', $request->quotation_number)
+                ->where('is_active', true)
+                ->update(['nama_perusahaan' => $request->customer_name]);
+
+            DB::commit();
+            return response()->json(['message' => 'Customer updated successfully'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to update customer'], 500);
+        }
     }
 }
