@@ -714,7 +714,7 @@ class DraftEmisiSumberBergerakController extends Controller
                     'message' => $e->getMessage(),
                 ], 401);
             }
-        } else if ($request->category2 == 34) {
+        } else if ($request->category == 34) {
             try {
                 $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
                 $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
