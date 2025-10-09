@@ -2086,7 +2086,7 @@ class InputParameterController extends Controller
             }
 
             // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-            if(!is_null($method_t_coli) && !in_array($request->no_sample, $quota_count[2]['Total Coliform'])){
+            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
                 if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
                     $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
                         ->where('required_parameter', $total_coliform)
@@ -2251,7 +2251,7 @@ class InputParameterController extends Controller
                 }
 
                 // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-                if(!is_null($method_t_coli) && !in_array($request->no_sample, $quota_count[2]['Total Coliform'])){
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
                     if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
                         $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
                             ->where('required_parameter', $total_coliform)
@@ -2434,7 +2434,7 @@ class InputParameterController extends Controller
                     }
                 }
 
-                if(!is_null($method_t_coli) || !in_array($request->no_sample, $quota_count['Total Coliform'])){
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
                     if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
                         $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
                             ->where('required_parameter', $total_coliform)
