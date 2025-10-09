@@ -25,6 +25,52 @@ class CreateKontrakJob extends Job
         $this->sales_id = $sales_id;
     }
 
+    private function groupDataSampling(array $data)
+    {
+        $grouped = [];
+    
+        foreach ($data as $periodeItem) {
+            $periode = $periodeItem->periode_kontrak ?? null;
+            if (!$periode || empty($periodeItem->data_sampling)) continue;
+    
+            foreach ($periodeItem->data_sampling as $sampling) {
+                // Buat key unik untuk mengelompokkan
+                $key = md5(json_encode([
+                    'kategori_1'      => $sampling->kategori_1,
+                    'kategori_2'      => $sampling->kategori_2,
+                    'parameter'       => $sampling->parameter,
+                    'jumlah_titik'    => $sampling->jumlah_titik,
+                    'total_parameter' => $sampling->total_parameter,
+                    'regulasi'        => $sampling->regulasi,
+                ]));
+    
+                // Hapus properti yang tidak diperlukan
+                unset($sampling->harga_satuan, $sampling->harga_total, $sampling->volume);
+    
+                if (!isset($grouped[$key])) {
+                    $grouped[$key] = (object)[
+                        'kategori_1'      => $sampling->kategori_1,
+                        'kategori_2'      => $sampling->kategori_2,
+                        'penamaan_titik'  => [], // default kosong
+                        'parameter'       => $sampling->parameter,
+                        'jumlah_titik'    => $sampling->jumlah_titik,
+                        'total_parameter' => $sampling->total_parameter,
+                        'periode_kontrak' => [$periode],
+                        'biaya_preparasi' => [], // default kosong
+                        'regulasi'        => $sampling->regulasi,
+                    ];
+                } else {
+                    // Tambahkan periode baru jika belum ada
+                    if (!in_array($periode, $grouped[$key]->periode_kontrak)) {
+                        $grouped[$key]->periode_kontrak[] = $periode;
+                    }
+                }
+            }
+        }
+    
+        return array_values($grouped);
+    }
+
     public function handle()
     { 
         $payload = $this->data;
@@ -63,6 +109,10 @@ class CreateKontrakJob extends Job
             $no_quotation = sprintf('%06d', $no_);
             $no_document = 'ISL/QTC/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
 
+            $data_pendukung = $payload->data_pendukung;
+            $periodeAwal = $data_pendukung[0]->periode_kontrak;
+            $periodeAkhir = $data_pendukung[count($data_pendukung) - 1]->periode_kontrak;
+
             // Implementasi untuk create kontrak
             // Insert Data Quotation Kontrak Header
             $dataH = new QuotationKontrakH;
@@ -89,8 +139,8 @@ class CreateKontrakJob extends Job
             $dataH->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
             $dataH->no_tlp_pic_sampling = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $dataH->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
-            $dataH->periode_kontrak_awal = $payload->data_pendukung[0]->periodeAwal;
-            $dataH->periode_kontrak_akhir = $payload->data_pendukung[0]->periodeAkhir;
+            $dataH->periode_kontrak_awal = $periodeAwal;
+            $dataH->periode_kontrak_akhir = $periodeAkhir;
             $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
             $dataH->created_by = $this->karyawan;
             $dataH->created_at = DATE('Y-m-d H:i:s');
@@ -98,81 +148,77 @@ class CreateKontrakJob extends Job
             $data_s = [];
             $period = [];
 
-            $globalTitikCounter = 1; // <======= BUAT NOMOR DI PENAMAAN TITIK
-            foreach ($payload->data_pendukung as $key => $data_pendukungH) {
-                $param = [];
-                $regulasi = '';
-                $periode = '';
+            $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
 
-                if ($data_pendukungH->parameter != null)
-                    $param = $data_pendukungH->parameter;
-                if (isset($data_pendukungH->regulasi))
-                    $regulasi = $data_pendukungH->regulasi;
-                if ($data_pendukungH->periode != null)
-                    $periode = $data_pendukungH->periode;
-
-                $exp = explode("-", $data_pendukungH->kategori_1);
+            foreach ($dataPendukungHeader as $i => $item) {
+                $param = $item->parameter;
+                $exp = explode("-", $item->kategori_1);
                 $kategori = $exp[0];
                 $vol = 0;
 
-                // GET PARAMETER NAME FOR CEK HARGA KONTRAK
                 $parameter = [];
-                foreach ($data_pendukungH->parameter as $va) {
-                    $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
+                foreach ($param as $par) {
+                    $cek_par = Parameter::where('id', explode(';', $par)[0])->first();
                     array_push($parameter, $cek_par->nama_lab);
                 }
 
-                $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                    ->where('is_active', true)
-                    ->whereIn('nama_parameter', $parameter)
-                    ->where('id_kategori', $kategori)
-                    ->first();
+                $harga_db = [];
+                $volume_db = [];
+                foreach ($parameter as $param_) {
+                    $ambil_data = HargaParameter::where('id_kategori', $kategori)
+                        ->where('nama_parameter', $param_)
+                        ->orderBy('id', 'ASC')
+                        ->get();
 
-                if ($harga_pertitik->volume != null)
+
+                    $cek_harga_parameter = $ambil_data->first(function ($item) use ($payload) {
+                        return explode(' ', $item->created_at)[0] > $payload->informasi_pelanggan->tgl_penawaran;
+                    }) ?? $ambil_data->first();
+
+                    $harga_db[] = $cek_harga_parameter->harga ?? 0;
+                    $volume_db[] = $cek_harga_parameter->volume ?? 0;
+
+                }
+
+                $harga_pertitik = (object) [
+                    'volume' => array_sum($volume_db),
+                    'total_harga' => array_sum($harga_db)
+                ];
+
+                if ($harga_pertitik->volume != null) {
                     $vol += floatval($harga_pertitik->volume);
-                if ($data_pendukungH->jumlah_titik == '') {
-                    $reqtitik = 0;
-                } else {
-                    $reqtitik = $data_pendukungH->jumlah_titik;
                 }
 
-                $temp_prearasi = [];
-                if ($data_pendukungH->biaya_preparasi != null || $data_pendukungH->biaya_preparasi != "") {
-                    foreach ($data_pendukungH->biaya_preparasi as $pre) {
-                        if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
-                            $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ','], '', $pre->biaya_preparasi_padatan))];
-                    }
-                }
-                $biaya_preparasi = $temp_prearasi;
+                $titik = $item->jumlah_titik;
 
-                array_push($data_pendukung_h, (object) [
-                    'kategori_1' => $data_pendukungH->kategori_1,
-                    'kategori_2' => $data_pendukungH->kategori_2,
-                    'regulasi' => $regulasi,
+                $data_sampling[$i] = [
+                    'kategori_1' => $item->kategori_1,
+                    'kategori_2' => $item->kategori_2,
+                    'penamaan_titik' => $item->penamaan_titik,
                     'parameter' => $param,
-                    'jumlah_titik' => $data_pendukungH->jumlah_titik,
-                    'penamaan_titik' => $data_pendukungH->penamaan_titik,
+                    'jumlah_titik' => $titik,
                     'total_parameter' => count($param),
                     'harga_satuan' => $harga_pertitik->total_harga,
-                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
+                    'harga_total' => floatval($harga_pertitik->total_harga) * (int) $titik,
                     'volume' => $vol,
-                    'periode' => $periode,
-                    'biaya_preparasi' => $biaya_preparasi
-                ]);
+                    'periode' => $item->periode_kontrak,
+                    'biaya_preparasi' => []
+                ];
 
-                foreach ($data_pendukungH->periode as $key => $v) {
+                isset($item->regulasi) ? $data_sampling[$i]['regulasi'] = $item->regulasi : $data_sampling[$i]['regulasi'] = null;
+
+                foreach ($item->periode_kontrak as $key => $v) {
                     array_push($period, $v);
                 }
+
+                array_push($data_pendukung_h, $data_sampling[$i]);
             }
 
             $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
 
             $dataH->save();
 
-            $period = array_values(array_unique($period));
-
-            foreach ($period as $key => $per) {
-                // Insert Data Quotation Kontrak Detail
+            foreach ($data_pendukung as $x => $pengujian){
                 $dataD = new QuotationKontrakD;
                 $dataD->id_request_quotation_kontrak_h = $dataH->id;
 
@@ -185,117 +231,124 @@ class CreateKontrakJob extends Job
                 $harga_padatan = 0;
                 $harga_swab_test = 0;
                 $harga_tanah = 0;
+                $harga_pangan = 0;
                 $grand_total = 0;
                 $total_diskon = 0;
-                $j = $key + 1;
-                $n = 0;
-
                 $desc_preparasi = [];
                 $harga_preparasi = 0;
-                foreach ($payload->data_pendukung as $m => $data_pendukungD) {
-                    if (in_array($per, $data_pendukungD->periode)) {
-                        $param = [];
-                        $regulasi = '';
-                        if ($data_pendukungD->parameter != null)
-                            $param = $data_pendukungD->parameter;
-                        if (isset($data_pendukungD->regulasi))
-                            $regulasi = $data_pendukungD->regulasi;
 
-                        $exp = explode("-", $data_pendukungD->kategori_1);
-                        $kategori = $exp[0];
-                        $vol = 0;
+                $n = 0;
 
-                        // GET PARAMETER NAME FOR CEK HARGA KONTRAK
-                        $parameter = [];
-                        foreach ($data_pendukungD->parameter as $va) {
-                            $cek_par = DB::table('parameter')->where('id', explode(';', $va)[0])->first();
-                            array_push($parameter, $cek_par->nama_lab);
+                // Perbaikan: data_sampling diupdate di dalam foreach, pastikan data yang di luar foreach sudah terupdate
+                foreach ($pengujian->data_sampling as $i => $sampling) {
+                    $id_kategori = \explode("-", $sampling->kategori_1)[0];
+                    $kategori = \explode("-", $sampling->kategori_1)[1];
+                    $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
+                    
+                    $parameters = [];
+                    $id_parameter = [];
+                    foreach ($sampling->parameter as $item) {
+                        $cek_par = DB::table('parameter')
+                            ->where('id', explode(';', $item)[0])->first();
+                        if ($cek_par) {
+                            $parameters[] = $cek_par->nama_lab;
+                            $id_parameter[] = $cek_par->id;
                         }
+                    }
+                    
+                    $harga_parameter = [];
+                    $volume_parameter = [];
 
-                        $harga_pertitik = HargaParameter::select(DB::raw("SUM(harga) as total_harga, SUM(volume) as volume"))
-                            ->where('is_active', true)
-                            ->whereIn('nama_parameter', $parameter)
-                            ->where('id_kategori', $kategori)
-                            ->first();
-
-                        if ($harga_pertitik->volume != null)
-                            $vol += floatval($harga_pertitik->volume);
-                        if ($data_pendukungD->jumlah_titik == '') {
-                            $reqtitik = 0;
+                    foreach ($parameters as $parameter) {
+                        $ambil_data = HargaParameter::where('id_kategori', $id_kategori)
+                            ->where('nama_parameter', $parameter)
+                            ->orderBy('id', 'ASC')
+                            ->get();
+                        
+                        if (count($ambil_data) > 1) {
+                            $found = false;
+                            foreach ($ambil_data as $xc => $zx) {
+                                if (\explode(' ', $zx->created_at)[0] > $informasi_pelanggan->tgl_penawaran) {
+                                    $harga_parameter[] = $zx->harga;
+                                    $volume_parameter[] = $zx->volume;
+                                    $found = true;
+                                    break;
+                                }
+                                if ((count($ambil_data) - 1) == $xc && !$found) {
+                                    $zx = $ambil_data[0];
+                                    $harga_parameter[] = $zx->harga;
+                                    $volume_parameter[] = $zx->volume;
+                                    break;
+                                }
+                            }
+                        } else if (count($ambil_data) == 1) {
+                            foreach ($ambil_data as $zx) {
+                                $harga_parameter[] = $zx->harga;
+                                $volume_parameter[] = $zx->volume;
+                                break;
+                            }
                         } else {
-                            $reqtitik = $data_pendukungD->jumlah_titik;
+                            $harga_parameter[] = 0;
+                            $volume_parameter[] = 0;
                         }
+                    }
 
-                        //============= BIAYA PREPARASI ==================
-                        $temp_prearasi = [];
-                        if ($data_pendukungD->biaya_preparasi != null || $data_pendukungD->biaya_preparasi != "") {
-                            foreach ($data_pendukungD->biaya_preparasi as $pre) {
-                                if ($pre->desc_preparasi != null && $pre->biaya_preparasi_padatan != null)
-                                    $temp_prearasi[] = ['Deskripsi' => $pre->desc_preparasi, 'Harga' => floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan))];
-                                if ($pre->biaya_preparasi_padatan != null || $pre->biaya_preparasi_padatan != "")
-                                    $harga_preparasi += floatval(\str_replace(['Rp. ', ',', '.'], '', $pre->biaya_preparasi_padatan));
-                            }
-                        }
-                        $biaya_preparasi = $temp_prearasi;
+                    $vol_db = array_sum($volume_parameter);
+                    $har_db = array_sum($harga_parameter);
 
-                        // dd($biaya_preparasi);
+                    $harga_pertitik = (object) [
+                        'volume' => $vol_db,
+                        'total_harga' => $har_db
+                    ];
 
-                        // PENENTUAN NOMOR PENAMAAN TITIK
-                        $penamaan_titik_fixed = [];
-                        if ($data_pendukungD->penamaan_titik != null) {
-                            foreach ($data_pendukungD->penamaan_titik as $pt) {
-                                $penamaan_titik_fixed[] = [sprintf('%03d', $globalTitikCounter) => trim($pt)];
-                                $globalTitikCounter++;
-                            }
-                        }
+                    // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
+                    $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
+                    
+                    $pengujian->data_sampling[$i]->regulasi = $regulasi;
+                    $pengujian->data_sampling[$i]->harga_satuan = $har_db;
+                    $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
+                    $pengujian->data_sampling[$i]->volume = $vol_db;
 
-                        $data_sampling[$n++] = [
-                            'kategori_1' => $data_pendukungD->kategori_1,
-                            'kategori_2' => $data_pendukungD->kategori_2,
-                            'regulasi' => $regulasi,
-                            'parameter' => $param,
-                            'jumlah_titik' => $data_pendukungD->jumlah_titik,
-                            'penamaan_titik' => $penamaan_titik_fixed,
-                            'total_parameter' => count($param),
-                            'harga_satuan' => $harga_pertitik->total_harga,
-                            'harga_total' => floatval($harga_pertitik->total_harga) * (int) $reqtitik,
-                            'volume' => $vol,
-                            'biaya_preparasi' => $biaya_preparasi
-                        ];
+                    if (isset($pengujian->data_sampling[$i]->biaya_preparasi)) {
+                        unset($pengujian->data_sampling[$i]->biaya_preparasi);
+                    }
 
-                        // kalkulasi harga parameter sesuai titik
-                        if ($kategori == 1) { // air
-                            // dd('masuk');
-                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 4) { //  udara
-                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 5) { // emisi
-
-                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 6) { // padatan
-
-                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 7) { // swab test
-
-                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        } else if ($kategori == 8) { // tanah
-
-                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $reqtitik;
-                        }
-                        // end kalkulasi harga parameter sesuai titik
+                    //bagian untuk di parsing keluar ke variable lain
+                    switch ($id_kategori) {
+                        case '1':
+                            $harga_air += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '4':
+                            $harga_udara += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '5':
+                            $harga_emisi += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '6':
+                            $harga_padatan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '7':
+                            $harga_swab_test += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '8':
+                            $harga_tanah += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
+                        case '9':
+                            $harga_pangan += floatval($harga_pertitik->total_harga) * (int) $jumlah_titik;
+                            break;
                     }
                 }
 
-                $datas[$j] = [
-                    'periode_kontrak' => $per,
-                    'data_sampling' => array_values($data_sampling)
-                    // 'data_sampling' => json_encode(array_values($data_sampling), JSON_UNESCAPED_UNICODE)
-                ];
-
-                $dataD->periode_kontrak = $per;
+                $dataD->periode_kontrak = $pengujian->periode_kontrak;
                 $grand_total += $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
-                $dataD->data_pendukung_sampling = json_encode($datas, JSON_UNESCAPED_UNICODE);
-                // $dataD->data_pendukung_sampling = json_encode($datas);
+
+                // $dataD->data_pendukung_sampling = json_encode($pengujian->data_sampling, JSON_UNESCAPED_UNICODE);
+                $data_sampling[$x] = [
+                    'periode_kontrak' => $pengujian->periode_kontrak,
+                    'data_sampling' => $pengujian->data_sampling
+                ];
+                
+                $dataD->data_pendukung_sampling = json_encode($data_sampling, JSON_UNESCAPED_UNICODE);
                 // end data sampling
                 $dataD->harga_air = $harga_air;
                 $dataD->harga_udara = $harga_udara;
@@ -303,11 +356,22 @@ class CreateKontrakJob extends Job
                 $dataD->harga_padatan = $harga_padatan;
                 $dataD->harga_swab_test = $harga_swab_test;
                 $dataD->harga_tanah = $harga_tanah;
+                $dataD->harga_pangan = $harga_pangan;
 
-                //============= BIAYA PREPARASI
-                $dataD->biaya_preparasi = json_encode($desc_preparasi);
+                $dataD->biaya_preparasi = json_encode($pengujian->biaya_preparasi);
+                $array_harga_preparasi = array_map(function ($pre) {
+                    if (isset($pre->Harga)) {
+                        return $pre->Harga;
+                    } elseif (isset($pre->harga)) {
+                        return $pre->harga;
+                    } else {
+                        return 0;
+                    }
+                }, $pengujian->biaya_preparasi);
+
+                $harga_preparasi = array_sum($array_harga_preparasi);
                 $dataD->total_biaya_preparasi = $harga_preparasi;
-                // dd($dataD);
+
                 $dataD->save();
             }
 
