@@ -3577,27 +3577,8 @@ class RequestQuotationController extends Controller
                         $no_qt_lama = $cek_order->no_document;
                         $no_qt_baru = $dataH->no_document;
                         $id_order = $data_lama->id_order;
-
-                        // $parse = new GeneratePraSampling;
-                        // $parse->type('QTC');
-                        // $parse->where('no_qt_lama', $no_qt_lama);
-                        // $parse->where('no_qt_baru', $no_qt_baru);
-                        // $parse->where('id_order', $id_order);
-                        // $parse->save();
-                    } else {
-                        // $parse = new GeneratePraSampling;
-                        // $parse->type('QTC');
-                        // $parse->where('no_qt_baru', $dataH->no_document);
-                        // $parse->where('generate', 'new');
-                        // $parse->save();
-                    }
-                } else {
-                    // $parse = new GeneratePraSampling;
-                    // $parse->type('QTC');
-                    // $parse->where('no_qt_baru', $dataH->no_document);
-                    // $parse->where('generate', 'new');
-                    // $parse->save();
-                }
+                    } 
+                } 
 
                 // dd('==========================');
                 JobTask::insert([

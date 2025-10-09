@@ -85,14 +85,10 @@ class CreateKontrakJob extends Job
             $dataH->email_pic_order = $payload->informasi_pelanggan->email_pic_order;
             $dataH->email_cc = (!empty($payload->informasi_pelanggan->email_cc) && sizeof($payload->informasi_pelanggan->email_cc) !== 0) ? json_encode($payload->informasi_pelanggan->email_cc) : null;
             $dataH->alamat_sampling = $payload->informasi_pelanggan->alamat_sampling;
-            // $dataH->no_tlp_sampling = \str_replace(["-", "(", ")", " ", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $dataH->nama_pic_sampling = ucwords($payload->informasi_pelanggan->nama_pic_sampling);
             $dataH->jabatan_pic_sampling = $payload->informasi_pelanggan->jabatan_pic_sampling;
             $dataH->no_tlp_pic_sampling = \str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $dataH->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
-            //end lokasi sampling customer
-            // $dataH->status_wilayah = $payload->status_wilayah;
-            // $dataH->wilayah = $payload->wilayah;
             $dataH->periode_kontrak_awal = $payload->data_pendukung[0]->periodeAwal;
             $dataH->periode_kontrak_akhir = $payload->data_pendukung[0]->periodeAkhir;
             $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
