@@ -80,6 +80,8 @@ class FdlKebisinganController extends Controller
 
     public function approve(Request $request)
     {
+        DB::beginTransaction();
+        try {
         if (isset($request->id) && $request->id != null) {
             $po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             if ($po) {
@@ -114,6 +116,8 @@ class FdlKebisinganController extends Controller
                 ->orderBy('value_kebisingan')
                 ->get();
             $totalL = $countL->count();
+            $total = [];
+            $totSesaat = [];
 
             $jumsuhu = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('suhu_udara');
             $jumkelemb = DataLapanganKebisingan::where('no_sampel', $no_sample)->sum('kelembapan_udara');
@@ -124,6 +128,7 @@ class FdlKebisinganController extends Controller
                 $total[] = json_decode($data->value_kebisingan);
                 $totSesaat = json_decode($data->value_kebisingan);
             }
+
 
             for ($i = 0; $i < count($total); $i++) {
                 $nilaiMin[$i] = min($total[$i]);
@@ -460,6 +465,7 @@ class FdlKebisinganController extends Controller
                     }
                 }
             } else if ($jenis_durasi == "Sesaat") {
+                
                 $function = Formula::where('id_parameter', $param->id)->where('is_active', true)->first()->function;
                 $data_parsing = $request->all();
                         $data_parsing = (object) $data_parsing;
@@ -538,6 +544,15 @@ class FdlKebisinganController extends Controller
                     ], 500);
                 }
             }
+            app(NotificationFdlService::class)->sendApproveNotification(
+                "Kebisingan pada shift ($data->jenis_durasi_sampling)",
+                $data->no_sampel,
+                $this->karyawan,
+                $data->created_by
+            );
+
+            DB::commit();
+
             return response()->json([
                 'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}",
                 'cat' => 1
@@ -546,6 +561,13 @@ class FdlKebisinganController extends Controller
             return response()->json([
                 'message' => "Data Lapangan Kebisingan dengan No Sampel {$request->no_sampel} Telah di Approve oleh {$this->karyawan}"
             ], 401);
+        }
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
 
     }
