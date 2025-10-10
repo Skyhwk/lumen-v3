@@ -1206,7 +1206,7 @@ class AppsBasController extends Controller
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
                 ->get();
-
+            
             $persiapanHeader = $dataList->first(function ($item) use ($expectednoSampel) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $expectednoSampel)) > 0;

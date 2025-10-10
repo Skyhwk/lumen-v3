@@ -36,7 +36,7 @@ class ReleaseAttendanceController extends Controller
 
         //=====================cek folder=========================================
         $dirRollback = '/mnt/backup/file/attendance/' . $folderRollback;
-        $dirMain = '/var/www/javascript/frontend/attendance/build/';
+        $dirMain = '/var/www/javascript/frontend/attendance/';
         $dirBackup = '/mnt/backup/file/attendance/' . $folderMain;
 
 

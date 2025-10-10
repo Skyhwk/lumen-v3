@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Sector;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class OrderDetail extends Sector
 {
@@ -478,6 +479,65 @@ class OrderDetail extends Sector
 
     public function getAnyDataLapanganPadatan()
     {
+        return null;
+    }
+
+    public function allDetailLingkunganHidup()
+    {
+        return $this->hasMany(DetailLingkunganHidup::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
+    }
+    
+    public function allDetailLingkunganKerja()
+    {
+        return $this->hasMany(DetailLingkunganKerja::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
+    }
+
+    protected $anyDataLapanganRelations = [
+        'dataLapanganAir',
+
+        'allDetailLingkunganHidup',
+        'allDetailLingkunganKerja',
+        'dataLapanganDirectLain',
+        'dataLapanganIklimPanas',
+        'dataLapanganPartikulatMeter',
+        'dataLapanganMedanLM',
+        'dataLapanganKebisinganPersonal',
+        'dataLapanganKebisingan',
+        'dataLapanganGetaranPersonal',
+        'dataLapanganGetaran',
+        'dataLapanganDebuPersonal',
+        'dataLapanganIklimDingin',
+        'dataLapanganMicrobiologiUdara',
+        'dataLapanganSwab',
+        'dataLapanganCahaya',
+        'dataLapanganPsikologi',
+        'data_lapangan_ergonomi',
+        'dataLapanganSinarUV',
+
+        'dataLapanganEmisiCerobong',
+        'dataLapanganEmisiKendaraan',
+    ];
+
+    public function scopeWithAnyDataLapangan($query)
+    {
+        return $query->with($this->anyDataLapanganRelations);
+    }
+
+    public function getAnyDataLapanganAttribute()
+    {
+        foreach ($this->anyDataLapanganRelations as $relation) {
+            if ($this->relationLoaded($relation) && !empty($this->{$relation})) {
+                // return $this->{$relation};
+                $relasi = $this->{$relation};
+
+                if ($relasi instanceof \Illuminate\Database\Eloquent\Collection) {
+                    return $relasi;
+                }
+
+                return collect([$relasi])->filter();
+            }
+        }
+
         return null;
     }
 }

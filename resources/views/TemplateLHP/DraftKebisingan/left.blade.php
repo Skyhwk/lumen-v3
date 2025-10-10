@@ -13,16 +13,16 @@
             <tbody>
                 @foreach ($detail as $k => $yy)
                     <tr>
-                        <td class="pd-5-solid-center">{{ $k + 1 }}</td>
-                        <td width="7%" style="text-align: right; border-right: none; vertical-align: top;" class="pd-5-solid-left">
+                        <td class="custom">{{ $k + 1 }}</td>
+                        <td width="7%" style="text-align: right; border-right: none; vertical-align: top;" class="custom">
                             <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
                         </td>
-                        <td width="35%" style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;" class="pd-5-solid-left">
+                        <td width="35%" style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;" class="custom">
                             {{ $yy['lokasi_keterangan'] }}
                         </td>
-                        <td class="pd-5-solid-center">{{ $yy['hasil_uji'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['paparan'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{ $yy['hasil_uji'] }}</td>
+                        <td class="custom">{{ $yy['paparan'] }}</td>
+                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
                     </tr>
                 @endforeach
             </tbody>

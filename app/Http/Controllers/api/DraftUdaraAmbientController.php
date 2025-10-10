@@ -299,6 +299,79 @@ class DraftUdaraAmbientController extends Controller
         }
     }
 
+    public function updateTanggalLhp(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dataHeader = LhpsLingHeader::find($request->id);
+
+            if (!$dataHeader) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan'
+                ], 404);
+            }
+
+            // Update tanggal LHP dan data pengesahan
+            $dataHeader->tanggal_lhp = $request->value;
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
+            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+            // Update QR Document jika ada
+            $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+            if ($qr) {
+                $dataQr = json_decode($qr->data, true);
+                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                $qr->data = json_encode($dataQr);
+                $qr->save();
+            }
+
+            // Render ulang file LHP
+            $detail = LhpsLingDetail::where('id_header', $dataHeader->id)->get();
+            $custom = LhpsLingCustom::where('id_header', $dataHeader->id)->get();
+
+            $groupedByPage = [];
+            foreach ($custom as $item) {
+                $page = $item->page;
+                $groupedByPage[$page][] = $item->toArray();
+            }
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($dataHeader)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUdaraAmbient')
+                ->render();
+
+            if ($dataHeader->file_lhp != $fileName) {
+                // ada perubahan nomor lhp yang artinya di token harus di update
+                GenerateLink::where('id_quotation', $dataHeader->id_token)->update(['fileName_pdf' => $fileName]);
+            }
+
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Tanggal LHP berhasil diubah',
+                'data' => $dataHeader
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
 
     public function handleDatadetail2(Request $request)
     {
@@ -724,11 +797,14 @@ class DraftUdaraAmbientController extends Controller
   private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
+         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
+            ->where('parameter', $val->parameter)
+            ->first();
         $entry = [
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => $param->status === "AKREDITASI" ? '' : 'ẍ',
+            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
             'parameter' => $param->nama_regulasi,
             'satuan' => $param->satuan,
             'hasil_uji' => $val->ws_value_linkungan->C	 ?? null,
@@ -736,10 +812,6 @@ class DraftUdaraAmbientController extends Controller
             'methode' => $param->method,
             'status' => $param->status
         ];
-
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-            ->where('parameter', $val->parameter)
-            ->first();
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
@@ -805,11 +877,9 @@ class DraftUdaraAmbientController extends Controller
                 ]);
 
                 
-                $data->is_approve = 1;
+                $data->is_approved = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                  if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;

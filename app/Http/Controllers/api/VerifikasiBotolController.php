@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Http\Controllers\Controller;
 use App\Models\{QcLapangan, OrderDetail, Ftc, ScanSampelTc, ScanBotol, PersiapanSampelDetail, DataLapanganAir};
+use Exception;
 use Illuminate\Support\Facades\DB;
 
 class VerifikasiBotolController extends Controller
@@ -67,13 +68,52 @@ class VerifikasiBotolController extends Controller
             ->where('created_by', $this->karyawan)
             ->first();
 
+        $scanSamplers = $this->getTodoFromScanSampler();
+
         return response()->json([
             'today' => $data->total_hari_ini ?? 0,
-            'thisMonth' => $data->total_bulan_ini ?? 0
+            'thisMonth' => $data->total_bulan_ini ?? 0,
+            'todo_count' => count($scanSamplers['todo_samples']),
+            'todo_samples' => $scanSamplers['todo_samples'],
+            'categories' => $scanSamplers['categories'],
         ], 200);
     }
 
+    private function getTodoFromScanSampler()
+    {
+        try {
+            // Ambil daftar no sampel yang sudah di-scan botol tapi belum masuk ke scan_sampel_tc
+            $todo_samples = ScanBotol::whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()])
+                ->whereNotIn('no_sampel', function ($query) {
+                    $query->select('no_sampel')
+                        ->from('scan_sampel_tc')
+                        ->whereBetween('created_at', [Carbon::parse('2025-10-03'), Carbon::now()]);
+                })
+                ->pluck('no_sampel')
+                ->unique()
+                ->toArray();
 
+            // Ambil data order detail berdasarkan daftar no_sampel tersebut
+            $order_detail = OrderDetail::select('no_sampel', 'kategori_3')
+                ->whereIn('no_sampel', $todo_samples)
+                ->where('is_active', true)
+                ->get();
+
+            // Kelompokkan berdasarkan kategori_3
+            $categories = [];
+            foreach ($order_detail as $item) {
+                $kategori = $item->kategori_3 ?? 'Tidak Diketahui';
+                $categories[$kategori][] = $item->no_sampel;
+            }
+
+            return [
+                'categories' => $categories,
+                'todo_samples' => $todo_samples,
+            ];
+        } catch (\Throwable $th) {
+            throw new Exception($th);
+        }
+    }
 
     public function scan(Request $request)
     {

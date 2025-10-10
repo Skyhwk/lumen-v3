@@ -580,31 +580,25 @@ class StpsController extends Controller
 
                             $sampleNumbers = [];
                             foreach ($sampleNumbersFromOrder as $orderDetail) {
-                                $number = explode('/', $orderDetail->no_sampel)[1];
+                                $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
+                                $inputParameter = $data_sampling['parameter'];
+                                
+                                $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+                                $totalParameterSame = count($orderParameter) === count($inputParameter);
 
-                                $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
-                                $idRegulasiPenawaran    = !empty($data_sampling['regulasi']) ? array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']) : [];
-
-                                $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
-
-                                if (in_array($number, $penawaran_keys) && $regulasiMatch) {
-                                    $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
-                                    $inputParameter = $data_sampling['parameter'];
-
-                                    $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
-                                    $totalParameterSame = count($orderParameter) === count($inputParameter);
-
-                                    if ($parameterMatch || $totalParameterSame) {
-                                        $sampleNumbers[] = $orderDetail->no_sampel;
-                                    }
-                                } else {
-                                    $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
-                                    $inputParameter = $data_sampling['parameter'];
-
-                                    $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
-                                    $totalParameterSame = count($orderParameter) === count($inputParameter);
-
-                                    if ($parameterMatch || $totalParameterSame) {
+                                if ($parameterMatch && $totalParameterSame) {
+                                    $number = explode('/', $orderDetail->no_sampel)[1];
+    
+                                    $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
+                                    $idRegulasiPenawaran    = !empty($data_sampling['regulasi']) ? array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']) : [];
+    
+                                    if (!empty($idRegulasiOrder) && !empty($idRegulasiPenawaran)) {
+                                        $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
+        
+                                        if (in_array($number, $penawaran_keys) && $regulasiMatch) {
+                                            $sampleNumbers[] = $orderDetail->no_sampel;
+                                        }
+                                    } else {
                                         $sampleNumbers[] = $orderDetail->no_sampel;
                                     }
                                 }

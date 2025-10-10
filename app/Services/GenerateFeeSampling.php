@@ -68,16 +68,16 @@ class GenerateFeeSampling
                 $titik = 0;
                 $feeTambahan = 0;
                 $durasi_tertinggi = 0;
-                $quotationTotal = 0;
+                // $quotationTotal = 0;
                 $perusahaanUnik = collect($items)->pluck('nama_perusahaan')->unique();
                 $noQuote = collect($items)->pluck('no_quotation')->unique();
-                foreach($noQuote as $quote){
-                    $quotation = QuotationKontrakH::where('no_document', $quote)->first();
-                    if(!$quotation) $quotation = QuotationNonKontrak::where('no_document', $quote)->first();
-                        if(isset($quotation->harga_perdiem_personil_total)) {
-                        $quotationTotal += 1;
-                    }
-                }
+                // foreach($noQuote as $quote){
+                //     $quotation = QuotationKontrakH::where('no_document', $quote)->first();
+                //     if(!$quotation) $quotation = QuotationNonKontrak::where('no_document', $quote)->first();
+                //         if(isset($quotation->harga_perdiem_personil_total)) {
+                //         $quotationTotal += 1;
+                //     }
+                // }
                 $feeTambahanRincian = [
                     'sampling_24jam' => 0,
                     'isokinetik' => 0,
@@ -92,6 +92,7 @@ class GenerateFeeSampling
                 $ptCampurAtauNonAir = [];  // PT yang mengandung non-air (campur atau non-air only)
                 $ptAirOnly = []; 
                      // PT yang hanya air
+                    //  dd($items);
                 foreach ($items as $item) {
                     $noOrder = $item->persiapanHeader->no_order;
                     $durasiValue = (int) $item->durasi;
@@ -109,7 +110,8 @@ class GenerateFeeSampling
                             $punyaAir = true;
                             $noSampelIni = $noOrder ."/".explode(' - ', $k)[1];
                             $datalapangan = DataLapanganAir::where('no_sampel', $noSampelIni)->first();
-                            if($datalapangan) $titikAirPTIni++;
+                            // if($datalapangan) $titikAirPTIni++;
+                           $titikAirPTIni++;
                         
                         } else {
                             $punyaNonAir = true;
@@ -180,29 +182,30 @@ class GenerateFeeSampling
        
                 // Hitung tempat dari titik air gabungan
                 $airTempat = 0;
+
                 if ($titikAirGabungan > 0) {
                     if ($titikAirGabungan <= 10) {
-                        $airTempat = 0;
-                    } elseif ($titikAirGabungan <= 20) {
                         $airTempat = 1;
-                    } else {
+                    } elseif ($titikAirGabungan <= 20) {
                         $airTempat = 2;
+                    } else {
+                        $airTempat = 3;
                     }
                 }
 
-                if(count($noQuote) > 1){
-                    $airTempat = $airTempat + $quotationTotal;
-                } else {
-                    $airTempat = $quotationTotal;
-                }
+                // if(count($noQuote) > 1){
+                //     $airTempat = $airTempat + $quotationTotal;
+                // } else {
+                //     $airTempat = $quotationTotal;
+                // }
 
                 // Hitung tempat dari PT campur/non-air
-                $nonAirTempat = count($ptCampurAtauNonAir) > 0 ? 1 : 0;
-                // dd($airTempat, $nonAirTempat);
-
+                // $nonAirTempat = count($ptCampurAtauNonAir) > 0 ? 1 : 0;
+                $nonAirTempat = count($ptCampurAtauNonAir);
+// dd($ptCampurAtauNonAir, $airTempat);
                 // Total tempat
                 if ($airTempat > 0 && $nonAirTempat > 0) {
-                    $tempat = $airTempat;
+                    $tempat = $airTempat + $nonAirTempat;
                 } else if ($airTempat > 0) {
                     $tempat = $airTempat;
                 } else {

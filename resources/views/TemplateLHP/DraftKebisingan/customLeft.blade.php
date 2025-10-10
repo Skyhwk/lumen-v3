@@ -13,21 +13,21 @@
             <tbody>
                 @foreach ($custom as $k => $yy)
                     <tr>
-                        <td class="pd-5-solid-center">{{ $k + 1 }}</td>
+                        <td class="custom">{{ $k + 1 }}</td>
 
-                        <td class="pd-5-solid-left" width="7%" 
+                        <td class="custom" width="7%" 
                             style="text-align: right; border-right: none; vertical-align: top;">
                             <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
                         </td>
 
-                        <td class="pd-5-solid-left" width="35%" 
+                        <td class="custom" width="35%" 
                             style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;">
                             {{ $yy['lokasi_keterangan'] }}
                         </td>
 
-                        <td class="pd-5-solid-center">{{ $yy['hasil_uji'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['paparan'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{ $yy['hasil_uji'] }}</td>
+                        <td class="custom">{{ $yy['paparan'] }}</td>
+                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
                     </tr>
                 @endforeach
             </tbody>

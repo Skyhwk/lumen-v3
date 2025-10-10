@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganEmisiKendaraan;
+use App\Models\HistoryAppReject;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
@@ -62,6 +63,30 @@ class TqcEmisiKendaraanController extends Controller
             ->make(true);
     }
 
+  public function handleApproveSelected(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'status' => 2,
+                ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Data berhasil diapprove.',
+                'success' => true,
+                'status' => 200,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+                'success' => false,
+                'status' => 500,
+            ], 500);
+        }
+    }
     public function getTrend(Request $request)
     {
         $orderDetails = OrderDetail::where('cfr', $request->cfr)

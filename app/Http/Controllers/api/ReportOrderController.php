@@ -142,6 +142,7 @@ class ReportOrderController extends Controller
                         foreach ($qtcDetail as $qtD) {
                             $data_pendukung_sampling = json_decode($qtD->data_pendukung_sampling);
                             foreach ($data_pendukung_sampling as &$dps) {
+                                dump($dps);
                                 foreach ($dps->data_sampling as &$ds) {
                                     foreach ($ds->penamaan_titik as &$pt) {
                                         $nomor = key((array) $pt);

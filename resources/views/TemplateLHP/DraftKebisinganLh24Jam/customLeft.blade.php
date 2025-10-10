@@ -4,9 +4,9 @@
             <thead>
                 <tr>
                     <th width="6%" rowspan="2" class="custom">NO</th>
-                    <th width="25%" rowspan="2" class="custom">LOKASI / KETERANGAN SAMPLE</th>
-                    <th width="25%" class="custom"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
-                    <th width="17%" rowspan="2" class="custom">TITIK KOORDINAT</th>
+                    <th width="30%" rowspan="2" class="custom">LOKASI / KETERANGAN SAMPLE</th>
+                    <th width="27%" class="custom"  colspan="3" >Kebisingan 24 Jam (dBA)</th>
+                    <th width="20%" rowspan="2" class="custom">TITIK KOORDINAT</th>
                     <th width="17%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
@@ -19,15 +19,15 @@
                 @foreach ($custom as $k => $yy)
        
                     <tr>
-                        <td class="pd-5-solid-center">{{ $k + 1 }}</td>
-                        <td class="pd-5-solid-left"><sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                        <td class="custom">{{ $k + 1 }}</td>
+                        <td class="custom"><sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                           {{ $yy['lokasi_keterangan'] }}
                         </td>
-                        <td class="pd-5-solid-center">{{ $yy['leq_ls'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['leq_lm'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['leq_lsm'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['titik_koordinat'] }}</td>
-                        <td class="pd-5-solid-center">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{ $yy['leq_ls'] }}</td>
+                        <td class="custom">{{ $yy['leq_lm'] }}</td>
+                        <td class="custom">{{ $yy['leq_lsm'] }}</td>
+                        <td class="custom">{{ $yy['titik_koordinat'] }}</td>
+                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
 
                       
                     </tr>

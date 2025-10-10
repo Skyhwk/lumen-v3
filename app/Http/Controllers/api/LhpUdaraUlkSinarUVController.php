@@ -2,25 +2,11 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\LhpsAirHeader;
-use App\Models\LhpsAirDetail;
-use App\Models\LhpsAirCustom;
-use App\Models\LhpsEmisiCustom;
-use App\Models\LhpsEmisiDetail;
-use App\Models\LhpsEmisiHeader;
 use App\Models\lhpsSinarUVCustom;
 use App\Models\LhpsSinarUVDetail;
 use App\Models\LhpsSinarUVHeader;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\Colorimetri;
-use App\Models\Gravimetri;
-use App\Models\Titrimetri;
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
+
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;
 use Illuminate\Http\Request;
@@ -33,16 +19,22 @@ class LhpUdaraUlkSinarUVController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::select('nama_perusahaan', 'no_order', 'cfr', DB::raw("GROUP_CONCAT(no_sampel SEPARATOR ', ') as no_sampel"), 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
-            ->with('lhps_sinaruv', 'orderHeader:no_document', 'DataLapanganSinarUV')
-            ->where('is_approve', true)
+        DB::statement("SET SESSION sql_mode = ''");
+        $data = OrderDetail::with([
+            'lhps_sinaruv',
+            'orderHeader' => function ($query) {
+                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
+            }
+        ])
+            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+            ->where('is_approve', 1)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
             ->where('parameter', 'like', '%Sinar UV%')
+            ->groupBy('cfr')
             ->where('status', 3)
-            ->groupBy('nama_perusahaan', 'no_order', 'cfr', 'kategori_3', 'tanggal_sampling', 'tanggal_terima')
-            ->orderBy('tanggal_terima', 'desc');
+            ->get();
 
         return Datatables::of($data)->make(true);
     }
@@ -109,7 +101,15 @@ class LhpUdaraUlkSinarUVController extends Controller
         $header->save();
 
         $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+        $groupedByPage = collect(lhpsSinarUVCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
 
+        LhpTemplate::setDataDetail(LhpsSinarUVDetail::where('id_header', $header->id)->get())
+                ->setDataHeader($header)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftUlkSinarUv')
+                ->render();
         $servicePrint = new PrintLhp();
         $servicePrint->printByFilename($header->file_lhp, $detail);
 

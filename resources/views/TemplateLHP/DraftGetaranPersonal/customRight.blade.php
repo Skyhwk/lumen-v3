@@ -59,7 +59,7 @@
                     </tr> 
 
                     @php
-                        $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : '-';
+                        $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : [];
                     @endphp
 
                     {{-- Metode Sampling --}}
