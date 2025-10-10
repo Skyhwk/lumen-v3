@@ -29,7 +29,7 @@ class LhpsGetaranHeader extends Sector
     public function link()
     {
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
-        ->where('quotation_status', 'draft_lhp_getaran');
+        ->where('quotation_status', 'draft_getaran');
     }
 
  
