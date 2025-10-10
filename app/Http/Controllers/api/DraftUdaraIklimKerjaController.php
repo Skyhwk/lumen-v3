@@ -217,7 +217,7 @@ class DraftUdaraIklimKerjaController extends Controller
             $header->alamat_sampling = $request->alamat_sampling ? $request->alamat_sampling : NULL;
             $header->keterangan = ($request->keterangan != '') ? $request->keterangan : NULL;
             $header->sub_kategori = $request->jenis_sampel ? $request->jenis_sampel : NULL;
-            $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : NULL;
+            $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : [];
             // $header->tanggal_sampling = $request->tanggal_tugas ? $request->tanggal_tugas : NULL;
             $header->periode_analisa = $request->periode_analisa ? $request->periode_analisa : NULL;
             $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
