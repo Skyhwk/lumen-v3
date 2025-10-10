@@ -34,9 +34,10 @@ class FdlDebuPersonalController extends Controller
     public function getSample(Request $request)
     {
         if (isset($request->no_sample) && $request->no_sample != null) {
-
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','debu_personal')->where('kategori','4-Udara')->first();
             $parameterList = json_decode($parameter->parameters, true);
+            
+
 
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where(function($q) use ($parameterList) {
@@ -62,7 +63,7 @@ class FdlDebuPersonalController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $data->parameter,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $parameterList
                     ], 200);
                 }else{
                     $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
@@ -73,7 +74,7 @@ class FdlDebuPersonalController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $data->parameter,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $parameterList
                     ], 200);
                 }
             }
