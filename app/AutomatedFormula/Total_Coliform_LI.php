@@ -83,7 +83,7 @@ class Total_Coliform_LI
 
             $average_turun_naik = array_sum(array_column($acuan, 'turun_naik')) / count($acuan);
             $max_greater = max(array_column($acuan, 'greater'));
-            $acuanTotalColi = 3000;
+            $acuanTotalColi = 1000;
 
             // =if(G7>0,E7 - (G7*E7), E7+(G7*E7))
             $temp_result = $average_turun_naik > 0 ? $acuanTotalColi - (($average_turun_naik / 100) * $acuanTotalColi) : $acuanTotalColi + (($average_turun_naik / 100) * $acuanTotalColi);
