@@ -127,12 +127,10 @@ class InputParameterController extends Controller
                 $row = array_fill_keys($diff, '-');
 
                 foreach (array_diff($select, $diff) as $param_key => $p) {
-                    if ($stp->name !== 'SUBKONTRAK') {
-
-                        $quota_exceeded = false;
-                        $already_counted = false;
-                        $index_counted = null;
-
+                    $quota_exceeded = false;
+                    $already_counted = false;
+                    $index_counted = null;
+                    if ($stp->name !== 'SUBKONTRAK' && isset($quota[$p])) {
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -181,6 +179,7 @@ class InputParameterController extends Controller
                     }
 
                     // --- 6️⃣ Simpan nomor sampel ke row
+                    if(!$quota_exceeded && !$already_counted) $quota_count[$request->id_stp][$p]->push($val->no_sampel);
                     $row[$p] = $val->no_sampel;
                 }
 

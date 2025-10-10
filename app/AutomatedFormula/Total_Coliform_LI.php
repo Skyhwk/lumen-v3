@@ -83,16 +83,15 @@ class Total_Coliform_LI
 
             $average_turun_naik = array_sum(array_column($acuan, 'turun_naik')) / count($acuan);
             $max_greater = max(array_column($acuan, 'greater'));
-            $acuanTotalColi = 3000;
+            $acuanTotalColi = 1000;
 
             // =if(G7>0,E7 - (G7*E7), E7+(G7*E7))
             $temp_result = $average_turun_naik > 0 ? $acuanTotalColi - (($average_turun_naik / 100) * $acuanTotalColi) : $acuanTotalColi + (($average_turun_naik / 100) * $acuanTotalColi);
 
             $isGreater = $temp_result >= 1600 ? true : false;
 
-            // $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
-            $closest = $this->searchClosestKey(15/10, false);
-            dd($closest);
+            $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
+
             $hasil = $closest['key'];
             if ($hasil < 1) {
                 $hasil = '<1';
