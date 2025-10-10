@@ -978,7 +978,7 @@ class DraftUdaraGetaranController extends Controller
      public function getLink(Request $request)
     {
         try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_lhp_getaran', 'type' => 'draft_getaran'])->first();
+            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_getaran', 'type' => 'draft'])->first();
             if (!$link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
