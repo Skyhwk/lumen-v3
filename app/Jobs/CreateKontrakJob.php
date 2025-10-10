@@ -110,8 +110,8 @@ class CreateKontrakJob extends Job
             $no_document = 'ISL/QTC/' . $tahun_chek . '-' . $bulan_chek . '/' . $no_quotation;
 
             $data_pendukung = $payload->data_pendukung;
-            $periodeAwal = $data_pendukung[0]->periode_kontrak;
-            $periodeAkhir = $data_pendukung[count($data_pendukung) - 1]->periode_kontrak;
+            $periodeAwal = \explode('-', $data_pendukung[0]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[0]->periode_kontrak)[0];
+            $periodeAkhir = \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[0];
 
             // Implementasi untuk create kontrak
             // Insert Data Quotation Kontrak Header
@@ -304,6 +304,7 @@ class CreateKontrakJob extends Job
                     // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                     $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
                     
+                    $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                     $pengujian->data_sampling[$i]->regulasi = $regulasi;
                     $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                     $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);

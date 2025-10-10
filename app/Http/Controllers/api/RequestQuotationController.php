@@ -2396,8 +2396,8 @@ class RequestQuotationController extends Controller
                 }
             }
 
-            $periodeAwal = $data_pendukung[0]->periode_kontrak;
-            $periodeAkhir = $data_pendukung[count($data_pendukung) - 1]->periode_kontrak;
+            $periodeAwal = \explode('-', $data_pendukung[0]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[0]->periode_kontrak)[0];
+            $periodeAkhir = \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[0];
 
             if (!isset($payload->informasi_pelanggan->sales_id) || $payload->informasi_pelanggan->sales_id == '') {
                 return response()->json([
@@ -2721,6 +2721,7 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
                         
+                        $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);
@@ -3657,8 +3658,8 @@ class RequestQuotationController extends Controller
                 }
             }
 
-            $periodeAwal = $data_pendukung[0]->periode_kontrak;
-            $periodeAkhir = $data_pendukung[count($data_pendukung) - 1]->periode_kontrak;
+            $periodeAwal = \explode('-', $data_pendukung[0]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[0]->periode_kontrak)[0];
+            $periodeAkhir = \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[1] . '-' . \explode('-', $data_pendukung[count($data_pendukung) - 1]->periode_kontrak)[0];
 
             if (!isset($payload->informasi_pelanggan->sales_id) || $payload->informasi_pelanggan->sales_id == '') {
                 return response()->json([
@@ -4083,6 +4084,7 @@ class RequestQuotationController extends Controller
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
                         
+                        $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
                         $pengujian->data_sampling[$i]->harga_total = ($har_db * $jumlah_titik);

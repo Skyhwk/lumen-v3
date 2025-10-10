@@ -1732,56 +1732,12 @@ class RenderKontrak
                         $bollean = false;
                         $periode_found = [];
                         foreach ($num_ as $key_ => $val_) {
-                            if ($val_->penamaan_titik && $val_->penamaan_titik != "") {
-                                if (is_array($val_->penamaan_titik)) {
-                                    $filtered_array = array_filter($val_->penamaan_titik, function ($item) {
-                                        $props = get_object_vars($item);
-                                        $value = current($props);
-                                        return !empty($value);
-                                    });
-
-                                    $filtered_array = array_map(function ($item) {
-                                        return current(get_object_vars($item));
-                                    }, $filtered_array);
-
-                                    if (!empty($filtered_array)) {
-                                        $penamaan_titik = "(" . implode(", ", $filtered_array) . ")";
-                                    } else {
-                                        $penamaan_titik = "";
-                                    }
-                                } else {
-                                    $penamaan_titik = "(" . $val_->penamaan_titik . ")";
-                                }
-                            } else {
-                                $penamaan_titik = "";
-                            }
-
-                            // $penamaan_titik = "";
-                            // $filtered = array_filter($val_->penamaan_titik, function ($item) {
-                            //     $props = get_object_vars($item);
-                            //     $key = key($props);
-                            //     $value = $props[$key];
-
-                            //     return !empty($value);
-                            // });
-
-                            // // ubah jadi string "Inlet (001), Outlet (002), ..."
-                            // $resultParts = array_map(function ($item) {
-                            //     $props = get_object_vars($item);
-                            //     $key = key($props);
-                            //     $value = $props[$key];
-
-                            //     return $value;
-                            // }, $filtered);
-
-                            // $penamaan_titik = count($resultParts) > 0 ? "(" . implode(', ', $resultParts) . ")" : '';
-
+                            
                             $td_kat = implode(" ", [
                                 strtoupper(explode("-", $val_->kategori_1)[1]),
                                 strtoupper(explode("-", htmlspecialchars_decode($val_->kategori_2))[1]),
                                 $val_->jumlah_titik,
                                 $x_,
-                                // $penamaan_titik,
                                 $val_->total_parameter,
                                 implode(" ", $val_->parameter)
                             ]);
@@ -1789,7 +1745,6 @@ class RenderKontrak
                                 explode("-", $a->kategori_2)[1]
                             );
 
-                            // dump($th_left, $td_kat);
                             if (in_array($values->periode_kontrak, $a->periode) && !in_array($values->periode_kontrak, $periode_found) && $th_left == $td_kat) {
                                 $periode_found[] = $values->periode_kontrak;
                                 $pdf->WriteHTML(
