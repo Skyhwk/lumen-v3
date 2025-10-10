@@ -24,7 +24,8 @@ use App\Models\{
     DataLapanganIklimPanas,
     DataLapanganIklimDingin,
     DataLapanganSwab,
-    DataLapanganErgonomi
+    DataLapanganErgonomi,
+    DataLapanganEmisiKendaraan
 };
 use App\Services\GenerateFeeSampling;
 use App\Services\InsertActivityFdl;

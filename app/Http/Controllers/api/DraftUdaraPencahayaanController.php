@@ -17,7 +17,6 @@ use App\Models\LhpsPencahayaanDetailHistory;
 
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\QrDocument;
@@ -135,7 +134,6 @@ class DraftUdaraPencahayaanController extends Controller
                 'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
                 'data' => $result,
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -317,8 +315,14 @@ class DraftUdaraPencahayaanController extends Controller
             $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            $renderDetail = LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get();
 
-            $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get())
+            $renderDetail = collect($renderDetail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+            ])->values()->toArray();
+            
+            $fileName = LhpTemplate::setDataDetail($renderDetail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
@@ -338,7 +342,7 @@ class DraftUdaraPencahayaanController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Data draft LHP Pencahayaan no sampel ' . $request->noSampel . ' berhasil disimpan',
+                'message' => 'Data draft LHP Pencahayaan no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status' => true
             ], 201);
         } catch (\Exception $th) {
@@ -362,7 +366,7 @@ class DraftUdaraPencahayaanController extends Controller
                 ->where('is_active', true)
                 ->where('no_lhp', $request->cfr)
                 ->first();
-            
+
             // ==============================
             // CASE 1: Jika ada cek_lhp
             // ==============================
@@ -431,26 +435,26 @@ class DraftUdaraPencahayaanController extends Controller
                     foreach ($regulasi_custom as $item) {
                         if (empty($item['page'])) continue;
                         // $id_regulasi = "id_" . $item['id'];
-                            $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
-                            $page        = $item['page'];
+                        $id_regulasi = (string)"id_" . explode('-', $item['regulasi'])[0];
+                        $page        = $item['page'];
 
-                            if (!empty($groupedCustom[$page])) {
-                                foreach ($groupedCustom[$page] as $val) {
-                                    $data_custom[$id_regulasi][] = [
-                                        'id'                => $val->id,
-                                        'no_sampel'         => $val->no_sampel,
-                                        'param'             => $val->param,
-                                        'lokasi_keterangan' => $val->lokasi_keterangan,
-                                        'hasil_uji'         => $val->hasil_uji,
-                                        'sumber_cahaya'     => $val->sumber_cahaya,
-                                        'jenis_pengukuran'  => $val->jenis_pengukuran,
-                                        'nab'               => $val->nab,
-                                        'tanggal_sampling'  => $val->tanggal_sampling,
-                                    ];
-                                }
+                        if (!empty($groupedCustom[$page])) {
+                            foreach ($groupedCustom[$page] as $val) {
+                                $data_custom[$id_regulasi][] = [
+                                    'id'                => $val->id,
+                                    'no_sampel'         => $val->no_sampel,
+                                    'param'             => $val->param,
+                                    'lokasi_keterangan' => $val->lokasi_keterangan,
+                                    'hasil_uji'         => $val->hasil_uji,
+                                    'sumber_cahaya'     => $val->sumber_cahaya,
+                                    'jenis_pengukuran'  => $val->jenis_pengukuran,
+                                    'nab'               => $val->nab,
+                                    'tanggal_sampling'  => $val->tanggal_sampling,
+                                ];
                             }
                         }
                     }
+                }
 
                 // ==============================
                 // Ambil mainData & otherRegulations
@@ -513,12 +517,30 @@ class DraftUdaraPencahayaanController extends Controller
                     }
                 }
 
-                $data_entry = collect($data_entry)->sortBy(function($item) {
-                    if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
-                    }
-                    return '';
-                })->values()->toArray();
+                $bulanMap = [
+                    'Januari' => 'January',
+                    'Februari' => 'February',
+                    'Maret' => 'March',
+                    'April' => 'April',
+                    'Mei' => 'May',
+                    'Juni' => 'June',
+                    'Juli' => 'July',
+                    'Agustus' => 'August',
+                    'September' => 'September',
+                    'Oktober' => 'October',
+                    'November' => 'November',
+                    'Desember' => 'December',
+                ];
+
+
+
+                $data_entry = collect($data_entry)
+                ->sortBy(function ($item) use ($bulanMap) {
+                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
+                })
+                ->values()
+                ->toArray();
 
                 return response()->json([
                     'status'    => true,
@@ -543,7 +565,7 @@ class DraftUdaraPencahayaanController extends Controller
             foreach ($data as $val) {
                 $entry      = $this->formatEntry($val);
                 $mainData[] = $entry;
-                
+
                 if ($request->other_regulasi) {
                     foreach ($request->other_regulasi as $id_regulasi) {
                         $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
@@ -552,13 +574,10 @@ class DraftUdaraPencahayaanController extends Controller
             }
 
             // Sort mainData
-            $mainData = collect($mainData)->sortBy(function($item) { 
-                if (is_array($item)) {
-                    return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
-                }
-                return '';
-            })->values()->toArray();
-
+            $mainData = collect($mainData)->sortBy([
+                ['tanggal_sampling', 'asc'],
+                ['no_sampel', 'asc']
+            ])->values()->toArray();
             // Sort otherRegulations
             foreach ($otherRegulations as $id => $regulations) {
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
@@ -569,7 +588,6 @@ class DraftUdaraPencahayaanController extends Controller
                 'data'      => $mainData,
                 'next_page' => $otherRegulations,
             ], 201);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,
@@ -592,12 +610,12 @@ class DraftUdaraPencahayaanController extends Controller
             $cahaya = isset($val->lapangan_cahaya) ? $val->lapangan_cahaya : null;
             $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
             $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
-            
+
             return array_merge($entry, [
-                'hasil_uji' => ($wsUdara && $wsUdara->hasil1) 
-                    ? (is_array(json_decode($wsUdara->hasil1, true)) 
-                        ? json_decode($wsUdara->hasil1, true) 
-                        : str_replace(',', '', $wsUdara->hasil1)) 
+                'hasil_uji' => ($wsUdara && $wsUdara->hasil1)
+                    ? (is_array(json_decode($wsUdara->hasil1, true))
+                        ? json_decode($wsUdara->hasil1, true)
+                        : str_replace(',', '', $wsUdara->hasil1))
                     : null,
                 'param'             => $val ? $val->parameter : null,
                 'no_sampel'         => $cahaya ? $cahaya->no_sampel : null,
@@ -615,7 +633,7 @@ class DraftUdaraPencahayaanController extends Controller
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
-    
+
                 if (!$konfirmasiLhp) {
                     $konfirmasiLhp = new KonfirmasiLhp();
                     $konfirmasiLhp->created_by = $this->karyawan;
@@ -624,7 +642,7 @@ class DraftUdaraPencahayaanController extends Controller
                     $konfirmasiLhp->updated_by = $this->karyawan;
                     $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 }
-    
+
                 $konfirmasiLhp->no_lhp = $request->cfr;
                 $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
                 $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
@@ -633,10 +651,10 @@ class DraftUdaraPencahayaanController extends Controller
                 $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
                 $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
                 $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
-    
+
                 $konfirmasiLhp->save();
             }
-            
+
             $data = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
@@ -666,8 +684,6 @@ class DraftUdaraPencahayaanController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                 if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;
@@ -695,7 +711,7 @@ class DraftUdaraPencahayaanController extends Controller
 
                 $servicePrint = new PrintLhp();
                 $servicePrint->printByFilename($data->file_lhp, $detail);
-                
+
                 if (!$servicePrint) {
                     DB::rollBack();
                     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
@@ -807,7 +823,7 @@ class DraftUdaraPencahayaanController extends Controller
                 ->where('is_active', true)
                 // ->where('id', $request->id)
                 ->first();
-                
+
             if ($header != null) {
                 $key = $header->no_lhp . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
@@ -991,5 +1007,68 @@ class DraftUdaraPencahayaanController extends Controller
         $data = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
         $extand = explode("|", $data);
         return $extand;
+    }
+        public function updateTanggalLhp(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dataHeader = LhpsPencahayaanHeader::find($request->id);
+
+            if (!$dataHeader) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan, harap adjust data terlebih dahulu'
+                ], 404);
+            }
+
+            $dataHeader->tanggal_lhp = $request->value;
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
+            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+            // Update QR Document jika ada
+            $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+            if ($qr) {
+                $dataQr = json_decode($qr->data, true);
+                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                $qr->data = json_encode($dataQr);
+                $qr->save();
+            }
+
+            // Render ulang file LHP
+            $detail = LhpsPencahayaanDetail::where('id_header', $dataHeader->id)->get();
+            $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $dataHeader->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($dataHeader)
+                ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
+                ->whereView('DraftPencahayaan')
+                ->render();
+           
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Tanggal LHP berhasil diubah',
+                'data' => $dataHeader
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
     }
 }

@@ -51,9 +51,11 @@ use App\Services\AnalystRender;
 use App\Services\AnalystFormula;
 use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
+use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Repository;
 
 class InputParameterController extends Controller
 {
@@ -68,13 +70,22 @@ class InputParameterController extends Controller
 			}
 
 			$join = OrderDetail::with('TrackingSatu')
-				->whereHas('TrackingSatu', function($q) use ($request) {
-					$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-				})
-				->where('kategori_2', $request->category)
-				->where('is_active', true)
-				->orderBy('no_sampel', 'asc');
+                ->whereHas('TrackingSatu', function ($q) use ($request) {
+                    $q->where('ftc_laboratory', 'LIKE', "%$request->tgl%")->orderBy('ftc_laboratory', 'asc');
+                })
+                ->where('kategori_2', $request->category)
+                ->where('is_active', true)
+                ->orderByRaw("JSON_LENGTH(parameter) = 1 DESC")
+                ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
+
+            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+                ->where('kategori', $request->category)
+                ->where('is_active', true)
+                ->get()
+                ->pluck('quota','parameter_name')
+                ->toArray();
+
 			// dd($join);
 			if($join->isEmpty()) {
 				return response()->json([
@@ -89,17 +100,89 @@ class InputParameterController extends Controller
 			$inter = [];
 			$ftc = [];
 
-			foreach($join as $key => $val) {
-				$param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
-					return explode(';', $item)[1];
-				}, json_decode($val->parameter, true)) : [];
+            $quota_count = collect();
 
-				$diff = array_diff($select, $param);
+            $repo_quota = json_decode(
+                Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
+                true
+            );
 
-				$row = array_fill_keys($diff, '-');
-				foreach(array_diff($select, $diff) as $p) {
-					$row[$p] = $val->no_sampel;
-				}
+            // Pastikan struktur data benar sebelum diproses
+            if (is_array($repo_quota) && isset($repo_quota[$request->id_stp])) {
+                foreach ($repo_quota[$request->id_stp] as $parameter => $samples) {
+                    // Simpan dengan struktur: [id_stp => [parameter => collection(samples)]]
+                    if (!$quota_count->has($request->id_stp)) {
+                        $quota_count->put($request->id_stp, collect());
+                    }
+                    $quota_count[$request->id_stp]->put($parameter, collect($samples));
+                }
+            }
+
+            foreach($join as $key => $val) {
+                $param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
+                    return explode(';', $item)[1];
+                }, json_decode($val->parameter, true)) : [];
+
+                $diff = array_diff($select, $param);
+                $row = array_fill_keys($diff, '-');
+
+                foreach (array_diff($select, $diff) as $param_key => $p) {
+                    if ($stp->name !== 'SUBKONTRAK') {
+
+                        $quota_exceeded = false;
+                        $already_counted = false;
+                        $index_counted = null;
+
+                        // Pastikan struktur quota_count ada
+                        if (!$quota_count->has($request->id_stp)) {
+                            $quota_count->put($request->id_stp, collect());
+                        }
+                        if (!$quota_count[$request->id_stp]->has($p)) {
+                            $quota_count[$request->id_stp]->put($p, collect());
+                        }
+
+                        // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                            $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                            $already_counted = true;
+                        }
+
+                        // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                        if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
+                            $quota_exceeded = true;
+                        }
+
+                        // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
+                        if ($quota_exceeded || $already_counted) {
+                            // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
+                            if($already_counted){
+                                $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
+                            }
+                            $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
+                            if ($diff_count > 0) {
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                    ->slice(0, $quota[$p])
+                                    ->values();
+                            }
+                            continue;
+                        }
+
+                        // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                        if (isset($quota[$p])) {
+                            $currentCount = $quota_count[$request->id_stp][$p]->count();
+                            $maxQuota = $quota[$p];
+
+                            // Hanya tambahkan jika belum mencapai batas quota
+                            if ($currentCount < $maxQuota) {
+                                $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                            }
+                        }
+
+                    }
+
+                    // --- 6️⃣ Simpan nomor sampel ke row
+                    $row[$p] = $val->no_sampel;
+                }
 
 				// dd($val);
 				if($stp->sample->nama_kategori == 'Air') {
@@ -571,6 +654,39 @@ class InputParameterController extends Controller
             //     ],401);
             // }
 
+            $filtered_sample_request = $quota_count->map(fn($item) =>
+                $item instanceof \Illuminate\Support\Collection ? $item->toArray() : (array)$item
+            )->toArray();
+
+            $filtered_sample_repo = $repo_quota;
+
+            foreach ($filtered_sample_request as $key => $val) {
+                if (isset($filtered_sample_repo[$key])) {
+                    // Jika key utama (misal 7 atau 8) sudah ada di repo
+                    foreach ($val as $param => $samples) {
+                        if (isset($filtered_sample_repo[$key][$param])) {
+                            // Gabungkan nilai array tanpa duplikasi
+                            $filtered_sample_repo[$key][$param] = array_values(array_unique(array_merge(
+                                $filtered_sample_repo[$key][$param],
+                                $samples
+                            )));
+                        } else {
+                            // Tambahkan parameter baru (misal COD, Fenol, dll)
+                            $filtered_sample_repo[$key][$param] = $samples;
+                        }
+                    }
+                } else {
+                    // Jika key utama belum ada di repo, tambahkan seluruh isinya
+                    $filtered_sample_repo[$key] = $val;
+                }
+            }
+
+            // Simpan ke repository sebagai JSON
+            Repository::dir('filtered_quota_sampel')
+                ->key($request->tgl)
+                // ->save(json_encode($filtered_sample_request, JSON_PRETTY_PRINT));
+                ->save(json_encode($filtered_sample_repo, JSON_PRETTY_PRINT));
+
             return response()->json([
                 'status'=>0,
                 'columns'=>$select,
@@ -591,11 +707,15 @@ class InputParameterController extends Controller
     public function addValueParamApi(Request $request){
 		$stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
 		// dd($request->all());
+        $repo_quota = json_decode(
+            Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
+            true
+        );
 		// $analyst = TemplateAnalyst::where('unique_id', $request->unique_id)->first();
 		if($stp->name == 'TITRIMETRI' && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
 			// dd('masuk titri');
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
-				$result = self::HelperTitrimetri($request, $stp);
+				$result = self::HelperTitrimetri($request, $stp, $repo_quota);
 				if($result->status == 200){
 					return response()->json([
 						'message'=> $result->message,
@@ -698,7 +818,7 @@ class InputParameterController extends Controller
 		// }else if(($analyst->nama == 'GRAVIMETRI A' || $analyst->nama == 'GRAVIMETRI B' || $analyst->nama == 'GRAVIMETRI') && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
 			// dd('masuk');
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
-				$result = self::HelperGravimetri($request, $stp);
+				$result = self::HelperGravimetri($request, $stp, $repo_quota);
 				if($result->status == 200){
 					return response()->json([
 						'message'=> $result->message,
@@ -806,7 +926,7 @@ class InputParameterController extends Controller
 
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
-					$result = self::HelperColorimetri($request, $stp);
+					$result = self::HelperColorimetri($request, $stp, $repo_quota);
 					if($result->status == 200){
 						return response()->json([
 							'message'=> $result->message,
@@ -1215,7 +1335,9 @@ class InputParameterController extends Controller
 						if($result->status) {
 							return response()->json([
 								'message'=> $result->message,
-								'status' => $result->status
+								'status' => $result->status,
+								'line' => $result->line ?? '',
+								'file' => $result->file ?? ''
 							], $result->status);
 						}
 					}
@@ -1843,7 +1965,7 @@ class InputParameterController extends Controller
 		}
     }
 
-	public function HelperTitrimetri($request, $stp){
+	public function HelperTitrimetri($request, $stp, $quota_count){
 		DB::beginTransaction();
 		try {
 			// Cek apakah sampel sudah ada
@@ -1938,6 +2060,45 @@ class InputParameterController extends Controller
 			$data_kalkulasi['no_sampel'] = $request->no_sample;
 			WsValueAir::create($data_kalkulasi);
 
+            $parameterList = json_decode($check->parameter);
+            $filteredParameter = array_map(function ($parameter) {
+                return explode(';', $parameter)[1];
+            }, $parameterList);
+
+            $total_coliform = [
+                "BOD","BOD (B-23-NA)","BOD (B-23)",
+                "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+            ];
+
+            $method_t_coli = null;
+
+            if (!empty($check->kategori_3)) {
+                switch ($check->kategori_3) {
+                    case '3-Air Limbah Industri':
+                        $method_t_coli = 'Total_Coliform_LI';
+                        break;
+                    case '2-Air Limbah Domestik':
+                        $method_t_coli = 'Total_Coliform_LD';
+                        break;
+                    default:
+                        $method_t_coli = null;
+                        break;
+                }
+            }
+
+            // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
+            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                    $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                        ->where('required_parameter', $total_coliform)
+                        ->where('no_sampel', $request->no_sample)
+                        ->where('class_calculate', $method_t_coli)
+                        ->where('tanggal_terima', $tgl_terima)
+                        ->calculate();
+                }
+            }
+
 			DB::commit();
 
 			return (object)[
@@ -1955,7 +2116,7 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperGravimetri($request, $stp) {
+	public function HelperGravimetri($request, $stp, $quota_count) {
 		// dd($request->all());
 		DB::beginTransaction();
 		try {
@@ -2059,15 +2220,49 @@ class InputParameterController extends Controller
 					return explode(';', $parameter)[1];
 				}, $parameterList);
 
-				$m_nabati = ['OG', 'M.Mineral'];
-				if(in_array($request->parameter, $m_nabati) && in_array('M.Nabati', $filteredParameter)){
-					$hitung_otomatis = AutomatedFormula::where('parameter', 'M.Nabati')
-						->where('required_parameter', $m_nabati)
-						->where('no_sampel', $request->no_sample)
-						->where('class_calculate', 'M_Nabati')
-						->where('tanggal_terima', $tgl_terima)
-						->calculate();
-				}
+				// $m_nabati = ['OG', 'M.Mineral'];
+				// if(in_array($request->parameter, $m_nabati) && in_array('M.Nabati', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', 'M.Nabati')
+				// 		->where('required_parameter', $m_nabati)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'M_Nabati')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
+
+                $total_coliform = [
+                    "BOD","BOD (B-23-NA)","BOD (B-23)",
+                    "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                    "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+                ];
+
+                $method_t_coli = null;
+
+                if (!empty($check->kategori_3)) {
+                    switch ($check->kategori_3) {
+                        case '3-Air Limbah Industri':
+                            $method_t_coli = 'Total_Coliform_LI';
+                            break;
+                        case '2-Air Limbah Domestik':
+                            $method_t_coli = 'Total_Coliform_LD';
+                            break;
+                        default:
+                            $method_t_coli = null;
+                            break;
+                    }
+                }
+
+                // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                            ->where('required_parameter', $total_coliform)
+                            ->where('no_sampel', $request->no_sample)
+                            ->where('class_calculate', $method_t_coli)
+                            ->where('tanggal_terima', $tgl_terima)
+                            ->calculate();
+                    }
+                }
 
 				//================================End Kalkulasi Mineral Nabati Otomatis===================================================================================
 				DB::commit();
@@ -2090,7 +2285,7 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperColorimetri($request, $stp) {
+	public function HelperColorimetri($request, $stp, $quota_count) {
 		DB::beginTransaction();
 		try {
 			$hp = $request->hp;
@@ -2204,20 +2399,53 @@ class InputParameterController extends Controller
 						->calculate();
 				}
 
-				$n_total = [
-					'NO2-N', 'NO2-N (NA)',
-					'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
-					'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
-					'N-Organik', 'N-Organik (NA)'
-				];
-				if(in_array($request->parameter, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)){
-					$hitung_otomatis = AutomatedFormula::where('parameter', in_array('N-Total (NA)', $filteredParameter) ? 'N-Total (NA)' : 'N-Total')
-						->where('required_parameter', $n_total)
-						->where('no_sampel', $request->no_sample)
-						->where('class_calculate', 'N_Total')
-						->where('tanggal_terima', $tgl_terima)
-						->calculate();
-				}
+				// $n_total = [
+				// 	'NO2-N', 'NO2-N (NA)',
+				// 	'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
+				// 	'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
+				// 	'N-Organik', 'N-Organik (NA)'
+				// ];
+				// if(in_array($request->parameter, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', in_array('N-Total (NA)', $filteredParameter) ? 'N-Total (NA)' : 'N-Total')
+				// 		->where('required_parameter', $n_total)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'N_Total')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
+
+				$total_coliform = [
+                    "BOD","BOD (B-23-NA)","BOD (B-23)",
+                    "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                    "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+                ];
+
+                $method_t_coli = null;
+
+                if (!empty($check->kategori_3)) {
+                    switch ($check->kategori_3) {
+                        case '3-Air Limbah Industri':
+                            $method_t_coli = 'Total_Coliform_LI';
+                            break;
+                        case '2-Air Limbah Domestik':
+                            $method_t_coli = 'Total_Coliform_LD';
+                            break;
+                        default:
+                            $method_t_coli = null;
+                            break;
+                    }
+                }
+
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                            ->where('required_parameter', $total_coliform)
+                            ->where('no_sampel', $request->no_sample)
+                            ->where('class_calculate', $method_t_coli)
+                            ->where('tanggal_terima', $tgl_terima)
+                            ->calculate();
+                    }
+                }
 
 				DB::commit();
 				return (object)[
@@ -2921,7 +3149,9 @@ class InputParameterController extends Controller
 			DB::rollBack();
 			return (object)[
 				'message' => 'Gagal input data: '.$e->getMessage(),
-				'status' => 500
+				'status' => 500,
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
 			];
 		}
 	}
@@ -4631,7 +4861,7 @@ class InputParameterController extends Controller
 		}else if($suhu >= 60.5 && $suhu < 61) {
 			$nil_pv = 152.8;
 		} else {
-			throw new Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
+			throw new \Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
 		}
 
 		return $nil_pv;

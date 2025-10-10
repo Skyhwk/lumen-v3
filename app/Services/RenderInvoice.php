@@ -1595,7 +1595,7 @@ class RenderInvoice
             ');
             // dd($sisa_tagihan);
             // dd($total_tagihan, $nilai_tagihan);
-            $sisa_tagihan = $sisa_tagihan - $nilai_tagihan;
+            $sisa_tagihan = $total_tagihan - $nilai_tagihan;
             if (abs($sisa_tagihan) > 10) {
                 $pdf->writeHTML('
                     <tr class="line_">

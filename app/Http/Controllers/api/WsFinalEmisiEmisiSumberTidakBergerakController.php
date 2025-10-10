@@ -105,6 +105,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		$data3Arr = $data3->toArray();
 
 		$data = array_merge($data1Arr, $data2Arr, $data3Arr);
+		// dd($data, $data1Arr, $data2Arr, $data3Arr);
 
 		foreach ($data as &$item) {
 			$item['method'] = null;

@@ -16,7 +16,6 @@ use App\Models\LhpsGetaranDetailHistory;
 use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
@@ -87,7 +86,7 @@ class DraftUdaraGetaranController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $header = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
 
             if ($header != null) {
                 if ($header->is_revisi == 1) {
@@ -324,25 +323,39 @@ class DraftUdaraGetaranController extends Controller
 
             // === 7. Generate QR & File ===
             if (!$header->file_qr) {
+                
                 $file_qr = new GenerateQrDocumentLhp();
                 if ($path = $file_qr->insert('LHP_Getaran', $header, $this->karyawan)) {
                     $header->file_qr = $path;
                     $header->save();
                 }
             }
+            $renderDetail = LhpsGetaranDetail::where('id_header', $header->id)->get();
+            $renderDetail = collect($renderDetail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
 
             $groupedByPage = collect(LhpsGetaranCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
+            foreach ($groupedByPage as $idx => $cstm) {
+                $groupedByPage[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
+                $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
                             ->render();
             } else {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
+                $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
@@ -610,7 +623,7 @@ class DraftUdaraGetaranController extends Controller
                 }
                 $data_entry = collect($data_entry)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
@@ -652,7 +665,7 @@ class DraftUdaraGetaranController extends Controller
 
                 $mainData = collect($mainData)->sortBy(function($item) {
                     if (is_array($item)) {
-                        return mb_strtolower($item['tanggal_terima'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
+                        return mb_strtolower($item['tanggal_sampling'] ?? '') . mb_strtolower($item['no_sampel'] ?? '');
                     }
                     return '';
                 })->values()->toArray();
@@ -775,8 +788,6 @@ class DraftUdaraGetaranController extends Controller
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
-                    $data->nama_karyawan = $this->karyawan;
-                    $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
 
                     HistoryAppReject::insert([
@@ -926,8 +937,8 @@ class DraftUdaraGetaranController extends Controller
                         'token' => $token,
                         'key' => $gen,
                         'id_quotation' => $header->id,
-                        'quotation_status' => 'draft_lhp_getaran',
-                        'type' => 'draft_getaran',
+                        'quotation_status' => 'draft_getaran',
+                        'type' => 'draft',
                         'expired' => Carbon::now()->addYear()->format('Y-m-d'),
                         'fileName_pdf' => $header->file_lhp,
                         'created_by' => $this->karyawan,

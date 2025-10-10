@@ -2,30 +2,27 @@
 
 namespace App\Http\Controllers\api;
 
-// use App\Models\LhpsAirHeader;
-// use App\Models\LhpsAirDetail;
-// use App\Models\LhpsAirCustom;
 
-use App\Models\LhpsIklimCustom;
-use App\Models\LhpsIklimDetail;
-use App\Models\LhpsIklimHeader;
 
-use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\Colorimetri;
-use App\Models\Gravimetri;
-use App\Models\Titrimetri;
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
-use App\Services\LhpTemplate;
-use App\Services\PrintLhp;
+use App\Models\{
+    LhpsIklimCustom, 
+    LhpsIklimDetail,
+    LhpsIklimHeader, 
+    OrderDetail
+};
+
+use App\Services\{
+    GenerateQrDocumentLhp,
+    LhpTemplate,
+    PrintLhp
+};
+
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
+
 use Yajra\Datatables\Datatables;
 
 class LhpIklimController extends Controller
@@ -181,11 +178,35 @@ class LhpIklimController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsIklimHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+            $header = LhpsIklimHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
                 $header->count_print = $header->count_print + 1; 
-
+                $header->save();
+                $parameter = explode(';', json_decode($request->parameter)[0])[1];
                 $detail = LhpsIklimDetail::where('id_header', $header->id)->get();
-         
+                $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
+                ->groupBy('page')
+                ->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+                if($parameter == 'ISBB' || $parameter == 'ISBB (8 Jam)'){
+                  LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->useLampiran(true)
+                        ->setDataCustom($custom)
+                        ->whereView('DraftIklimPanas')
+                        ->render();
+                } else {
+                    LhpTemplate::setDataDetail($detail)
+                        ->setDataHeader($header)
+                        ->useLampiran(true)
+                        ->setDataCustom($custom)
+                        ->whereView('DraftIklimDingin')
+                        ->render();
+                }
                 $servicePrint = new PrintLhp();
                  $servicePrint->printByFilename($header->file_lhp, $detail);
                 

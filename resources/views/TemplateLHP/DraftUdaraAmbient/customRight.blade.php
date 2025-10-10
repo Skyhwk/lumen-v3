@@ -49,7 +49,7 @@
                                 style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
                         @php
-                         $methode_sampling = $header->methode_sampling ? $header->methode_sampling : '-';
+                         $methode_sampling = $header->methode_sampling ? $header->methode_sampling : [];
                     @endphp
                     <tr>
                         <td class="custom5" width="120">Metode Sampling</td>
