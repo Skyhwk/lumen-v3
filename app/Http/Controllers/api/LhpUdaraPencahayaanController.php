@@ -100,6 +100,7 @@ class LhpUdaraPencahayaanController extends Controller
         LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
                 ->whereView('DraftPencahayaan')
                 ->render();
         $servicePrint = new PrintLhp();
