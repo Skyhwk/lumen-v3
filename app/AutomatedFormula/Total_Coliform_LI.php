@@ -90,9 +90,8 @@ class Total_Coliform_LI
 
             $isGreater = $temp_result >= 1600 ? true : false;
 
-            // $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
-            $closest = $this->searchClosestKey(15/10, false);
-            dd($closest);
+            $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
+
             $hasil = $closest['key'];
             if ($hasil < 1) {
                 $hasil = '<1';
