@@ -127,12 +127,10 @@ class InputParameterController extends Controller
                 $row = array_fill_keys($diff, '-');
 
                 foreach (array_diff($select, $diff) as $param_key => $p) {
+                    $quota_exceeded = false;
+                    $already_counted = false;
+                    $index_counted = null;
                     if ($stp->name !== 'SUBKONTRAK') {
-
-                        $quota_exceeded = false;
-                        $already_counted = false;
-                        $index_counted = null;
-
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -141,46 +139,48 @@ class InputParameterController extends Controller
                             $quota_count[$request->id_stp]->put($p, collect());
                         }
 
-                        // --- 1️⃣ Cek apakah sample sudah pernah terhitung
-                        if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
-                            $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
-                            $already_counted = true;
-                        }
-
-                        // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
-                        if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
-                            $quota_exceeded = true;
-                        }
-
-                        // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
-                        if ($quota_exceeded || $already_counted) {
-                            // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
-                            if($already_counted){
-                                $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
+                        if(isset($quota[$p])){
+                            // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                            if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                                $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                                $already_counted = true;
                             }
-                            $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
-                            if ($diff_count > 0) {
-                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
-                                    ->slice(0, $quota[$p])
-                                    ->values();
+
+                            // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                            if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
+                                $quota_exceeded = true;
                             }
-                            continue;
-                        }
 
-                        // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
-                        if (isset($quota[$p])) {
-                            $currentCount = $quota_count[$request->id_stp][$p]->count();
-                            $maxQuota = $quota[$p];
+                            // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
+                            if ($quota_exceeded || $already_counted) {
+                                // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
+                                if($already_counted){
+                                    $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
+                                }
+                                $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
+                                if ($diff_count > 0) {
+                                    $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                        ->slice(0, $quota[$p])
+                                        ->values();
+                                }
+                                continue;
+                            }
 
-                            // Hanya tambahkan jika belum mencapai batas quota
-                            if ($currentCount < $maxQuota) {
-                                $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                            // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                            if (isset($quota[$p])) {
+                                $currentCount = $quota_count[$request->id_stp][$p]->count();
+                                $maxQuota = $quota[$p];
+
+                                // Hanya tambahkan jika belum mencapai batas quota
+                                if ($currentCount < $maxQuota) {
+                                    $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                                }
                             }
                         }
-
                     }
 
                     // --- 6️⃣ Simpan nomor sampel ke row
+                    if(!$quota_exceeded && !$already_counted) $quota_count[$request->id_stp][$p]->push($val->no_sampel);
                     $row[$p] = $val->no_sampel;
                 }
 

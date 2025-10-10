@@ -797,11 +797,14 @@ class DraftUdaraAmbientController extends Controller
   private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
+         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
+            ->where('parameter', $val->parameter)
+            ->first();
         $entry = [
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => $param->status === "AKREDITASI" ? '' : 'ẍ',
+            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
             'parameter' => $param->nama_regulasi,
             'satuan' => $param->satuan,
             'hasil_uji' => $val->ws_value_linkungan->C	 ?? null,
@@ -809,10 +812,6 @@ class DraftUdaraAmbientController extends Controller
             'methode' => $param->method,
             'status' => $param->status
         ];
-
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-            ->where('parameter', $val->parameter)
-            ->first();
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;

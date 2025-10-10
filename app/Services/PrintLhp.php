@@ -107,13 +107,13 @@ class PrintLhp
             if (!$header) {
                 return false;
             }
-            $cek_printer = Printers::where('id', 47)->first();
+            $cek_printer = Printers::where('id', 67)->first();
             $print = Printing::where('pdf', env('APP_URL') . '/public/dokumen/LHP/' . $header->no_dokumen)
                 ->where('printer', $cek_printer->full_path)
                 ->where('karyawan', 'System')
                 ->where('filename', 'dokumen/LHP/' . $header->no_dokumen)
-                ->where('printer_name', '\\itcom2\EPSON L360 Series')
-                ->where('destination', '\\itcom2\EPSON L360 Series')
+                ->where('printer_name', $cek_printer->name)
+                ->where('destination', $cek_printer->full_path)
                 // ->where('pages', $request->pages)
                 ->print();
             if (!$print) {

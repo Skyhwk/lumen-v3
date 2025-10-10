@@ -342,7 +342,7 @@ class DraftUdaraPencahayaanController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Data draft LHP Pencahayaan no sampel ' . $request->noSampel . ' berhasil disimpan',
+                'message' => 'Data draft LHP Pencahayaan no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status' => true
             ], 201);
         } catch (\Exception $th) {
