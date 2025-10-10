@@ -36,7 +36,7 @@ class FdlDebuPersonalController extends Controller
         if (isset($request->no_sample) && $request->no_sample != null) {
 
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','debu_personal')->where('kategori','4-Udara')->first();
-            $listParameter = json_decode($parameter->parameters, true);
+            $parameterList = json_decode($parameter->parameters, true);
 
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where(function($q) use ($parameterList) {
