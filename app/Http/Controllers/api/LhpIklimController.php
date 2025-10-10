@@ -178,7 +178,7 @@ class LhpIklimController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsIklimHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsIklimHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
                 $header->count_print = $header->count_print + 1; 
                 $header->save();
                 $parameter = explode(';', json_decode($request->parameter)[0])[1];
