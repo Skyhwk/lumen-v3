@@ -89,4 +89,37 @@ class LhpErgonomiController extends Controller
             'message' => 'Berhasil Melakukan Reprint Data ' . $request->no_sampel . ' berhasil!'
         ], 200);
     }
+
+    public function handleReject(Request $request) {
+        DB::beginTransaction();
+        try {
+            $header = DraftErgonomiFile::where('no_sampel', $request->no_sampel)->first();
+
+            if($header != null) {
+                $header->is_approve = 0;
+                $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+                $header->rejected_by = $this->karyawan.'(LHP)';
+                
+                // $header->file_qr = null;
+                $header->save();
+
+                $data_order = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
+                    'status' => 2,
+                    'is_approve' => 0,
+                    'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'rejected_by' => $this->karyawan . '(LHP)'
+                ]);
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Reject no sampel '.$request->no_sampel.' berhasil!'
+            ]);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan '.$e->getMessage(),
+            ], 401);
+        }
+    }
 }

@@ -74,7 +74,7 @@ class PrintLhp
             //code...
             // $id_printer = 67; // Default printer ID
             // $id_printer = 68; // kan
-            $id_printer = 71; // debug Internal
+            $id_printer = 67; // debug Internal
             $cek_printer = Printers::where('id', $id_printer)->first();
           
             $print = Printing::where('pdf', env('APP_URL') . '/public/draft_ergonomi/lhp/' . $no_sampel->name_file)
