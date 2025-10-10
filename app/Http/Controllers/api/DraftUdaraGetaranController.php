@@ -766,6 +766,7 @@ class DraftUdaraGetaranController extends Controller
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
                 $no_lhp = $data->no_lhp;
+                $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
                     ->where('type_document', 'LHP_GETARAN')
                     ->where('is_active', 1)
@@ -783,10 +784,12 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by' => $this->karyawan
                     ]);
+
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
                     $data->save();
+
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
                         'no_sampel' => is_array($request->no_sampel) 
@@ -799,6 +802,7 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+
                     if ($qr != null) {
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
