@@ -53,7 +53,7 @@ class TestingController extends Controller
     {
         try {
             //code...
-
+            
             switch ($request->menu) {
                 case 'this':
                     dd($this);
@@ -1053,8 +1053,22 @@ class TestingController extends Controller
                 case 'decode':
                     $decrypt = $this->makeDecrypt($request->decrypt);
                     return response()->json($decrypt);
+                case 'chekregen':
+                    $db =OrderDetail::where('no_sampel',$request->no_sampel)
+                    ->where('is_active',1)->first();
+                    if($db != null){
+                        
+                        $raw = json_decode($db->parameter,true);
+                        
+                        $parameter =array_map(function($item){
+                            $parts =explode(';',$item);
+                            return $parts[1] ?? null;
+                        },$raw);
+                        $chekRegen =HargaParameter::whereIn('nama_parameter',$parameter)->get(['nama_parameter','regen','nama_kategori']);
+                        return response()->json(["data"=>$chekRegen],200);
+                    }
                 default:
-                    return response()->json("Menu tidak ditemukanX", 404);
+                    return response()->json("Menu tidak ditemukanXw", 404);
             }
         } catch (\Throwable $th) {
             //throw $th;

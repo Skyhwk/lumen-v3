@@ -30,6 +30,7 @@ use App\Models\{
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
+    LhpsLingHeader,
     JobTask,
     LhpsAirCustom,
     LhpsAirDetail,
@@ -399,6 +400,18 @@ class PortalController extends Controller
                             }
                         } else if ($cek->quotation_status == 'draft_iklim') {
                             $data = LhpsIklimHeader::with('link')
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+                            $uri = env('APP_URL') . '/public/dokumen/LHPS/';
+                            if ($data) {
+                                $data->flag_status = 'draft';
+                                $data->type = $cek->quotation_status;
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = null;
+                            }
+                        }else if ($cek->quotation_status == 'draft_ambient'){
+                             $data = LhpsLingHeader::with('link')
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
                                 ->first();
