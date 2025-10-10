@@ -87,8 +87,7 @@ class DraftUdaraGetaranPersonalController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
-
+            $header = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
             if ($header != null) {
                 if ($header->is_revisi == 1) {
                     $header->is_revisi = 0;
@@ -333,21 +332,13 @@ class DraftUdaraGetaranPersonalController extends Controller
             $groupedByPage = collect(LhpsGetaranCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
-            if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
-                    ->setDataHeader($header)
-                    ->useLampiran(true)
-                    ->setDataCustom($groupedByPage)
-                    ->whereView('DraftGetaranPersonal')
-                    ->render();
-            } else {
-                $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
-                    ->setDataHeader($header)
-                    ->useLampiran(true)
-                    ->setDataCustom($groupedByPage)
-                    ->whereView('DraftGetaran')
-                    ->render();
-            }
+            $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
+                ->setDataHeader($header)
+                ->useLampiran(true)
+                ->setDataCustom($groupedByPage)
+                ->whereView('DraftGetaranPersonal')
+                ->render();
+           
 
 
             $header->file_lhp = $fileName;

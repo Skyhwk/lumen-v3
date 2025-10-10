@@ -47,7 +47,6 @@
                                         $hasil =  $yy['percepatan'];
                                     }
                             }
-
                         @endphp
                         <td class="custom">{{ $hasil }}</td>
                         <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
