@@ -25,6 +25,7 @@ use App\Models\{
     LhpsPencahayaanHeader,
     LhpsIklimHeader,
     LhpUdaraPsikologiHeader,
+    LhpsGetaranHeader,
     LhpsEmisiHeader,
     OrderDetail,
     Parameter,
