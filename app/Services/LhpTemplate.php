@@ -427,9 +427,8 @@ class LhpTemplate
                         }
                         .custom4 {
                             padding: 3px;
-                            border-left: 1px solid #000000;
-                            border-right: 1px solid #000000;
-                            border-bottom: 1px solid #000000;
+                            border: 1px solid #000000;
+                            font-weight: bold;
                             font-size: 9px;
                         }
                         .custom5 {
