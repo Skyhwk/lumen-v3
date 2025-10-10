@@ -44,7 +44,7 @@ use Carbon\Carbon;
 class WsFinalUdaraGetaranController extends Controller
 {
 
-	private $categoryGetaran = [13, 14, 15, 16, 18, 19, 20];
+	private $categoryGetaran = [13, 14, 15, 16, 18, 19];
 
 
 	// public function index(Request $request)
@@ -143,6 +143,7 @@ class WsFinalUdaraGetaranController extends Controller
 			$data = GetaranHeader::with(['lapangan_getaran', 'lapangan_getaran_personal', 'ws_udara'])->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->where('status', 0)
+				->where('is_active', 1)
 				->get();
 
 			$ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();

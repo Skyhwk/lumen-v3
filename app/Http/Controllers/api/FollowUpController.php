@@ -12,10 +12,11 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\DFUS;
+use App\Models\KontakPelangganBlacklist;
 use App\Models\OrderHeader;
 use App\Models\MasterPelanggan;
 use App\Models\MasterKaryawan;
-
+use App\Models\MasterPelangganBlacklist;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -67,8 +68,28 @@ class FollowUpController extends Controller
         return substr(str_shuffle($str), 0, 4) . sprintf("%02d", $no);
     }
 
+    private function checkForBlacklistedCustomer($nama_pelanggan, $kontak_pelanggan)
+    {
+        $blacklistedByName = MasterPelangganBlacklist::where('nama_pelanggan', $nama_pelanggan)->exists();
+        if ($blacklistedByName) return response()->json(['message' => 'Pelanggan dengan nama: ' . $nama_pelanggan . ' telah terdaftar di daftar hitam'],  401);
+
+        if ($kontak_pelanggan) {
+            $kontak_pelanggan = preg_replace("/[^0-9]/", "", $kontak_pelanggan);
+
+            if (substr($kontak_pelanggan, 0, 2) === "62") {
+                $kontak_pelanggan = "0" . substr($kontak_pelanggan, 2);
+            }
+
+            $blacklistedByTelNumber = KontakPelangganBlacklist::where('no_tlp_perusahaan', $kontak_pelanggan)->exists();
+            if ($blacklistedByTelNumber) return response()->json(['message' => 'Pelanggan dengan nomor telepon: ' . $kontak_pelanggan . ' telah terdaftar di daftar hitam'], 401);
+        }
+    }
+
     public function saveFollowUp(Request $request)
     {
+        $response = $this->checkForBlacklistedCustomer($request->nama_pelanggan, $request->no_tlp_perusahaan);
+        if ($response) return $response;
+
         // Generate no_urut
         $lastPelanggan = MasterPelanggan::orderBy('no_urut', 'desc')->first();
         $noUrut = str_pad($lastPelanggan ? (int) $lastPelanggan->no_urut + 1 : 1, 5, '0', STR_PAD_LEFT);

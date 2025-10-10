@@ -11,6 +11,8 @@ use App\Models\EmisiCerobongHeader;
 use App\Models\Subkontrak;
 use App\Models\IsokinetikHeader;
 use App\Http\Controllers\Controller;
+use App\Models\MasterBakumutu;
+use App\Models\MasterRegulasi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -104,6 +106,25 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
 		$data = array_merge($data1Arr, $data2Arr, $data3Arr);
 
+		foreach ($data as &$item) {
+			$item['method'] = null;
+			$item['baku_mutu'] = null;
+			$item['satuan'] = null;
+			$item['jenis_persyaratan'] = null;
+			if ($request->regulasi) {
+				$bakuMutu = MasterBakumutu::where('id_regulasi', explode('-', $request->regulasi)[0])
+					->where('parameter', $item['parameter'])
+					->where('is_active', 1)
+					->first();
+
+				if ($bakuMutu) {
+					$item['method'] = $bakuMutu->method;
+					$item['baku_mutu'] = $bakuMutu->baku_mutu;
+					$item['satuan'] = $bakuMutu->satuan;
+					$item['jenis_persyaratan'] = $bakuMutu->nama_header;
+				}
+			}
+		}
 
 		return Datatables::of($data)->make(true);
 	}
@@ -584,5 +605,36 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 				'line' => $e->getLine()
 			], 500);
 		}
+	}
+
+	public function getRegulasi(Request $request)
+	{
+		$data = MasterRegulasi::where('id_kategori', $request->id_kategori)
+			->where('is_active', '1')->get();
+
+		return response()->json([
+			'data' => $data
+		]);
+	}
+
+	public function ubahRegulasi(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$regulasi = MasterRegulasi::where('id', $request->regulasi)->first();
+			$new_regulasi = [$request->regulasi . '-' . $regulasi->peraturan];
+			$data = OrderDetail::where('id', $request->id)->first();
+			$data->regulasi = $new_regulasi;
+			$data->save();
+			DB::commit();
+			return response()->json([
+				'success' => true,
+				'message' => 'Regulasi berhasil diubah!'
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollback();
+			throw $th;
+		}
+
 	}
 }

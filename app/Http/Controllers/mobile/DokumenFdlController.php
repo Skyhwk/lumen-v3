@@ -8,6 +8,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\OrderDetail;
+use App\Models\QuotationKontrakD;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 use App\Models\QuotationKontrakH;
@@ -42,67 +43,65 @@ use App\Models\DataLapanganSinarUV;
 use App\Models\DetailMicrobiologi;
 use App\Models\DataLapanganErgonomi;
 use App\Models\DataLapanganPsikologi;
+use App\Models\MasterKaryawan;
+use Illuminate\Support\Str; // Pastikan sudah di-import
+
 class DokumenFdlController extends Controller
 {
     public function index(Request $request) {
 
         $periode_akhir = Carbon::parse($request->periode_akhir);
-        $periode_awal = $periode_akhir->copy()->subWeeks(8); // atau subDays(7)
+        $periode_awal = $periode_akhir->copy()->subWeek(); // atau subDays(7)
 
         $periode_awal->toDateString();
         $periode_akhir->toDateString();
 
+        $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
+            ->whereIn('id_jabatan', [41, 42])
+            ->exists();
+
+        $startDate = $isProgrammer
+            ? Carbon::now()->subDays(20)->toDateString()
+            : Carbon::now()->subDays(8)->toDateString();
+
+        $endDate = Carbon::now()->toDateString();
+
         $data = OrderDetail::with([
             'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
             'orderHeader.samplingPlan',
-            'orderHeader.samplingPlan.jadwal'=>
-                function ($query) {
-                    $query->where('is_active', true);
-                },
+            'orderHeader.samplingPlan.jadwal' => function ($query) {
+                $query->where('is_active', true);
+            },
         ])
         ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->where('is_active', true)
-        // ->whereIn('tanggal_sampling', $tanggal)
-        ->whereBetween('tanggal_sampling', [$periode_awal->toDateString(), $periode_akhir->toDateString()])
+        ->whereBetween('tanggal_sampling', [$startDate, $endDate])
         ->groupBy(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
         ->get();
 
-        $jadwalData = collect();  // Variabel untuk menampung jadwal yang sudah dimodifikasi
-        $orderDetailData = collect();  // Variabel untuk menampung OrderDetail data
+        // Inisialisasi koleksi kosong
+        $jadwalData = collect();
+        $orderDetailData = collect();
 
-        // Looping untuk memodifikasi dan mengambil data
+        // Looping utama untuk menampung OrderDetail dan jadwal
         foreach ($data as $orderDetail) {
-            // Menyimpan OrderDetail data
             $orderDetailData->push($orderDetail);
 
-            // Looping untuk memodifikasi data jadwal
-            // Kode lama
-            // $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use ($orderDetail, &$jadwalData) { // Menggunakan &$jadwalData untuk pass by reference
-            //     $samplingPlan->jadwal->each(function ($jadwal) use ($orderDetail, &$jadwalData) { // 
-            //     // Menggunakan &$jadwalData untuk pass by reference
-            //         // Menambahkan data ke jadwal
-            //         if($jadwal->tanggal == $orderDetail->tanggal_sampling){
-            //             $jadwal->no_order = $orderDetail->no_order; 
-            //             $jadwalData->push($jadwal);
-            //         }
-            //     });
-            // });
+            $samplingPlans = optional($orderDetail->orderHeader)->samplingPlan;
 
-            if ($orderDetail->orderHeader && $orderDetail->orderHeader->samplingPlan) {
-                $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use ($orderDetail, &$jadwalData) {
-                    if ($samplingPlan->jadwal) {
-                        $samplingPlan->jadwal->each(function ($jadwal) use ($orderDetail, &$jadwalData) {
-                            if($jadwal->tanggal == $orderDetail->tanggal_sampling){
-                                $jadwal->no_order = $orderDetail->no_order; 
-                                $jadwalData->push($jadwal);
-                            }
-                        });
-                    }
+            if ($samplingPlans) {
+                $samplingPlans->each(function ($samplingPlan) use ($orderDetail, &$jadwalData) {
+                    $samplingPlan->jadwal->each(function ($jadwal) use ($orderDetail, &$jadwalData) {
+                        if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
+                            $jadwal->no_order = $orderDetail->no_order;
+                            $jadwalData->push($jadwal);
+                        }
+                    });
                 });
             }
         }
-
-        // Output hasil
+        // dd($jadwalData);
+        // Grouping berdasarkan kunci unik gabungan field
         $grouped = $jadwalData->groupBy(function ($item) {
             return implode('|', [
                 $item->id_sampling,
@@ -122,7 +121,8 @@ class DokumenFdlController extends Controller
                 $item->wilayah
             ]);
         });
-
+        // dd($grouped);
+        // Format akhir data
         $final = $grouped->map(function ($group) {
             $first = $group->first();
 
@@ -136,7 +136,7 @@ class DokumenFdlController extends Controller
                 'periode' => $first->periode,
                 'jam_mulai' => $first->jam_mulai,
                 'jam_selesai' => $first->jam_selesai,
-                'kategori' => implode(', ', json_decode(html_entity_decode($first->kategori), true)),
+                'kategori' => implode(', ', json_decode(html_entity_decode($first->kategori), true) ?? []),
                 'durasi' => $first->durasi,
                 'status' => $first->status,
                 'warna' => $first->warna,
@@ -149,27 +149,40 @@ class DokumenFdlController extends Controller
                 'batch_id' => $group->pluck('id')->implode(','),
                 'batch_user' => $group->pluck('userid')->implode(','),
             ];
-        })->values(); // values() untuk reset key numerik
-        $arrayFinal = $final->toArray();
+        })->values()->toArray();
+        // dd($final);
+        // Filter berdasarkan nama karyawan (case-insensitive)
+        if (!$isProgrammer) {
+            $arrayFinal = array_filter($final, function ($item) {
+                if (empty($item['sampler'])) return false;
 
-
-        // filter data 
-        $arrayFinal = array_filter($arrayFinal, function($item) {
-            if (!isset($item['sampler'])) return false;
-        
-            $samplerArray = array_map('trim', explode(',', $item['sampler']));
-        
-            foreach ($samplerArray as $name) {
-                if (strcasecmp($name, $this->karyawan) == 0) {
-                    return true;
+                $samplerArray = array_map('trim', explode(',', $item['sampler']));
+                
+                foreach ($samplerArray as $name) {
+                    if (strcasecmp($name, $this->karyawan) === 0) {
+                        return true;
+                    }
                 }
-            }
-        
-            return false;
-        });
 
+                return false;
+            });
+        } else {
+            // Programmer, tidak difilter
+            $arrayFinal = $final;
+        }
+        // dd($arrayFinal);
+        // Ambil no_order untuk query selanjutnya
         $orderNos = array_column($arrayFinal, 'no_order');
-        $persiapanHeaders = PersiapanSampelHeader::whereIn('no_order', $orderNos)->get()->keyBy('no_order');
+
+        // Ambil data persiapan header berdasarkan no_order
+        $persiapanHeaders = PersiapanSampelHeader::whereIn('no_order', $orderNos)
+            ->where('is_active', true)
+            ->orderBy('id', 'desc')
+            ->get()
+            ->keyBy('no_order');
+
+        // dd($persiapanHeaders);
+
         
         foreach ($arrayFinal as &$item) {
             if (isset($persiapanHeaders[$item['no_order']])) {
@@ -210,9 +223,18 @@ class DokumenFdlController extends Controller
 
     public function detailsData(Request $request)
     {
+        
         try {
             $loggedInUser = $this->karyawan;
 
+            $isProgrammer = MasterKaryawan::where('nama_lengkap', $this->karyawan)
+                ->whereIn('id_jabatan', [41, 42])
+                ->exists();
+
+            // Deteksi apakah jenis quotation kontrak (QTC) atau non-kontrak (QT)
+            $isKontrak = Str::contains($request->no_quotation, '/QTC/');
+
+            // Mulai query
             $data = OrderDetail::with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
                 'orderHeader.samplingPlan',
@@ -221,8 +243,15 @@ class DokumenFdlController extends Controller
                 },
             ])
             ->where('is_active', true)
-            ->where('no_quotation', $request->no_quotation)
-            ->get();
+            ->where('no_quotation', $request->no_quotation);
+
+            // Jika kontrak, filter juga berdasarkan periode
+            if ($isKontrak) {
+                $data->where('periode', Carbon::parse($request->tanggal_sampling)->format('Y-m'));
+            }
+
+            // Eksekusi query
+            $data = $data->get();
 
             $flatData = [];
 
@@ -231,17 +260,27 @@ class DokumenFdlController extends Controller
                     continue;
                 }
 
-                $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use (&$orderDetail, &$flatData, &$loggedInUser) {
+                $orderDetail->orderHeader->samplingPlan->each(function ($samplingPlan) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
                     $jadwals = $samplingPlan->jadwal ?? collect();
 
-                    $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, &$loggedInUser) {
+                    $jadwals->each(function ($jadwal) use (&$orderDetail, &$flatData, $loggedInUser, $isProgrammer) {
                         if ($jadwal->tanggal == $orderDetail->tanggal_sampling) {
-                            $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+                            $allowPush = false;
 
-                            // Tampilkan hanya jika user login adalah salah satu sampler
-                            if (in_array($loggedInUser, $samplerList)) {
+                            if ($isProgrammer) {
+                                // Programmer bisa lihat semua
+                                $allowPush = true;
+                            } else {
+                                // Non-programmer hanya kalau termasuk dalam sampler
+                                $samplerList = array_map('trim', explode(',', $jadwal->sampler));
+                                if (in_array($loggedInUser, $samplerList)) {
+                                    $allowPush = true;
+                                }
+                            }
+
+                            if ($allowPush) {
                                 $crf = explode("-", $orderDetail->kategori_3);
-                                $nama_kategori = explode("/", $orderDetail->cfr ?? '');
+                                $nama_kategori = explode("/", $orderDetail->no_sampel ?? '');
 
                                 $flatData[] = [
                                     'sampler' => $loggedInUser,
@@ -259,8 +298,11 @@ class DokumenFdlController extends Controller
                 });
             }
 
+            
             $persiapan = PersiapanSampelHeader::select('detail_cs_documents')
                 ->where('no_quotation', $request->no_quotation)
+                ->where('is_active', true)
+                ->orderBy('id', 'desc')
                 ->first();
     
             // Lakukan pencocokan signature per baris data
@@ -281,6 +323,7 @@ class DokumenFdlController extends Controller
                             }
                         }
                     }
+                    
                     if (!empty($matchingDocs)) {
                         // Jika ada lebih dari satu, coba pilih berdasarkan tanggal yang sesuai
                         $selectedDoc = null;
@@ -320,7 +363,7 @@ class DokumenFdlController extends Controller
                 ->sortBy('no_sampel')
                 ->values()
                 ->toArray();
-
+            
             return DataTables::of($sorted)->make(true);
 
         } catch (\Throwable $th) {
@@ -338,6 +381,7 @@ class DokumenFdlController extends Controller
 
     public function updateData(Request $request)
     {
+        // dd($request->all());
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
             try {
@@ -353,6 +397,106 @@ class DokumenFdlController extends Controller
                         ->where('is_active', 1)
                         ->first();
 
+                    if ($po) {
+                        $isContract = str_contains($item['nomor_quotation'], 'QTC');
+                        if (!$isContract) {
+                            $qt = QuotationNonKontrak::where('no_document', $item['nomor_quotation'])->first();
+                            if ($qt) {
+                                $data_pendukung_sampling = json_decode($qt->data_pendukung_sampling);
+                                foreach ($data_pendukung_sampling as &$dps) {
+                                    foreach ($dps->penamaan_titik as &$pt) {
+                                        $nomor = key((array) $pt);
+                                        if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                            $pt->$nomor = $item['deskripsi'];
+                                        }
+                                    }
+                                }
+
+                                $qt->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                $qt->save();
+                            }
+                        } else {
+                            // dd('masuk ke kontrak');
+                            $groupedNamedPoints = [];
+
+                            $qtcHeader = QuotationKontrakH::where('no_document', $item['nomor_quotation'])->first();
+                            $qtcDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $qtcHeader->id)->get();
+
+                            // UPDATE QTCD
+                            if ($qtcDetail) {
+                                foreach ($qtcDetail as $qtD) {
+                                    $data_pendukung_sampling = json_decode($qtD->data_pendukung_sampling);
+                                    foreach ($data_pendukung_sampling as &$dps) {
+                                        foreach ($dps->data_sampling as &$ds) {
+                                            foreach ($ds->penamaan_titik as &$pt) {
+                                                $nomor = key((array) $pt);
+                                                if ($nomor == explode('/', $item['no_sampel'])[1]) {
+                                                    $pt->$nomor = $item['deskripsi'];
+                                                }
+                                                $props = get_object_vars($pt);
+                                                $nomor = key($props);
+                                                $titik = $props[$nomor];
+                                                // $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . empty($ds->regulasi) ? json_encode([]) : json_encode($ds->regulasi) . ';' . json_encode($ds->parameter);
+                                                $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . (
+                                                    empty($ds->regulasi) 
+                                                        ? json_encode([]) 
+                                                        : json_encode($ds->regulasi)
+                                                ) . ';' . json_encode($ds->parameter);
+                                                // dd($fullGroupKey);
+                                                $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
+                                                    $nomor => $titik
+                                                ];
+                                            }
+                                        }
+                                    }
+                                    // dd($data_pendukung_sampling);
+                                    $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                    $qtD->save();
+                                }
+                            }
+
+
+                            // UPDATE QTCH
+                            // dd(array_keys($groupedNamedPoints));
+                            if ($qtcHeader) {
+                                $data_pendukung_sampling = json_decode($qtcHeader->data_pendukung_sampling);
+                                foreach ($data_pendukung_sampling as &$dps) {
+
+                                    $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
+
+                                    // Filter penamaan titik
+                                    $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
+                                        if (!is_array($group))
+                                            return false;
+                                        foreach ($group as $item) {
+                                            if (is_array($item) || is_object($item)) {
+                                                foreach ($item as $value) {
+                                                    if (!empty($value))
+                                                        return true;
+                                                }
+                                            }
+                                        }
+                                        return false;
+                                    });
+
+                                    // Proses penamaan titik Header
+                                    if ($penamaan_sampling_all) {
+                                        $penamaan_sampling = array_map(function ($item) {
+                                            return array_values($item)[0] ?? "";
+                                        }, reset($penamaan_sampling_all));
+                                    } else {
+                                        $penamaan_sampling = array_fill(0, $dps->jumlah_titik, "");
+                                    }
+
+                                    $dps->penamaan_titik = $penamaan_sampling;
+                                }
+
+                                $qtcHeader->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                                $qtcHeader->save();
+                            }
+                        }
+                    }
+
                     $po->keterangan_1 = $item['deskripsi'];
                     $po->save();
                     $noSampel[] = $item['no_sampel'];
@@ -366,7 +510,8 @@ class DokumenFdlController extends Controller
                 }
 
                 // PersiapanSampelHeader
-                $persiapanSampel = PersiapanSampelHeader::where('no_quotation', $nomorQuotation)->first();
+                $persiapanSampel = PersiapanSampelHeader::where('no_quotation', $nomorQuotation)->where('tanggal_sampling', $tanggalSampling)->where('is_active', 1)->orderBy('id', 'desc')->first();
+                // dd($persiapanSampel);
                 if (! $persiapanSampel) {
                     $persiapanSampel = new PersiapanSampelHeader();
                     $persiapanSampel->no_quotation      = $nomorQuotation;
@@ -447,7 +592,7 @@ class DokumenFdlController extends Controller
                 if ($quotation) {
                     // Ambil semua PersiapanSampelDetail sesuai no_sampel
                     $psDetails = PersiapanSampelDetail::whereIn('no_sampel', $noSampel)->get();
-                    
+                    // dd($psDetails);
                     // Ambil orderDetail yang mau di-PDF
                     $orderDetails = $quotation->order->orderDetail()
                         // ->where('tanggal_sampling', $tanggalSampling)
@@ -462,14 +607,18 @@ class DokumenFdlController extends Controller
                         foreach ($psDetails as $psd) {
                             if ($item->no_sampel == $psd->no_sampel) {
                                 $parameters = json_decode($psd->parameters, true);
-                                foreach ($parameters as $kategori => $sub) {
-                                    foreach ($sub as $val) {
-                                        $d = (int) $val['disiapkan'];
-                                        $jumlahBotol += $d;
-                                        $jumlahLabel += $d * 2;
+                                // dd($parameters);
+                                if($parameters != null) {
+                                    foreach ($parameters as $kategori => $sub) {
+                                        // dd($sub);
+                                        foreach ($sub as $val) {
+                                            $d = (int) $val['disiapkan'];
+                                            $jumlahBotol += $d;
+                                            $jumlahLabel += $d * 2;
+                                        }
                                     }
+                                    break;
                                 }
-                                break;
                             }
                         }
                         
@@ -483,7 +632,7 @@ class DokumenFdlController extends Controller
                         $item->jumlah_botol  = $jumlahBotol;
                         $item->jumlah_label = $jumlahLabel;
                     }
-
+                    // dd('masuk');
                     // Siapkan data signature untuk PDF
                     $signatureData = (object) [
                         'ttd_sampler' => $ttd_sampler ? $ttd_sampler->filename : null,
@@ -495,12 +644,12 @@ class DokumenFdlController extends Controller
                     ];
 
                     // Hapus PDF lama
-                    if ($request->filled('filename_cs_old')) {
-                        $oldPdfPath = public_path('dokumen/cs/' . $request->filename_cs_old);
-                        if (file_exists($oldPdfPath)) {
-                            unlink($oldPdfPath);
-                        }
-                    }
+                    // if ($request->filled('filename_cs_old')) {
+                    //     $oldPdfPath = public_path('dokumen/cs/' . $request->filename_cs_old);
+                    //     if (file_exists($oldPdfPath)) {
+                    //         unlink($oldPdfPath);
+                    //     }
+                    // }
 
                     // Generate PDF baru
                     $newFilename = $this->cetakPDF($orderDetails, $signatureData, $orderDetails);
@@ -521,14 +670,14 @@ class DokumenFdlController extends Controller
 
             } catch (\Exception $e) {
                 DB::rollBack();
+                dd($e);
                 return response()->json([
                     'message' => 'Gagal menyimpan data : ' . $e->getMessage(),
                     'line'    => $e->getLine()
                 ], 500);
             }
         }
-        return response()->json(['message' => 'Data tidak ada'], 400)
-            ->header('Access-Control-Allow-Origin', '*');
+        return response()->json(['message' => 'Data tidak ada'], 400);
     }
     
     public function cetakPDF($orderDetail, $signatureData, $orderDetails)

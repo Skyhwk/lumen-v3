@@ -27,7 +27,7 @@
             <div>021-5089-8988/89 contact@intilab.com</div>
         </td>
         <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
-            Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
+            Hasil uji ini hanya berlaku untuk sampel yang diuji. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak laboratorium.
             @if ($mode != 'downloadWSDraft')
             <br>Halaman {PAGENO} - {nbpg}
             @endif

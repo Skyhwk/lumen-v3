@@ -1113,7 +1113,7 @@ class AppsBasController extends Controller
 
     public function preview(Request $request)
     {
-        // dd($request->all());
+        
         try {
             if (!$request->has('no_document') || empty($request->no_document)) {
                 return response()->json([
@@ -1218,11 +1218,7 @@ class AppsBasController extends Controller
 
 
             // Ambil data PersiapanSampelHeader berdasarkan no_quotation kode lama menggunakan no_order
-            $dataList = PersiapanSampelHeader::where('no_quotation', $request->no_document)
-                ->where('tanggal_sampling', $request->tanggal_sampling)
-                ->where('is_active', true)
-                ->orderBy('id', 'desc')
-                ->get();
+            
 
             $persiapanHeader = $dataList->first(function ($item) use ($expectednoSampel) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
@@ -2848,6 +2844,13 @@ class AppsBasController extends Controller
             ],
             [
                 "parameter" => "O2",
+                "requiredCount" => 1,
+                "category" => "5-Emisi",
+                "model" => DataLapanganEmisiCerobong::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "O2 (ESTB)",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",
                 "model" => DataLapanganEmisiCerobong::class,

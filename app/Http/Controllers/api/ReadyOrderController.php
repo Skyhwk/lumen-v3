@@ -330,7 +330,7 @@ class ReadyOrderController extends Controller
                 Notification::whereIn('id', $sales)->title('New Order')->message($message)->url('/qt-ordered')->send();
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             } else {
-                $prosess = $this->generateOrderNonKontrak($request);
+                $prosess = self::generateOrderNonKontrak($request);
                 $dataQuotation = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
                 $message = "No. Penawaran : " . $request->no_document . " telah di order.";
                 $sales = GetAtasan::where('id', $dataQuotation->sales_id)->get()->pluck('id');
@@ -338,10 +338,22 @@ class ReadyOrderController extends Controller
                 return response()->json($prosess->getData(), $prosess->getStatusCode());
             }
         } catch (\Throwable $th) {
-            return response()->json([
-                'message' => 'Write Order Failed: ' . $th->getMessage(),
-                'status' => 401
-            ], 401);
+            if (
+                str_contains($th->getMessage(), 'Connection timed out') ||
+                str_contains($th->getMessage(), 'MySQL server has gone away') ||
+                str_contains($th->getMessage(), 'Lock wait timeout exceeded')
+            ) {
+                Notification::whereIn('id_department', [7])->title('Database time out Exceeded')->message('Saat akan qs ulang atau di Controller ReadyOrder bermasalah.!')->url('/monitor-database')->send();
+                return response()->json([
+                    'message' => 'Terdapat antrian transaksi pada fitur ini, mohon untuk mencoba kembali beberapa saat lagi.!',
+                    'status' => 401
+                ], 401);
+            } else {
+                return response()->json([
+                    'message' => 'Write Order Failed: ' . $th->getMessage(),
+                    'status' => 401
+                ], 401);
+            }
         }
     }
 
@@ -481,10 +493,7 @@ class ReadyOrderController extends Controller
                 }
             }
         } catch (\Throwable $th) {
-            return response()->json([
-                'message' => 'Generate Order Non Kontrak Failed: ' . $th->getMessage() . ' on file ' . $th->getFile() . ' on line ' . $th->getLine(),
-                'status' => 401
-            ], 401);
+            throw new \Exception($th->getMessage(), 401);
         }
     }
 
@@ -640,10 +649,7 @@ class ReadyOrderController extends Controller
                 return self::orderKontrak($dataQuotation, $no_order, $dataJadwal);
             }
         } catch (\Throwable $th) {
-            return response()->json([
-                'message' => 'Generate Order Kontrak Failed: ' . $th->getMessage() . ' in Line ' . $th->getLine(),
-                'status' => 401
-            ], 401);
+            throw new \Exception($th->getMessage(), 401);
         }
     }
 
@@ -768,10 +774,7 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            return response()->json([
-                'message' => 'Generate Order Non Kontrak Non Pengujian Failed: Line ' . $th->getLine() . ' Message: ' . $th->getMessage(),
-                'status' => 401
-            ], 401);
+            throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
 
@@ -1022,11 +1025,19 @@ class ReadyOrderController extends Controller
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
-                            // if($type == ''){
-                            //     continue; // Skip if type is empty
-                            // }
+                            if (empty($type)) {
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
+                            }
                             $koding = $no_sampling . strtoupper(Str::random(5));
                             // Hitung jumlah botol yang dibutuhkan
+
                             $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
 
                             $botol[] = (object) [
@@ -1127,7 +1138,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (\Throwable $th) {
             DB::rollback();
-            dd($th);
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
@@ -1431,6 +1441,17 @@ class ReadyOrderController extends Controller
                             'BEBAS PYROGEN' => 10
                         ];
                         foreach ($botol_volumes as $type => $volume) {
+                            if (empty($type)) {
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
+                            }
+
                             $koding = $no_sampling . strtoupper(Str::random(5));
                             $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
 
@@ -1605,7 +1626,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
-            dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }
@@ -1871,6 +1891,17 @@ class ReadyOrderController extends Controller
                                     ];
 
                                     foreach ($botol_volumes as $type => $volume) {
+                                        if (empty($type)) {
+                                            foreach ($param_map as $p) {
+                                                if ($p->regen == '' || $p->regen == null) {
+                                                    DB::rollBack();
+                                                    return response()->json([
+                                                        'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                                    ], 400);
+                                                }
+                                            }
+                                        }
+
                                         $koding = $no_sampling . strtoupper(Str::random(5));
                                         // Hitung jumlah botol yang dibutuhkan
                                         $jumlah_botol = ceil($volume / $ketentuan_botol[$type]);
@@ -1968,7 +1999,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
-            dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }
@@ -2290,6 +2320,17 @@ class ReadyOrderController extends Controller
                         ];
 
                         foreach ($botol_volumes as $type => $volume) {
+                            if (empty($type)) {
+                                foreach ($param_map as $p) {
+                                    if ($p->regen == '' || $p->regen == null) {
+                                        DB::rollBack();
+                                        return response()->json([
+                                            'message' => 'Terdapat botol parameter ' . $p->nama_parameter . ' yang belum di set, silahkan hubungi teknis.!'
+                                        ], 400);
+                                    }
+                                }
+                            }
+
                             $koding = $no_sampling . strtoupper(Str::random(5));
 
                             // Hitung jumlah botol yang dibutuhkan
@@ -2465,7 +2506,6 @@ class ReadyOrderController extends Controller
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
-            dd($e);
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }

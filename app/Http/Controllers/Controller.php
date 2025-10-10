@@ -11,6 +11,7 @@ class Controller extends BaseController
     protected $user_id;
     protected $nama_lengkap;
     protected $privilageCabang;
+    protected $grade;
     protected $db;
 
     public function __construct(Request $request)
@@ -19,6 +20,7 @@ class Controller extends BaseController
         $name_req = null;
         $cabang = null;
         $privilageCabang = null;
+        $grade = null;
         $department = null;
         if ($request->attributes->has('user')) {
             $user = $request->attributes->get('user');
@@ -27,6 +29,7 @@ class Controller extends BaseController
                 $userId = $user->karyawan->id;
                 $cabang = $user->karyawan->id_cabang;
                 $id_department = $user->karyawan->id_department;
+                $grade = $user->karyawan->grade;
                 $privilageCabang = json_decode($user->karyawan->privilage_cabang);
             } else {
                 $name_req = $user->email;
@@ -42,6 +45,7 @@ class Controller extends BaseController
         $this->karyawan = $name_req;
         $this->idcabang = $cabang;
         $this->department = $id_department;
+        $this->grade = $grade;
         $this->privilageCabang = $privilageCabang;
         $this->db = DATE('Y');
 

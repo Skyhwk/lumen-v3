@@ -583,11 +583,21 @@ class StpsController extends Controller
                                 $number = explode('/', $orderDetail->no_sampel)[1];
 
                                 $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
-                                $idRegulasiPenawaran    = array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']);
+                                $idRegulasiPenawaran    = !empty($data_sampling['regulasi']) ? array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']) : [];
 
                                 $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
 
                                 if (in_array($number, $penawaran_keys) && $regulasiMatch) {
+                                    $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
+                                    $inputParameter = $data_sampling['parameter'];
+
+                                    $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+                                    $totalParameterSame = count($orderParameter) === count($inputParameter);
+
+                                    if ($parameterMatch || $totalParameterSame) {
+                                        $sampleNumbers[] = $orderDetail->no_sampel;
+                                    }
+                                } else {
                                     $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
                                     $inputParameter = $data_sampling['parameter'];
 
@@ -863,6 +873,7 @@ class StpsController extends Controller
             if ($request->periode) $psHeader = $psHeader->where('periode', $request->periode);
 
             $psHeader = $psHeader->first();
+            
             // dd($psHeader, $request->sampler);
             if (!$psHeader) {
                 $request->no_document = $request->nomor_quotation;
@@ -872,7 +883,7 @@ class StpsController extends Controller
 
                 $response = $psController->preview($request);
                 $preview = json_decode($response->getContent(), true);
-                
+               
                 $isMustPrepared = false;
                 foreach (['air', 'udara', 'emisi', 'padatan'] as $kategori) {
                     foreach ($preview[$kategori] as $sampel) {

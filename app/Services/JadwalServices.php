@@ -639,14 +639,19 @@ class JadwalServices
                                 $array_no_samples[] = $no_samples;
                             }
 
-                            $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                ->where('is_active', true)
-                                ->whereIn('no_sampel', $array_no_samples)
-                                ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                            
-                            if ($updated === 0) {
-                                // kalau tidak ada satupun data yang kena update
+                            $query = OrderDetail::where('id_order_header', $orderh->id)
+                            ->where('is_active', true)
+                            ->whereIn('no_sampel', $array_no_samples);
+
+                            $exists = $query->exists();;
+
+                            if(!$exists){
                                 throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                            }else{
+                                $updated = OrderDetail::where('id_order_header', $orderh->id)
+                                    ->where('is_active', true)
+                                    ->whereIn('no_sampel', $array_no_samples)
+                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
                             }
                         }
                     }
@@ -662,15 +667,19 @@ class JadwalServices
                                 $no_samples = $orderh->no_order . '/' . $pra_no_sample;
                                 $array_no_samples[] = $no_samples;
                             }
+                            $query = OrderDetail::where('id_order_header', $orderh->id)
+                            ->where('is_active', true)
+                            ->whereIn('no_sampel', $array_no_samples);
 
-                            $updated = OrderDetail::where('id_order_header', $orderh->id)
-                                ->where('is_active', true)
-                                ->whereIn('no_sampel', $array_no_samples)
-                                ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                            
-                            if ($updated === 0) {
-                                // kalau tidak ada satupun data yang kena update
+                            $exists = $query->exists();;
+
+                            if(!$exists){
                                 throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                            }else{
+                                $updated = OrderDetail::where('id_order_header', $orderh->id)
+                                    ->where('is_active', true)
+                                    ->whereIn('no_sampel', $array_no_samples)
+                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
                             }
                         }
                     }
@@ -1014,14 +1023,20 @@ class JadwalServices
                                     $array_no_samples[] = $no_samples;
                                 }
 
-                                $update = OrderDetail::where('id_order_header', $orderh->id)
-                                    ->where('is_active', true)
-                                    ->whereIn('no_sampel', $array_no_samples)
-                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                                if ($updated === 0) {
-                                // kalau tidak ada satupun data yang kena update
-                                throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
-                            }
+                                $query = OrderDetail::where('id_order_header', $orderh->id)
+                                ->where('is_active', true)
+                                ->whereIn('no_sampel', $array_no_samples);
+
+                                $exists = $query->exists();;
+
+                                if(!$exists){
+                                    throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                                }else{
+                                    $updated = OrderDetail::where('id_order_header', $orderh->id)
+                                        ->where('is_active', true)
+                                        ->whereIn('no_sampel', $array_no_samples)
+                                        ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
+                                }
                             }
                         }
                     } catch (Exception $ex) {
@@ -1040,13 +1055,19 @@ class JadwalServices
                                     $array_no_samples[] = $no_samples;
                                 }
 
-                                $update = OrderDetail::where('id_order_header', $orderh->id)
-                                    ->where('is_active', true)
-                                    ->whereIn('no_sampel', $array_no_samples)
-                                    ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
-                                if ($updated === 0) {
-                                    // kalau tidak ada satupun data yang kena update
+                                $query = OrderDetail::where('id_order_header', $orderh->id)
+                                ->where('is_active', true)
+                                ->whereIn('no_sampel', $array_no_samples);
+
+                                $exists = $query->exists();
+
+                                if(!$exists){
                                     throw new \Exception("Nomor sampel sudah berubah, silakan hubungi IT untuk pengecekan lebih lanjut.");
+                                }else{
+                                    $updated = OrderDetail::where('id_order_header', $orderh->id)
+                                        ->where('is_active', true)
+                                        ->whereIn('no_sampel', $array_no_samples)
+                                        ->update(['tanggal_sampling' => date('Y-m-d', strtotime($dataUpdate->tanggal))]);
                                 }
                             }
                         }

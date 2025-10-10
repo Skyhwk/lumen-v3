@@ -43,10 +43,10 @@ class ScanBotolController extends Controller
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
                 foreach ($dataDisplay as $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
 
@@ -60,16 +60,21 @@ class ScanBotolController extends Controller
                         if ($item->koding == $request->no_sampel) {
                             $item->jumlah = 1;
                         }
+                    } else if (isset($parameters->padatan->$type)) {
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->jumlah = 1;
+                        }
                     } else {
                         $item->disiapkan = null;
                     }
                 }
             } else {
-
-                $data = OrderDetail::get()->filter(function ($item) use ($request) {
-                    $persiapan = json_decode($item->persiapan, true);
-                    return collect($persiapan)->contains('koding', $request->no_sampel);
-                })->first();
+                // dd('www');
+                $data = OrderDetail::whereNotNull('persiapan')
+                    ->whereJsonContains('persiapan', ['koding' => $request->no_sampel])
+                    ->first();
+                // dd($data);
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
@@ -77,10 +82,10 @@ class ScanBotolController extends Controller
                 $formattedData = [];
 
                 foreach ($dataDisplay as $key => $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
                     $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
@@ -101,9 +106,12 @@ class ScanBotolController extends Controller
                             $item->jumlah = 1;
                         }
                     } else if (isset($parameters->emisi->$type)) {
-
-
                         $item->disiapkan = $parameters->emisi->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->jumlah = 1;
+                        }
+                    } else if (isset($parameters->padatan->$type)) {
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
                         if ($item->koding == $request->no_sampel) {
                             $item->jumlah = 1;
                         }

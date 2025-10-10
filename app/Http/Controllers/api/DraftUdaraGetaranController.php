@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
 
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
@@ -24,6 +25,7 @@ use App\Models\QrDocument;
 use App\Models\GetaranHeader;
 
 use App\Models\GenerateLink;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -39,7 +41,7 @@ class DraftUdaraGetaranController extends Controller
     // AmanghandleDatadetail
     public function index(Request $request)
     {
-        $kategori = ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"];
+        $kategori = ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"];
 
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
@@ -79,6 +81,34 @@ class DraftUdaraGetaranController extends Controller
             'data' => $kategori,
             'message' => 'Available data category retrieved successfully',
         ], 201);
+    }
+
+    public function handleRevisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = LhpsGetaranHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+
+            if ($header != null) {
+                if ($header->is_revisi == 1) {
+                    $header->is_revisi = 0;
+                } else {
+                    $header->is_revisi = 1;
+                }
+
+                $header->save();
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Revisi updated successfully!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
       public function handleMetodeSampling(Request $request)
@@ -143,7 +173,7 @@ class DraftUdaraGetaranController extends Controller
 
 
 
-   public function store(Request $request)
+    public function store(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -154,8 +184,12 @@ class DraftUdaraGetaranController extends Controller
             'no_order'      => $request->no_order,
             'is_active'     => true
         ])->first();
+        $is_revisi = false;
+        $newCountRevisi = 0;
             if ($header) {
+                $is_revisi = $header->is_revisi == 1 ? true : false;
                 // Backup ke history sebelum update
+                $newCountRevisi = $is_revisi ? $header->count_revisi + 1 : $header->count_revisi;
                 $history = $header->replicate();
                 $history->setTable((new LhpsGetaranHeaderHistory())->getTable());
                 // $history->id = $header->id;
@@ -189,9 +223,12 @@ class DraftUdaraGetaranController extends Controller
                 return ['page' => (int)$page, 'regulasi' => $item];
             })->values()->toArray();
             // === 4. Simpan / update header ===
+
             $header->fill([
                 'no_order'        => $request->no_order ?: null,
-                'no_sampel'       => implode(', ',$request->no_sampel) ?: null,
+                'no_sampel' => is_array($request->no_sampel) 
+                    ? implode(', ', $request->no_sampel) 
+                    : ($request->no_sampel ?: null),
                 'no_lhp'          => $request->no_lhp ?: null,
                 'no_qt'           => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
@@ -205,6 +242,9 @@ class DraftUdaraGetaranController extends Controller
                 'id_kategori_3'    => null,
                 'metode_sampling'=> $request->metode_sampling ? json_encode($request->metode_sampling) : null,
                 'nama_karyawan'   => $nama_perilis,
+                'is_revisi'       => false,
+                'count_revisi'    => $newCountRevisi,
+                'is_generated'    => $is_revisi ? false : $header->is_generated ?? 0,
                 'jabatan_karyawan'=> $jabatan_perilis,
                 'regulasi'        => $request->regulasi ? json_encode($request->regulasi) : null,
                 'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
@@ -226,36 +266,37 @@ class DraftUdaraGetaranController extends Controller
                 $detailHistory->save();
             }
             LhpsGetaranDetail::where('id_header', $header->id)->delete();
-    foreach ($request->no_sampel ?? [] as $key => $val) {
-        //   dd($request->all());
-        if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
-                $detail = new LhpsGetaranDetail([
-                    'id_header'   => $header->id,
-                    'no_sampel'   => $request->no_sampel[$val] ?? null,
-                    'param'       =>$request->param[$val] ?? null,
-                    'keterangan'  => $request->keterangan_detail[$val] ?? null,
-                    'sumber_get'  =>$request->sumber_get[$val] ?? null,
-                    'w_paparan'   => $request->w_paparan[$val] ?? null,
-                    'hasil'       => $request->hasil[$val] ?? null,
-                    'tipe_getaran'=>$request->tipe_getaran[$val] ?? null,
-                    'nab'         => $request->nab[$val] ?? null,
-                    'tanggal_sampling'         => $request->tanggal_sampling[$val] ?? null,
-                ]);
-                $detail->save();
-            } else {
-                $detail = new LhpsGetaranDetail([
-                    'id_header'   => $header->id,
-                    'no_sampel'   => $val,
-                    'param'       => $request->param[$val] ?? null,
-                    'keterangan'  => $request->keterangan_detail[$val] ?? null,
-                    'percepatan'  => $request->percepatan[$val] ?? null,
-                    'kecepatan'   => $request->kecepatan[$val] ?? null,
-                    'tipe_getaran'=> $request->tipe_getaran[$val] ?? null,
-                    'tanggal_sampling'  => $request->tanggal_sampling[$val] ?? null,
-                ]);
-                $detail->save();
+            $no_sampel = is_string($request->no_sampel) ? explode(',', $request->no_sampel) : $request->no_sampel;
+            foreach ($no_sampel as $key => $val) {
+            //   dd($request->all());
+                if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
+                    $detail = new LhpsGetaranDetail([
+                        'id_header'   => $header->id,
+                        'no_sampel'   => $request->no_sampel[$val] ?? null,
+                        'param'       =>$request->param[$val] ?? null,
+                        'keterangan'  => $request->keterangan_detail[$val] ?? null,
+                        'sumber_get'  =>$request->sumber_get[$val] ?? null,
+                        'w_paparan'   => $request->w_paparan[$val] ?? null,
+                        'hasil'       => $request->hasil[$val] ?? null,
+                        'tipe_getaran'=>$request->tipe_getaran[$val] ?? null,
+                        'nab'         => $request->nab[$val] ?? null,
+                        'tanggal_sampling'         => $request->tanggal_sampling[$val] ?? null,
+                    ]);
+                    $detail->save();
+                } else {
+                    $detail = new LhpsGetaranDetail([
+                        'id_header'   => $header->id,
+                        'no_sampel'   => $val,
+                        'param'       => $request->param[$val] ?? null,
+                        'keterangan'  => $request->keterangan_detail[$val] ?? null,
+                        'percepatan'  => $request->percepatan[$val] ?? null,
+                        'kecepatan'   => $request->kecepatan[$val] ?? null,
+                        'tipe_getaran'=> $request->tipe_getaran[$val] ?? null,
+                        'tanggal_sampling'  => $request->tanggal_sampling[$val] ?? null,
+                    ]);
+                    $detail->save();
+                }
             }
-        }
             // === 6. Handle custom ===
             LhpsGetaranCustom::where('id_header', $header->id)->delete();
 
@@ -311,11 +352,23 @@ class DraftUdaraGetaranController extends Controller
 
          
             $header->file_lhp = $fileName;
+            if($newCountRevisi > 2){
+                // dd($request->all());
+                try {
+                    $this->handleApprove($request, false);
+                } catch (\Throwable $th) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                        'status'  => false,
+                    ]);
+                }
+            }
             $header->save();
 
             DB::commit();
             return response()->json([
-                'message' => "Data draft lhp air no sampel {$request->no_lhp} berhasil disimpan",
+                'message' => "Data draft lhp getaran no sampel {$request->no_lhp} berhasil disimpan",
                 'status'  => true
             ], 201);
 
@@ -376,8 +429,6 @@ class DraftUdaraGetaranController extends Controller
                 ->whereView('DraftGetaran')
                 ->render();
             }
-
-         
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
 
@@ -557,12 +608,12 @@ class DraftUdaraGetaranController extends Controller
                         }
                     }
                 }
-
-                    return response()->json([
-                        'status' => true,
-                        'data' => $data_entry,
-                        'next_page' => $data_custom,
-                    ], 201);
+                $data_entry = collect($data_entry)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
+                return response()->json([
+                    'status' => true,
+                    'data' => $data_entry,
+                    'next_page' => $data_custom,
+                ], 201);
             } else {
                 $mainData = [];
                 $otherRegulations = [];
@@ -593,6 +644,8 @@ class DraftUdaraGetaranController extends Controller
                         return mb_strtolower($item['param']);
                     })->values()->toArray();
                 }   
+
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['no_sampel']))->values()->toArray();
            
                 return response()->json([
                     'status' => true,
@@ -610,66 +663,94 @@ class DraftUdaraGetaranController extends Controller
         }
     }
    private function formatEntry($val)
-{
-    $entry = [
-        'id'        => $val->id,
-        'param' => $val->parameter,
-    ];
+    {
+        $entry = [
+            'id'        => $val->id,
+            'param' => $val->parameter,
+        ];
 
-    // Cek apakah getaran personal
-    if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
-        $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
+        // Cek apakah getaran personal
+        $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
+        if (in_array($val->parameter, ["Getaran (LK) ST", "Getaran (LK) TL"])) {
+            $personal = isset($val->lapangan_getaran_personal) ? $val->lapangan_getaran_personal : null;
+            $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+
+            return array_merge($entry, [
+                'w_paparan'    => ($personal && $personal->durasi_paparan) ? json_decode($personal->durasi_paparan, true) : null,
+                'hasil'        => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
+                'no_sampel'    => $personal ? $personal->no_sampel : null,
+                'sumber_get'   => $personal ? $personal->sumber_getaran : null,
+                'keterangan'   => trim(
+                    (($personal && $personal->keterangan) ? $personal->keterangan : '') .
+                    (($personal && !empty($personal->nama_pekerja)) ? ' (' . $personal->nama_pekerja . ')' : '')
+                ),
+                'nab'          => $wsUdara ? $wsUdara->nab : null,
+                'tipe_getaran' => 'getaran personal',
+                'tanggal_sampling'  => $tanggal_sampling
+            ]);
+        }
+
+        // Default: getaran umum
+        $lapangan = isset($val->lapangan_getaran) ? $val->lapangan_getaran : null;
         $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+        $hasilWs  = ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : [];
 
         return array_merge($entry, [
-            'w_paparan'    => ($personal && $personal->durasi_paparan) ? json_decode($personal->durasi_paparan, true) : null,
-            'hasil'        => ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : null,
-            'no_sampel'    => $personal ? $personal->no_sampel : null,
-            'sumber_get'   => $personal ? $personal->sumber_getaran : null,
+            'no_sampel'    => $lapangan ? $lapangan->no_sampel : null,
             'keterangan'   => trim(
-                (($personal && $personal->keterangan) ? $personal->keterangan : '') .
-                (($personal && !empty($personal->nama_pekerja)) ? ' (' . $personal->nama_pekerja . ')' : '')
+                (($lapangan && $lapangan->keterangan) ? $lapangan->keterangan : '') .
+                (($lapangan && !empty($lapangan->nama_pekerja)) ? ' (' . $lapangan->nama_pekerja . ')' : '')
             ),
-            'nab'          => $wsUdara ? $wsUdara->nab : null,
-            'tipe_getaran' => 'getaran personal',
+            'tipe_getaran' => 'getaran',
+            'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
+            'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
+            'tanggal_sampling'  => $tanggal_sampling
         ]);
     }
 
-    // Default: getaran umum
-    $lapangan = isset($val->lapangan_getaran) ? $val->lapangan_getaran : null;
-    $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
-    $hasilWs  = ($wsUdara && $wsUdara->hasil1) ? json_decode($wsUdara->hasil1, true) : [];
-
-    return array_merge($entry, [
-        'no_sampel'    => $lapangan ? $lapangan->no_sampel : null,
-        'keterangan'   => trim(
-            (($lapangan && $lapangan->keterangan) ? $lapangan->keterangan : '') .
-            (($lapangan && !empty($lapangan->nama_pekerja)) ? ' (' . $lapangan->nama_pekerja . ')' : '')
-        ),
-        'tipe_getaran' => 'getaran',
-        'kecepatan'    => isset($hasilWs['Kecepatan']) ? $hasilWs['Kecepatan'] : null,
-        'percepatan'   => isset($hasilWs['Percepatan']) ? $hasilWs['Percepatan'] : null,
-    ]);
-}
 
 
-
-      public function handleApprove(Request $request)
+    public function handleApprove(Request $request, $isManual = true)
     {
             try {
-                $data = LhpsGetaranHeader::where('id', $request->id)
+                if($isManual) {
+                    $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+
+                    if (!$konfirmasiLhp) {
+                        $konfirmasiLhp = new KonfirmasiLhp();
+                        $konfirmasiLhp->created_by = $this->karyawan;
+                        $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    } else {
+                        $konfirmasiLhp->updated_by = $this->karyawan;
+                        $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                    }
+
+                    $konfirmasiLhp->no_lhp = $request->cfr;
+                    $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                    $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                    $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+                    $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+                    $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+                    $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+                    $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+
+                    $konfirmasiLhp->save();
+                }
+                $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
                     ->where('is_active', true)
                     ->first();
-                $noSampel = array_map('trim', explode(',', $request->no_sampel));
+                $noSampel = is_array($request->no_sampel) 
+                    ? ($request->no_sampel ?: null) 
+                    : explode(', ', $request->no_sampel);
                 $no_lhp = $data->no_lhp;
-            
+                $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
                     ->where('type_document', 'LHP_GETARAN')
                     ->where('is_active', 1)
                     ->where('file', $data->file_qr)
                     ->orderBy('id', 'desc')
                     ->first();
-
+                    // dd('lewat');
                 if ($data != null) {
                     OrderDetail::where('cfr', $data->no_lhp)
                     ->whereIn('no_sampel', $noSampel)
@@ -680,16 +761,19 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         'approved_by' => $this->karyawan
                     ]);
-                  
+
                     $data->is_approve = 1;
                     $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->approved_by = $this->karyawan;
                     $data->nama_karyawan = $this->karyawan;
                     $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                     $data->save();
+
                     HistoryAppReject::insert([
                         'no_lhp' => $data->no_lhp,
-                        'no_sampel' => $request->no_sampel,
+                        'no_sampel' => is_array($request->no_sampel) 
+                            ? implode(', ', $request->no_sampel) 
+                            : ($request->no_sampel ?: null),
                         'kategori_2' => $data->id_kategori_2,
                         'kategori_3' => $data->id_kategori_3,
                         'menu' => 'Draft Udara',
@@ -697,6 +781,7 @@ class DraftUdaraGetaranController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+
                     if ($qr != null) {
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
@@ -705,17 +790,28 @@ class DraftUdaraGetaranController extends Controller
                         $qr->data = json_encode($dataQr);
                         $qr->save();
                     }
+                    $data->count_print = $data->count_print + 1; 
+                    $data->save();
+
+                    $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
+            
+                    $servicePrint = new PrintLhp();
+                    $servicePrint->printByFilename($data->file_lhp, $detail);
+                    
+                    if (!$servicePrint) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                    }
                 }
 
                 DB::commit();
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $no_lhp . ' berhasil diapprove'
+                    'message' => 'Data draft Getaran no LHP ' . $no_lhp . ' berhasil diapprove'
                 ], 201);
             } catch (\Exception $th) {
                 DB::rollBack();
-                dd($th);
                 return response()->json([
                     'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                     'status' => false
@@ -733,7 +829,7 @@ class DraftUdaraGetaranController extends Controller
             $lhps = LhpsGetaranHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
-            $no_lhp = $lhps->no_lhp;
+            $no_lhp = $lhps->no_lhp ?? null;
 
             if ($lhps) {
                 HistoryAppReject::insert([
@@ -770,7 +866,7 @@ class DraftUdaraGetaranController extends Controller
                 $lhps->delete();
             }
             $noSampel = array_map('trim', explode(",", $request->no_sampel));
-            OrderDetail::where('cfr', $lhps->no_lhp)
+            OrderDetail::where('cfr', $request->no_lhp)
                     ->whereIn('no_sampel', $noSampel)
                     ->update([
                         'status' => 1
@@ -780,7 +876,7 @@ class DraftUdaraGetaranController extends Controller
             DB::commit();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft no sample ' . $no_lhp . ' berhasil direject'
+                'message' => 'Data draft Getaran no LHP ' . $no_lhp . ' berhasil direject'
             ]);
         } catch (\Exception $th) {
             DB::rollBack();

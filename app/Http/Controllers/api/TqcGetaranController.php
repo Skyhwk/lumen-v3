@@ -49,12 +49,13 @@ class TqcGetaranController extends Controller
             DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
             'kategori_1',
             'konsultan',
+            'regulasi',
         )
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)", "20-Getaran (Seluruh Tubuh)"])
-            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
+            ->whereIn('kategori_3',["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kejut Bangunan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)"])
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'regulasi')
             ->orderBy('max_id', 'desc');
 
         return Datatables::of($data)->make(true);
@@ -93,28 +94,7 @@ class TqcGetaranController extends Controller
         }
     }
 
-    // public function rejectData(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         $data = OrderDetail::where('id', $request->id)->first();
-    //         if ($data) {
-    //             $data->status = 0;
-    //             $data->save();
-    //             DB::commit();
-    //             return response()->json([
-    //                 'status' => 'success',
-    //                 'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
-    //             ]);
-    //         }
-    //     } catch (\Throwable $th) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Terjadi kesalahan ' . $th->getMessage()
-    //         ]);
-    //     }
-    // }
+
     public function rejectData(Request $request)
     {
         DB::beginTransaction();
@@ -318,29 +298,32 @@ class TqcGetaranController extends Controller
                 ->first()
                 ->hasil1 ?? null;
 
-            $hasilDecoded = json_decode($hasil, true);
+                
+                $regulasi = json_decode($orderDetail->regulasi)[0];
+                $regulasiId = explode('-', $regulasi)[0];
 
+                $hasilDecoded = json_decode($hasil, true);
 
-            if (is_array($hasilDecoded)) {
+                $hasilparsed = is_array($hasilDecoded) ? $hasilDecoded : $hasil;
+
+                if (is_array($hasilparsed)) {
+                    if (in_array($regulasiId, [61, 204, 60])) {
+                        unset($hasilparsed['Percepatan']);
+                    } else {
+                        unset($hasilparsed['Kecepatan']);
+                    }
+                }
+
                 $data[] = [
-                    'no_sampel' => $orderDetail->no_sampel,
-                    'titik' => $orderDetail->keterangan_1,
-                    'history' => $lhpsGetaranDetail,
-                    'hasil' => json_decode($hasil),
-                    'analyst' => optional($header)->created_by,
-                    'approved_by' => optional($header)->approved_by
+                    'no_sampel'   => $orderDetail->no_sampel,
+                    'titik'       => $orderDetail->keterangan_1,
+                    'regulasi'    => $orderDetail->regulasi,
+                    'history'     => $lhpsGetaranDetail,
+                    'hasil'       => $hasilparsed,
+                    'analyst'     => optional($header)->created_by,
+                    'approved_by' => optional($header)->approved_by,
                 ];
 
-            } else {
-                $data[] = [
-                    'no_sampel' => $orderDetail->no_sampel,
-                    'titik' => $orderDetail->keterangan_1,
-                    'history' => $lhpsGetaranDetail,
-                    'hasil' => $hasil,
-                    'analyst' => optional($header)->created_by,
-                    'approved_by' => optional($header)->approved_by
-                ];
-            }
         }
 
         return response()->json([

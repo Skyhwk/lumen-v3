@@ -16,6 +16,8 @@ class LhpsMedanLMHeader extends Sector
     {
         return $this->hasMany(LhpsMedanLMDetail::class, 'id_header', 'id');
     }
-
- 
+   public function lhpsMedanLMCustom()
+    {
+        return $this->hasMany(LhpsMedanLMCustom::class, 'id_header', 'id');
+    }
 }

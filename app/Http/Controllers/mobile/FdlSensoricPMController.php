@@ -43,6 +43,7 @@ class FdlSensoricPMController extends Controller
                 }
             })
             ->where('is_active', 1)->first();
+
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan pada kategori Partikulat Meter'
@@ -51,57 +52,52 @@ class FdlSensoricPMController extends Controller
                 
                 $partikulat = DataLapanganPartikulatMeter::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
                 // Cek apakah data partikulat tersedia
-                if ($partikulat !== NULL) {
+                $arrayParam = json_decode($data->parameter, true);
 
-                    // Nonaktifkan mode strict SQL agar query groupBy tidak error karena mode ONLY_FULL_GROUP_BY
+                // Ambil nama parameter saja dari format "id;name"
+                $parameters = array_map(function($item) {
+                    return explode(';', $item)[1];
+                }, $arrayParam);
+
+                if ($partikulat !== NULL) {
                     \DB::statement("SET SQL_MODE=''");
 
-                    // Ambil nomor sampel dari request, dan ubah ke huruf kapital
                     $no_sampel = strtoupper(trim($request->no_sample));
 
-                    // Ambil semua parameter yang sudah dicatat di tabel DataLapanganPartikulatMeter
-                    // Dikelompokkan berdasarkan parameter (tidak duplikat)
                     $par = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)
                                 ->groupBy('parameter')->pluck('parameter')->toArray();
 
                     // Ambil parameter dengan shift selain 'Sesaat', untuk memastikan hanya pengambilan waktu tertentu
-                    $par2 = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)
-                                ->where('shift_pengambilan', '!=', 'Sesaat')
+                    $paramSesaat = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)
+                                ->where('shift_pengambilan', 'Sesaat')
                                 ->groupBy('parameter')->pluck('parameter')->toArray();
 
-                    // Decode data parameter dari tabel utama (yang seharusnya diuji)
-                    $p = json_decode($data->parameter, true);
-
                     // Cari parameter yang seharusnya diuji tapi belum ada di tabel (belum dicatat)
-                    $nilai_param2 = array_values(array_diff($p, $par));
+                    $nilai_param2 = array_values(array_diff($parameters, $paramSesaat));
 
-                    // Parameter yang sudah tercatat tapi hanya untuk shift non-Sesaat
-                    $nilai_param3 = $par2;
-
-                    // Gabungkan hasilnya sesuai kondisi:
-                    // Jika tidak ada parameter baru, pakai yang shift non-Sesaat
-                    if (empty($nilai_param2)) {
-                        $param_fin = json_encode($nilai_param3);
+                    $param_fin = $nilai_param2;
+                    if(empty($param_fin)){
+                        return response()->json([
+                            'message' => 'Data Parameter Sesaat sudah terinput semua .!'
+                        ], 400);
                     }
-                    // Jika tidak ada parameter shift non-Sesaat, pakai parameter baru saja
-                    elseif (empty($nilai_param3)) {
-                        $param_fin = json_encode($nilai_param2);
-                    }
-                    // Jika dua-duanya ada, gabungkan semua
-                    else {
-                        $param_fin = json_encode(array_merge($nilai_param3, $nilai_param2));
+                    if(empty($param_fin)){
+                        return response()->json([
+                            'message' => 'Data Parameter Sesaat sudah terinput semua .!'
+                        ], 401);
                     }
 
                     // Ambil informasi sub-kategori dari master berdasarkan ID kategori_3 (dipisah dengan '-')
                     $id_ket = explode('-', $data->kategori_3)[0];
                     $cek = MasterSubKategori::find($id_ket);
-                    // Kirim response JSON yang berisi data utama untuk ditampilkan atau dipakai di frontend
+
                     return response()->json([
                         'no_sample'  => $data->no_sampel,
                         'jenis'      => $cek->nama_sub_kategori ?? null,
                         'keterangan' => $data->keterangan_1,
                         'id_ket'     => $id_ket,
                         'parameter'  => $param_fin,
+                        'listParameter' => $listParameter,
                     ], 200);
 
                 } else {
@@ -116,7 +112,8 @@ class FdlSensoricPMController extends Controller
                         'keterangan' => $data->keterangan_1,
                         'id_ket'     => $id_ket,
                         'id_ket2'    => $id_ket2,
-                        'param'      => $data->parameter,
+                        'parameter'  => $parameters,
+                        'listParameter' => $listParameter,
                     ], 200);
                 }
 

@@ -34,7 +34,7 @@ class DraftUlkErgonomiController extends Controller
             ->where('order_detail.status', 2)
             ->where('is_active', true)
             ->whereIn('kategori_3', $kategori)
-            // ->whereJsonContains('parameter','230;Ergonomi')
+            ->whereJsonContains('parameter','230;Ergonomi') //aktivin filter
             ->groupBy('no_sampel')
             ->get() // ambil data dulu
             ->map(function ($item) use ($generatedFiles) {
@@ -1537,11 +1537,11 @@ class DraftUlkErgonomiController extends Controller
         
         DB::beginTransaction();
         $categoryLingkunganKerja = [11, 27, 53];
-        $category = explode('-', $request->kategori_3)[0];
-        $sub_category = explode('-', $request->kategori_3)[1];
         $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
-            ->where('is_active', true)
-            ->first();
+        ->where('is_active', true)
+        ->first();
+        $sub_category = explode('-', $data_order->kategori_3)[1];
+        $category = explode('-', $data_order->kategori_3)[0];
         
         if (in_array($category, $categoryLingkunganKerja)) {
             try {
@@ -1766,14 +1766,13 @@ class DraftUlkErgonomiController extends Controller
                     'id' => $saveFilePDF->id,
                     'no_lhp' => $dataLHP->detail->cfr,
                     'nama_pelanggan' => $dataLHP->detail->nama_perusahaan,
-                    'no_order' => substr($dataLHP->detail->no_order, 0, 6),
-                    'tanggal_lhp' => Carbon::parse($tanggalLhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'no_order' => $dataLHP->detail->no_order,
+                    'tanggal_lhp' => $tanggalLhp,
                     'nama_karyawan' => $pengesahan->nama_karyawan,
                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan
                 ];
                 $file_qr = new GenerateQrDocumentLhp();
                 $pathQr = $file_qr->insert('LHP_ERGONOMI', $dataQr, $this->karyawan);
-                
                 $pdfFile->file_qr = $pathQr;
                 $pdfFile->save();
             }

@@ -96,10 +96,10 @@ class VerifikasiBotolController extends Controller
                 $parameters = json_decode($persiapan->parameters);
 
                 foreach ($dataDisplay as $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
                     if (isset($parameters->air->$type)) {
@@ -112,11 +112,15 @@ class VerifikasiBotolController extends Controller
                         if ($item->koding == $request->no_sampel) {
                             $item->jumlah = 1;
                         }
+                    } else if (isset($parameters->padatan->$type)) {
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->jumlah = 1;
+                        }
                     } else {
                         $item->disiapkan = null;
                     }
                 }
-                
             } else {
 
                 $data = OrderDetail::whereNotNull('persiapan')
@@ -126,7 +130,7 @@ class VerifikasiBotolController extends Controller
                 if (!$data) {
                     return response()->json(["message" => "Koding botol tidak ditemukan di Order Detail", "code" => 404], 404);
                 }
-                
+
                 $lapangan = DataLapanganAir::where('no_sampel', $data->no_sampel)->first();
                 $scan = ScanSampelTc::where('no_sampel', $data->no_sampel)->first();
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
@@ -134,10 +138,10 @@ class VerifikasiBotolController extends Controller
                 $parameters = json_decode($persiapan->parameters) ?? null;
 
                 foreach ($dataDisplay as $key => $item) {
-                    if ($data->kategori_2 == '4-Udara' || $data->kategori_2 == '5-Emisi') {
-                        $type = $item->parameter;
-                    } else {
+                    if ($data->kategori_2 == '1-Air') {
                         $type = $item->type_botol;
+                    } else {
+                        $type = $item->parameter;
                     }
 
                     $paramExplane = ['SO2', 'NO2', 'Velocity', 'NOX'];
@@ -164,10 +168,16 @@ class VerifikasiBotolController extends Controller
                         if ($item->koding == $request->no_sampel) {
                             $item->scanned = 1;
                         }
+                    } else if (isset($parameters->padatan->$type)) {
+
+
+                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                        if ($item->koding == $request->no_sampel) {
+                            $item->scanned = 1;
+                        }
                     } else {
                         $item->disiapkan = null;
                     }
-
                 }
             }
 
@@ -200,7 +210,6 @@ class VerifikasiBotolController extends Controller
                 'no_sampel' => $request->no_sampel,
                 'kategori' => $categoris
             ], 200);
-
         } catch (\Exception $th) {
             return response()->json([
                 "message" => $th->getMessage(),
@@ -289,6 +298,12 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
                 }
+
+                $order_detail = OrderDetail::where('no_sampel', $scanSampelTc->no_sampel)->where('is_active', true)->first();
+                if ($order_detail) {
+                    $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                    $order_detail->save();
+                }
             } else {
                 $kondisi_sampel = '';
                 $dokumentasi_lainnya = '';
@@ -363,6 +378,12 @@ class VerifikasiBotolController extends Controller
                     $scanSampelTc->created_at = Carbon::now();
                     $scanSampelTc->created_by = $this->karyawan;
                     $scanSampelTc->save();
+                }
+
+                $order_detail = OrderDetail::where('no_sampel', $scanSampelTc->no_sampel)->where('is_active', true)->first();
+                if ($order_detail) {
+                    $order_detail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                    $order_detail->save();
                 }
             }
 

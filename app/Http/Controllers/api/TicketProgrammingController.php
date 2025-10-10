@@ -7,6 +7,7 @@ use App\Models\MasterKaryawan;
 use App\Models\AksesMenu;
 // use App\Models\User;
 use App\Http\Controllers\Controller;
+use App\Services\GetAtasan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -70,7 +71,8 @@ class TicketProgrammingController extends Controller
     public function getAllMenu(Request $request)
     {
         try {
-            $menu = AksesMenu::select('akses')->where('user_id', $this->user_id)->first();
+            $masterKaryawan = MasterKaryawan::where('id', $this->user_id)->first();
+            $menu = AksesMenu::select('akses')->where('user_id', $masterKaryawan->user_id)->first();
             if ($menu && is_string($menu->akses)) {
                 $menus = json_decode($menu->akses, true);
             } else if ($menu && is_array($menu->akses)) {
@@ -263,6 +265,40 @@ class TicketProgrammingController extends Controller
         }
     }
 
+    public function reOpen(Request $request)
+    {
+        // dd($request->all());
+        DB::beginTransaction();
+        try {
+            $data = TicketProgramming::find($request->id);
+            $data->status = 'REOPEN';
+            $data->reopened_by = $this->karyawan;
+            $data->reopened_time = Carbon::now();
+            $data->reopened_notes = $request->notes;
+            // $data->is_active = false;
+            $message = 'Ticket Programming telah di re-open';
+
+            $data->save();
+
+            Notification::where('nama_lengkap', $data->solve_by)
+                ->title('Ticket Programming Update')
+                ->message($message . ' Oleh ' . $this->karyawan)
+                ->url('/ticket-programming')
+                ->send();
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal Proses reject Ticket Programming: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
     // Pending by Worker
     public function pending(Request $request)
     {
@@ -435,7 +471,12 @@ class TicketProgrammingController extends Controller
             }
 
             $data->status = 'WAITING PROCESS';
-            $data->tingkat_masalah = $request->tingkat_masalah;
+            $data->kategori = $request->kategori;
+
+            if($this->grade == 'MANAGER' && $data->kategori == 'PERUBAHAN_DATA') {
+                $data->approved_by = $this->karyawan;
+                $data->approved_time = Carbon::now()->format('Y-m-d H:i:s');
+            }
 
             $data->save();
 
@@ -447,7 +488,16 @@ class TicketProgrammingController extends Controller
 
             Notification::whereIn('id', $user_programmer)
                 ->title('Ticket Programming !')
-                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . $data->tingkat_masalah)
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+                ->url('/ticket-programming')
+                ->send();
+
+            $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
+
+            $isPerubahanData = $data->kategori == 'PERUBAHAN_DATA';
+            Notification::whereIn('id', $getAtasan)
+                ->title('Ticket Programming !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
                 ->url('/ticket-programming')
                 ->send();
 

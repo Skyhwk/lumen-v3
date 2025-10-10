@@ -231,6 +231,11 @@ class QtApproveController extends Controller
             'amin@intilab.com',
             'daud@intilab.com',
             'faidhah@intilab.com',
+            'budiono@intilab.com',
+            'yeni@intilab.com',
+            'riri@intilab.com',
+            'shalsa@intilab.com',
+            'rudi@intilab.com',
         ];
 
         if ($request->email_cc) {
@@ -303,7 +308,11 @@ class QtApproveController extends Controller
             }
 
             // $emails = GetAtasan::where('id', $data->sales_id)->get()->pluck('email');
-
+            // Jika $request->cc adalah array dengan satu elemen kosong, ubah menjadi array kosong
+            if (is_array($request->cc) && count($request->cc) === 1 && $request->cc[0] === "") {
+                $request->cc = [];
+            }
+            
             $email = SendEmail::where('to', $request->to)
                 ->where('subject', $request->subject)
                 ->where('body', $request->content)
