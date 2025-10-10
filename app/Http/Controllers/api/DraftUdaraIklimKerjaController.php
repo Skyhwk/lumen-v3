@@ -217,7 +217,7 @@ class DraftUdaraIklimKerjaController extends Controller
             $header->alamat_sampling = $request->alamat_sampling ? $request->alamat_sampling : NULL;
             $header->keterangan = ($request->keterangan != '') ? $request->keterangan : NULL;
             $header->sub_kategori = $request->jenis_sampel ? $request->jenis_sampel : NULL;
-            $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : NULL;
+            $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : [];
             // $header->tanggal_sampling = $request->tanggal_tugas ? $request->tanggal_tugas : NULL;
             $header->periode_analisa = $request->periode_analisa ? $request->periode_analisa : NULL;
             $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
@@ -345,9 +345,19 @@ class DraftUdaraIklimKerjaController extends Controller
             }
 
             $details = LhpsIklimDetail::where('id_header', $header->id)->get();
+            $details = collect($details)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsIklimCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
             if ($header) {
                 $file_qr = new GenerateQrDocumentLhp();
                 $file_qr = $file_qr->insert('LHP_IKLIM', $header, $this->karyawan);
@@ -566,7 +576,7 @@ class DraftUdaraIklimKerjaController extends Controller
                             $data1[$i]['keterangan'] = $val->iklim_dingin->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_dingin->aktifitas_kerja;
                             $data1[$i]['kondisi'] = $val->ws_udara->interpretasi;
-                        } else if ($val->parameter == "ISBB" || $val->parameter == "ISBB (8 jam)") {
+                        } else  {
                             $data1[$i]['keterangan'] = $val->iklim_panas->keterangan;
                             $data1[$i]['indeks_suhu_basah'] = $val->iklim_panas->keterangan;
                             $data1[$i]['aktivitas_pekerjaan'] = $val->iklim_panas->aktifitas;
@@ -749,8 +759,6 @@ class DraftUdaraIklimKerjaController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                 if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;

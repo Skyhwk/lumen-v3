@@ -504,13 +504,14 @@ class PersiapanSampleController extends Controller
                 ['is_active', 1],
                 ['no_quotation', $request->no_quotation],
                 ['tanggal_sampling', $request->tanggal_sampling],
+                ['periode', $request->periode],
                 ['sampler_jadwal', $request->sampler_jadwal],
             ])->pluck('id')
             ->unique()
             ->toArray();
             $jumlahHeader = count($existingPsd);
             
-
+           
             if ($jumlahHeader == 1) {
                 // Jika hanya ada 1 header aktif, update detail yang tidak ada dalam request
                 PersiapanSampelDetail::whereNotIn('no_sampel', $noSampel)
@@ -523,6 +524,7 @@ class PersiapanSampleController extends Controller
 
                 $psh = PersiapanSampelHeader::find($existingPsd[0]);
             } else if ($jumlahHeader > 1) {
+                 
                 // Jika ada banyak header, pilih yang memiliki detail_bas_document
                 $getHeaderFix = PersiapanSampelHeader::where('is_active', 1)
                     ->whereIn('id', $existingPsd)
@@ -1093,7 +1095,7 @@ class PersiapanSampleController extends Controller
                 if ($diffParams)
                     return response()->json(['message' => "Parameter tidak sesuai"], 500);
             }
-            dd($psHeader);
+            
             return response()->json($psHeader, 200);
         } catch (\Throwable $th) {
             dd($th);

@@ -656,8 +656,6 @@ class DraftUlkMedanMagnetController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                  if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;
@@ -703,60 +701,76 @@ class DraftUlkMedanMagnetController extends Controller
 
     // Amang
 
-    public function handleReject(Request $request)
+     public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
+            $lhps = LhpsMedanLMHeader::where('id', $request->id)
+                ->where('is_active', true)
+                ->first();
+            $no_lhp = $lhps->no_lhp ?? null;
+            if ($lhps) {
+                HistoryAppReject::insert([
+                    'no_lhp' => $lhps->no_lhp,
+                    'no_sampel' => $request->no_sampel,
+                    'kategori_2' => $lhps->id_kategori_2,
+                    'kategori_3' => $lhps->id_kategori_3,
+                    'menu' => 'Draft Udara',
+                    'status' => 'rejected',
+                    'rejected_at' => Carbon::now(),
+                    'rejected_by' => $this->karyawan
+                ]);
+                $lhpsHistory = $lhps->replicate();
+                $lhpsHistory->setTable((new LhpsMedanLMHeaderHistory())->getTable());
+                $lhpsHistory->created_at = $lhps->created_at;
+                $lhpsHistory->updated_at = $lhps->updated_at;
+                $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+                $lhpsHistory->deleted_by = $this->karyawan;
+                $lhpsHistory->save();
 
-            $data = OrderDetail::where('id', $request->id)->first();
+                $oldDetails = LhpsMedanLMDetail::where('id_header', $lhps->id)->get();
+                $oldCustom = LhpsMedanLMCustom::where('id_header', $lhps->id)->get();
 
-                if ($data) {
-                    $orderDetailParameter = json_decode($data->parameter); // array of strings
-                    foreach ($orderDetailParameter as $item) {
-                        $parts = explode(';', $item);
-                        if (isset($parts[1])) {
-                            $parsedParam[] = trim($parts[1]); // "Medan Magnit Statis"
-                        }
-                    }
-                        $id_kategori = explode('-', $data->kategori_3);
-                        $lhps = LhpsMedanLMHeader::where('no_lhp', $data->cfr)
-                            ->where('no_order', $data->no_order)
-                            ->where('id_kategori_3', $id_kategori[0])
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($lhps) {
-                            $lhpsHistory = $lhps->replicate();
-                            $lhpsHistory->setTable((new LhpsMedanLMHeaderHistory())->getTable());
-                            $lhpsHistory->created_at = $lhps->created_at;
-                            $lhpsHistory->updated_at = $lhps->updated_at;
-                            $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
-                            $lhpsHistory->deleted_by = $this->karyawan;
-                            $lhpsHistory->save();
-
-                            $oldDetails = LhpsMedanLMDetail::where('id_header', $lhps->id)->get();
-                            foreach ($oldDetails as $detail) {
-                                $detailHistory = $detail->replicate();
-                                $detailHistory->setTable((new LhpsMedanLMDetailHistory())->getTable());
-                                $detailHistory->created_by = $this->karyawan;
-                                $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                                $detailHistory->save();
-                            }
-
-                            foreach ($oldDetails as $detail) {
-                                $detail->delete();
-                            }
-
-                            $lhps->delete();
-                        }
+                foreach ($oldDetails as $detail) {
+                    $detailHistory = $detail->replicate();
+                    $detailHistory->setTable((new LhpsMedanLMDetailHistory())->getTable());
+                    $detailHistory->created_by = $this->karyawan;
+                    $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $detailHistory->save();
                 }
 
-            $data->status = 1;
-            $data->save();
+                foreach ($oldDetails as $detail) {
+                    $detail->delete();
+                }
+
+                foreach ($oldCustom as $custom) {
+                    $custom->delete();
+                }
+
+                $lhps->delete();
+            }
+            $noSampel = array_map('trim', explode(",", $request->no_sampel));
+
+            if ($no_lhp) {
+                OrderDetail::where('cfr', $no_lhp)
+                    ->whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            } else {
+                // kalau tidak ada LHP, update tetap bisa dilakukan dengan kriteria lain
+                // contoh: berdasarkan no_sampel saja
+                OrderDetail::whereIn('no_sampel', $noSampel)
+                    ->update([
+                        'status' => 1
+                    ]);
+            }
+
+
             DB::commit();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Data draft Medan Magnet no LHP ' . $data->no_sampel . ' berhasil direject'
+                'message' => 'Data draft dengan no LHP ' . $no_lhp . ' berhasil direject'
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
