@@ -1218,7 +1218,7 @@ class RenderKontrak
                             $pdf->WriteHTML(
                                 " <br>
                                 <hr>" . ' <b>
-                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.volume') . ' : ' . count($a->parameter) . $volume . ' - KAN (P) : ' . count($akreditasi_detail) . ' (' . count($non_akre_detail) . ')' . '</span>
+                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.total_parameter') . ' : ' . count($a->parameter) . $volume . ' - KAN (P) : ' . count($akreditasi_detail) . ' (' . count($non_akre_detail) . ')' . '</span>
                                 </b>
                                 </td>
                                 <td style="vertical-align: middle;text-align:center;font-size: 13px; padding: 5px;">' . $a->jumlah_titik . '</td>
@@ -1230,7 +1230,7 @@ class RenderKontrak
                             $pdf->WriteHTML(
                                 " <br>
                                 <hr>" . ' <b>
-                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.volume') . ' : ' . count($a->parameter) . $volume . '</span>
+                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.total_parameter') . ' : ' . count($a->parameter) . $volume . '</span>
                                 </b>
                                 </td>
                                 <td style="vertical-align: middle;text-align:center;font-size: 13px; padding: 5px;">' . $a->jumlah_titik . '</td>
