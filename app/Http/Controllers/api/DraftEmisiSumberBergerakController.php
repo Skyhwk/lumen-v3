@@ -640,6 +640,9 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data_custom = [];
                 $cek_regulasi = [];
 
+
+
+
                 foreach ($cek_lhp as $lhp) {
                     foreach ($lhp->lhpsEmisiDetail->toArray() as $key => $val) {
 
