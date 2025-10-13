@@ -17,7 +17,7 @@
                 @foreach ($detail as $k => $yy)
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
-                        <td class="custom" style="word-wrap: break-word; white-space: normal;">
+                        <td class="custom4" style="word-wrap: break-word; white-space: normal;">
                             <sup style="font-size: 5px; margin-top: -5px; display: block;">{{ $yy['no_sampel'] }}</sup>
                             {{ $yy['lokasi_keterangan'] }}
                         </td>

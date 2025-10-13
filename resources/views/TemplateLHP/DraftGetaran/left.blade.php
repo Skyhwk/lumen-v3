@@ -29,10 +29,10 @@
                 @foreach ($detail as $k => $yy)
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
-                        <td class="custom" width="8%" style="text-align: right; border-right: none;"> 
+                        <td class="custom4" width="8%" style="text-align: right; border-right: none;"> 
                              <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
                         </td>
-                        <td class="custom3" width="32%" style="border-left: none; text-align: left;"> 
+                        <td class="custom4" width="32%" style="border-left: none; text-align: left;"> 
                             {{ $yy['keterangan'] }}
                         </td>
                         @php
