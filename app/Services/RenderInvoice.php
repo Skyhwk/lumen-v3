@@ -1200,10 +1200,10 @@ class RenderInvoice
                                                 $rowspan = count($chunks[$i]) + 1 + $tambah;
                                                 $is_order_same = $no_order_render_now == $values->no_order;
                                                 if($is_order_same){
-                                                    $no = '';
-                                                    $values->no_order = '';
-                                                    $values->no_document = '';
-                                                    $pr = '';
+                                                    // $no = '';
+                                                    // $values->no_order = '';
+                                                    // $values->no_document = '';
+                                                    // $pr = '';
                                                     $pdf->writeHTML('
                                                             </tbody>
                                                         </table>
@@ -1211,6 +1211,16 @@ class RenderInvoice
                                                     $pdf->AddPage();
                                                     $pdf->writeHTML('
                                                         <table style="border-collapse: collapse;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                                                                </tr>
+                                                            </thead>
                                                             <tbody>
                                                     ');
                                                 }
@@ -1223,10 +1233,10 @@ class RenderInvoice
                                             } else {
                                                 $is_order_same = $no_order_render_now == $values->no_order;
                                                 if($is_order_same){
-                                                    $no = '';
-                                                    $values->no_order = '';
-                                                    $values->no_document = '';
-                                                    $pr = '';
+                                                    // $no = '';
+                                                    // $values->no_order = '';
+                                                    // $values->no_document = '';
+                                                    // $pr = '';
                                                     $pdf->writeHTML('
                                                             </tbody>
                                                         </table>
@@ -1234,6 +1244,16 @@ class RenderInvoice
                                                     $pdf->AddPage();
                                                     $pdf->writeHTML('
                                                         <table style="border-collapse: collapse;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                                                                </tr>
+                                                            </thead>
                                                             <tbody>
                                                     ');
                                                 }
