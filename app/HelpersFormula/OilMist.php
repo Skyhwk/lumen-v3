@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupH2S
+class OilMist
 {
     public function index($data, $id_parameter, $mdl) {
         if($data->use_absorbansi) {
@@ -44,31 +44,18 @@ class LingkunganHidupH2S
 
         $hasil1_array = $hasil2_array = $hasil3_array = [];
 
-        $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4);
-        foreach ($data->ks as $key => $value) {
-            if(floatval($Vu) != 0.0) {
-                // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
-                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45) / 1000, 4);
+        // Vstd (L) = (Rerata Laju alir x Durasi Pengambilan sampel)
+        $Vu = round($data->average_flow * $data->durasi, 4);
+        if(floatval($Vu) != 0.0) {
+            // C (mg/m3) = (((Ct - Cb)/Vstd)
+            $C1 = round((($ks - $kb) / $Vu) * (34 / 24.45) / 1000, 4);
 
-                // C1 = C2*1000
-                $C_val = round($C1_val * 1000, 4);
-
-                // H2S (PPM) = (A1-A2)/Vs
-                $C2_val = round(($value - $data->kb[$key]) / $Vu, 4);
-            }else {
-                $C_val = 0;
-                $C1_val = 0;
-                $C2_val = 0;
-            }
-
-            $hasil1_array[$key] = $C_val;
-            $hasil2_array[$key] = $C1_val;
-            $hasil3_array[$key] = $C2_val;
+            // C1 = C2*1000
+            $C = round($C1 * 1000, 4);
+        }else {
+            $C = 0;
+            $C1 = 0;
         }
-
-        $C = array_sum($hasil1_array) / count($hasil1_array);
-        $C1 = array_sum($hasil2_array) / count($hasil2_array);
-        $C2 = array_sum($hasil3_array) / count($hasil3_array);
 
 
         if (floatval($C) < 1.39)
@@ -79,21 +66,6 @@ class LingkunganHidupH2S
             $C2 = '<0.0010';
 
         $satuan = 'mg/m3';
-
-        $data_pershift = [
-            'Shift 1' => $hasil1_array[0],
-            'Shift 2' => $hasil1_array[1] ?? null,
-            'Shift 3' => $hasil1_array[2] ?? null,
-        ];
-
-        if(count($hasil1_array) == 4){
-            $data_pershift = [
-                'Shift 1' => $hasil1_array[0],
-                'Shift 2' => $hasil1_array[1],
-                'Shift 3' => $hasil1_array[2],
-                'Shift 4' => $hasil1_array[3],
-            ];
-        }
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -121,7 +93,6 @@ class LingkunganHidupH2S
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
-            'data_pershift' => count($hasil1_array) > 1 ? $data_pershift : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

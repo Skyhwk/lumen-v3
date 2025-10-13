@@ -40,13 +40,27 @@ class LingkunganHidupNO2_8J
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         // dd($Vu);
-        if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * (10 / 25) * 1000, 4));
-        }else {
-            $C = 0;
+        $hasil1_array = [];
+        $hasil2_array = [];
+        $hasil3_array = [];
+
+        foreach ($data->ks as $key => $value) {
+            if($Vu != 0.0) {
+                $C_value = \str_replace(",", "", number_format(($value / floatval($Vu)) * (10 / 25) * 1000, 4));
+            }else {
+                $C_value = 0;
+            }
+            $C1_value = \str_replace(",", "", number_format(floatval($C_value) / 1000, 5));
+            $C2_value = \str_replace(",", "", number_format(24.45 * floatval($C1_value) / 46, 5));
+
+            array_push($hasil1_array, $C_value);
+            array_push($hasil2_array, $C1_value);
+            array_push($hasil3_array, $C2_value);
         }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
+        $C = array_sum($hasil1_array) / count($hasil1_array);
+        $C1 = array_sum($hasil2_array) / count($hasil2_array);
+        $C2 = array_sum($hasil3_array) / count($hasil3_array);
+
         if (floatval($C) < 0.4623)
             $C = '<0.4623';
         if (floatval($C1) < 0.00046)
@@ -71,6 +85,11 @@ class LingkunganHidupNO2_8J
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'data_pershift' => [
+                'Shift 1' => $hasil1_array[0],
+                'Shift 2' => $hasil1_array[1] ?? null,
+                'Shift 3' => $hasil1_array[2] ?? null,
+            ],
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
