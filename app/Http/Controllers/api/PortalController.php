@@ -24,11 +24,12 @@ use App\Models\{
     LhpsKebisinganHeader,
     LhpsPencahayaanHeader,
     LhpsIklimHeader,
-    LhpUdaraPsikologiHeader,
+    LhpUdaraPsikologiHeader,LhpsGetaranHeader,
     LhpsEmisiHeader,
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
+    LhpsLingHeader,
     JobTask,
     LhpsAirCustom,
     LhpsAirDetail,
@@ -47,12 +48,13 @@ class PortalController extends Controller
     public function ceklinkApi(Request $request)
     {
         try {
+            
             if ($request->token != null) {
 
                 $cek = GenerateLink::where('token', $request->token)
                     ->where('key', $request->key)
                     ->first();
-
+                
                 $uri = env('APP_URL');
                 if ($cek != null) {
                     if ($request->mode == 'GETDATA') {
@@ -385,6 +387,7 @@ class PortalController extends Controller
                                 }
                             }
                         } else if ($cek->quotation_status == 'draft_getaran') {
+                            
                              $data = LhpsGetaranHeader::with('link')
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
@@ -398,6 +401,18 @@ class PortalController extends Controller
                             }
                         } else if ($cek->quotation_status == 'draft_iklim') {
                             $data = LhpsIklimHeader::with('link')
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+                            $uri = env('APP_URL') . '/public/dokumen/LHPS/';
+                            if ($data) {
+                                $data->flag_status = 'draft';
+                                $data->type = $cek->quotation_status;
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = null;
+                            }
+                        }else if ($cek->quotation_status == 'draft_ambient'){
+                             $data = LhpsLingHeader::with('link')
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
                                 ->first();
