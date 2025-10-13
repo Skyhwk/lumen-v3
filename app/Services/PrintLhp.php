@@ -67,6 +67,37 @@ class PrintLhp
         }
     }
 
+    public function printErgonomi($no_sampel)
+    {
+        DB::beginTransaction();
+        try {
+            //code...
+            // $id_printer = 67; // Default printer ID
+            // $id_printer = 68; // kan
+            $id_printer = 67; // debug Internal
+            $cek_printer = Printers::where('id', $id_printer)->first();
+          
+            $print = Printing::where('pdf', env('APP_URL') . '/public/draft_ergonomi/lhp/' . $no_sampel->name_file)
+                    ->where('printer', $cek_printer->full_path)
+                    ->where('karyawan', 'System')
+                    ->where('filename', 'draft_ergonomi/lhp/' . $no_sampel->name_file)
+                    ->where('printer_name', $cek_printer->name)
+                    ->where('destination', $cek_printer->full_path)
+                    // ->where('pages', $request->pages)
+                    ->print();
+            return true;
+        } catch (\Throwable $th) {
+            //throw $th;
+             DB::rollBack();
+            // Handle the exception and return an error response
+            return response()->json([
+                'status' => false,
+                'message' => 'Error printing LHP: ' . $th->getMessage(),
+                'line' => 'Line: ' . $th->getLine()
+            ], 500);
+        }
+    }
+
     public function printPsikologi($no_sampel)
     {
         // Implement the logic for handling the print LHP request
@@ -139,7 +170,6 @@ class PrintLhp
         DB::beginTransaction();
         try {
             $kan = $this->cekAkreditasi($detail);
-            // dd($kan);
             $id_printer = 67; // Default printer ID
             if ($kan)
                 $id_printer = 68;
