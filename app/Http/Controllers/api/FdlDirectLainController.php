@@ -148,11 +148,12 @@ class FdlDirectLainController extends Controller
                 ->where('shift', 'LIKE', $shift . '%')
                 ->get();
 
+                
             $TotalApprove = DataLapanganDirectLain::where('no_sampel', $no_sample)
                 ->where('parameter', $parameterData)
                 ->where('is_approve', 1)
                 ->count();
-
+                
             $approveCountNeeded = count($dataLapangan);
 
             // Always approve current record
@@ -182,33 +183,36 @@ class FdlDirectLainController extends Controller
                     'parameter' => $parameterData,
                 ]);
 
-                $header->fill([
-                    'id_parameter' => $parameter->id,
-                    'is_approve' => 1,
-                    // 'lhps' => 1,
-                    'approved_by' => $this->karyawan,
-                    'approved_at' => Carbon::now(),
-                    'created_by' => $header->exists ? $header->created_by : $this->karyawan,
-                    'created_at' => $header->exists ? $header->created_at : Carbon::now(),
-                    'is_active' => 1,
-                ]);
-                $header->save();
-
-                WsValueUdara::updateOrCreate(
-                    [
-                        'no_sampel' => $no_sample,
-                        'id_direct_lain_header' => $header->id,
-                    ],
-                    [
-                        'id_po' => $po->id,
+                if($data_kalkulasi){
+                    $header->fill([
+                        'id_parameter' => $parameter->id,
+                        'is_approve' => 1,
+                        // 'lhps' => 1,
+                        'approved_by' => $this->karyawan,
+                        'approved_at' => Carbon::now(),
+                        'created_by' => $header->exists ? $header->created_by : $this->karyawan,
+                        'created_at' => $header->exists ? $header->created_at : Carbon::now(),
                         'is_active' => 1,
-                        'hasil1' => $data_kalkulasi['hasil'],
-                        // 'hasil2' => $data_kalkulasi['hasil2'], // naik setelah tanggal 10-10-2025
-                        // 'hasil3' => $data_kalkulasi['hasil3'], // naik setelah tanggal 10-10-2025
-                        // 'hasil4' => $data_kalkulasi['hasil4'], // naik setelah tanggal 10-10-2025
-                        'satuan' => $data_kalkulasi['satuan'],
-                    ]
-                );
+                    ]);
+                    $header->save();
+    
+                    WsValueUdara::updateOrCreate(
+                        [
+                            'no_sampel' => $no_sample,
+                            'id_direct_lain_header' => $header->id,
+                        ],
+                        [
+                            'id_po' => $po->id,
+                            'is_active' => 1,
+                            'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil3' => $data_kalkulasi['c3'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil4' => $data_kalkulasi['c4'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil5' => $data_kalkulasi['c5'] ?? null, // naik setelah tanggal 10-10-2025
+                            'satuan' => $data_kalkulasi['satuan'] ?? null,
+                        ]
+                    );
+                }
             }
 
             app(NotificationFdlService::class)->sendApproveNotification('Direct Lain', $no_sample, $this->karyawan, $initialRecord->created_by);

@@ -194,6 +194,19 @@ class FdlLingkunganKerjaController extends Controller
 
                     $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
                     
+                    $c1 =NULL;
+                    $c2 =NULL;
+                    $c3 =NULL;
+                    $c4 =NULL;
+                    $c5 =NULL;
+                    $c6 =NULL;
+                    $c7 =NULL;
+                    $c8 =NULL;
+                    $c9 =NULL;
+                    $c10 =NULL;
+                    $c11 =NULL;
+                    $c12 =NULL;
+
                     // Aktifkan kembali ketika sudah di approve rumusnya oleh TA di spreadsheet
                     // if ($filtered->isNotEmpty()) {
                     //     foreach ($filtered as $p) {
@@ -258,85 +271,110 @@ class FdlLingkunganKerjaController extends Controller
                     //     }
                     // }
 
-                    // if(!empty($foundParams)) {
-                    //     // Loop setiap parameter
-                    //     foreach ($foundParams as $index => $param) {
-                    //         $column = $targetParams[$param];
-                    //         $is8Jam = Str::contains($param, ['8J', '8 Jam']);
-                    //         $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
-                    //         $details = $is8Jam ? $details8Jam : $detailsSesaat;
+                    if(!empty($foundParams)) {
+                        // Loop setiap parameter
+                        foreach ($foundParams as $index => $param) {
+                            $column = $targetParams[$param];
+                            $is8Jam = Str::contains($param, ['8J', '8 Jam']);
+                            $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
+                            $details = $is8Jam ? $details8Jam : $detailsSesaat;
 
-                    //         // Handle kolom auto_laju
-                    //         if ($column === 'auto_laju') {
-                    //             $lokasi = optional($details->first())->lokasi;
-                    //             $column = ($lokasi === 'Indoor') ? 'laju_ventilasi' : 'kecepatan_angin';
-                    //         }
+                            // Handle kolom auto_laju
+                            if ($column === 'auto_laju') {
+                                $lokasi = optional($details->first())->lokasi;
+                                $column = ($lokasi === 'Indoor') ? 'laju_ventilasi' : 'kecepatan_angin';
+                            }
 
-                    //         // Ambil rata-rata nilai parameter
-                    //         $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
-                    //         $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
+                            // Ambil rata-rata nilai parameter
+                            $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
+                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
 
-                    //         $satuan = null;
-                    //         $lowerParam = strtolower($param);
+                            $satuan = null;
+                            $lowerParam = strtolower($param);
 
-                    //         if (Str::contains($lowerParam, 'suhu')) {
-                    //             $satuan = '°C';
-                    //         } elseif (Str::contains($lowerParam, 'kelembaban')) {
-                    //             $satuan = '%';
-                    //         } elseif (Str::contains($lowerParam, 'laju ventilasi')) {
-                    //             $satuan = 'm/s';
-                    //         } elseif (Str::contains($lowerParam, 'tekanan udara')) {
-                    //             $satuan = 'mmHg';
-                    //         }
+                            if (Str::contains($lowerParam, 'suhu')) {
+                                $satuan = '°C';
+                                $c12 = $rataRata; //°C
+                            } elseif (Str::contains($lowerParam, 'kelembaban')) {
+                                $satuan = '%';
+                                $c5 = $rataRata; //%
+                            } elseif (Str::contains($lowerParam, 'laju ventilasi')) {
+                                $satuan = 'm/s';
+                                $c8 = $rataRata; //m/s
+                            } elseif (Str::contains($lowerParam, 'tekanan udara')) {
+                                $satuan = 'mmHg';
+                            }
 
-                    //         // Simpan Header
-                    //         $header = LingkunganHeader::updateOrCreate(
-                    //             [
-                    //                 'no_sampel' => $data->no_sampel,
-                    //                 'id_parameter' => $id_parameter[$index] ?? null,
-                    //             ],
-                    //             [
-                    //                 'parameter' => $param,
-                    //                 'template_stp' => 30,
-                    //                 'tanggal_terima' => $tanggalTerima,
-                    //                 'created_by' => $this->karyawan,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'is_approved' => true,
-                    //                 'approved_by' => $this->karyawan,
-                    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
-                    //             ]
-                    //         );
+                            // Simpan Header
+                            $header = LingkunganHeader::updateOrCreate(
+                                [
+                                    'no_sampel' => $data->no_sampel,
+                                    'id_parameter' => $id_parameter[$index] ?? null,
+                                ],
+                                [
+                                    'parameter' => $param,
+                                    'template_stp' => 30,
+                                    'tanggal_terima' => $tanggalTerima,
+                                    'created_by' => $this->karyawan,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                    'is_approved' => true,
+                                    'approved_by' => $this->karyawan,
+                                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
+                                ]
+                            );
 
-                    //         // id header
-                    //         $id_header = $header->id;
+                            // id header
+                            $id_header = $header->id;
 
-                    //         // Simpan ke WsValueLingkungan
-                    //         WsValueLingkungan::updateOrCreate(
-                    //             [
-                    //                 'lingkungan_header_id' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
-                    //             ],
-                    //             [
-                    //                 'C' => $rataRata,
-                    //                 'tanggal_terima' =>$tanggalTerima,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'created_by' => $this->karyawan,
-                    //             ]
-                    //         );
+                            // Simpan ke WsValueLingkungan
+                            WsValueLingkungan::updateOrCreate(
+                                [
+                                    'lingkungan_header_id' => $id_header,
+                                    'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
+                                ],
+                                [
+                                    'C' => $c1,
+                                    'C1' => $c2,
+                                    'C2' => $c3,
+                                    'C3' => $c4,
+                                    'C4' => $c5,
+                                    'C5' => $c6,
+                                    'C6' => $c7,
+                                    'C7' => $c8,
+                                    'C8' => $c9,
+                                    'C9' => $c10,
+                                    'C10' => $c11,
+                                    'C11' => $c12,
+                                    'tanggal_terima' =>$tanggalTerima,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                    'created_by' => $this->karyawan,
+                                ]
+                            );
 
-                    //         // Simpan ke WsValueUdara
-                    //         WsValueUdara::updateOrCreate(
-                    //             [
-                    //                 'id_lingkungan_header' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel,
-                    //             ],
-                    //             [
-                    //                 'hasil1' => $rataRata,
-                    //                 'satuan' => $satuan,
-                    //             ]
-                    //         );
-                    //     }
-                    // }
+                            // Simpan ke WsValueUdara
+                            WsValueUdara::updateOrCreate(
+                                [
+                                    'id_lingkungan_header' => $id_header,
+                                    'no_sampel' => $data->no_sampel,
+                                ],
+                                [
+                                    'hasil1' => $c1,
+                                    'hasil2' => $c2,
+                                    'hasil3' => $c3,
+                                    'hasil4' => $c4,
+                                    'hasil5' => $c5,
+                                    'hasil6' => $c6,
+                                    'hasil7' => $c7,
+                                    'hasil8' => $c8,
+                                    'hasil9' => $c9,
+                                    'hasil10' => $c10,
+                                    'hasil11' => $c11,
+                                    'hasil12' => $c12,
+                                    'satuan' => $satuan,
+                                ]
+                            );
+                        }
+                    }
 
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
