@@ -3,17 +3,17 @@
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
-                    <th width="5%" rowspan="2" class="pd-5-solid-top-center">NO</th>
-                    <th width="25%" class="pd-5-solid-top-center" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="15%" class="pd-5-solid-top-center">HASIL UJI</th>
-                    <th width="15%" class="pd-5-solid-top-center">STANDART</th>
-                    <th width="10%" class="pd-5-solid-top-center" rowspan="2">SUMBER PENCAHAYAAN</th>
-                    <th width="10%" class="pd-5-solid-top-center" rowspan="2">JENIS PENGUKURAN</th>
-                    <th width="10%" class="pd-5-solid-top-center" rowspan="2">TANGGAL SAMPLING</th>
+                    <th width="5%" rowspan="2" class="custom">NO</th>
+                    <th width="25%" class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
+                    <th width="15%" class="custom">HASIL UJI</th>
+                    <th width="15%" class="custom">STANDART</th>
+                    <th width="10%" class="custom" rowspan="2">SUMBER PENCAHAYAAN</th>
+                    <th width="10%" class="custom" rowspan="2">JENIS PENGUKURAN</th>
+                    <th width="10%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
 
                 </tr>
                 <tr>
-                    <th class="pd-5-solid-top-center">Satuan = LUX</th>
+                    <th class="custom">Satuan = LUX</th>
                 </tr>
             </thead>
             <tbody>
@@ -36,20 +36,20 @@
                         $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                     @endphp
                     <tr>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $number }}</td>
-                        <td class="pd-5-solid-left"><sup
+                        <td class="custom4"><sup
                                 style="font-size:5px; !important; margin-top:-10px;">{{ $no_sampel }}</sup>{{ $keterangan }}
                         </td>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $hasil }}</td>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $nab }}</td>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $sumber_cahaya }}</td>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $jenis_pengukuran }}</td>
-                        <td class="pd-5-solid-center">
+                        <td class="custom">
                             {{ $tanggal_sampling }}</td>
                     </tr>
                 @endforeach

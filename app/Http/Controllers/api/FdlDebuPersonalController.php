@@ -120,29 +120,41 @@ class FdlDebuPersonalController extends Controller
         }
     }
 
-    public function approve(Request $request){
-        if (isset($request->id) && $request->id != null) {
+    public function approve(Request $request)
+    {
+        try {
+            DB::beginTransaction();
 
             $data = DataLapanganDebuPersonal::where('id', $request->id)->first();
-            // $no_sample = $data->no_sample;
-            
+
             $data->is_approve  = true;
             $data->approved_by = $this->karyawan;
-            $data->approved_at = Carbon::now();
+            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            app(NotificationFdlService::class)->sendApproveNotification("Debu Personal pada Shift($data->shift)", $data->no_sampel, $this->karyawan, $data->created_by);
+            DB::commit();
+
+            app(NotificationFdlService::class)->sendApproveNotification(
+                "Debu Personal pada Shift($data->shift)",
+                $data->no_sampel,
+                $this->karyawan,
+                $data->created_by
+            );
 
             return response()->json([
                 'message' => 'Data berhasil di Approve',
                 'master_kategori' => 1
             ], 200);
-        } else {
+
+        } catch (\Exception $th) {
+            DB::rollBack();
             return response()->json([
-                'message' => 'Gagal Approve'
+                'message' => 'Gagal approve ' . $th->getMessage(),
+                'line'    => $th->getLine()
             ], 401);
         }
     }
+
 
     public function rejectData(Request $request)
     {

@@ -19,7 +19,7 @@
                 <div style="page-break-before: always;">
                      <table style="padding-top: 5px; font-size: 10px;" width="100%">
                         <tr>
-                            <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas  Iklim Kerja :</td>
+                            <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas Iklim Kerja :</td>
                         </tr>
                     </table>
                     <table style="padding-top: 10px; font-size: 10px;" width="100%">
@@ -74,7 +74,7 @@
                 <div style="page-break-before: always;">     
                     <table style="padding-top: 5px;font-size: 10px;" width="100%">
                         <tr>
-                            <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas Kebisingan :</td>
+                            <td class="custom5" colspan="3">Regulasi Acuan Pengujian dan Monitoring Kualitas Iklim Kerja :</td>
                         </tr>
                     </table>
                     <table style="padding-top: 5px; font-size: 10px;" width="100%">

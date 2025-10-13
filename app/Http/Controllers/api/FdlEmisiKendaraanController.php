@@ -265,7 +265,7 @@ class FdlEmisiKendaraanController extends Controller
                     $data_fdl->save();
 
                     $emisi_order = DataLapanganEmisiOrder::where('id_fdl', $request->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
-                    $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    // $emisi_order = MasterKendaraan::where('id', $data_fdl->emisiOrder->kendaraan->id)->update(['is_active' => false, 'deleted_by' => $this->karyawan, 'deleted_at' => Carbon::now()->format('Y-m-d H:i:s')]);
                 }
                 DB::commit();
                 return response()->json([
@@ -774,17 +774,17 @@ class FdlEmisiKendaraanController extends Controller
                             }
 
                             // 🔹 Isi data (baik create maupun update)
-                            $data_kendaraan->merk_kendaraan      = ucfirst($request->merk);
+                            $data_kendaraan->merk_kendaraan      = ucfirst($request->merk_kendaraan);
                             $data_kendaraan->id_bbm              = $request->jenis_kendaraan;
                             $data_kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
-                            $data_kendaraan->plat_nomor          = $request->no_plat;
-                            $data_kendaraan->bobot_kendaraan     = $request->bobot_kendaraan;
-                            $data_kendaraan->tahun_pembuatan     = $request->tahun;
+                            $data_kendaraan->plat_nomor          = $request->no_polisi;
+                            $data_kendaraan->bobot_kendaraan     = $request->bobot;
+                            $data_kendaraan->tahun_pembuatan     = $request->tahun_pembuatan;
                             $data_kendaraan->no_mesin            = $request->no_mesin;
                             $data_kendaraan->transmisi           = $request->transmisi;
                             $data_kendaraan->kategori_kendaraan  = $request->kategori_kendaraan;
                             $data_kendaraan->km                  = $request->km;
-                            $data_kendaraan->cc                  = $request->cc;
+                            $data_kendaraan->cc                  = $request->kapasitas_cc;
 
                             // bedakan create/update metadata
                             if (!$data_kendaraan->exists) {

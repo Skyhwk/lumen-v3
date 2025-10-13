@@ -135,6 +135,16 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 		return null;
 	}
 
+	private function akarPangkatN($angka, $n) {
+		$hasil =  pow($angka, 1/$n);
+
+		if(fmod($hasil, 1) == 0) {
+			return (int)$hasil;
+		}
+
+		return $hasil;
+	}
+
 	public function detail(Request $request)
 	{
 		try {
@@ -190,17 +200,21 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					}
 					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
 					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
-					if ($paparan < 60) {
+					if ($paparan == 30) {
 						$item->nab = 3.4644;
-					} else if ($paparan >= 60 && $paparan < 120) {
+					} else if ($paparan == 60) {
 						$item->nab = 2.4497;
-					} else if ($paparan >= 120 && $paparan < 240) {
+					} else if ($paparan == 120) {
 						$item->nab = 1.7322;
-					} else if ($paparan >= 240 && $paparan < 480) {
+					} else if ($paparan == 240) {
 						$item->nab = 1.2249;
-					} else if ($paparan >= 480) {
+					} else if ($paparan == 480) {
 						$item->nab = 0.8661;
+					} else {
+						$hitung = 2.45 / $this->akarPangkatN($dataLapanganDurasi, 2);
+						$item->nab = round($hitung, 4);
 					}
+
 					$ws->nab = $item->nab;
 					$ws->save();
 				}

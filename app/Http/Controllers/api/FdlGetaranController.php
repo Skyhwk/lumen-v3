@@ -278,6 +278,17 @@ class FdlGetaranController extends Controller
                     $percepP_ms2 = round(($percepP / 10000), 4);
                     $percepB_ms2 = round(($percepB / 10000), 4);
                 }
+                $kercep_mms = $kercep_mms < 0.1 ? '<0.1' : $kercep_mms;
+                $kercepT_mms = $kercepT_mms < 0.1 ? '<0.1' : $kercepT_mms;
+                $kercepP_mms = $kercepP_mms < 0.1 ? '<0.1' : $kercepP_mms;
+                $kercepB_mms = $kercepB_mms < 0.1 ? '<0.1' : $kercepB_mms;
+
+                $percep_ms2 = $percep_ms2 < 0.1 ? '<0.1' : $percep_ms2;
+                $percepT_ms2 = $percepT_ms2 < 0.1 ? '<0.1' : $percepT_ms2;
+                $percepP_ms2 = $percepP_ms2 < 0.1 ? '<0.1' : $percepP_ms2;
+                $percepB_ms2 = $percepB_ms2 < 0.1 ? '<0.1' : $percepB_ms2;
+                
+
                 if($kategori_3 == 13 || $kategori_3 == 14 || $kategori_3 == 15 || $kategori_3 == 16 || $kategori_3 == 17 || $kategori_3 == 18 || $kategori_3 == 19) {
                     if ($kercep_mms == '') {
                         return response()->json([

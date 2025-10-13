@@ -1970,18 +1970,18 @@ class RenderKontrak
 
             // TOTAL PERDIEM 24 JAM
             $perdiem_24 = "";
-            $total_perdiem = 0;
+            // $total_perdiem = 0;
             if ($data->harga_24jam_personil_total != 0) {
                 $perdiem_24 = strtoupper(__('QTC.table.item.manpower24'));
                 // $pdf->WriteHTML('<tr><td style="text-align:center;font-size: 8px;">TOTAL PERDIEM 24 JAM</td>');
-                $total_harga_24jam_perdiem = 0;
-                foreach ($detail as $key => $value) {
-                    // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($value->harga_24jam_personil_total) . '</td>');
-                    $total_harga_24jam_perdiem =
-                        $total_harga_24jam_perdiem +
-                        $value->harga_24jam_personil_total;
-                }
-                $total_perdiem = $total_perdiem + $total_harga_24jam_perdiem;
+                // $total_harga_24jam_perdiem = 0;
+                // foreach ($detail as $key => $value) {
+                //     // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($value->harga_24jam_personil_total) . '</td>');
+                //     $total_harga_24jam_perdiem =
+                //         $total_harga_24jam_perdiem +
+                //         $value->harga_24jam_personil_total;
+                // }
+                // $total_perdiem = $total_perdiem + $total_harga_24jam_perdiem;
                 // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($total_harga_24jam_perdiem) . '</td></tr>');
             }
 
@@ -1993,18 +1993,17 @@ class RenderKontrak
                 $total_harga_perdiem = 0;
                 foreach ($detail as $key => $value) {
                     $harga_perdiem = 0;
-                    if ($value->jumlah_orang_24jam > 0) {
-                        $harga_perdiem =
-                            $harga_perdiem + $value->harga_24jam_personil_total;
+                    if ($value->jumlah_orang_24jam > 0 || !is_null($value->perdiem_jumlah_orang)) {
+                        $harga_perdiem += $value->harga_24jam_personil_total;
                     }
                     $pdf->WriteHTML(
-                        ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->harga_perdiem_personil_total + $harga_perdiem) . "</td>"
+                        ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->harga_perdiem_personil_total + $value->harga_24jam_personil_total) . "</td>"
                     );
-                    $total_harga_perdiem =
-                        $total_harga_perdiem + $value->harga_perdiem_personil_total;
+                    $total_harga_perdiem += ($value->harga_perdiem_personil_total + $value->harga_24jam_personil_total);
                 }
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem + $total_perdiem) . "</td></tr>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem) . "</td></tr>"
+                    // ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem + $total_perdiem_24) . "</td></tr>"
                 );
             }
 
