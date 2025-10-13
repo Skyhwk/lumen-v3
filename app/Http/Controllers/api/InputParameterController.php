@@ -2947,7 +2947,7 @@ class InputParameterController extends Controller
 			if ($isO3) {
 				$data_parsing->ks = array_chunk(array_map('floatval', $request->ks), 2);
 				$data_parsing->kb = array_chunk(array_map('floatval', $request->kb), 2);
-			} else {
+			} else if(isset($request->ks)){
 				$data_parsing->ks = array_map('floatval', $request->ks);
 				$data_parsing->kb = array_map('floatval', $request->kb);
 			}
