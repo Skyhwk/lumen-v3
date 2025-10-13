@@ -2741,7 +2741,7 @@ class RequestQuotationController extends Controller
                         $decoded = json_decode($dataOldSampling, true);
                         $dataOldSampling = is_array($decoded) ? $decoded : [];
                     }
-                    
+
                     foreach ($dataOldSampling as $key => $sampling) {
                         $coreData = [
                             'kategori_1' => $sampling['kategori_1'] ?? null,
@@ -3249,16 +3249,23 @@ class RequestQuotationController extends Controller
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil = 0;
                                         }
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil_total = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil_total = 0;
                                         }
 
                                         $transport = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
                                         $perdiem = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
-                                        if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '')
+                                        if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != ''){
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $jam = 0;
+                                        }
                                     } else {
                                         // IF NOT CALCULATE BY SYSTEM
                                         // JUMLAH TRANSPORTASI
@@ -3358,11 +3365,16 @@ class RequestQuotationController extends Controller
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil = 0;
                                         }
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil_total = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil_total = 0;
+                                            $jam = 0;
                                         }
 
                                         $transport = ($harga_tiket + $harga_transportasi_darat + $harga_penginapan) * $data_wilayah->wilayah_data[$c]->transportasi;
@@ -5181,16 +5193,23 @@ class RequestQuotationController extends Controller
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil = 0;
                                         }
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil_total = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil_total = 0;
                                         }
 
                                         $transport = ($cekOperasional->transportasi * (int) $data_wilayah->wilayah_data[$c]->transportasi);
                                         $perdiem = ($cekOperasional->per_orang * (int) $data_wilayah->wilayah_data[$c]->perdiem_jumlah_orang) * $data_wilayah->wilayah_data[$c]->perdiem_jumlah_hari;
-                                        if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '')
+                                        if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != ''){
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $jam = 0;
+                                        }
                                     } else {
                                         // IF NOT CALCULATE BY SYSTEM
                                         // JUMLAH TRANSPORTASI
@@ -5290,11 +5309,16 @@ class RequestQuotationController extends Controller
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil = $cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil = 0;
                                         }
 
                                         if ($data_wilayah->wilayah_data[$c]->jumlah_hari_24jam != '' && $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam != '') {
                                             $dataD->harga_24jam_personil_total = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
                                             $jam = ($cekOperasional->{'24jam'} * (int) $data_wilayah->wilayah_data[$c]->jumlah_orang_24jam) * $data_wilayah->wilayah_data[$c]->jumlah_hari_24jam;
+                                        }else{
+                                            $dataD->harga_24jam_personil_total = 0;
+                                            $jam = 0;
                                         }
 
                                         $transport = ($harga_tiket + $harga_transportasi_darat + $harga_penginapan) * $data_wilayah->wilayah_data[$c]->transportasi;
