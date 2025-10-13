@@ -799,10 +799,47 @@ class StpsController extends Controller
                     });
                     // dd('stop', $dataOrderDetailPerPeriode, $kategori_sample);
                 } else {
+                    
                     $data_detail_penawaran = json_decode($dataPenawaran->data_pendukung_sampling, true);
                     // dd($dataPenawaran, 'test');
+                    
                     $data_detail_penawaran = array_map(function ($data_sampling) use ($dataOrder, $pra_no_sample) {
+                        $sampleNumbersFromOrder = $dataOrder->orderDetail()
+                                ->where('kategori_1', '!=', 'SD')
+                                ->where('kategori_2', $data_sampling['kategori_1'])
+                                ->where('kategori_3', $data_sampling['kategori_2'])
+                                // ->whereJsonContains('regulasi', $data_sampling['regulasi']) // dipindah ke bawah pengecekana
+                                // ->whereJsonContains('parameter', $data_sampling['parameter']) // dipindah ke bawah pengecekana
+                                
+                                ->whereIn('no_sampel', $pra_no_sample)
+                                ->where('is_active', 1)
+                                ->get();
+                        $penawaran_keys = array_merge(...array_map('array_keys', $data_sampling['penamaan_titik']));
+                        $sampleNumbers = [];
+                        foreach ($sampleNumbersFromOrder as $orderDetail) {
+                            $orderParameter = json_decode($orderDetail->parameter, true) ?? [];
+                            $inputParameter = $data_sampling['parameter'];
+                            
+                            $parameterMatch = !empty(array_intersect($orderParameter, $inputParameter));
+                            $totalParameterSame = count($orderParameter) === count($inputParameter);
 
+                            if ($parameterMatch && $totalParameterSame) {
+                                $number = explode('/', $orderDetail->no_sampel)[1];
+
+                                $idRegulasiOrder        = array_map(fn($item) => explode('-', $item)[0], json_decode($orderDetail->regulasi, true) ?? []);
+                                $idRegulasiPenawaran    = !empty($data_sampling['regulasi']) ? array_map(fn($item) => explode('-', $item)[0], $data_sampling['regulasi']) : [];
+
+                                if (!empty($idRegulasiOrder) && !empty($idRegulasiPenawaran)) {
+                                    $regulasiMatch = !empty(array_intersect($idRegulasiOrder, $idRegulasiPenawaran));
+    
+                                    if (in_array($number, $penawaran_keys) && $regulasiMatch) {
+                                        $sampleNumbers[] = $orderDetail->no_sampel;
+                                    }
+                                } else {
+                                    $sampleNumbers[] = $orderDetail->no_sampel;
+                                }
+                            }
+                        }
                         return [
                             'kategori_3' => \explode('-', $data_sampling['kategori_2'])[1],
                             'periode' => NULL,
@@ -818,16 +855,7 @@ class StpsController extends Controller
                                 '( ' . number_format($data_sampling['volume'] / 1000, 1) . ' L )' : '',
                             'total_parameter' => $data_sampling['total_parameter'],
                             'jumlah_titik' => $data_sampling['jumlah_titik'],
-                            'no_sampel' => $dataOrder->orderDetail()
-                                ->where('kategori_3', $data_sampling['kategori_2'])
-                                ->where('kategori_2', $data_sampling['kategori_1'])
-                                ->whereJsonContains('regulasi', $data_sampling['regulasi'])
-                                ->whereJsonContains('parameter', $data_sampling['parameter'])
-                                // ->where('periode', $item['periode_kontrak'])
-                                ->whereIn('no_sampel', $pra_no_sample)
-                                ->where('kategori_1', '!=', 'SD')
-                                ->where('is_active', 1)
-                                ->pluck('no_sampel')->toArray(),
+                            'no_sampel' => $sampleNumbers,
                         ];
                     }, $data_detail_penawaran);
 
@@ -952,7 +980,7 @@ class StpsController extends Controller
                 ->where('type_document', 'surat_tugas_pengambilan_sampel')
                 ->whereJsonContains('data->no_document', $noDocument)
                 ->first();
-
+            
             if ($qr) {
                 $qr_data = json_decode($qr->data, true);
                 if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
@@ -1251,7 +1279,7 @@ class StpsController extends Controller
                         '<td style="font-size: 13px; padding: 5px;text-align:center; width: 50%;">' . implode('; ', $value->no_sampel) . '</td></tr>'
                     );
                 } else {
-
+                    // dump($value);
                     $pdf->WriteHTML(
                         '<tr>
                                 <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
