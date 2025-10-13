@@ -16,6 +16,15 @@ class LingkunganHidupPM
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C3 = null;
+        $C4 = null;
+        $C5 = null;
+        $C6 = null;
+        $C7 = null;
+        $C8 = null;
+        $C9 = null;
+        $C10 = null;
+        $C11 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -39,18 +48,16 @@ class LingkunganHidupPM
                 $Qs = $data->nilQs;
                 $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
             }
-        if ($id_parameter == 310 || $id_parameter == 311 || $id_parameter == 312) {
+        if ($id_parameter == 310 || $id_parameter == 311 || $id_parameter == 312) { // PM.10
             // dd($C,$C1);
-            if (floatval($C) < 0.56)
-                $C = '<0.56';
-            if (floatval($C1) < 0.00056)
-                $C1 = '<0.00056';
-        } else if ($id_parameter == 313 || $id_parameter == 314 || $id_parameter == 315) {
-            if (floatval($C) < 0.58)
-                $C = '<0.58';
-            if (floatval($C1) < 0.00058)
-                $C1 = '<0.00058';
+            if (floatval($C) < 0.0631)
+                $C = '<0.0631';
+        } else if ($id_parameter == 313 || $id_parameter == 314 || $id_parameter == 315) { // PM 2.5
+            if (floatval($C) < 0.0631)
+                $C = '<0.0631';
         }
+
+        $satuan = 'ug/Nm3';
         // dd($data);
         $w1 = $data->w1;
         $w2 = $data->w2;
@@ -72,9 +79,18 @@ class LingkunganHidupPM
             // 'hasil1' => $C,
             // 'hasil2' => $C1,
             // 'hasil3' => $C2,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
+            'C' => isset($C) ? $C : null,
+            'C1' => isset($C1) ? $C1 : null,
+            'C2' => isset($C2) ? $C2 : null,
+            'C3' => isset($C3) ? $C3 : null,
+            'C4' => isset($C4) ? $C4 : null,
+            'C5' => isset($C5) ? $C5 : null,
+            'C6' => isset($C6) ? $C6 : null,
+            'C7' => isset($C7) ? $C7 : null,
+            'C8' => isset($C8) ? $C8 : null,
+            'C9' => isset($C9) ? $C9 : null,
+            'C10' => isset($C10) ? $C10 : null,
+            'C11' => isset($C11) ? $C11 : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

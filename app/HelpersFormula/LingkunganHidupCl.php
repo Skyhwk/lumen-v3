@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupH2S
+class LingkunganHidupCl
 {
     public function index($data, $id_parameter, $mdl) {
         if($data->use_absorbansi) {
@@ -30,6 +30,11 @@ class LingkunganHidupH2S
         $C9 = null;
         $C10 = null;
         $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -42,60 +47,47 @@ class LingkunganHidupH2S
         $st = null;
         $satuan = null;
 
-        $hasil1_array = $hasil2_array = $hasil3_array = [];
-
-        $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4);
-        foreach ($data->ks as $key => $value) {
-            if(floatval($Vu) != 0.0) {
-                // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
-                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45) / 1000, 4);
-
-                // C1 = C2*1000
-                $C_val = round($C1_val * 1000, 4);
-
-                // H2S (PPM) = (A1-A2)/Vs
-                $C2_val = round(($value - $data->kb[$key]) / $Vu, 4);
-            }else {
-                $C_val = 0;
-                $C1_val = 0;
-                $C2_val = 0;
-            }
-
-            $hasil1_array[$key] = $C_val;
-            $hasil2_array[$key] = $C1_val;
-            $hasil3_array[$key] = $C2_val;
+        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+        if($Vu != 0.0) {
+            // C (ug/m3) = ((((A-B)*5))/Vs)*1000
+            $C = \str_replace(",", "", number_format(((($ks - $kb) * 5) / $Vu) * 1000, 4));
+        }else {
+            $C = 0;
         }
 
-        $C = array_sum($hasil1_array) / count($hasil1_array);
-        $C1 = array_sum($hasil2_array) / count($hasil2_array);
-        $C2 = array_sum($hasil3_array) / count($hasil3_array);
+        // Pastikan nilai C valid (numerik)
+        $C = is_numeric($C) ? (float) $C : 0;
 
-
-        if (floatval($C) < 1.39)
-            $C = '<1.39';
-        if (floatval($C1) < 0.0022)
-            $C1 = '<0.0022';
-        if (floatval($C2) < 0.0010)
-            $C2 = '<0.0010';
-
-        $satuan = 'mg/m3';
-
-        $data_pershift = [
-            'Shift 1' => $hasil1_array[0],
-            'Shift 2' => $hasil1_array[1] ?? null,
-            'Shift 3' => $hasil1_array[2] ?? null,
-        ];
-
-        if(count($hasil1_array) == 4){
-            $data_pershift = [
-                'Shift 1' => $hasil1_array[0],
-                'Shift 2' => $hasil1_array[1],
-                'Shift 3' => $hasil1_array[2],
-                'Shift 4' => $hasil1_array[3],
-            ];
+        // Hindari division by zero (24.45 tidak boleh nol)
+        $divider = 24.45;
+        if ($divider == 0) {
+            $divider = 1; // fallback agar tidak error
         }
 
-        $processed = [
+        // C1 = C / 1000
+        $C1 = round($C / 1000, 4);
+
+        // C2 = (C1 / 24.45) * 35.45
+        $C2 = round(($C1 / $divider) * 35.45, 4);
+
+        // C3 = C2 * 1000
+        $C3 = round($C2 * 1000, 4);
+
+        // C4 = C3 * 10000
+        $C4 = round($C3 * 10000, 4);
+
+        // Jika ingin semua hasil dalam format string angka (untuk tampilan, bukan perhitungan):
+        $C1 = number_format($C1, 4, '.', '');
+        $C2 = number_format($C2, 4, '.', '');
+        $C3 = number_format($C3, 4, '.', '');
+        $C4 = number_format($C4, 4, '.', '');
+
+
+        $Vs = $Vu;
+
+        $satuan = 'ug/Nm3';
+
+        $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
             'durasi' => $data->durasi,
@@ -121,7 +113,11 @@ class LingkunganHidupH2S
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
-            'data_pershift' => count($hasil1_array) > 1 ? $data_pershift : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
@@ -133,7 +129,7 @@ class LingkunganHidupH2S
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
 
-        return $processed;
+        return $data;
     }
 
 }
