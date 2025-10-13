@@ -32,12 +32,13 @@ class TqcEmisiKendaraanController extends Controller
             DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
             'kategori_1',
             'konsultan',
+            'keterangan_1'
         )
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '!=', '34-Emisi Sumber Tidak Bergerak')
-            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'keterangan_1')
             ->orderBy('max_id', 'desc');
 
         return DataTables::of($data)
@@ -127,8 +128,6 @@ class TqcEmisiKendaraanController extends Controller
                 // 'max' => optional($emisiHeader)->max,
                 'sampler' => $currentDataLapangan->created_by,
                 'approved_by' => $currentDataLapangan->approved_by,
-
-
                 'id' => $currentDataLapangan->id,
                 'nama_perusahaan' => $orderDetail->nama_perusahaan,
                 'no_order' => $orderDetail->no_order,

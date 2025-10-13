@@ -14,7 +14,7 @@
                 @foreach ($custom as $k => $yy)
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
-                        <td style="text-align: right; border-right: none; vertical-align: top;" class="custom" width="6%">
+                        <td style="text-align: right; border-right: none; vertical-align: top;" class="custom4" width="6%">
                             <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
                         </td>
                         <td style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;" class="custom" width="24%">

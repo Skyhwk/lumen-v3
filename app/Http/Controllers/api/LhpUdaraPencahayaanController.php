@@ -30,7 +30,7 @@ class LhpUdaraPencahayaanController extends Controller
     public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $header = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+            $header = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             if($header != null) {
 
                 $header->is_approve = 0;
@@ -39,8 +39,8 @@ class LhpUdaraPencahayaanController extends Controller
                 
                 // $header->file_qr = null;
                 $header->save();
-             OrderDetail::where('cfr', $request->no_lhp)
-                    ->whereIn('no_sampel', explode(', ',$request->no_sampel))
+             OrderDetail::where('cfr', $request->cfr)
+                    ->where('status', 3)
                     ->where('is_active', true)
                     ->update([
                     'status' => 2,
@@ -52,7 +52,7 @@ class LhpUdaraPencahayaanController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
+                'message' => 'Reject no LHP '.$request->cfr.' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();
