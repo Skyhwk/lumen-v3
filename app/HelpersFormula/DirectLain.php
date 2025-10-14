@@ -26,7 +26,7 @@ class DirectLain {
         $paramCO2 = ["CO2"];
         $paramVoc = ["VOC", "VOC (8 Jam)"];
         $paramCO  = ["C O", "CO (8 Jam)", "CO (6 Jam)", "CO (24 Jam)"];
-        $h2co     = ["H2CO", "HCHO (8 Jam)"];
+        $h2co     = ["H2CO", "H₂CO"];
 
         // Hanya proses kalau jumlah data valid
         if ($jumlahElemen > 0) {
@@ -48,13 +48,13 @@ class DirectLain {
                     $c2 = $c2 < 1 ? '<1' : round($c2, 0);
                     $c1 = $c2 * 1000;
                     $c3 = ($c2 / 24.45) * 30.03;
-                    $satuan = "mg/Nm3";
+                    $satuan = "mg/m3";
                 } 
                 else if (in_array($row->parameter, $paramVoc)) {
                     $c2 = $totalNilai / $jumlahElemen;
                     $c2 = $c2 < 0.001 ? '<0.001' : round($c2, 3);
                     $c1 = $c2 * 1000;
-                    $satuan = "mg/Nm3";
+                    $satuan = "mg/m3";
                 } 
                 else if (in_array($row->parameter, $paramO2)) {
                     $c5 = round($totalNilai / $jumlahElemen, 2);
