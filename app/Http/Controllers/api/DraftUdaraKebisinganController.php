@@ -396,7 +396,7 @@ class DraftUdaraKebisinganController extends Controller
                         ->useLampiran(true)
                         ->whereView('DraftKebisinganLh')
                         ->render();
-                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)
@@ -412,8 +412,6 @@ class DraftUdaraKebisinganController extends Controller
                     ->whereView('DraftKebisingan')
                     ->render();
             }
-
-
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
 

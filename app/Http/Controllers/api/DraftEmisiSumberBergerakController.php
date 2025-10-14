@@ -101,6 +101,7 @@ class DraftEmisiSumberBergerakController extends Controller
             ->make(true);
     }
 
+
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
@@ -508,116 +509,310 @@ class DraftEmisiSumberBergerakController extends Controller
         }
     }
 
+    // public function handleDatadetail(Request $request)
+    // {
+    //     try {
+    //         $cfr = OrderDetail::with([
+    //             'subCategory' => function ($query) {
+    //                 $query->select('nama_sub_kategori');
+    //             },
+    //             'category' => function ($query) {
+    //                 $query->select('nama_kategori');
+    //             }
+    //         ])
+    //             ->where('cfr', $request->cfr)
+    //             ->first();
+
+    //         if ($request->category2 == 32 || $request->category2 == 31) {
+    //             $cek_all = OrderDetail::with('orderHeader', 'lhps_emisi.lhpsEmisiCustom')->where('cfr', $cfr->cfr)->where('is_active', true)->get();
+
+    //             if ($cek_all) {
+    //                 $data
+    //             }
+
+    //             $dataTable = [];
+    //             $dataTable2 = [];
+    //             foreach ($cek_all as $key => $values) {
+    //                 $value = DataLapanganEmisiKendaraan::with('emisiOrder')->where('no_sampel', $values->no_sampel)->first();
+
+    //                 $cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->emisiOrder->id_regulasi)
+    //                     ->where('is_active', true)
+    //                     ->get();
+
+    //                 $hc = '-';
+    //                 $co = '-';
+    //                 $op = '-';
+    //                 foreach ($cek_bakumutu as $x => $xx) {
+    //                     if ($xx->parameter == 'HC' || $xx->parameter == 'HC (Bensin)') {
+    //                         $hc = $xx->baku_mutu;
+    //                     } else if ($xx->parameter == 'CO' || $xx->parameter == 'CO (Bensin)') {
+    //                         $co = $xx->baku_mutu;
+    //                     } else if ($xx->parameter == 'Opasitas' || $xx->parameter == 'Opasitas (Solar)') {
+    //                         $op = $xx->baku_mutu;
+    //                     }
+    //                 }
+
+    //                 array_push($dataTable, (object) [
+    //                     'no_sampel' => $value->no_sampel,
+    //                     'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
+    //                     'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
+    //                     'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
+    //                     'hasil_co' => $value->co,
+    //                     'hasil_hc' => $value->hc,
+    //                     'hasil_op' => $value->opasitas,
+    //                     'baku_co' => $co,
+    //                     'baku_hc' => $hc,
+    //                     'baku_op' => $op,
+    //                     'regulasi' => $value->peraturan,
+    //                     'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
+    //                 ]);
+
+    //                 $reqOtherRegs = $request->other_regulasi;
+    //                 if ($reqOtherRegs && count($reqOtherRegs) > 0) {
+    //                     foreach ($reqOtherRegs as $key => $idReg) {
+    //                         if ($values->lhps_emisi && $values->lhps_emisi->lhpsEmisiCustom) {
+    //                             $page = $key + 1;
+    //                             $val = $values->lhps_emisi->lhpsEmisiCustom->where('page', $page)->first()->toArray();
+    //                             $orderDetail = OrderDetail::where('no_sampel', $val['no_sampel'])->first();
+
+    //                             $dataTable2["id_$idReg"][] = [
+    //                                 'no_sampel' => $val['no_sampel'],
+    //                                 'nama_kendaraan' => $orderDetail->keterangan_1 ?? $val['nama_kendaraan'],
+    //                                 'bobot_kendaraan' => $val['bobot_kendaraan'],
+    //                                 'tahun_kendaraan' => $val['tahun_kendaraan'],
+    //                                 'hasil_uji' => $val['hasil_uji'],
+    //                                 'baku_mutu' => $val['baku_mutu'],
+    //                                 'tanggal_sampling' => $val['tanggal_sampling'] ?? $values->tanggal_sampling ?? null,
+    //                             ];
+    //                         } else {
+    //                             $dataTable2["id_$idReg"][] = [
+    //                                 'no_sampel' => $value->no_sampel,
+    //                                 'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
+    //                                 'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
+    //                                 'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
+    //                                 'hasil_co' => $value->co,
+    //                                 'hasil_hc' => $value->hc,
+    //                                 'hasil_op' => $value->opasitas,
+    //                                 'baku_co' => $co,
+    //                                 'baku_hc' => $hc,
+    //                                 'baku_op' => $op,
+    //                                 'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
+    //                             ];
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+    //             return response()->json([
+    //                 // 'data' => $cfr,
+    //                 'dataAll' => $cek_all[0],
+    //                 // 'datalapangan' => $datalapangan,
+    //                 'data' => $dataTable,
+    //                 'next_page' => json_encode($dataTable2),
+    //                 'keterangan' => [
+    //                     '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+    //                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+    //                     'ẍ Parameter belum terakreditasi.'
+    //                 ],
+    //             ], 200);
+    //         }
+
+    //         return response()->json(['message' => 'Sub Kategori tidak sesuai.!'], 400);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'message' => $e->getMessage(),
+    //             'line' => $e->getLine(),
+    //             'file' => $e->getFile()
+    //         ], 500);
+    //     }
+    // }
+
+
     public function handleDatadetail(Request $request)
     {
         try {
-            $cfr = OrderDetail::with([
-                'subCategory' => function ($query) {
-                    $query->select('nama_sub_kategori');
-                },
-                'category' => function ($query) {
-                    $query->select('nama_kategori');
+            $cek_lhp = LhpsEmisiHeader::with('lhpsEmisiDetail', 'lhpsEmisiCustom')
+                ->where('no_lhp', $request->cfr)->get();
+
+
+            if ($cek_lhp->isNotEmpty()) {
+                $data_entry = [];
+                $data_custom = [];
+                $cek_regulasi = [];
+
+
+
+
+                foreach ($cek_lhp as $lhp) {
+                    foreach ($lhp->lhpsEmisiDetail->toArray() as $key => $val) {
+
+                        $hasilUji = json_decode($val['hasil_uji'], true);
+                        $bakuMutu = json_decode($val['baku_mutu'], true);
+
+                        $data_entry[$key] = [
+                            'id' => $val['id'],
+                            'no_sampel' => $val['no_sampel'],
+                            'nama_kendaraan' => $val['nama_kendaraan'] ?? '-',
+                            'bobot' => $val['bobot_kendaraan'] ?? '-',
+                            'tahun' => $val['tahun_kendaraan'] ?? '-',
+                            'hasil_co' => $hasilUji['CO'] ?? null,
+                            'hasil_hc' => $hasilUji['HC'] ?? null,
+                            'hasil_op' => $hasilUji['OP'] ?? null,
+                            'baku_co' => $bakuMutu['CO'] ?? null,
+                            'baku_hc' => $bakuMutu['HC'] ?? null,
+                            'baku_op' => $bakuMutu['OP'] ?? null,
+                            'regulasi' => $val['peraturan'] ?? null,
+                            'tanggal_sampling' => $val['tanggal_sampling'] ?? null,
+                            'status' => ($val['akr'] ?? null) == 'ẍ'
+                                ? "BELUM AKREDITASI"
+                                : "AKREDITASI",
+                        ];
+                    }
+
+
                 }
-            ])
-                ->where('cfr', $request->cfr)
-                ->first();
 
-            if ($request->category2 == 32 || $request->category2 == 31) {
-                $cek_all = OrderDetail::with('orderHeader', 'lhps_emisi.lhpsEmisiCustom')->where('cfr', $cfr->cfr)->where('is_active', true)->get();
+                // --- Other regulasi kalau ada
+                if (!empty($request->other_regulasi)) {
+                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
+                        ->select('id', 'peraturan as regulasi')
+                        ->get()->toArray();
+                }
 
-                $dataTable = [];
-                $dataTable2 = [];
-                foreach ($cek_all as $key => $values) {
-                    $value = DataLapanganEmisiKendaraan::with('emisiOrder')->where('no_sampel', $values->no_sampel)->first();
 
-                    $cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->emisiOrder->id_regulasi)
-                        ->where('is_active', true)
-                        ->get();
-
-                    $hc = '-';
-                    $co = '-';
-                    $op = '-';
-                    foreach ($cek_bakumutu as $x => $xx) {
-                        if ($xx->parameter == 'HC' || $xx->parameter == 'HC (Bensin)') {
-                            $hc = $xx->baku_mutu;
-                        } else if ($xx->parameter == 'CO' || $xx->parameter == 'CO (Bensin)') {
-                            $co = $xx->baku_mutu;
-                        } else if ($xx->parameter == 'Opasitas' || $xx->parameter == 'Opasitas (Solar)') {
-                            $op = $xx->baku_mutu;
+                foreach ($cek_lhp as $lhp) {
+                    if (!empty($lhp->lhpsEmisiCustom)) {
+                        // Group by page
+                        $groupedCustom = [];
+                        foreach ($lhp->lhpsEmisiCustom as $val) {
+                            $groupedCustom[$val->page][] = $val;
                         }
                     }
 
-                    array_push($dataTable, (object) [
-                        'no_sampel' => $value->no_sampel,
-                        'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
-                        'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
-                        'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
-                        'hasil_co' => $value->co,
-                        'hasil_hc' => $value->hc,
-                        'hasil_op' => $value->opasitas,
-                        'baku_co' => $co,
-                        'baku_hc' => $hc,
-                        'baku_op' => $op,
-                        'regulasi' => $value->peraturan,
-                        'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
-                    ]);
+                    // Buat mapping regulasi berdasarkan urutan halaman
+                    foreach ($cek_regulasi as $item) {
+                        $id_regulasi = "id_" . $item['id'];
+                        $page = array_search($item, $cek_regulasi) + 1;
 
-                    $reqOtherRegs = $request->other_regulasi;
-                    if ($reqOtherRegs && count($reqOtherRegs) > 0) {
-                        foreach ($reqOtherRegs as $key => $idReg) {
-                            if ($values->lhps_emisi && $values->lhps_emisi->lhpsEmisiCustom) {
-                                $page = $key + 1;
-                                $val = $values->lhps_emisi->lhpsEmisiCustom->where('page', $page)->first()->toArray();
-                                $orderDetail = OrderDetail::where('no_sampel', $val['no_sampel'])->first();
+                        if (!empty($groupedCustom[$page])) {
+                            foreach ($groupedCustom[$page] as $val) {
 
-                                $dataTable2["id_$idReg"][] = [
+                                $hasil_uji = json_decode($val['hasil_uji'], true);
+                                $baku_mutu = json_decode($val['baku_mutu'], true);
+
+                                $data_custom[$id_regulasi][] = [
+                                    'id' => $val['id'],
                                     'no_sampel' => $val['no_sampel'],
-                                    'nama_kendaraan' => $orderDetail->keterangan_1 ?? $val['nama_kendaraan'],
-                                    'bobot_kendaraan' => $val['bobot_kendaraan'],
-                                    'tahun_kendaraan' => $val['tahun_kendaraan'],
-                                    'hasil_uji' => $val['hasil_uji'],
-                                    'baku_mutu' => $val['baku_mutu'],
-                                    'tanggal_sampling' => $val['tanggal_sampling'] ?? $values->tanggal_sampling ?? null,
-                                ];
-                            } else {
-                                $dataTable2["id_$idReg"][] = [
-                                    'no_sampel' => $value->no_sampel,
-                                    'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
-                                    'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
-                                    'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
-                                    'hasil_co' => $value->co,
-                                    'hasil_hc' => $value->hc,
-                                    'hasil_op' => $value->opasitas,
-                                    'baku_co' => $co,
-                                    'baku_hc' => $hc,
-                                    'baku_op' => $op,
-                                    'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
+                                    'nama_kendaraan' => $val['nama_kendaraan'] ?? '-',
+                                    'bobot' => $val['bobot_kendaraan'] ?? '-',
+                                    'tahun' => $val['tahun_kendaraan'] ?? '-',
+                                    'hasil_co' => $hasil_uji['CO'] ?? null,
+                                    'hasil_hc' => $hasil_uji['HC'] ?? null,
+                                    'hasil_op' => $hasil_uji['OP'] ?? null,
+                                    'baku_co' => $baku_mutu['CO'] ?? null,
+                                    'baku_hc' => $baku_mutu['HC'] ?? null,
+                                    'baku_op' => $baku_mutu['OP'] ?? null,
+                                    'tanggal_sampling' => $val['tanggal_sampling'] ?? null,
+                                    'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
                                 ];
                             }
                         }
                     }
                 }
 
+
+
                 return response()->json([
-                    // 'data' => $cfr,
-                    'dataAll' => $cek_all[0],
-                    // 'datalapangan' => $datalapangan,
-                    'data' => $dataTable,
-                    'next_page' => json_encode($dataTable2),
+                    'status' => true,
+                    'data' => $data_entry,
+                    'next_page' => json_encode($data_custom),
                     'keterangan' => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                         'ẍ Parameter belum terakreditasi.'
-                    ],
+                    ]
                 ], 200);
             }
 
-            return response()->json(['message' => 'Sub Kategori tidak sesuai.!'], 400);
-        } catch (\Exception $e) {
+            // =======================================
+            // 2️⃣ CASE: Jika BELUM ADA LHP EMISI
+            // =======================================
+
+            $mainData = [];
+            $methodsUsed = [];
+            $otherRegulations = [];
+
+            // Ambil data dari lapangan (hasil uji kendaraan)
+            $no_sampel = OrderDetail::where('cfr', $request->cfr)
+                ->where('is_active', true)
+                ->pluck('no_sampel')
+                ->toArray();
+
+
+            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
+                ->whereIn('no_sampel', $no_sampel)
+                ->get();
+            if ($lapangan->isNotEmpty()) {
+                foreach ($lapangan as $lapangan) {
+
+                    $kendaraan = $lapangan->emisiOrder->kendaraan;
+                    $baku = MasterBakumutu::where('id_regulasi', $lapangan->emisiOrder->id_regulasi)
+                        ->where('is_active', true)
+                        ->get();
+
+                    $hc = $co = $op = '-';
+                    foreach ($baku as $xx) {
+                        if (in_array($xx->parameter, ['HC', 'HC (Bensin)']))
+                            $hc = $xx->baku_mutu;
+                        if (in_array($xx->parameter, ['CO', 'CO (Bensin)']))
+                            $co = $xx->baku_mutu;
+                        if (in_array($xx->parameter, ['Opasitas', 'Opasitas (Solar)']))
+                            $op = $xx->baku_mutu;
+                    }
+
+                    $mainData[] = [
+                        'no_sampel' => $lapangan->no_sampel,
+                        'nama_kendaraan' => $kendaraan->merk_kendaraan ?? '-',
+                        'bobot' => $kendaraan->bobot_kendaraan ?? '-',
+                        'tahun' => $kendaraan->tahun_pembuatan ?? '-',
+                        'hasil_co' => $lapangan->co,
+                        'hasil_hc' => $lapangan->hc,
+                        'hasil_op' => $lapangan->opasitas,
+                        'baku_co' => $co,
+                        'baku_hc' => $hc,
+                        'baku_op' => $op,
+                        'tanggal_sampling' => $lapangan->tanggal_sampling ?? null,
+                        'status' => 'AKREDITASI'
+                    ];
+
+                }
+                ;
+            }
+
+
+            // --- handle other regulasi jika ada
+            if (!empty($request->other_regulasi)) {
+                foreach ($request->other_regulasi as $id_regulasi) {
+                    $otherRegulations["id_" . $id_regulasi] = $mainData;
+                }
+            }
+
+
             return response()->json([
-                'message' => $e->getMessage(),
+                'status' => true,
+                'data' => $mainData,
+                'next_page' => json_encode($otherRegulations),
+                'keterangan' => [
+                    '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                    '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                    'ẍ Parameter belum terakreditasi.'
+                ]
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
                 'line' => $e->getLine(),
-                'file' => $e->getFile()
             ], 500);
         }
     }
@@ -1016,7 +1211,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
 
 
-      public function handleApprove(Request $request, $isManual = true)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
             if ($isManual) {

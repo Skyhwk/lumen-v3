@@ -150,9 +150,9 @@ class RenderSamplingPlan
                         $dParam = explode(';', $valuess);
                         $d = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
                         if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         }
                     }
 
@@ -221,15 +221,15 @@ class RenderSamplingPlan
                             <td style="font-size: 12px; padding: 5px;"><b style="font-size: 12px;">' . $kategori2[1] . ' - ' . $regulasi . ' - ' . $a->total_parameter . ' Parameter</b>'
                     );
                     // dd('ss');
-                    // dd($d->nama_regulasi);
+                    // dd($d->nama_lab);
                     foreach ($a->parameter as $keys => $valuess) {
                         $dParam = explode(';', $valuess);
                         $d = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
                         if (!$d) continue;
                         if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         }
                     }
 
@@ -652,9 +652,9 @@ class RenderSamplingPlan
                         $dParam = explode(';', $valuess);
                         $d = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
                         if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         }
                     }
 
@@ -720,9 +720,9 @@ class RenderSamplingPlan
                         $dParam = explode(';', $valuess);
                         $d = Parameter::where('id', $dParam[0])->where('is_active', 1)->first();
                         if ($keys == 0) {
-                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML('<br><hr><span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         } else {
-                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_regulasi . '</span> ');
+                            $pdf->WriteHTML(' &bull; <span style="font-size: 13px; float:left; display: inline; text-align:left;">' . $d->nama_lab . '</span> ');
                         }
                     }
 

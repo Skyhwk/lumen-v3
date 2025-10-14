@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupH2S
+class LingkunganKerjaCl2
 {
     public function index($data, $id_parameter, $mdl) {
         if($data->use_absorbansi) {
@@ -42,60 +42,31 @@ class LingkunganHidupH2S
         $st = null;
         $satuan = null;
 
-        $hasil1_array = $hasil2_array = $hasil3_array = [];
+        $Vu = \str_replace(",", "",number_format(($data->average_flow) * $data->durasi * ($data->tekanan/$Ta) * (298/760), 4));
+        if(floatval($Vu) <= 0.0000) {
+            $C = 0;
+            $Qs = 0;
+            $C1 = 0;
+        }else {
+            // C (ug/Nm3) : (A/Vu)*1000000
+            $C = \str_replace(",", "", number_format(($ks/$Vu) * 1000000, 3));
 
-        $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4);
-        foreach ($data->ks as $key => $value) {
-            if(floatval($Vu) != 0.0) {
-                // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
-                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45) / 1000, 4);
+            // C (mg/Nm3) = C1/1000
+            $C1 = \str_replace(",", "", number_format($C / 1000, 3));
 
-                // C1 = C2*1000
-                $C_val = round($C1_val * 1000, 4);
+            // C (PPM) = ((A/Vu)*0.001)*(24.45/71)
+            $C2 = \str_replace(",", "", number_format(($C1*0.001) * (24.45/71), 4));
 
-                // H2S (PPM) = (A1-A2)/Vs
-                $C2_val = round(($value - $data->kb[$key]) / $Vu, 4);
-            }else {
-                $C_val = 0;
-                $C1_val = 0;
-                $C2_val = 0;
-            }
+            // "Rumus :C4 = C3 x 1000"
+            $C3 = \str_replace(",", "", number_format($C2 * 1000, 4));
 
-            $hasil1_array[$key] = $C_val;
-            $hasil2_array[$key] = $C1_val;
-            $hasil3_array[$key] = $C2_val;
+            // C(%) = C3 x 10000
+            $C4 = \str_replace(",", "", number_format($C3 * 10000, 4));
         }
 
-        $C = array_sum($hasil1_array) / count($hasil1_array);
-        $C1 = array_sum($hasil2_array) / count($hasil2_array);
-        $C2 = array_sum($hasil3_array) / count($hasil3_array);
+        $satuan = 'ug/Nm3';
 
-
-        if (floatval($C) < 1.39)
-            $C = '<1.39';
-        if (floatval($C1) < 0.0022)
-            $C1 = '<0.0022';
-        if (floatval($C2) < 0.0010)
-            $C2 = '<0.0010';
-
-        $satuan = 'mg/m3';
-
-        $data_pershift = [
-            'Shift 1' => $hasil1_array[0],
-            'Shift 2' => $hasil1_array[1] ?? null,
-            'Shift 3' => $hasil1_array[2] ?? null,
-        ];
-
-        if(count($hasil1_array) == 4){
-            $data_pershift = [
-                'Shift 1' => $hasil1_array[0],
-                'Shift 2' => $hasil1_array[1],
-                'Shift 3' => $hasil1_array[2],
-                'Shift 4' => $hasil1_array[3],
-            ];
-        }
-
-        $processed = [
+        $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,
             'durasi' => $data->durasi,
@@ -121,7 +92,6 @@ class LingkunganHidupH2S
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
-            'data_pershift' => count($hasil1_array) > 1 ? $data_pershift : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
@@ -133,7 +103,7 @@ class LingkunganHidupH2S
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
 
-        return $processed;
+        return $data;
     }
 
 }
