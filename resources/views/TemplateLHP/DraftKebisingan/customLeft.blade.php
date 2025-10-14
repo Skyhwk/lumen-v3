@@ -15,7 +15,7 @@
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
 
-                        <td class="custom" width="7%" 
+                        <td class="custom4" width="7%" 
                             style="text-align: right; border-right: none; vertical-align: top;">
                             <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
                         </td>

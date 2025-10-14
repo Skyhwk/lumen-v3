@@ -102,6 +102,11 @@ class LingkunganHidupO3_8J
             'hasil2' => $avg_pershift[0],
             'hasil3' => $avg_pershift[1] ?? null,
             'hasil4' => $avg_pershift[2] ?? null,
+            'data_pershift' => [
+                'Shift 1' => $avg_pershift[0],
+                'Shift 2' => $avg_pershift[1] ?? null,
+                'Shift 3' => $avg_pershift[2] ?? null
+            ],
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

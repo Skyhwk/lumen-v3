@@ -87,6 +87,30 @@ class TqcEmisiKendaraanController extends Controller
             ], 500);
         }
     }
+  public function handleRejectSelected(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'status' => 0,
+                ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Data berhasil direject.',
+                'success' => true,
+                'status' => 200,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+                'success' => false,
+                'status' => 500,
+            ], 500);
+        }
+    }
     public function getTrend(Request $request)
     {
         $orderDetails = OrderDetail::where('cfr', $request->cfr)
@@ -127,8 +151,6 @@ class TqcEmisiKendaraanController extends Controller
                 // 'max' => optional($emisiHeader)->max,
                 'sampler' => $currentDataLapangan->created_by,
                 'approved_by' => $currentDataLapangan->approved_by,
-
-
                 'id' => $currentDataLapangan->id,
                 'nama_perusahaan' => $orderDetail->nama_perusahaan,
                 'no_order' => $orderDetail->no_order,

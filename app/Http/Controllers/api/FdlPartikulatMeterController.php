@@ -22,6 +22,8 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Models\AnalystFormula as Formula;
+use App\Services\AnalystFormula;
 
 class FdlPartikulatMeterController extends Controller
 {
@@ -117,17 +119,128 @@ class FdlPartikulatMeterController extends Controller
 
     public function approve(Request $request)
     {
-        if (isset($request->id) && $request->id != null) {
+        DB::beginTransaction();
+        try {
+            if (isset($request->id) && $request->id != null) {
 
-            $data = DataLapanganPartikulatMeter::where('id', $request->id)->first();
-            $no_sample = $data->no_sampel;
+                $initialRecord = DataLapanganPartikulatMeter::findOrFail($request->id);
+                $no_sample = $initialRecord->no_sampel;
+                $parameterData = $initialRecord->parameter;
+                $shift = explode('-', $initialRecord->shift_pengambilan)[0];
 
-            $data->is_approve = true;
-            $data->approved_by = $this->karyawan;
-            $data->approved_at = Carbon::now();
-            $data->rejected_at = null;
-            $data->rejected_by = null;
-            $data->save();
+                // Get PO & parameter
+                $po = OrderDetail::where('no_sampel', $no_sample)->firstOrFail();
+                $parameter = Parameter::where('nama_lab', $parameterData)
+                    ->where('id_kategori', 4)
+                    ->where('is_active', true)
+                    ->first();
+
+
+                $dataLapangan = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
+                    ->where('parameter', $parameterData)
+                    ->where('shift_pengambilan', 'LIKE', $shift . '%')
+                    ->get();
+
+                    
+                $TotalApprove = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
+                    ->where('parameter', $parameterData)
+                    ->where('is_approve', 1)
+                    ->count();
+
+                // Always approve current record
+                $fdl = $initialRecord;
+                $fdl->is_approve = 1;
+                $fdl->approved_by = $this->karyawan;
+                $fdl->approved_at = Carbon::now();
+                $fdl->save();
+
+                // Minimal Approve Data
+                if($shift == "24 Jam"){
+                    $approveCountNeeded = 4;
+                }else if($shift == "8 Jam"){
+                    $approveCountNeeded = 3;
+                }else{
+                    $approveCountNeeded = 1;
+                }
+
+                // Cek jumlah data aktual
+                if (count($dataLapangan) < $approveCountNeeded) {
+                    return response()->json([
+                        'message' => "Belum cukup data untuk proses perhitungan. Minimal $approveCountNeeded data diperlukan untuk Shift $shift",
+                    ], 400);
+                }
+
+                $isFinalApprove = ($TotalApprove + 1) >= $approveCountNeeded;
+
+                if ($isFinalApprove) {
+                    $functionObj = Formula::where('id_parameter', $parameter->id)
+                        ->where('is_active', true)
+                        ->first();
+                    if(!$functionObj){
+                        return response()->json(['message' => 'Formula is Coming Soon'], 404);
+                    } else{
+                        $function = $functionObj->function;
+                    }
+
+                    $data_kalkulasi = AnalystFormula::where('function', $function)
+                        ->where('data', $dataLapangan)
+                        ->where('id_parameter', $parameter->id)
+                        ->process();
+
+                    $header = PartikulatHeader::firstOrNew([
+                        'no_sampel' => $no_sample,
+                        'parameter' => $parameterData,
+                    ]);
+
+                    $header->fill([
+                        'id_parameter' => $parameter->id,
+                        'is_approve' => 1,
+                        // 'lhps' => 1,
+                        'approved_by' => $this->karyawan,
+                        'approved_at' => Carbon::now(),
+                        'created_by' => $header->exists ? $header->created_by : $this->karyawan,
+                        'created_at' => $header->exists ? $header->created_at : Carbon::now(),
+                        'is_active' => 1,
+                    ]);
+                    $header->save();
+
+                    WsValueUdara::updateOrCreate(
+                        [
+                            'no_sampel' => $no_sample,
+                            'id_partikulat_header' => $header->id,
+                        ],
+                        [
+                            'id_po' => $po->id,
+                            'is_active' => 1,
+                            'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
+                            'satuan' => $data_kalkulasi['satuan'] ?? null,
+                        ]
+                    );
+                }
+
+                app(NotificationFdlService::class)->sendApproveNotification("Partikulat Meter pada Shift($initialRecord->shift_pengambilan)", "$initialRecord->no_sampel($initialRecord->parameter)", $this->karyawan, $initialRecord->created_by);
+                
+                DB::commit();
+
+                return response()->json([
+                    'message' => "Data Dengan No Sampel $no_sample Telah di Approve oleh $this->karyawan",
+                    'master_kategori' => 1
+                ], 200);
+
+            } else {
+                return response()->json([
+                    'message' => 'Gagal Approve'
+                ], 401);
+            }
+        }catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal Approve',
+                'error' => $e->getMessage()
+            ], 401);
+        }
+        
 
             // $activeFdl = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
             //     ->where('parameter', $data->parameter)
@@ -184,18 +297,6 @@ class FdlPartikulatMeterController extends Controller
             //         ]
             //     );
             // }
-
-            app(NotificationFdlService::class)->sendApproveNotification("Partikulat Meter pada Shift($data->shift_pengambilan)", "$data->no_sampel($data->parameter)", $this->karyawan, $data->created_by);
-
-            return response()->json([
-                'message' => "Data Dengan No Sampel $no_sample Telah di Approve oleh $this->karyawan",
-                'master_kategori' => 1
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'Gagal Approve'
-            ], 401);
-        }
     }
 
     public function reject(Request $request)

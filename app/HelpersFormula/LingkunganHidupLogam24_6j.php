@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupLogam_8J
+class LingkunganHidupLogam24_6j
 {
     public function index($data, $id_parameter, $mdl)
     {
@@ -41,18 +41,14 @@ class LingkunganHidupLogam_8J
 
         $arr_hasil = [];
 
-        $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
+        $Vstd = round($data->nilQs * $data->durasi, 1);
         if ((float) $Vstd <= 0) {
             $C = 0;
             $Qs = 0;
             $C1 = 0;
         } else {
             foreach($data->ks as $key => $value) {
-                if($data->tipe_data == 'ambient'){
-                    $rawC = (($value - $data->kb[$key]) * ($data->vl / 1000) * 1) / $Vstd;
-                }else if($data->tipe_data == 'ulk'){
-                    $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
-                }
+                $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
 
@@ -113,11 +109,11 @@ class LingkunganHidupLogam_8J
             // 'hasil1' => $C,
             // 'hasil2' => $C1,
             // 'hasil3' => $C2,
-            'data_pershift' => $data_pershift,
             'satuan' => $satuan,
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'data_pershift' => $data_pershift,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,

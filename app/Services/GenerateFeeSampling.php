@@ -754,6 +754,7 @@ class GenerateFeeSampling
     public function rekapFeeSampling($userId, $level, $tanggal)
     {
         try {
+            $userK3 = [166];
             // 1. Ambil fee berdasarkan level
             $fee = MasterFeeSampling::where('kategori', $level)->first();
             if (!$fee) {
@@ -809,6 +810,7 @@ class GenerateFeeSampling
                     'luar_kota_24jam' => 0,
                     'driver' => 0,
                     'durasi_sampling' => '',
+                    'biaya_pendampingan_k3' => 0
                 ];
 
                 // ==== Klasifikasi PT dan Hitung Titik ====
@@ -827,9 +829,16 @@ class GenerateFeeSampling
                     $hasAir = false;
                     $hasNonAir = false;
                     $titikAirPT = 0;
+                    $hasEmisiIsokinetik = false;
 
                     foreach ($kategoriList as $kategori) {
-                        if (stripos($kategori, 'air') !== false) {
+                        $kategoriLower = strtolower($kategori);
+
+                        if (stripos($kategoriLower, 'emisi isokinetik') !== false) {
+                            $hasEmisiIsokinetik = true;
+                        }
+
+                        if (stripos($kategoriLower, 'air') !== false) {
                             $hasAir = true;
                             $titikAirPT++;
                         } else {
@@ -849,10 +858,29 @@ class GenerateFeeSampling
                         $ptNonAir[$namaPT] = 1;
                     }
 
-                    // Isokinetik
-                    if ($item->note && stripos($item->note, 'isokinetik') !== false) {
-                        $feeTambahan += $fee->isokinetik;
-                        $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                    // --- Isokinetik dan Pendampingan K3 ---
+                    if ($item->note) {
+                        $note = strtolower($item->note);
+
+                        // Jika note mengandung "pendampingan"
+                        if (strpos($note, 'pendampingan') !== false) {
+                            if (in_array($userId, $userK3)) {
+                                $feeTambahan += 45000;
+                                $feeTambahanRincian['biaya_pendampingan_k3'] += 45000;
+                            }
+
+                        // Jika mengandung "isokinetik" (tanpa pendampingan) ATAU kategori ada "emisi isokinetik"
+                        } elseif (strpos($note, 'isokinetik') !== false || $hasEmisiIsokinetik || stripos($note, 'iso') !== false) {
+                            $feeTambahan += $fee->isokinetik;
+                            $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                        }
+
+                    } else {
+                        // Jika tidak ada note tapi kategori mengandung "emisi isokinetik"
+                        if ($hasEmisiIsokinetik) {
+                            $feeTambahan += $fee->isokinetik;
+                            $feeTambahanRincian['isokinetik'] += $fee->isokinetik;
+                        }
                     }
 
                     // Cek luar kota (hanya sekali per hari)

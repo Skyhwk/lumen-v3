@@ -51,8 +51,8 @@
                     @endphp
                     <tr>
                         <td class="{{ $k == ($totdat - 1) ? 'custom' : 'custom' }}">{{ $number }}</td>
-                                   <td class="{{ $k == ($totdat - 1) ? 'custom3' : 'custom3' }}" width="8%" style="text-align: right; border-right: none;"><sup  style="font-size: 5px; margin-top: -10px;">{!! $no_sampel !!}</sup></td>
-                        <td class="{{ $k == ($totdat - 1) ? 'custom3' : 'custom3' }}" width="32%" style="border-left: none; text-align: left;">{{ $keterangan }}</td>
+                                   <td class="{{ $k == ($totdat - 1) ? 'custom4' : 'custom4' }}" width="8%" style="text-align: right; border-right: none;"><sup  style="font-size: 5px; margin-top: -10px;">{!! $no_sampel !!}</sup></td>
+                        <td class="{{ $k == ($totdat - 1) ? 'custom4' : 'custom4' }}" width="32%" style="border-left: none; text-align: left;">{{ $keterangan }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'custom' : 'custom' }}">{{ $hasil }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'custom' : 'custom' }}">{{ $tanggal_sampling }}</td>
                     </tr>

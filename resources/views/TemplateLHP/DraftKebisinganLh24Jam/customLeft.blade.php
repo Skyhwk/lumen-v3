@@ -20,7 +20,7 @@
        
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
-                        <td class="custom"><sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                        <td class="custom4"><sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                           {{ $yy['lokasi_keterangan'] }}
                         </td>
                         <td class="custom">{{ $yy['leq_ls'] }}</td>
