@@ -345,7 +345,7 @@ class JadwalServices
         
         $dataUpdate = $this->updateJadwal;
         
-
+        
         if (
             $dataUpdate->no_quotation == null ||
             $dataUpdate->nama_perusahaan == null ||
@@ -362,7 +362,9 @@ class JadwalServices
             $dataUpdate->jadwal_id == null ||
             $dataUpdate->tanggal == null ||
             $dataUpdate->sampler == null ||
-            // $dataUpdate->driver == null ||
+            $dataUpdate->driver == null ||
+            $dataUpdate->pendampingan_k3 == null ||
+            $dataUpdate->isokinetic == null ||
             $dataUpdate->durasi_lama == null ||
             $dataUpdate->tanggal_lama == null
             // || $dataUpdate->periode == null    //cek di command line karena ada kasus dimana periode null kontrak maupun non kontrak
@@ -472,6 +474,8 @@ class JadwalServices
                         'kategori' => json_encode($dataUpdate->kategori),
                         'sampler' => $nama_sampler,
                         'driver' => $dataUpdate->driver ?? null,
+                        'pendampingan_k3' => $dataUpdate->pendampingan_k3 ?? 0,
+                        'isokinetic' => $dataUpdate->isokinetic ?? 0,
                         'userid' => $idSampler,
                         'warna' => $dataUpdate->warna,
                         'note' => $dataUpdate->note,
@@ -526,6 +530,8 @@ class JadwalServices
                         'kategori' => json_encode($dataUpdate->kategori),
                         'sampler' => $nama_sampler,
                         'driver' => $dataUpdate->driver ?? null,
+                        'pendampingan_k3' => $dataUpdate->pendampingan_k3 ?? 0,
+                        'isokinetic' => $dataUpdate->isokinetic ?? 0,
                         'userid' => $idSampler,
                         'warna' => $dataUpdate->warna,
                         'note' => $dataUpdate->note,
@@ -1343,6 +1349,7 @@ class JadwalServices
     public function addJadwalSP()
     { // add jadwal baru
         $dataAdd = $this->addJadwal;
+       
         if (
             $dataAdd->id_sampling == null ||
             $dataAdd->no_quotation == null ||
@@ -1355,7 +1362,9 @@ class JadwalServices
             $dataAdd->durasi == null ||
             $dataAdd->status == null ||
             $dataAdd->nama_perusahaan == null ||
-            $dataAdd->alamat == null
+            $dataAdd->alamat == null||
+            $dataAdd->isokinetic == null||
+            $dataAdd->pendampingan_k3 == null
         ) {
             throw new Exception("Id Sampling, No Quotation, Karyawan, No Document, Tanggal, Sampler, Kategori, Durasi, Status, Nama Perusahaan, Alamat is required when add jadwal", 401);
         }
@@ -1421,6 +1430,7 @@ class JadwalServices
                 $wilayah = explode('-', $cek->wilayah)[1];
             }
             // bentuk data
+            
             $temBody = [];
             for ($i = 0; $i < count($dataAdd->tanggal); $i++) {
                 $temBody[] = [
@@ -1439,7 +1449,7 @@ class JadwalServices
                     "kategori" => json_encode($dataAdd->kategori[$i]),
                     "sampler" => $dataAdd->sampler[$i],
                     "warna" => $dataAdd->warna[$i],
-                    "driver" => $dataAdd->driver[0] ?? null,
+                    "driver" => $dataAdd->driver[$i] ?? null,
 
                     "note" => $dataAdd->note[$i],
                     "durasi" => $dataAdd->durasi[$i],
@@ -1448,14 +1458,18 @@ class JadwalServices
                     "created_at" => $this->timestamp,
                     "kendaraan" => $dataAdd->kendaraan[$i] ?? null,
                     "wilayah" => $wilayah,
+                    "isokinetic" => $dataAdd->isokinetic[$i] ?? 0,
+                    "pendampingan_k3" => $dataAdd->pendampingan_k3[$i] ?? 0,
                 ];
             }
-
+            
+            
             // pengolahan data
             $firstJadwalId = null; // Menyimpan ID untuk referensi parsial jika diperlukan
             foreach ($temBody as $key => $val) {
                 $keys = $key;
                 if ($key == 0) { // Jika data pertama
+                    
                     foreach ($val['sampler'] as $key => $value) {
                         $commonData = [
                             'nama_perusahaan' => $val['nama_perusahaan'],
@@ -1478,14 +1492,17 @@ class JadwalServices
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
+                            'isokinetic' => $val['isokinetic'][0] ?? 0,
+                            'pendampingan_k3' => $val['pendampingan_k3'][$keys] ?? 0,
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
                         ];
-
+                        
                         // Menyimpan data pertama langsung ke database
                         $firstJadwalId = Jadwal::insertGetId($commonData);
                     }
                 } else { //jika memiliki parsial
+                    
                     foreach ($val['sampler'] as $key => $value) {
 
                         $commonData = [
@@ -1509,10 +1526,13 @@ class JadwalServices
                             'id_sampling' => $val['id_sampling'],
                             'id_cabang' => $val['id_cabang'][$keys],
                             'wilayah' => $val['wilayah'],
+                            'isokinetic' => $val['isokinetic'][0] ?? 0,
+                            'pendampingan_k3' => $val['pendampingan_k3'][0] ?? 0,
                             'sampler' => explode(',', $value)[1],
                             'userid' => explode(',', $value)[0],
                             'parsial' => $firstJadwalId,
                         ];
+                        
                         Jadwal::insert($commonData);
                     }
                 }
@@ -1530,7 +1550,7 @@ class JadwalServices
             $sales = JadwalServices::on('no_quotation', $dataAdd->no_quotation)->getQuotation()->sales_id;
             $salesAtasan = GetAtasan::where('id', $sales)->get()->pluck('id');
             $message = "Jadwal No Quotation $dataAdd->no_quotation Sudah Melakukan Jadwal Parsial Di Tanggal " . implode(', ', $dataAdd->tanggal);
-            Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
+            //Notification::whereIn('id', $salesAtasan)->title('Jadwal Parsial')->message($message)->url('url')->send();
             DB::commit();
             return true;
         } catch (Exception $ex) {
@@ -1734,7 +1754,10 @@ class JadwalServices
             $dataParsial->durasi == null ||
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
-            $dataParsial->kendaraan == null
+            $dataParsial->kendaraan == null ||
+            $dataParsial->pendampingan_k3 == null ||
+            $dataParsial->isokinetic == null 
+            
         ) {
             throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, note, durasi, status, urutan, karyawan, kendaraan is required", 401);
         }
@@ -1837,6 +1860,8 @@ class JadwalServices
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
                     'kendaraan' => $dataParsial->kendaraan,
+                    'pendampingan_k3' => $dataParsial->pendampingan_k3,
+                    'isokinetic' => $dataParsial->isokinetic,
                     'parsial' => $dataParsial->id,
                     'id_sampling' => $dataParsial->id_sampling,
                     'id_cabang' => $dataParsial->id_cabang,
@@ -1902,6 +1927,8 @@ class JadwalServices
             $dataParsial->durasi == null ||
             $dataParsial->status == null ||
             $dataParsial->karyawan == null ||
+            $dataParsial->pendampingan_k3 == null ||
+            $dataParsial->isokinetic == null ||
             $dataParsial->kendaraan == null
         ) {
             throw new Exception("id, id_sampling, totkateg, kategori, no_quotation, nama_perusahaan, wilayah, alamat, tanggal, durasi, status, karyawan, kendaraan is required", 401);
@@ -2001,6 +2028,8 @@ class JadwalServices
                     'note' => $dataParsial->note,
                     'durasi' => $dataParsial->durasi,
                     'status' => $dataParsial->status,
+                    'pendampingan_k3' => $dataParsial->pendampingan_k3,
+                    'isokinetic' => $dataParsial->isokinetic,
                     'notif' => 0,
                     'urutan' => $dataParsial->urutan,
                     'created_by' => $dataParsial->karyawan,
