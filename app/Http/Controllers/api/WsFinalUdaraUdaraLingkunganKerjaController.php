@@ -196,7 +196,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
 					->where('id_regulasi', $id_regulasi)
 					->where('is_active', 1)
-					->select('baku_mutu', 'satuan', 'method')
+					->select('baku_mutu', 'satuan', 'method', 'nama_header')
 					->first();
 				$item->durasi = $dataLapangan->durasi_pengambilan ?? null;
 				$item->satuan = $bakuMutu->satuan ?? null;

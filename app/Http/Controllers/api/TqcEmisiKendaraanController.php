@@ -32,13 +32,12 @@ class TqcEmisiKendaraanController extends Controller
             DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
             'kategori_1',
             'konsultan',
-            'keterangan_1'
         )
             ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '!=', '34-Emisi Sumber Tidak Bergerak')
-            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'keterangan_1')
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
             ->orderBy('max_id', 'desc');
 
         return DataTables::of($data)
@@ -76,6 +75,30 @@ class TqcEmisiKendaraanController extends Controller
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diapprove.',
+                'success' => true,
+                'status' => 200,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+                'success' => false,
+                'status' => 500,
+            ], 500);
+        }
+    }
+  public function handleRejectSelected(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
+                ->update([
+                    'status' => 0,
+                ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Data berhasil direject.',
                 'success' => true,
                 'status' => 200,
             ], 200);
