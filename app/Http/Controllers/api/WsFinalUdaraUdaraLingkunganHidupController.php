@@ -135,7 +135,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
 					->where('id_regulasi', $id_regulasi)
 					->where('is_active', 1)
-					->select('baku_mutu', 'satuan', 'method')
+					->select('baku_mutu', 'satuan', 'method', 'nama_header')
 					->first();
 					// dd($bakuMutu,  $item->id_parameter, $id_regulasi);
 				$item->durasi = $dataLapangan->durasi_pengambilan ?? null;
@@ -143,6 +143,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
 				$item->method = $bakuMutu->method ?? null;
 				$item->nama_header = $bakuMutu->nama_header ?? null;
+				// dd($bakuMutu);
 			}
 			// dd($processedData);
 
