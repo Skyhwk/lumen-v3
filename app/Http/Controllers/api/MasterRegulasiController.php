@@ -48,7 +48,7 @@ class MasterRegulasiController extends Controller
                         'id_parameter' => $id_parameter,
                         'satuan' => $request->bakumutu['satuan'][$index],
                         'method' => $request->bakumutu['method'][$index],
-                        'baku_mutu' => $request->bakumutu['baku_mutu'][$index],
+                        'baku_mutu' => $request->bakumutu['baku_mutu'][$index] != '' ? $request->bakumutu['baku_mutu'][$index] : null,
                         'nama_header' => $request->bakumutu['nama_header'][$index] ?? null,
                         'durasi_pengukuran' => $request->bakumutu['durasi_pengukuran'][$index] ?? null,
                         'akreditasi' => $request->bakumutu['akreditasi'][$index] ?? null,
