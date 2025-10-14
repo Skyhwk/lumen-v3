@@ -204,11 +204,14 @@ class FdlDirectLainController extends Controller
                         [
                             'id_po' => $po->id,
                             'is_active' => 1,
-                            'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
-                            'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
-                            'hasil3' => $data_kalkulasi['c3'] ?? null, // naik setelah tanggal 10-10-2025
-                            'hasil4' => $data_kalkulasi['c4'] ?? null, // naik setelah tanggal 10-10-2025
-                            'hasil5' => $data_kalkulasi['c5'] ?? null, // naik setelah tanggal 10-10-2025
+                            'hasil1' => $data_kalkulasi['c1'] ?? null, 
+                            'hasil2' => $data_kalkulasi['c2'] ?? null, 
+                            'hasil3' => $data_kalkulasi['c3'] ?? null, 
+                            'hasil4' => $data_kalkulasi['c4'] ?? null, 
+                            'hasil5' => $data_kalkulasi['c5'] ?? null, 
+                            'hasil15' => $data_kalkulasi['c15'] ?? null, 
+                            'hasil16' => $data_kalkulasi['c16'] ?? null, 
+                            'hasil17' => $data_kalkulasi['c17'] ?? null, 
                             'satuan' => $data_kalkulasi['satuan'] ?? null,
                         ]
                     );

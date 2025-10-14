@@ -18,7 +18,7 @@ class DirectLain {
         }
 
         // Inisialisasi default
-        $c1 = $c2 = $c3 = $c4 = $c5 = NULL;
+        $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
         $satuan = NULL;
 
         // Daftar parameter
@@ -42,6 +42,12 @@ class DirectLain {
                     $c1 = $c1 < 11.45 ? '<11.45' : round($c1, 2);
                     $c3 = $c3 < 0.01 ? '<0.01' : round($c3, 2);
                     $c2 = $c2 < 0.01145 ? '<0.01145' : round($c2, 5);
+
+                    if($row->parameter == "C O"){
+                        $c15 = $c3;
+                        $c16 = $c1;
+                        $c17 = $c2;
+                    }
                 } 
                 else if (in_array($row->parameter, $h2co)) {
                     $c2 = $totalNilai / $jumlahElemen;
@@ -73,6 +79,9 @@ class DirectLain {
             'c3' => $c3,
             'c4' => $c4,
             'c5' => $c5,
+            'c15' => $c15,
+            'c16' => $c16,
+            'c17' => $c17,
             'satuan' => $satuan,
         ];
     }
