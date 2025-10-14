@@ -3019,8 +3019,8 @@ class InputParameterController extends Controller
 				// dd($nilQs, $datot, $rerataFlow, $durasiFin, $po->id, $po->tgl_terima, $tekananFin, $suhuFin, $request, $this->karyawan, $par->id, $result);
 				// dd($result);
 
-                if (isset($data_kalkulasi->data_pershift)) {
-                    unset($data_kalkulasi->data_pershift);
+                if (array_key_exists('data_pershift', $data_kalkulasi)) {
+                    unset($data_kalkulasi['data_pershift']);
                 }
 				$data_udara['id_lingkungan_header'] = $data->id;
 				$data_udara['no_sampel'] = $request->no_sample;
