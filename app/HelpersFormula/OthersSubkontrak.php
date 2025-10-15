@@ -29,12 +29,12 @@ class OthersSubkontrak
 		// }else if(in_array($id_parameter, $is_0_decimal)){
 		// 	$decimal = 0;
 		// }
-		
+
 		// if ($id_parameter == 543 || $id_parameter == 179 || $id_parameter == 141) {
 		// 	$decimal = 1;
 		// }
 		// dd($data->hp);
-		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false || strpos($data->parameter, 'Rasa') !== false) {
+		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false || strpos($data->parameter, 'Rasa') !== false || !is_numeric($data->hp)) {
 			// dd('masuk');
 			$rumus = $data->hp;
 		}else{
