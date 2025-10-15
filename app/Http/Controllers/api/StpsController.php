@@ -604,6 +604,12 @@ class StpsController extends Controller
                                 }
                             }
 
+                            if (empty($sampleNumbers)) {
+                                return response()->json([
+                                    'message' => 'Parameter/regulasi pada order tidak sesuai dengan penawaran, silahkan hubungi tim IT untuk melakukan crosscheck data',
+                                ], 401);
+                            }
+
                             $data = [
                                 'kategori_3' => \explode('-', $data_sampling['kategori_2'])[1],
                                 'periode' => $item['periode_kontrak'],
