@@ -83,7 +83,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             DB::commit();
 
-            Notification::whereIn('id', [13, 127])
+            Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil mengirim permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah ditambahkan oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
                 ->url('/permintaan-dokumentasi-sampling')
@@ -119,7 +119,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
     public function approve(Request $request)
     {
-        if (in_array($request->attributes->get('user')->karyawan->id, [13, 127])) {
+        if (in_array($request->attributes->get('user')->karyawan->id, \explode(',', env('AKSES_APPROVAL', '127,13,784')))) {
             $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
 
             $permintaanDokumentasiSampling->is_approved = 1;
@@ -152,7 +152,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
 
-            Notification::whereIn('id', [13, 127])
+            Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah diapprove oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
                 ->url('/permintaan-dokumentasi-sampling')
@@ -166,7 +166,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
     public function reject(Request $request)
     {
-        if (in_array($request->attributes->get('user')->karyawan->id, [13, 127])) {
+        if (in_array($request->attributes->get('user')->karyawan->id, \explode(',', env('AKSES_APPROVAL', '127,13,784')))) {
             $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
 
             $permintaanDokumentasiSampling->is_rejected = 1;
@@ -175,7 +175,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $permintaanDokumentasiSampling->save();
 
-            Notification::whereIn('id', [13, 127])
+            Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil reject permintaan')
                 ->message('Permintaan Dokumentasi Kegiatan Sampling telah direject oleh ' . $this->karyawan . ' pada ' . Carbon::now()->translatedFormat('d F Y H:i'))
                 ->url('/permintaan-dokumentasi-sampling')
