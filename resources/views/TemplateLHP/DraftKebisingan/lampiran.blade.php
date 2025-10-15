@@ -11,7 +11,7 @@
                 $regulasiId = explode('-', $y)[0];
                 $regulasiName = explode('-', $y)[1] ?? '';
                 $regulasi = MasterRegulasi::find($regulasiId);
-                $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->where('is_active', true)->first();
                 $table = $tableObj ? $tableObj->konten : '';
             @endphp
 
@@ -53,7 +53,7 @@
                 $regulasiId = explode('-', $y)[0];
                 $regulasiName = explode('-', $y)[1] ?? '';
                 $regulasi = MasterRegulasi::find($regulasiId);
-                $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->where('is_active', true)->first();
                 $table = $tableObj ? $tableObj->konten : '';
             @endphp
 
