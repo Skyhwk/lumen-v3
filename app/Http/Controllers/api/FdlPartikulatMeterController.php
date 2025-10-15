@@ -180,6 +180,9 @@ class FdlPartikulatMeterController extends Controller
                         return response()->json(['message' => 'Formula is Coming Soon'], 404);
                     } else{
                         $function = $functionObj->function;
+                        if(in_array($parameterData, ['PM 10', 'PM 2.5', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])){
+                            $function = 'DirectPartikulatPM';
+                        }
                     }
 
                     $data_kalkulasi = AnalystFormula::where('function', $function)
