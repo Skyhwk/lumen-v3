@@ -3013,7 +3013,7 @@ class InputParameterController extends Controller
 					// dd($data_shift, $request->ks, $request->kb);
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
-                if(isset($data_kalkulasi->data_pershift)) $data->data_pershift = json_encode($data_kalkulasi->data_pershift);
+                if(isset($data_kalkulasi['data_pershift'])) $data->data_pershift = json_encode($data_kalkulasi['data_pershift']);
 				$data->save();
 
 				// dd($nilQs, $datot, $rerataFlow, $durasiFin, $po->id, $po->tgl_terima, $tekananFin, $suhuFin, $request, $this->karyawan, $par->id, $result);
