@@ -278,7 +278,6 @@ class DraftUdaraKebisinganController extends Controller
 
                     $master_regulasi = MasterRegulasi::find($id_regulasii);
 
-                    dd($master_regulasi);
                     if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH' || $master_regulasi->deskripsi == 'Ambient Sesaat') {
                         $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
