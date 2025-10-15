@@ -123,7 +123,6 @@ class LingkunganHidupO3
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
-            'data_hasil' => $C_value,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
