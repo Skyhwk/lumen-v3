@@ -1394,7 +1394,7 @@ class PortalController extends Controller
             if (!$quotation) return response()->json(['message' => 'Quotation not found'], 404);
 
             $quotation->nama_perusahaan = $request->customer_name;
-            $quotation->konsultan = $request->consultant_name ?? null;
+            $quotation->konsultan = $request->consultant_name ?: null;
             $quotation->save();
 
             $orderHeader = OrderHeader::where('no_document', $quotation->no_document)
@@ -1404,13 +1404,13 @@ class PortalController extends Controller
 
             if ($orderHeader) {
                 $orderHeader->nama_perusahaan = $request->customer_name;
-                $orderHeader->konsultan = $request->consultant_name ?? null;
+                $orderHeader->konsultan = $request->consultant_name ?: null;
                 $orderHeader->save();
 
                 OrderDetail::where('id_order_header', $orderHeader->id)
                     ->update([
                         'nama_perusahaan' => $request->customer_name, 
-                        'konsultan' => $request->consultant_name ?? null
+                        'konsultan' => $request->consultant_name ?: null
                     ]);
             }
 

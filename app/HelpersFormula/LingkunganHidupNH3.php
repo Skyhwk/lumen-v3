@@ -40,18 +40,18 @@ class LingkunganHidupNH3
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * 1000, 4));
+            $C1 = \str_replace(",", "", number_format(($ks / floatval($Vu)), 4));
         }else {
-            $C = 0;
+            $C1 = 0;
         }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
+        // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 4));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17.031, 4));
+        // if (floatval($C1) < 0.1419)
+        //     $C1 = '<0.1419';
         if (floatval($C1) < 0.0005)
             $C1 = '<0.0005';
-        if (floatval($C2) < 0.0007)
-            $C2 = '<0.0007';
+        // if (floatval($C2) < 0.0007)
+        //     $C2 = '<0.0007';
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
