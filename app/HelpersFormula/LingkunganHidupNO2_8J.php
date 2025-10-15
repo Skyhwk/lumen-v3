@@ -61,12 +61,18 @@ class LingkunganHidupNO2_8J
         $C1 = array_sum($hasil2_array) / count($hasil2_array);
         $C2 = array_sum($hasil3_array) / count($hasil3_array);
 
+        $C = round(floatval($C), 4);
+        $C1 = round(floatval($C1), 5);
+        $C2 = round(floatval($C2), 5);
+
         if (floatval($C) < 0.4623)
             $C = '<0.4623';
         if (floatval($C1) < 0.00046)
             $C1 = '<0.00046';
         if (floatval($C2) < 0.00025)
             $C2 = '<0.00025';
+
+        $satuan = 'ug/Nm3';
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
