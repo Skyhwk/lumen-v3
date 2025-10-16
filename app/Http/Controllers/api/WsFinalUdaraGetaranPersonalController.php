@@ -173,7 +173,7 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					if ($paparan < 30) {
 						$item->nab = 20;
 					} else if ($paparan >= 30 && $paparan < 60) {
-						$item->nab = 14;
+						$item->nab = 10;
 					} else if ($paparan >= 60 && $paparan < 120) {
 						$item->nab = 14;
 					} else if ($paparan >= 120 && $paparan < 240) {
