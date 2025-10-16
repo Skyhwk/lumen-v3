@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+
 use Illuminate\Http\Request;
 
 use Carbon\Carbon;
@@ -20,13 +21,14 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\PermintaanDokumentasiSampling;
 
+
 class PermintaanDokumentasiSamplingController extends Controller
 {
     public function index()
     {
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::latest()
-            // ->where('is_rejected', 0)
             ->where('is_active', 1)
+            // ->where('is_rejected', 0)
             // ->where('is_approved', 0)
             ->get();
 
@@ -158,7 +160,7 @@ class PermintaanDokumentasiSamplingController extends Controller
                 ->url('/permintaan-dokumentasi-sampling')
                 ->send();
 
-            return response()->json(['message' => 'Berhasil approve permintaan'], 200);
+            return response()->json(['message' => 'Berhasil approve permintaan, silahkan tunggu beberapa saat.'], 200);
         }
 
         return response()->json(['message' => 'Anda tidak memiliki akses untuk approve permintaan'], 401);
