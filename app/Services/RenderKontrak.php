@@ -1724,13 +1724,15 @@ class RenderKontrak
                 foreach ($detail as $key => $value) {
                     foreach (json_decode($value->data_pendukung_sampling) as $keys => $values) {
                         if (is_array($values->data_sampling)) {
-                            $num_ = $values->data_sampling;
+                            $object = $values->data_sampling;
                         } else {
-                            $num_ = json_decode($values->data_sampling);
+                            $object = json_decode($values->data_sampling);
                         }
-                        // dd($num_);
+                        
+                        $num_ = self::gabungDataDanJumlahTitik($object);
                         $bollean = false;
                         $periode_found = [];
+                        
                         foreach ($num_ as $key_ => $val_) {
                             
                             $td_kat = implode(" ", [
@@ -1741,10 +1743,11 @@ class RenderKontrak
                                 $val_->total_parameter,
                                 implode(" ", $val_->parameter)
                             ]);
+
                             $td_kat1 = strtoupper(
                                 explode("-", $a->kategori_2)[1]
                             );
-
+                            
                             if (in_array($values->periode_kontrak, $a->periode) && !in_array($values->periode_kontrak, $periode_found) && $th_left == $td_kat) {
                                 $periode_found[] = $values->periode_kontrak;
                                 $pdf->WriteHTML(
@@ -2591,4 +2594,31 @@ class RenderKontrak
         $hasil_rupiah = "Rp " . number_format($angka, 0, ".", ",");
         return $hasil_rupiah;
     }
+
+    protected function gabungDataDanJumlahTitik($data)
+    {
+        $result = [];
+    
+        foreach ($data as $item) {
+            // Buat kunci unik berdasarkan kategori_1, kategori_2, dan regulasi
+            $key = $item->kategori_1 . '|' . $item->kategori_2 . '|' . implode(',',$item->parameter) . '|' . implode(',', (array) $item->regulasi);
+            
+            if (!isset($result[$key])) {
+                // Inisialisasi object baru
+                $result[$key] = (object) [
+                    'kategori_1' => $item->kategori_1,
+                    'kategori_2' => $item->kategori_2,
+                    'regulasi' => $item->regulasi,
+                    'parameter' => $item->parameter,
+                    'jumlah_titik' => $item->jumlah_titik,
+                ];
+            } else {
+                // Tambah jumlah titik
+                $result[$key]->jumlah_titik += $item->jumlah_titik;
+            }
+        }
+    
+        return array_values($result);
+    }
+    
 }
