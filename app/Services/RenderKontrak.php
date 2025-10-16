@@ -2611,6 +2611,7 @@ class RenderKontrak
                     'regulasi' => $item->regulasi,
                     'parameter' => $item->parameter,
                     'jumlah_titik' => $item->jumlah_titik,
+                    'total_parameter' => $item->total_parameter,
                 ];
             } else {
                 // Tambah jumlah titik
