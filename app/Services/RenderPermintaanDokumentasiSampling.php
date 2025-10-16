@@ -5,6 +5,7 @@ namespace App\Services;
 use Mpdf\Mpdf;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,9 +18,9 @@ class RenderPermintaanDokumentasiSampling
 {
     private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
     {
-        $originalPath = public_path("dokumentasi/sampling/$originalFileName");
+        $originalPath = public_path('dokumentasi/sampling/' . $originalFileName);
 
-        if (!$originalFileName || !file_exists($originalPath)) {
+        if (!$originalFileName || !File::exists($originalPath)) {
             Log::warning("File gambar sumber tidak ditemukan: " . $originalPath);
             return false;
         }
@@ -70,11 +71,79 @@ class RenderPermintaanDokumentasiSampling
         }
     }
 
+    // buat ngetes pake gambar dari produksi
+    // private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
+    // {
+    //     $url = "https://apps.intilab.com/v3/public/dokumentasi/sampling/$originalFileName";
+
+    //     if (!$originalFileName) {
+    //         Log::warning("Nama file kosong");
+    //         return false;
+    //     }
+
+    //     try {
+    //         $response = Http::get($url);
+
+    //         if (!$response->successful()) {
+    //             Log::warning("Gagal ambil gambar dari URL: $url");
+    //             return false;
+    //         }
+
+    //         // Simpen dulu ke temporary file
+    //         $tempPath = storage_path('app/temp_' . uniqid() . '.jpg');
+    //         file_put_contents($tempPath, $response->body());
+
+    //         $img = Image::make($tempPath);
+    //         // $img = Image::make($originalPath);
+
+    //         // --- WATERMARK UNTUK KIRI ATAS (Nama PT & Order ID) ---
+    //         if (!empty($watermarkData['header'])) {
+    //             $img->text($watermarkData['header'], 15, 15, function ($font) { // X=15, Y=15 dari kiri atas
+    //                 $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
+    //                 $font->size(18);
+    //                 $font->color('#FFFFFF');
+    //                 $font->align('left');
+    //                 $font->valign('top');
+    //             });
+    //         }
+
+    //         // --- WATERMARK UNTUK KIRI BAWAH (Sampling Date & Report By) ---
+    //         if (!empty($watermarkData['footerLeft'])) {
+    //             $img->text($watermarkData['footerLeft'], 15, $img->height() - 70, function ($font) { // 70px dari bawah
+    //                 $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
+    //                 $font->size(18);
+    //                 $font->color('#FFFFFF');
+    //                 $font->align('left');
+    //                 $font->valign('bottom');
+    //             });
+    //         }
+
+    //         // --- WATERMARK UNTUK KANAN BAWAH (Koordinat) ---
+    //         if (!empty($watermarkData['footerRight'])) {
+    //             $img->text($watermarkData['footerRight'], $img->width() - 15, $img->height() - 15, function ($font) { // 15px dari kanan & bawah
+    //                 $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
+    //                 $font->size(18);
+    //                 $font->color('#FFFFFF');
+    //                 $font->align('right');
+    //                 $font->valign('bottom');
+    //             });
+    //         }
+
+    //         $img->encode('webp', 80);
+    //         $img->save($outputPath);
+
+    //         return true;
+    //     } catch (\Exception $e) {
+    //         Log::error("Gagal membuat watermark: " . $e->getMessage());
+    //         return false;
+    //     }
+    // }
+
     public function renderPdf($permintaanDokumentasiSampling, $qr)
     {
         DB::beginTransaction();
         try {
-            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
+            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="30px" height="30px"><br>' . $qr->kode_qr;
 
             $pdf = new Mpdf([
                 'mode' => 'utf-8',
@@ -150,10 +219,10 @@ class RenderPermintaanDokumentasiSampling
                     }
 
                     // Proses gambar 'foto_lainnya'
-                    $outputNameKondisi = "lainnya-{$noSampelClean}_{$randomId}.webp";
-                    $outputPathKondisi = "{$outputDir}/{$outputNameKondisi}";
-                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_lainnya, $outputPathKondisi, $watermarkData)) {
-                        $dataLapangan->webp_path_kondisi = "request/temp_img/{$noOrder}/{$outputNameKondisi}";
+                    $outputNameLainnya = "lainnya-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathLainnya = "{$outputDir}/{$outputNameLainnya}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_lainnya, $outputPathLainnya, $watermarkData)) {
+                        $dataLapangan->webp_path_lainnya = "request/temp_img/{$noOrder}/{$outputNameLainnya}";
                     }
                 }
             }
@@ -176,6 +245,7 @@ class RenderPermintaanDokumentasiSampling
             $filePath = public_path('request/dokumentasi_sampling/' . $fileName);
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
 
+            $permintaanDokumentasiSampling->status = 'PDF Ready';
             $permintaanDokumentasiSampling->filename = $fileName;
             $permintaanDokumentasiSampling->save();
 
@@ -191,71 +261,3 @@ class RenderPermintaanDokumentasiSampling
         }
     }
 }
-
-// buat ngetes pake gambar dari produksi
-// private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
-//     {
-//         $url = "https://apps.intilab.com/v3/public/dokumentasi/sampling/$originalFileName";
-
-//         if (!$originalFileName) {
-//             Log::warning("Nama file kosong");
-//             return false;
-//         }
-
-//         try {
-//             $response = Http::get($url);
-
-//             if (!$response->successful()) {
-//                 Log::warning("Gagal ambil gambar dari URL: $url");
-//                 return false;
-//             }
-
-//             // Simpen dulu ke temporary file
-//             $tempPath = storage_path('app/temp_' . uniqid() . '.jpg');
-//             file_put_contents($tempPath, $response->body());
-
-//             $img = Image::make($tempPath);
-//             // $img = Image::make($originalPath);
-
-//             // --- WATERMARK UNTUK KIRI ATAS (Nama PT & Order ID) ---
-//             if (!empty($watermarkData['header'])) {
-//                 $img->text($watermarkData['header'], 15, 15, function ($font) { // X=15, Y=15 dari kiri atas
-//                     $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
-//                     $font->size(18);
-//                     $font->color('#FFFFFF');
-//                     $font->align('left');
-//                     $font->valign('top');
-//                 });
-//             }
-
-//             // --- WATERMARK UNTUK KIRI BAWAH (Sampling Date & Report By) ---
-//             if (!empty($watermarkData['footerLeft'])) {
-//                 $img->text($watermarkData['footerLeft'], 15, $img->height() - 70, function ($font) { // 70px dari bawah
-//                     $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
-//                     $font->size(18);
-//                     $font->color('#FFFFFF');
-//                     $font->align('left');
-//                     $font->valign('bottom');
-//                 });
-//             }
-
-//             // --- WATERMARK UNTUK KANAN BAWAH (Koordinat) ---
-//             if (!empty($watermarkData['footerRight'])) {
-//                 $img->text($watermarkData['footerRight'], $img->width() - 15, $img->height() - 15, function ($font) { // 15px dari kanan & bawah
-//                     $font->file(base_path('vendor/mpdf/mpdf/ttfonts/Roboto-Regular.ttf'));
-//                     $font->size(18);
-//                     $font->color('#FFFFFF');
-//                     $font->align('right');
-//                     $font->valign('bottom');
-//                 });
-//             }
-
-//             $img->encode('webp', 80);
-//             $img->save($outputPath);
-
-//             return true;
-//         } catch (\Exception $e) {
-//             Log::error("Gagal membuat watermark: " . $e->getMessage());
-//             return false;
-//         }
-//     }

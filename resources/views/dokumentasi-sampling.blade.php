@@ -130,7 +130,7 @@
                             <tr>
                                 @forelse ($fotos as $foto)
                                     <td width="{{ $colWidth }}%" align="center">
-                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="width: auto; height: 500px;">
+                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="max-width: 100%; max-height: 200px; width: auto; height: auto; display: block; margin: 0 auto;">
                                         <div>{{ $foto['label'] }}</div>
                                     </td>
                                 @empty
