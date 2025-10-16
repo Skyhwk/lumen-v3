@@ -84,6 +84,12 @@ class FdlKebisinganController extends Controller
                 }
             }
 
+            if(!isset($request->jenis_durasi)){
+                return response()->json([
+                    'message' => 'Pilih Jenis Durasi !'
+                ], 401);
+            }
+
             if (in_array($request->durasi_sampl, $nilai_array)) {
                 return response()->json([
                     'message' => 'Shift Pengambilan ' . $request->durasi_sampl . ' sudah ada !'

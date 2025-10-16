@@ -1155,13 +1155,38 @@ class RenderInvoice
                                 if (isset($values->keterangan_lainnya)) {
                                     $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                                 }
-                                //cek ada berapa pengujian, jika lebih dari 17 pengujian maka akan add page baru
-                                $chunks = self::chunkByContentHeight($dataSampling->data_sampling);
+                                
+                                $extra_row = 0;
+                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+                                    $extra_row++;
+                                }
 
+                                if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                    $extra_row++;
+                                }
+
+                                if (isset($values->keterangan_lainnya)) {
+                                    foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                        $extra_row++;
+                                    }
+                                }
+
+                                if ($values->biaya_lain != null) {
+                                    foreach (json_decode($values->biaya_lain) as $b => $biayaL) {
+                                        $extra_row++;
+                                    }
+                                }
+
+                                if (isset($values->biaya_preparasi) && $values->biaya_preparasi != "[]") {
+                                    $extra_row++;
+                                }
+
+                                $chunks = self::chunkByContentHeight($dataSampling->data_sampling, $extra_row);
+                                // dd($extra_row_new_page);
+                                $no_order_render_now = '';
                                 for ($i = 0; $i < count($chunks); $i++) {
 
                                     foreach ($chunks[$i] as $key => $datasp) {
-
                                         if ($values->periode != null) {
                                             $pr = self::tanggal_indonesia($values->periode, 'period');
                                         } else {
@@ -1173,19 +1198,72 @@ class RenderInvoice
 
                                             if ($i == count($chunks) - 1) {
                                                 $rowspan = count($chunks[$i]) + 1 + $tambah;
-
+                                                $is_order_same = $no_order_render_now == $values->no_order;
+                                                if($is_order_same){
+                                                    // $no = '';
+                                                    // $values->no_order = '';
+                                                    // $values->no_document = '';
+                                                    // $pr = '';
+                                                    $pdf->writeHTML('
+                                                            </tbody>
+                                                        </table>
+                                                    ');
+                                                    $pdf->AddPage();
+                                                    $pdf->writeHTML('
+                                                        <table style="border-collapse: collapse;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                    ');
+                                                }
                                                 $pdf->writeHTML(
                                                     '<tr style="border: 1px solid; font-size: 9px;">
                                                         <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                                                         <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
+                                                $no_order_render_now = $values->no_order;
                                             } else {
+                                                $is_order_same = $no_order_render_now == $values->no_order;
+                                                if($is_order_same){
+                                                    // $no = '';
+                                                    // $values->no_order = '';
+                                                    // $values->no_document = '';
+                                                    // $pr = '';
+                                                    $pdf->writeHTML('
+                                                            </tbody>
+                                                        </table>
+                                                    ');
+                                                    $pdf->AddPage();
+                                                    $pdf->writeHTML('
+                                                        <table style="border-collapse: collapse;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">NO</th>
+                                                                    <th style="font-size:10px; padding:14px; padding:5px;border:1px solid #000">NO QT</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;" class="text-center" colspan="3">KETERANGAN PENGUJIAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TITIK</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">HARGA SATUAN</th>
+                                                                    <th style="font-size:10px; padding:14px; border:1px solid #000;">TOTAL HARGA</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                    ');
+                                                }
                                                 $rowspan = count($chunks[$i]) + 1;
                                                 $pdf->writeHTML(
                                                     '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                         <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                                                         <td style="font-size:9px; border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br><span><b>' . $values->no_document . '</b></span><br><span><b>' . $pr . '</b></span</td>'
                                                 );
+                                                $no_order_render_now = $values->no_order;
                                             }
                                         }
 
@@ -2013,23 +2091,32 @@ class RenderInvoice
         return $hasil_rupiah;
     }
 
-    private static function chunkByContentHeight($data, $maxHeight = 1000)
+    private static function chunkByContentHeight($data, $extra_row = null)
     {
+        $maxHeight = 1000;
         $chunks = [];
         $currentChunk = [];
         $currentHeight = 0;
 
-        foreach ($data as $row) {
+        foreach ($data as $key => $row) {
             // Estimasi tinggi berdasarkan panjang teks
             $textLength = strlen($row->keterangan_pengujian ?? '') +
                         strlen(json_encode($row->regulasi ?? ''));
             $rowHeight = 40 + ceil($textLength / 120) * 20;
 
-            // Kalau udah mentok halaman, bikin chunk baru
-            if ($currentHeight + $rowHeight > $maxHeight) {
-                $chunks[] = $currentChunk;
-                $currentChunk = [];
-                $currentHeight = 0;
+            if($key == count($data) - 1 && $extra_row != null){
+                $extraHeight = (40 + 20) * 3;
+                if ($currentHeight + $rowHeight + $extraHeight > $maxHeight) {
+                    $chunks[] = $currentChunk;
+                    $currentChunk = [];
+                    $currentHeight = 0;
+                }
+            } else {
+                if ($currentHeight + $rowHeight > $maxHeight) {
+                    $chunks[] = $currentChunk;
+                    $currentChunk = [];
+                    $currentHeight = 0;
+                }
             }
 
             $currentChunk[] = $row;

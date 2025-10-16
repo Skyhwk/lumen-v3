@@ -40,7 +40,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 	{
 		$data = OrderDetail::where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ['27-Udara Lingkungan Kerja'])
+			->whereIn('kategori_3', ["27-Udara Lingkungan Kerja"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
@@ -55,32 +55,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 	{
 		$minutes = $hour * 60;
 		return $minutes;
-	}
-
-	private function getNabKebisingan($menit)
-	{
-		if ($menit >= 0.94 && $menit < 1.88) {
-			return 112;
-		} elseif ($menit >= 1.88 && $menit < 3.75) {
-			return 109;
-		} elseif ($menit >= 3.75 && $menit < 7.5) {
-			return 106;
-		} elseif ($menit >= 7.5 && $menit < 15) {
-			return 103;
-		} elseif ($menit >= 15 && $menit < 30) {
-			return 100;
-		} elseif ($menit >= 30 && $menit < 60) {
-			return 97;
-		} elseif ($menit >= 60 && $menit < 120) {
-			return 94;
-		} elseif ($menit >= 120 && $menit < 240) {
-			return 91;
-		} elseif ($menit >= 240 && $menit < 480) {
-			return 88;
-		} elseif ($menit >= 480) {
-			return 85;
-		}
-		return null;
 	}
 
 	public function detail(Request $request)

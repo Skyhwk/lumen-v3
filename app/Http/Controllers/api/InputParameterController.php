@@ -51,9 +51,11 @@ use App\Services\AnalystRender;
 use App\Services\AnalystFormula;
 use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
+use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Repository;
 
 class InputParameterController extends Controller
 {
@@ -68,13 +70,22 @@ class InputParameterController extends Controller
 			}
 
 			$join = OrderDetail::with('TrackingSatu')
-				->whereHas('TrackingSatu', function($q) use ($request) {
-					$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
-				})
-				->where('kategori_2', $request->category)
-				->where('is_active', true)
-				->orderBy('no_sampel', 'asc');
+                ->whereHas('TrackingSatu', function ($q) use ($request) {
+                    $q->where('ftc_laboratory', 'LIKE', "%$request->tgl%")->orderBy('ftc_laboratory', 'asc');
+                })
+                ->where('kategori_2', $request->category)
+                ->where('is_active', true)
+                ->orderByRaw("JSON_LENGTH(parameter) = 1 DESC")
+                ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
+
+            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+                ->where('kategori', $request->category)
+                ->where('is_active', true)
+                ->get()
+                ->pluck('quota','parameter_name')
+                ->toArray();
+
 			// dd($join);
 			if($join->isEmpty()) {
 				return response()->json([
@@ -89,17 +100,89 @@ class InputParameterController extends Controller
 			$inter = [];
 			$ftc = [];
 
-			foreach($join as $key => $val) {
-				$param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
-					return explode(';', $item)[1];
-				}, json_decode($val->parameter, true)) : [];
+            $quota_count = collect();
 
-				$diff = array_diff($select, $param);
+            $repo_quota = json_decode(
+                Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
+                true
+            );
 
-				$row = array_fill_keys($diff, '-');
-				foreach(array_diff($select, $diff) as $p) {
-					$row[$p] = $val->no_sampel;
-				}
+            // Pastikan struktur data benar sebelum diproses
+            if (is_array($repo_quota) && isset($repo_quota[$request->id_stp])) {
+                foreach ($repo_quota[$request->id_stp] as $parameter => $samples) {
+                    // Simpan dengan struktur: [id_stp => [parameter => collection(samples)]]
+                    if (!$quota_count->has($request->id_stp)) {
+                        $quota_count->put($request->id_stp, collect());
+                    }
+                    $quota_count[$request->id_stp]->put($parameter, collect($samples));
+                }
+            }
+
+            foreach($join as $key => $val) {
+                $param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
+                    return explode(';', $item)[1];
+                }, json_decode($val->parameter, true)) : [];
+
+                $diff = array_diff($select, $param);
+                $row = array_fill_keys($diff, '-');
+
+                foreach (array_diff($select, $diff) as $param_key => $p) {
+                    $quota_exceeded = false;
+                    $already_counted = false;
+                    $index_counted = null;
+                    if ($stp->name !== 'SUBKONTRAK') {
+                        // Pastikan struktur quota_count ada
+                        if (!$quota_count->has($request->id_stp)) {
+                            $quota_count->put($request->id_stp, collect());
+                        }
+                        if (!$quota_count[$request->id_stp]->has($p)) {
+                            $quota_count[$request->id_stp]->put($p, collect());
+                        }
+
+                        if(isset($quota[$p])){
+                            // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                            if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                                $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                                $already_counted = true;
+                            }
+
+                            // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                            if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
+                                $quota_exceeded = true;
+                            }
+
+                            // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
+                            if ($quota_exceeded || $already_counted) {
+                                // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
+                                if($already_counted){
+                                    $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
+                                }
+                                $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
+                                if ($diff_count > 0) {
+                                    $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                        ->slice(0, $quota[$p])
+                                        ->values();
+                                }
+                                continue;
+                            }
+
+                            // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                            if (isset($quota[$p])) {
+                                $currentCount = $quota_count[$request->id_stp][$p]->count();
+                                $maxQuota = $quota[$p];
+
+                                // Hanya tambahkan jika belum mencapai batas quota
+                                if ($currentCount < $maxQuota) {
+                                    $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                                }
+                            }
+                        }
+                    }
+
+                    // --- 6️⃣ Simpan nomor sampel ke row
+                    if(!$quota_exceeded && !$already_counted) $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                    $row[$p] = $val->no_sampel;
+                }
 
 				// dd($val);
 				if($stp->sample->nama_kategori == 'Air') {
@@ -571,6 +654,39 @@ class InputParameterController extends Controller
             //     ],401);
             // }
 
+            $filtered_sample_request = $quota_count->map(fn($item) =>
+                $item instanceof \Illuminate\Support\Collection ? $item->toArray() : (array)$item
+            )->toArray();
+
+            $filtered_sample_repo = $repo_quota;
+
+            foreach ($filtered_sample_request as $key => $val) {
+                if (isset($filtered_sample_repo[$key])) {
+                    // Jika key utama (misal 7 atau 8) sudah ada di repo
+                    foreach ($val as $param => $samples) {
+                        if (isset($filtered_sample_repo[$key][$param])) {
+                            // Gabungkan nilai array tanpa duplikasi
+                            $filtered_sample_repo[$key][$param] = array_values(array_unique(array_merge(
+                                $filtered_sample_repo[$key][$param],
+                                $samples
+                            )));
+                        } else {
+                            // Tambahkan parameter baru (misal COD, Fenol, dll)
+                            $filtered_sample_repo[$key][$param] = $samples;
+                        }
+                    }
+                } else {
+                    // Jika key utama belum ada di repo, tambahkan seluruh isinya
+                    $filtered_sample_repo[$key] = $val;
+                }
+            }
+
+            // Simpan ke repository sebagai JSON
+            Repository::dir('filtered_quota_sampel')
+                ->key($request->tgl)
+                // ->save(json_encode($filtered_sample_request, JSON_PRETTY_PRINT));
+                ->save(json_encode($filtered_sample_repo, JSON_PRETTY_PRINT));
+
             return response()->json([
                 'status'=>0,
                 'columns'=>$select,
@@ -588,14 +704,32 @@ class InputParameterController extends Controller
 		}
     }
 
+    public function getShiftIcp(Request $request)
+	{
+		try {
+			$data = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->get();
+			return response()->json([
+				'total' => $data->count()
+			], 200);
+		} catch (\Exception $e) {
+			return response()->json([
+				'message' => 'Gagal mengambil data: ' . $e->getMessage(),
+			], 500);
+		}
+	}
+
     public function addValueParamApi(Request $request){
 		$stp = TemplateStp::with('sample')->where('id', $request->id_stp)->select('name','category_id')->first();
 		// dd($request->all());
+        $repo_quota = json_decode(
+            Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
+            true
+        );
 		// $analyst = TemplateAnalyst::where('unique_id', $request->unique_id)->first();
 		if($stp->name == 'TITRIMETRI' && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
 			// dd('masuk titri');
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
-				$result = self::HelperTitrimetri($request, $stp);
+				$result = self::HelperTitrimetri($request, $stp, $repo_quota);
 				if($result->status == 200){
 					return response()->json([
 						'message'=> $result->message,
@@ -698,7 +832,7 @@ class InputParameterController extends Controller
 		// }else if(($analyst->nama == 'GRAVIMETRI A' || $analyst->nama == 'GRAVIMETRI B' || $analyst->nama == 'GRAVIMETRI') && ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan')) {
 			// dd('masuk');
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
-				$result = self::HelperGravimetri($request, $stp);
+				$result = self::HelperGravimetri($request, $stp, $repo_quota);
 				if($result->status == 200){
 					return response()->json([
 						'message'=> $result->message,
@@ -806,7 +940,7 @@ class InputParameterController extends Controller
 
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
-					$result = self::HelperColorimetri($request, $stp);
+					$result = self::HelperColorimetri($request, $stp, $repo_quota);
 					if($result->status == 200){
 						return response()->json([
 							'message'=> $result->message,
@@ -1215,7 +1349,9 @@ class InputParameterController extends Controller
 						if($result->status) {
 							return response()->json([
 								'message'=> $result->message,
-								'status' => $result->status
+								'status' => $result->status,
+								'line' => $result->line ?? '',
+								'file' => $result->file ?? ''
 							], $result->status);
 						}
 					}
@@ -1843,7 +1979,7 @@ class InputParameterController extends Controller
 		}
     }
 
-	public function HelperTitrimetri($request, $stp){
+	public function HelperTitrimetri($request, $stp, $quota_count){
 		DB::beginTransaction();
 		try {
 			// Cek apakah sampel sudah ada
@@ -1938,6 +2074,45 @@ class InputParameterController extends Controller
 			$data_kalkulasi['no_sampel'] = $request->no_sample;
 			WsValueAir::create($data_kalkulasi);
 
+            $parameterList = json_decode($check->parameter);
+            $filteredParameter = array_map(function ($parameter) {
+                return explode(';', $parameter)[1];
+            }, $parameterList);
+
+            $total_coliform = [
+                "BOD","BOD (B-23-NA)","BOD (B-23)",
+                "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+            ];
+
+            $method_t_coli = null;
+
+            if (!empty($check->kategori_3)) {
+                switch ($check->kategori_3) {
+                    case '3-Air Limbah Industri':
+                        $method_t_coli = 'Total_Coliform_LI';
+                        break;
+                    case '2-Air Limbah Domestik':
+                        $method_t_coli = 'Total_Coliform_LD';
+                        break;
+                    default:
+                        $method_t_coli = null;
+                        break;
+                }
+            }
+
+            // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
+            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                    $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                        ->where('required_parameter', $total_coliform)
+                        ->where('no_sampel', $request->no_sample)
+                        ->where('class_calculate', $method_t_coli)
+                        ->where('tanggal_terima', $tgl_terima)
+                        ->calculate();
+                }
+            }
+
 			DB::commit();
 
 			return (object)[
@@ -1955,7 +2130,7 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperGravimetri($request, $stp) {
+	public function HelperGravimetri($request, $stp, $quota_count) {
 		// dd($request->all());
 		DB::beginTransaction();
 		try {
@@ -2059,15 +2234,49 @@ class InputParameterController extends Controller
 					return explode(';', $parameter)[1];
 				}, $parameterList);
 
-				$m_nabati = ['OG', 'M.Mineral'];
-				if(in_array($request->parameter, $m_nabati) && in_array('M.Nabati', $filteredParameter)){
-					$hitung_otomatis = AutomatedFormula::where('parameter', 'M.Nabati')
-						->where('required_parameter', $m_nabati)
-						->where('no_sampel', $request->no_sample)
-						->where('class_calculate', 'M_Nabati')
-						->where('tanggal_terima', $tgl_terima)
-						->calculate();
-				}
+				// $m_nabati = ['OG', 'M.Mineral'];
+				// if(in_array($request->parameter, $m_nabati) && in_array('M.Nabati', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', 'M.Nabati')
+				// 		->where('required_parameter', $m_nabati)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'M_Nabati')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
+
+                $total_coliform = [
+                    "BOD","BOD (B-23-NA)","BOD (B-23)",
+                    "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                    "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+                ];
+
+                $method_t_coli = null;
+
+                if (!empty($check->kategori_3)) {
+                    switch ($check->kategori_3) {
+                        case '3-Air Limbah Industri':
+                            $method_t_coli = 'Total_Coliform_LI';
+                            break;
+                        case '2-Air Limbah Domestik':
+                            $method_t_coli = 'Total_Coliform_LD';
+                            break;
+                        default:
+                            $method_t_coli = null;
+                            break;
+                    }
+                }
+
+                // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                            ->where('required_parameter', $total_coliform)
+                            ->where('no_sampel', $request->no_sample)
+                            ->where('class_calculate', $method_t_coli)
+                            ->where('tanggal_terima', $tgl_terima)
+                            ->calculate();
+                    }
+                }
 
 				//================================End Kalkulasi Mineral Nabati Otomatis===================================================================================
 				DB::commit();
@@ -2090,7 +2299,7 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperColorimetri($request, $stp) {
+	public function HelperColorimetri($request, $stp, $quota_count) {
 		DB::beginTransaction();
 		try {
 			$hp = $request->hp;
@@ -2204,20 +2413,53 @@ class InputParameterController extends Controller
 						->calculate();
 				}
 
-				$n_total = [
-					'NO2-N', 'NO2-N (NA)',
-					'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
-					'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
-					'N-Organik', 'N-Organik (NA)'
-				];
-				if(in_array($request->parameter, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)){
-					$hitung_otomatis = AutomatedFormula::where('parameter', in_array('N-Total (NA)', $filteredParameter) ? 'N-Total (NA)' : 'N-Total')
-						->where('required_parameter', $n_total)
-						->where('no_sampel', $request->no_sample)
-						->where('class_calculate', 'N_Total')
-						->where('tanggal_terima', $tgl_terima)
-						->calculate();
-				}
+				// $n_total = [
+				// 	'NO2-N', 'NO2-N (NA)',
+				// 	'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
+				// 	'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
+				// 	'N-Organik', 'N-Organik (NA)'
+				// ];
+				// if(in_array($request->parameter, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', in_array('N-Total (NA)', $filteredParameter) ? 'N-Total (NA)' : 'N-Total')
+				// 		->where('required_parameter', $n_total)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'N_Total')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
+
+				$total_coliform = [
+                    "BOD","BOD (B-23-NA)","BOD (B-23)",
+                    "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
+                    "NH3","NH3-N","NH3-N Bebas","NH3-N (3-03-NA)","NH3-N (3-03)","NH3-N (30-25-NA)","NH3-N (30-25)","NH3-N (T)","NH3-N (T-NA)"
+                ];
+
+                $method_t_coli = null;
+
+                if (!empty($check->kategori_3)) {
+                    switch ($check->kategori_3) {
+                        case '3-Air Limbah Industri':
+                            $method_t_coli = 'Total_Coliform_LI';
+                            break;
+                        case '2-Air Limbah Domestik':
+                            $method_t_coli = 'Total_Coliform_LD';
+                            break;
+                        default:
+                            $method_t_coli = null;
+                            break;
+                    }
+                }
+
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                            ->where('required_parameter', $total_coliform)
+                            ->where('no_sampel', $request->no_sample)
+                            ->where('class_calculate', $method_t_coli)
+                            ->where('tanggal_terima', $tgl_terima)
+                            ->calculate();
+                    }
+                }
 
 				DB::commit();
 				return (object)[
@@ -2381,9 +2623,10 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganv) {
+	public function HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganV)
+	{
+		// dd($request->all());
 		$wsling = LingkunganHeader::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('is_active', true)->first();
-
 		if ($wsling) {
 			return (object)[
 				'message' => 'Parameter sudah diinput..!!',
@@ -2391,123 +2634,234 @@ class InputParameterController extends Controller
 			];
 		} else {
 			$parame = $request->parameter;
-			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-			// dd($data_parameter);
-			if ($datlapanganh != null || $datlapangank != null || $datlapanganv != null) {
-					$lingHidup = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->get();
-					$lingKerja = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->get();
-					$lingVolatile = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->get();
-
+			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
+			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
+				// dd($data_parameter);
+				if ($request->id_stp == 14) {
+					$parame = 'TSP';
+				}
+				$lingHidup = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
+				$lingKerja = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
+				$lingVolatile = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
+				// dd($lingHidup, $lingKerja, $lingVolatile,$parame);
 				if (!$lingHidup->isEmpty() || !$lingKerja->isEmpty() || !$lingVolatile->isEmpty()) {
 
 					try {
 						$datapangan = '';
+                        $tipe_data = '';
 						if (count($lingHidup) > 0) {
 							$datapangan = $lingHidup;
+                            $tipe_data = 'ambient';
 						}
 						if (count($lingKerja) > 0) {
-							$datapangan = $lingKerja;
+                            $datapangan = $lingKerja;
+                            $tipe_data = 'ulk';
 						}
 						if (count($lingVolatile) > 0) {
-							$datapangan = $lingVolatile;
+                            $datapangan = $lingVolatile;
+                            $tipe_data = 'volatile';
 						}
 						// dd($datapangan);
-						if($datapangan != '') {
+						if ($datapangan != '') {
 							$datot = count($datapangan);
-						}else {
+						} else {
 							$datot = '';
 						}
+						// dd($datot);
 						$rerata = [];
 						$durasi = [];
 						$tekanan_u = [];
 						$suhu = [];
 						$Qs = [];
+
+						// O3 Kasus Khusus, Bagi 2 Bjir
+						$rerataO3 = [];
+						$durasiO3 = [];
+						$tekanan_uO3 = [];
+						$suhuO3 = [];
+						$QsO3 = [];
+						$ks_all = [];
+						$kb_all = [];
+						// dd($ks_all, $kb_all);
 						$nilQs = '';
 						if ($datot > 0 || $datot != '') {
 
+							$isO3 = strpos($data_parameter->nama_lab, 'O3') !== false;
+							$parameterExplode = explode(' ', $data_parameter->nama_lab);
+							$is8Jam = count($parameterExplode) > 1 ? strpos($parameterExplode[1], '8J') !== false : false;
 							foreach ($datapangan as $keye => $vale) {
+								$absorbansi = !is_null($vale->absorbansi) ? json_decode($vale->absorbansi) : null;
 								$dat = json_decode($vale->pengukuran);
-								$durasii = [];
-								$flow = [];
-								foreach ($dat as $key => $val) {
-									if ($key == 'Durasi' || $key == 'Durasi 2') {
-										$formt = (int) str_replace(" menit", "", $val);
-										array_push($durasii, $formt);
-									} else {
-										array_push($flow, $val);
+								// dd($absorbansi, $dat);
+								// dd($vale);
+								if ($isO3) {
+									$durasii = [[], []];
+									$flow = [[], []];
+									// dump($absorbansi->{"data-4"});
+									if (!is_null($absorbansi)) {
+										$sample_penjerap_1 = [$absorbansi->{"data-1"}, $absorbansi->{"data-2"}, $absorbansi->{"data-3"}];
+										$sample_penjerap_2 = [$absorbansi->{"data-4"}, $absorbansi->{"data-5"}, $absorbansi->{"data-6"}];
+										$blanko_penjerap_1 = $absorbansi->blanko;
+										$blanko_penjerap_2 = $absorbansi->blanko2;
+										$ks = [array_sum($sample_penjerap_1) / count($sample_penjerap_1), array_sum($sample_penjerap_2) / count($sample_penjerap_2)];
+										$kb = [$blanko_penjerap_1, $blanko_penjerap_2];
+										// dd($ks, $kb);
+										array_push($ks_all, $ks);
+										array_push($kb_all, $kb);
 									}
+									$i = 0;
+									foreach ($dat as $key => $val) {
+										if ($key == 'Durasi' || $key == 'Durasi 2') {
+											$formt = (int) str_replace(" menit", "", $val);
+											if ($i == 0) {
+												array_push($durasii[$i], $formt);
+												$i++;
+											} else {
+												array_push($durasii[$i], $formt);
+											}
+										} else {
+											array_push($flow[$i], $val);
+										}
+									}
+									// dd($flow);
+									$avg_flow = array_map(function ($item) use ($vale, &$QsO3, &$rerataO3, &$keye) {
+										$avg = array_sum($item) / count($item);
+										$Q0 = $avg * pow((298 * $vale->tekanan_udara) / (($vale->suhu + 273) * 760), 0.5);
+										$Q0 = str_replace(",", "", number_format($Q0, 4));
+										$QsO3[$keye][] =  (float) $Q0;
+										$rerataO3[$keye][] =  $avg;
+										return $avg;
+									}, $flow);
+
+									$tekanan_uO3[] =  $vale->tekanan_udara;
+									$suhuO3[] =  $vale->suhu;
+
+									$avg_durasi = array_map(function ($item) use ($vale, &$durasiO3, &$keye) {
+										$avg = array_sum($item) / count($item);
+										$durasiO3[$keye][] =  $avg;
+										return $avg;
+									}, $durasii);
+								} else {
+									$durasii = [];
+									$flow = [];
+									if (!is_null($absorbansi)) {
+										$sample_penjerap_1 = [$absorbansi->{"data-1"}, $absorbansi->{"data-2"}, $absorbansi->{"data-3"}];
+										$blanko_penjerap_1 = $absorbansi->blanko;
+										$ks = array_sum($sample_penjerap_1) / count($sample_penjerap_1);
+										$kb = $blanko_penjerap_1;
+										array_push($ks_all, $ks);
+										array_push($kb_all, $kb);
+									}
+									foreach ($dat as $key => $val) {
+										if ($key == 'Durasi' || $key == 'Durasi 2') {
+											$formt = (int) str_replace(" menit", "", $val);
+											array_push($durasii, $formt);
+										} else {
+											array_push($flow, $val);
+										}
+									}
+									$rera = array_sum($flow) / count($flow);
+									// $Q0 = \str_replace(",", "", number_format($rera * ((298 * $vale->tekanan_u) / (($vale->suhu + 273) * 760) ** 1 / 2), 4));
+									// $Q0 = \str_replace(",", "", number_format($rera * ((298 * $vale->tekanan_u) / (($vale->suhu + 273) * 760) ** 0.5), 4));
+
+									// Menghitung Q0 sesuai rumus yang benar
+									$Q0 = $rera * pow((298 * $vale->tekanan_udara) / (($vale->suhu + 273) * 760), 0.5);
+
+									// Format hasil Q0 agar 4 desimal dan hilangkan koma pemisah ribuan
+									$Q0 = str_replace(",", "", number_format($Q0, 4));
+
+									$dur = array_sum($durasii);
+
+									array_push($rerata, $rera);
+									array_push($Qs, (float) $Q0);
+									array_push($durasi, $dur);
+									array_push($tekanan_u, $vale->tekanan_udara);
+									array_push($suhu, $vale->suhu);
 								}
-								$rera = array_sum($flow) / count($flow);
-								// $Q0 = \str_replace(",", "", number_format($rera * ((298 * $vale->tekanan_u) / (($vale->suhu + 273) * 760) ** 1 / 2), 4));
-								// $Q0 = \str_replace(",", "", number_format($rera * ((298 * $vale->tekanan_u) / (($vale->suhu + 273) * 760) ** 0.5), 4));
-
-								// Menghitung Q0 sesuai rumus yang benar
-								$Q0 = $rera * pow((298 * $vale->tekanan_udara) / (($vale->suhu + 273) * 760), 0.5);
-
-								// Format hasil Q0 agar 4 desimal dan hilangkan koma pemisah ribuan
-								$Q0 = str_replace(",", "", number_format($Q0, 4));
-
-								$dur = array_sum($durasii);
-								array_push($rerata, $rera);
-								array_push($Qs, (float) $Q0);
-								array_push($durasi, $dur);
-								array_push($tekanan_u, $vale->tekanan_udara);
-								array_push($suhu, $vale->suhu);
 							}
-							if (!empty ($Qs)) {
-								$nilQs = array_sum($Qs) / $datot;
-							}
-							// dd($nilQs);
-							$rerataFlow = \str_replace(",", "", number_format(array_sum($rerata) / $datot, 1));
-							if (count($durasi) == 1) {
-								$durasiFin = $durasi[0];
+
+							if ($isO3) {
+								if (!empty($QsO3)) {
+									$index1Qs = array_column($QsO3, 0);
+									$index2Qs = array_column($QsO3, 1);
+									$nil1Qs = array_sum($index1Qs) / count($index1Qs);
+									$nil2Qs = array_sum($index2Qs) / count($index2Qs);
+								}
+								// dd($nilQs);
+								$index1Flow = array_column($rerataO3, 0);
+								$index2Flow = array_column($rerataO3, 1);
+								$rerata1Flow = \str_replace(",", "", number_format(array_sum($index1Flow) / count($index1Flow), 1));
+								$rerata2Flow = \str_replace(",", "", number_format(array_sum($index2Flow) / count($index2Flow), 1));
+								// if (count($durasiO3) == 1) {
+								// 	$durasiFin = array_sum($durasiO3[0]) / count($durasiO3[0]);
+								// } else {
+								$index1Durasi = array_column($durasiO3, 0);
+								$index2Durasi = array_column($durasiO3, 1);
+								$rerata1Durasi = array_sum($index1Durasi) / count($index1Durasi);
+								$rerata2Durasi = array_sum($index2Durasi) / count($index2Durasi);
+								// }
+								// $durasiO3 = array_push($durasiO3,$durasiO3[0]);
+								$tekananFin = \str_replace(",", "", number_format(array_sum($tekanan_uO3) / $datot, 1));
+								$suhuFin = \str_replace(",", "", number_format(array_sum($suhuO3) / $datot, 1));
+								// dd($tekananFin, $suhuFin, $rerata1Flow, $rerata2Flow, $flow, $rerata1Durasi, $rerata2Durasi,$durasii, $nil1Qs, $nil2Qs, $QsO3);
 							} else {
-								$durasiFin = array_sum($durasi) / $datot;
+								if (!empty($Qs)) {
+									$nilQs = array_sum($Qs) / $datot;
+								}
+
+								// dd($nilQs);
+								// dd('RERATA', $rerata);
+								$rerataFlow = \str_replace(",", "", number_format(array_sum($rerata) / $datot, 1));
+								if (count($durasi) == 1) {
+									$durasiFin = $durasi[0];
+								} else {
+									$durasiFin = array_sum($durasi) / $datot;
+								}
+								if ($request->parameter == 'Pb (24 Jam)' || $request->parameter == 'PM 2.5 (24 Jam)' || $request->parameter == 'PM 10 (24 Jam)' || $request->parameter == 'TSP (24 Jam)' || $data_parameter->id ==  306) {
+									$l25 = '';
+									if (count($lingHidup) > 0) {
+
+										$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										if ($l25) {
+											$waktu = explode(",", $l25->durasi_pengambilan);
+											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
+											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
+											$durasiFin = ((int)$jam * 60) + (int)$menit;
+										} else {
+											$durasiFin = 24 * 60;
+										}
+									}
+									if (count($lingKerja) > 0) {
+
+										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										// dd($l25);
+										if ($l25) {
+											$waktu = explode(",", $l25->durasi_pengambilan);
+											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
+											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
+											$durasiFin = ((int)$jam * 60) + (int)$menit;
+										} else {
+											$durasiFin = 24 * 60;
+										}
+										// dd('masukkk');
+									}
+									if (count($lingVolatile) > 0) {
+										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
+										if ($l25) {
+											$waktu = explode(",", $l25->durasi_pengambilan);
+											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
+											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
+											$durasiFin = ((int)$jam * 60) + (int)$menit;
+										} else {
+											$durasiFin = 24 * 60;
+										}
+									}
+								}
+								// dd($durasiFin);
+
+								$tekananFin = \str_replace(",", "", number_format(array_sum($tekanan_u) / $datot, 1));
+								$suhuFin = \str_replace(",", "", number_format(array_sum($suhu) / $datot, 1));
 							}
-							if( $request->parameter == 'Pb (24 Jam)' || $request->parameter == 'PM 2.5 (24 Jam)' || $request->parameter == 'PM 10 (24 Jam)' || $request->parameter == 'TSP (24 Jam)' || $data_parameter->id ==  306) {
-								$l25 = '';
-								if (count($lingHidup) > 0) {
-
-									$l25 = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('shift_pengambilan', 'L25')->first();
-									if($l25) {
-										$waktu = explode(",",$l25->durasi_pengambilan);
-										$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
-										$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
-										$durasiFin = ((int)$jam * 60) + (int)$menit;
-									}else {
-										$durasiFin = 24 * 60;
-									}
-								}
-								if (count($lingKerja) > 0) {
-
-									$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('shift_pengambilan', 'L25')->first();
-									// dd($l25);
-									if($l25) {
-										$waktu = explode(",",$l25->durasi_pengambilan);
-										$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
-										$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
-										$durasiFin = ((int)$jam * 60) + (int)$menit;
-									}else {
-										$durasiFin = 24 * 60;
-									}
-									// dd('masukkk');
-								}
-
-								if( count($lingVolatile) > 0) {
-									$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('shift_pengambilan', 'L25')->first();
-									if($l25) {
-										$waktu = explode(",",$l25->durasi_pengambilan);
-										$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
-										$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
-										$durasiFin = ((int)$jam * 60) + (int)$menit;
-									}else{
-										$durasiFin = 24 * 60;
-									}
-								}
-							}
-							$tekananFin = \str_replace(",", "", number_format(array_sum($tekanan_u) / $datot, 1));
-							$suhuFin = \str_replace(",", "", number_format(array_sum($suhu) / $datot, 1));
-
 						} else {
 							return (object)[
 								'message' => 'No sample tidak ada di lingkungan hidup atau lingkungan kerja.',
@@ -2518,7 +2872,9 @@ class InputParameterController extends Controller
 						// dd($e);
 						return (object)[
 							'message' => 'Error : ' . $e->getMessage(),
-							'status' => 500
+							'status' => 500,
+							'line' => $e->getLine(),
+							'file' => $e->getFile()
 						];
 					}
 				} else {
@@ -2528,58 +2884,109 @@ class InputParameterController extends Controller
 					];
 				}
 			} else {
-				return (object)[
-					'message' => 'Data lapangan belum diinputkan oleh Sampler.',
-					'status' => 404
-				];
+				// dd("data Lapangan null");
+				$tekananFin = 0;
+				$suhuFin = 0;
+				$nilQs = 0;
+				$datot = 0;
+				$rerataFlow = 0;
+				$durasiFin = 0;
 			}
 
 			// dd($durasiFin, $tekananFin, $suhuFin, $nilQs, $datot, $rerataFlow);
-			$check = OrderDetail::where('no_sampel',$request->no_sample)->where('is_active',true)->first();
+			$check = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
 
-			if(!isset($check->id)){
+			if (!isset($check->id)) {
 				return (object)[
-					'message'=> 'No Sample tidak ada.!!',
+					'message' => 'No Sample tidak ada.!!',
 					'status' => 401
 				];
 			}
 			$id_po = $check->id;
 			$tgl_terima = $check->tanggal_terima;
-
 			// Proses kalkulasi dengan AnalystFormula
+
 			$functionObj = Formula::where('id_parameter', $data_parameter->id)->where('is_active', true)->first();
+			// dd($functionObj);
 			if (!$functionObj) {
 				return (object)[
-					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
 			$function = $functionObj->function;
-			$data_parsing = $request->all();
 
+            $ulk_ambient_parameter = [
+                'Cl2' => [
+                    'ambient' => 'LingkunganHidupCl2',
+                    'ulk' => 'LingkunganKerjaCl2'
+                ]
+            ];
+
+            if(isset($ulk_ambient_parameter[$request->parameter])) {
+                $function = $ulk_ambient_parameter[$request->parameter][$tipe_data];
+            }
+
+			$data_parsing = $request->all();
 			$data_parsing = (object) $data_parsing;
-			$data_parsing->durasi = $durasiFin;
+			$data_parsing->use_absorbansi = false;
+			$data_parsing->tipe_data = $tipe_data;
+			// dd($data_parsing);
+			if (!$isO3) {
+				$data_parsing->durasi = $durasiFin;
+				$data_parsing->nilQs = $nilQs;
+				$data_parsing->data_total = $datot;
+				$data_parsing->average_flow = $rerataFlow;
+			} else {
+				$data_parsing->durasi = [$rerata1Durasi, $rerata2Durasi];
+				$data_parsing->nilQs = [$nil1Qs, $nil2Qs];
+				$data_parsing->average_flow = [$rerata1Flow, $rerata2Flow];
+			}
+
+            // dd($request->all());
+			if ($isO3) {
+				$data_parsing->ks = array_chunk(array_map('floatval', $request->ks), 2);
+				$data_parsing->kb = array_chunk(array_map('floatval', $request->kb), 2);
+			} else if(isset($request->ks)){
+				$data_parsing->ks = array_map('floatval', $request->ks);
+				$data_parsing->kb = array_map('floatval', $request->kb);
+			}
+
+			// dd($data_parsing->ks);
+
+			if (count($ks_all) > 0) {
+				$data_parsing->use_absorbansi = true;
+				$data_parsing->ks = $ks_all;
+			}
+			if (count($kb_all) > 0) {
+				$data_parsing->kb = $kb_all;
+			}
 			$data_parsing->tekanan = $tekananFin;
 			$data_parsing->suhu = $suhuFin;
-			$data_parsing->nilQs = $nilQs;
-			$data_parsing->data_total = $datot;
-			$data_parsing->average_flow = $rerataFlow;
 			$data_parsing->tanggal_terima = $tgl_terima;
 			// dd($data_parsing);
-			// dd($function);
 			$data_kalkulasi = AnalystFormula::where('function', $function)
 				->where('data', $data_parsing)
 				->where('id_parameter', $data_parameter->id)
 				->process();
-			if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+
+			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
 				return (object)[
-					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
 
-			$saveShift = [246,247,248,249,289,290,291,293,294,295,296,299,300,326,327,328,329];
+			if(isset($data_kalkulasi['status']) == 'error'){
+				return (object)[
+					'message' => $data_kalkulasi['message'],
+					'trace' => $data_kalkulasi['trace'],
+					'line' => $data_kalkulasi['line'],
+					'status' => 500
+				];
+			}
 
+			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329];
 			DB::beginTransaction();
 			try {
 				$data = new LingkunganHeader;
@@ -2587,30 +2994,53 @@ class InputParameterController extends Controller
 				$data->parameter = $request->parameter;
 				$data->template_stp = $request->id_stp;
 				$data->id_parameter = $data_parameter->id;
+				$data->use_absorbansi = $data_parsing->use_absorbansi;
+				$data->is_approved = $data_parsing->use_absorbansi ? true : false;
 				$data->note = $request->note;
 				$data->tanggal_terima = $tgl_terima;
 				$data->created_by = $this->karyawan;
 				$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->data_shift = null;
-				if(in_array($data_parameter->id, $saveShift)) {
-					// Store Shift Data
+				if (in_array($data_parameter->id, $saveShift) || $request->id_stp == 13) {
+					$ks = array_chunk(array_map('floatval', $request->ks), 2);
+					$kb = array_chunk(array_map('floatval', $request->kb), 2);
 					$data_shift = array_map(function ($sample, $blanko) {
 						return (object) [
-							"sample" => $sample,
-							"blanko" => $blanko
+							"sample" => number_format(array_sum($sample) / count($sample),4),
+							"blanko" => number_format(array_sum($blanko) / count($blanko),4)
 						];
-					}, $request->ks, $request->kb);
+					}, $ks, $kb);
+					// dd($data_shift, $request->ks, $request->kb);
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
+                if(isset($data_kalkulasi['data_pershift'])) $data->data_pershift = json_encode($data_kalkulasi['data_pershift']);
 				$data->save();
 
 				// dd($nilQs, $datot, $rerataFlow, $durasiFin, $po->id, $po->tgl_terima, $tekananFin, $suhuFin, $request, $this->karyawan, $par->id, $result);
 				// dd($result);
+
+                if (array_key_exists('data_pershift', $data_kalkulasi)) {
+                    unset($data_kalkulasi['data_pershift']);
+                }
 				$data_udara['id_lingkungan_header'] = $data->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				$data_udara['hasil1'] = $data_kalkulasi['C'];
-				$data_udara['hasil2'] = $data_kalkulasi['C1'];
-				$data_udara['hasil3'] = $data_kalkulasi['C2'];
+				$data_udara['hasil1']  = isset($data_kalkulasi['C'])   ? $data_kalkulasi['C']   : null;
+                $data_udara['hasil2']  = isset($data_kalkulasi['C1'])  ? $data_kalkulasi['C1']  : null;
+                $data_udara['hasil3']  = isset($data_kalkulasi['C2'])  ? $data_kalkulasi['C2']  : null;
+                $data_udara['hasil4']  = isset($data_kalkulasi['C3'])  ? $data_kalkulasi['C3']  : null;
+                $data_udara['hasil5']  = isset($data_kalkulasi['C4'])  ? $data_kalkulasi['C4']  : null;
+                $data_udara['hasil6']  = isset($data_kalkulasi['C5'])  ? $data_kalkulasi['C5']  : null;
+                $data_udara['hasil7']  = isset($data_kalkulasi['C6'])  ? $data_kalkulasi['C6']  : null;
+                $data_udara['hasil8']  = isset($data_kalkulasi['C7'])  ? $data_kalkulasi['C7']  : null;
+                $data_udara['hasil9']  = isset($data_kalkulasi['C8'])  ? $data_kalkulasi['C8']  : null;
+                $data_udara['hasil10'] = isset($data_kalkulasi['C9'])  ? $data_kalkulasi['C9']  : null;
+                $data_udara['hasil11'] = isset($data_kalkulasi['C10']) ? $data_kalkulasi['C10'] : null;
+                $data_udara['hasil12'] = isset($data_kalkulasi['C11']) ? $data_kalkulasi['C11'] : null;
+                $data_udara['hasil13'] = isset($data_kalkulasi['C12']) ? $data_kalkulasi['C12'] : null;
+                $data_udara['hasil14'] = isset($data_kalkulasi['C13']) ? $data_kalkulasi['C13'] : null;
+                $data_udara['hasil15'] = isset($data_kalkulasi['C14']) ? $data_kalkulasi['C14'] : null;
+                $data_udara['hasil16'] = isset($data_kalkulasi['C15']) ? $data_kalkulasi['C15'] : null;
+                $data_udara['hasil17'] = isset($data_kalkulasi['C16']) ? $data_kalkulasi['C16'] : null;
 				$data_udara['satuan'] = $data_kalkulasi['satuan'];
 				WsValueUdara::create($data_udara);
 
@@ -2630,7 +3060,6 @@ class InputParameterController extends Controller
 					'par' => $request->parameter,
 					'status' => 200
 				];
-
 			} catch (\Exception $e) {
 				DB::rollback();
 				return (object)[
@@ -2921,7 +3350,9 @@ class InputParameterController extends Controller
 			DB::rollBack();
 			return (object)[
 				'message' => 'Gagal input data: '.$e->getMessage(),
-				'status' => 500
+				'status' => 500,
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
 			];
 		}
 	}
@@ -4631,7 +5062,7 @@ class InputParameterController extends Controller
 		}else if($suhu >= 60.5 && $suhu < 61) {
 			$nil_pv = 152.8;
 		} else {
-			throw new Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
+			throw new \Exception('Error karena suhu tidak sesuai, suhu di data lapangan adalah ' . $suhu);
 		}
 
 		return $nil_pv;

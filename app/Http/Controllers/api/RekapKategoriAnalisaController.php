@@ -53,7 +53,7 @@ class RekapKategoriAnalisaController extends Controller
             $allSalesIds = $salesData->pluck('sales_id')->unique()->filter()->values();
 
             // Ambil data karyawan untuk sales_id yang ditemukan
-            $allSales = MasterKaryawan::whereIn('user_id', $allSalesIds)
+            $allSales = MasterKaryawan::whereIn('id', $allSalesIds)
                 ->pluck('nama_lengkap', 'user_id')
                 ->toArray();
 

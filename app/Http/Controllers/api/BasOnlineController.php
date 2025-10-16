@@ -983,12 +983,13 @@ class BasOnlineController extends Controller
                 'no_quotation' => $request->no_document,
                 'tanggal_sampling' => $request->tanggal_sampling,
             ])->get();
+           
             
             $persiapanHeader = $dataList->first(function ($item) use ($noSample) {
                 $no_sampel = json_decode($item->no_sampel, true) ?? [];
                 return count(array_intersect($no_sampel, $noSample)) > 0;
             });
-            // dd($persiapanHeader,$dataList);
+            
             if ($persiapanHeader && !empty($persiapanHeader->detail_bas_documents)) {
                 $orderH->detail_bas_documents = $persiapanHeader->detail_bas_documents;
             } else {
@@ -3961,6 +3962,13 @@ class BasOnlineController extends Controller
             ],
             [
                 "parameter" => "Isopropil Alkohol",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailLingkunganKerja::class,
+                "model2" => DetailLingkunganHidup::class
+            ],
+            [
+                "parameter" => "Metanol",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,

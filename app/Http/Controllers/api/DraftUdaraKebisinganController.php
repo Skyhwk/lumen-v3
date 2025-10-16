@@ -276,15 +276,21 @@ class DraftUdaraKebisinganController extends Controller
                 $fileName = null;
                 if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382])) {
 
-                    $master_regulasi = MasterRegulasi::find($id_regulasii);
-                    if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                    // $master_regulasi = MasterRegulasi::find($id_regulasii);
+                    $parameter = $details->first()->param;
+                    if (strpos($parameter, '24 Jam') !== false) {
+                        $is_sesaat = false;
+                    } else {
+                        $is_sesaat = true;
+                    }
+                    if ($is_sesaat) {
                         $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
                             ->setDataCustom($custom)
                             ->useLampiran(true)
                             ->whereView('DraftKebisinganLh')
                             ->render();
-                    } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
+                    } else {
                         $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
                             ->setDataCustom($custom)
@@ -312,7 +318,7 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 $header->save();
             }
-
+            // dd('================');
             DB::commit();
             return response()->json([
                 'message' => 'Data draft Kebisingan udara no LHP ' . $request->no_lhp . ' berhasil disimpan',
@@ -370,9 +376,20 @@ class DraftUdaraKebisinganController extends Controller
 
             // Render ulang file LHP
             $detail = LhpsKebisinganDetail::where('id_header', $dataHeader->id)->get();
+            $detail = collect($detail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
             $custom = collect(LhpsKebisinganCustom::where('id_header', $dataHeader->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
 
             $id_regulasii = explode('-', (json_decode($dataHeader->regulasi)[0]))[0];
             if (in_array($id_regulasii, [54, 151, 167, 168, 382])) {
@@ -385,7 +402,7 @@ class DraftUdaraKebisinganController extends Controller
                         ->useLampiran(true)
                         ->whereView('DraftKebisinganLh')
                         ->render();
-                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam') {
+                } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
                     $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)
@@ -401,8 +418,6 @@ class DraftUdaraKebisinganController extends Controller
                     ->whereView('DraftKebisingan')
                     ->render();
             }
-
-
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
 
@@ -513,17 +528,41 @@ class DraftUdaraKebisinganController extends Controller
                     $custom[] = $detail;
                 }
 
+                $bulanMap = [
+                    'Januari' => 'January',
+                    'Februari' => 'February',
+                    'Maret' => 'March',
+                    'April' => 'April',
+                    'Mei' => 'May',
+                    'Juni' => 'June',
+                    'Juli' => 'July',
+                    'Agustus' => 'August',
+                    'September' => 'September',
+                    'Oktober' => 'October',
+                    'November' => 'November',
+                    'Desember' => 'December',
+                ];
 
-                $detail = collect($detail)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
-                ])->values()->toArray();
+
+
+                $detail = collect($detail)
+                ->sortBy(function ($item) use ($bulanMap) {
+                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
+                })
+                ->values()
+                ->toArray();
 
                 foreach ($custom as $idx => $cstm) {
-                    $custom[$idx] = collect($cstm)->sortBy([
-                        ['tanggal_sampling', 'asc'],
-                        ['no_sampel', 'asc']
-                    ])->values()->toArray();
+                    $custom[$idx] = collect($cstm)
+                        ->sortBy(function ($item) use ($bulanMap) {
+                            $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                            $timestamp = Carbon::parse($tgl)->timestamp;
+
+                            return sprintf('%010d-%s', $timestamp, $item['no_sampel']);
+                        })
+                        ->values()
+                        ->toArray();
                 }
 
 
@@ -632,8 +671,6 @@ class DraftUdaraKebisinganController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                 if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;

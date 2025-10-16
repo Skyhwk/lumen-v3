@@ -1218,7 +1218,7 @@ class RenderKontrak
                             $pdf->WriteHTML(
                                 " <br>
                                 <hr>" . ' <b>
-                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.volume') . ' : ' . count($a->parameter) . $volume . ' - KAN (P) : ' . count($akreditasi_detail) . ' (' . count($non_akre_detail) . ')' . '</span>
+                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.total_parameter') . ' : ' . count($a->parameter) . $volume . ' - KAN (P) : ' . count($akreditasi_detail) . ' (' . count($non_akre_detail) . ')' . '</span>
                                 </b>
                                 </td>
                                 <td style="vertical-align: middle;text-align:center;font-size: 13px; padding: 5px;">' . $a->jumlah_titik . '</td>
@@ -1230,7 +1230,7 @@ class RenderKontrak
                             $pdf->WriteHTML(
                                 " <br>
                                 <hr>" . ' <b>
-                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.volume') . ' : ' . count($a->parameter) . $volume . '</span>
+                                    <span style="font-size: 13px; margin-top: 5px;">' . __('QTC.table.item.total_parameter') . ' : ' . count($a->parameter) . $volume . '</span>
                                 </b>
                                 </td>
                                 <td style="vertical-align: middle;text-align:center;font-size: 13px; padding: 5px;">' . $a->jumlah_titik . '</td>
@@ -1732,56 +1732,12 @@ class RenderKontrak
                         $bollean = false;
                         $periode_found = [];
                         foreach ($num_ as $key_ => $val_) {
-                            if ($val_->penamaan_titik && $val_->penamaan_titik != "") {
-                                if (is_array($val_->penamaan_titik)) {
-                                    $filtered_array = array_filter($val_->penamaan_titik, function ($item) {
-                                        $props = get_object_vars($item);
-                                        $value = current($props);
-                                        return !empty($value);
-                                    });
-
-                                    $filtered_array = array_map(function ($item) {
-                                        return current(get_object_vars($item));
-                                    }, $filtered_array);
-
-                                    if (!empty($filtered_array)) {
-                                        $penamaan_titik = "(" . implode(", ", $filtered_array) . ")";
-                                    } else {
-                                        $penamaan_titik = "";
-                                    }
-                                } else {
-                                    $penamaan_titik = "(" . $val_->penamaan_titik . ")";
-                                }
-                            } else {
-                                $penamaan_titik = "";
-                            }
-
-                            // $penamaan_titik = "";
-                            // $filtered = array_filter($val_->penamaan_titik, function ($item) {
-                            //     $props = get_object_vars($item);
-                            //     $key = key($props);
-                            //     $value = $props[$key];
-
-                            //     return !empty($value);
-                            // });
-
-                            // // ubah jadi string "Inlet (001), Outlet (002), ..."
-                            // $resultParts = array_map(function ($item) {
-                            //     $props = get_object_vars($item);
-                            //     $key = key($props);
-                            //     $value = $props[$key];
-
-                            //     return $value;
-                            // }, $filtered);
-
-                            // $penamaan_titik = count($resultParts) > 0 ? "(" . implode(', ', $resultParts) . ")" : '';
-
+                            
                             $td_kat = implode(" ", [
                                 strtoupper(explode("-", $val_->kategori_1)[1]),
                                 strtoupper(explode("-", htmlspecialchars_decode($val_->kategori_2))[1]),
                                 $val_->jumlah_titik,
                                 $x_,
-                                // $penamaan_titik,
                                 $val_->total_parameter,
                                 implode(" ", $val_->parameter)
                             ]);
@@ -1789,7 +1745,6 @@ class RenderKontrak
                                 explode("-", $a->kategori_2)[1]
                             );
 
-                            // dump($th_left, $td_kat);
                             if (in_array($values->periode_kontrak, $a->periode) && !in_array($values->periode_kontrak, $periode_found) && $th_left == $td_kat) {
                                 $periode_found[] = $values->periode_kontrak;
                                 $pdf->WriteHTML(
@@ -1970,18 +1925,18 @@ class RenderKontrak
 
             // TOTAL PERDIEM 24 JAM
             $perdiem_24 = "";
-            $total_perdiem = 0;
+            // $total_perdiem = 0;
             if ($data->harga_24jam_personil_total != 0) {
                 $perdiem_24 = strtoupper(__('QTC.table.item.manpower24'));
                 // $pdf->WriteHTML('<tr><td style="text-align:center;font-size: 8px;">TOTAL PERDIEM 24 JAM</td>');
-                $total_harga_24jam_perdiem = 0;
-                foreach ($detail as $key => $value) {
-                    // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($value->harga_24jam_personil_total) . '</td>');
-                    $total_harga_24jam_perdiem =
-                        $total_harga_24jam_perdiem +
-                        $value->harga_24jam_personil_total;
-                }
-                $total_perdiem = $total_perdiem + $total_harga_24jam_perdiem;
+                // $total_harga_24jam_perdiem = 0;
+                // foreach ($detail as $key => $value) {
+                //     // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($value->harga_24jam_personil_total) . '</td>');
+                //     $total_harga_24jam_perdiem =
+                //         $total_harga_24jam_perdiem +
+                //         $value->harga_24jam_personil_total;
+                // }
+                // $total_perdiem = $total_perdiem + $total_harga_24jam_perdiem;
                 // $pdf->WriteHTML('<td style="font-size: 8px; text-align:right; padding: 5px;">' . Self::rupiah($total_harga_24jam_perdiem) . '</td></tr>');
             }
 
@@ -1993,18 +1948,17 @@ class RenderKontrak
                 $total_harga_perdiem = 0;
                 foreach ($detail as $key => $value) {
                     $harga_perdiem = 0;
-                    if ($value->jumlah_orang_24jam > 0) {
-                        $harga_perdiem =
-                            $harga_perdiem + $value->harga_24jam_personil_total;
+                    if ($value->jumlah_orang_24jam > 0 || !is_null($value->perdiem_jumlah_orang)) {
+                        $harga_perdiem += $value->harga_24jam_personil_total;
                     }
                     $pdf->WriteHTML(
-                        ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->harga_perdiem_personil_total + $harga_perdiem) . "</td>"
+                        ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($value->harga_perdiem_personil_total + $value->harga_24jam_personil_total) . "</td>"
                     );
-                    $total_harga_perdiem =
-                        $total_harga_perdiem + $value->harga_perdiem_personil_total;
+                    $total_harga_perdiem += ($value->harga_perdiem_personil_total + $value->harga_24jam_personil_total);
                 }
                 $pdf->WriteHTML(
-                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem + $total_perdiem) . "</td></tr>"
+                    ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem) . "</td></tr>"
+                    // ' <td style="font-size: 8px; text-align:right; padding: 5px;">' . self::rupiah($total_harga_perdiem + $total_perdiem_24) . "</td></tr>"
                 );
             }
 

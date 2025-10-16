@@ -34,9 +34,10 @@ class FdlDebuPersonalController extends Controller
     public function getSample(Request $request)
     {
         if (isset($request->no_sample) && $request->no_sample != null) {
-
             $parameter = ParameterFdl::select('parameters')->where('is_active', 1)->where('nama_fdl','debu_personal')->where('kategori','4-Udara')->first();
-            $listParameter = json_decode($parameter->parameters, true);
+            $parameterList = json_decode($parameter->parameters, true);
+            
+
 
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where(function($q) use ($parameterList) {
@@ -62,7 +63,7 @@ class FdlDebuPersonalController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $data->parameter,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $parameterList
                     ], 200);
                 }else{
                     $cek = MasterSubKategori::where('id', explode('-', $data->kategori_3)[0])->first();
@@ -73,7 +74,7 @@ class FdlDebuPersonalController extends Controller
                         'id_ket' => explode('-', $data->kategori_3)[0],
                         'id_ket2' => explode('-', $data->kategori_2)[0],
                         'param' => $data->parameter,
-                        'parameterList' => json_decode($parameterList->parameters,true)
+                        'parameterList' => $parameterList
                     ], 200);
                 }
             }
@@ -98,7 +99,7 @@ class FdlDebuPersonalController extends Controller
         DB::beginTransaction();
         try {
             $nilai_array = [];
-            $cek_nil = DataLapanganDebuPersonal::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
+            $cek_nil = DataLapanganDebuPersonal::where('no_sampel', strtoupper(trim($request->no_sampel)))->get();
             foreach ($cek_nil as $key => $value) {
                 $durasi = $value->shift;
                 $durasi = explode("-", $durasi);
@@ -106,31 +107,31 @@ class FdlDebuPersonalController extends Controller
                 $nilai_array[$key] = str_replace('"', "", $durasi);
             }
 
-            if (in_array($request->shift, $nilai_array)) {
+            if (in_array($request->shift_pengambilan, $nilai_array)) {
                 return response()->json([
-                    'message' => 'Pengambilan Shift ' . $request->shift . ' sudah ada !'
+                    'message' => 'Pengambilan Shift ' . $request->shift_pengambilan . ' sudah ada !'
                 ], 401);
             }
 
-            $shift_peng = $request->kateg_uji . '-' . $request->shift;
+            $shift_peng = $request->kateg_uji . '-' . $request->shift_pengambilan;
 
             $data = new DataLapanganDebuPersonal;
-            $data->no_sampel = strtoupper(trim($request->no_sample));
+            $data->no_sampel = strtoupper(trim($request->no_sampel));
             if ($request->keterangan_4 != '')
                 $data->keterangan = $request->keterangan_4;
             if ($request->keterangan_2 != '')
                 $data->keterangan_2 = $request->keterangan_2;
             if ($request->posisi != '')
                 $data->titik_koordinat = $request->posisi;
-            if ($request->lat != '')
-                $data->latitude = $request->lat;
+            if ($request->latitude != '')
+                $data->latitude = $request->latitude;
             if ($request->longitude != '')
-                $data->longi = $request->longi;
+                $data->longitude = $request->longitude;
             if ($request->lok_submit != '')
                 $data->lokasi_submit = $request->lok_submit;
 
-            if ($request->categori != '')
-                $data->kategori_3 = $request->categori;
+            if ($request->id_kat != '')
+                $data->kategori_3 = $request->id_kat;
             if ($request->nama_pekerja != '') $data->nama_pekerja = $request->nama_pekerja;
             if ($request->divisi != '') $data->divisi = $request->divisi;
             if ($request->suhu != '') $data->suhu = $request->suhu;

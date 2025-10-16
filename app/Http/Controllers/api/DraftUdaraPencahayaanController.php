@@ -17,7 +17,6 @@ use App\Models\LhpsPencahayaanDetailHistory;
 
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\QrDocument;
@@ -316,8 +315,14 @@ class DraftUdaraPencahayaanController extends Controller
             $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+            $renderDetail = LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get();
 
-            $fileName = LhpTemplate::setDataDetail(LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get())
+            $renderDetail = collect($renderDetail)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+            ])->values()->toArray();
+            
+            $fileName = LhpTemplate::setDataDetail($renderDetail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
@@ -337,7 +342,7 @@ class DraftUdaraPencahayaanController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Data draft LHP Pencahayaan no sampel ' . $request->noSampel . ' berhasil disimpan',
+                'message' => 'Data draft LHP Pencahayaan no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status' => true
             ], 201);
         } catch (\Exception $th) {
@@ -512,10 +517,30 @@ class DraftUdaraPencahayaanController extends Controller
                     }
                 }
 
-                $data_entry = collect($data_entry)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
-                ])->values()->toArray();
+                $bulanMap = [
+                    'Januari' => 'January',
+                    'Februari' => 'February',
+                    'Maret' => 'March',
+                    'April' => 'April',
+                    'Mei' => 'May',
+                    'Juni' => 'June',
+                    'Juli' => 'July',
+                    'Agustus' => 'August',
+                    'September' => 'September',
+                    'Oktober' => 'October',
+                    'November' => 'November',
+                    'Desember' => 'December',
+                ];
+
+
+
+                $data_entry = collect($data_entry)
+                ->sortBy(function ($item) use ($bulanMap) {
+                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
+                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
+                })
+                ->values()
+                ->toArray();
 
                 return response()->json([
                     'status'    => true,
@@ -659,8 +684,6 @@ class DraftUdaraPencahayaanController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                $data->nama_karyawan = $this->karyawan;
-                $data->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
                 if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;
@@ -984,5 +1007,68 @@ class DraftUdaraPencahayaanController extends Controller
         $data = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
         $extand = explode("|", $data);
         return $extand;
+    }
+        public function updateTanggalLhp(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dataHeader = LhpsPencahayaanHeader::find($request->id);
+
+            if (!$dataHeader) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data tidak ditemukan, harap adjust data terlebih dahulu'
+                ], 404);
+            }
+
+            $dataHeader->tanggal_lhp = $request->value;
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
+            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
+            // Update QR Document jika ada
+            $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
+            if ($qr) {
+                $dataQr = json_decode($qr->data, true);
+                $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
+                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
+                $qr->data = json_encode($dataQr);
+                $qr->save();
+            }
+
+            // Render ulang file LHP
+            $detail = LhpsPencahayaanDetail::where('id_header', $dataHeader->id)->get();
+            $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $dataHeader->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($dataHeader)
+                ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
+                ->whereView('DraftPencahayaan')
+                ->render();
+           
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Tanggal LHP berhasil diubah',
+                'data' => $dataHeader
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+            ], 500);
+        }
     }
 }

@@ -69,9 +69,17 @@ class PerubahanSampelService
         foreach ($perubahanSampel as $jsonString) {
             foreach (json_decode($jsonString, true) as $item) {
                 $oldDetail = OrderDetail::where('no_sampel', $item['old'])->first();
-                // if ($oldDetail->status >= 2) {
-                //     continue;
-                // }
+                if ($oldDetail->status >= 2) {
+                    continue;
+                }
+                if ($oldDetail) {
+                    // Cek selisih hari dari tanggal_terima sampai hari ini
+                    $selisihHari = Carbon::parse($oldDetail->tanggal_terima)->diffInDays(Carbon::now());
+
+                    if ($selisihHari > 10) {
+                        continue;
+                    }
+                }
                 OrderDetail::where('no_sampel', $item['new'])->update([
                     'tanggal_terima' => $oldDetail->tanggal_terima,
                     'keterangan_1' => $oldDetail->keterangan_1,

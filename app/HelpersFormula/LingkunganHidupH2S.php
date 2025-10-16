@@ -7,18 +7,13 @@ use Carbon\Carbon;
 class LingkunganHidupH2S
 {
     public function index($data, $id_parameter, $mdl) {
-        $ks = null;
-        // dd(count($data->ks));
-        if (is_array($data->ks)) {
-            $ks = number_format(array_sum($data->ks) / count($data->ks), 4);
-        }else {
-            $ks = $data->ks;
-        }
-        $kb = null;
-        if (is_array($data->kb)) {
-            $kb = number_format(array_sum($data->kb) / count($data->kb), 4);
-        }else {
-            $kb = $data->kb;
+        if($data->use_absorbansi) {
+            $ks = array_sum($data->ks[0]) / count($data->ks[0]);
+            $kb = array_sum($data->kb[0]) / count($data->kb[0]);
+        }else{
+            $ks = array_sum($data->ks) / count($data->ks);
+            $kb = array_sum($data->kb) / count($data->kb);
+            // dd($data);
         }
 
         $Ta = floatval($data->suhu) + 273;
@@ -26,6 +21,15 @@ class LingkunganHidupH2S
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C3 = null;
+        $C4 = null;
+        $C5 = null;
+        $C6 = null;
+        $C7 = null;
+        $C8 = null;
+        $C9 = null;
+        $C10 = null;
+        $C11 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -38,23 +42,58 @@ class LingkunganHidupH2S
         $st = null;
         $satuan = null;
 
-        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-        if($Vu != 0.0) {
-            $C_ = \str_replace(",", "", number_format(($ks - $kb) / floatval($Vu), 4));
-        }else {
-            $C_ = 0;
+        $hasil1_array = $hasil2_array = $hasil3_array = [];
+
+        $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4);
+        foreach ($data->ks as $key => $value) {
+            if(floatval($Vu) != 0.0) {
+                // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
+                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45) / 1000, 4);
+
+                // C1 = C2*1000
+                $C_val = round($C1_val * 1000, 4);
+
+                // H2S (PPM) = (A1-A2)/Vs
+                $C2_val = round(($value - $data->kb[$key]) / $Vu, 4);
+            }else {
+                $C_val = 0;
+                $C1_val = 0;
+                $C2_val = 0;
+            }
+
+            $hasil1_array[$key] = $C_val;
+            $hasil2_array[$key] = $C1_val;
+            $hasil3_array[$key] = $C2_val;
         }
-        
-        $C_ = \str_replace(",", "", number_format((floatval($ks) - floatval($kb)) / (floatval($Vu) != 0.0 ? floatval($Vu) : 1), 4));
-        $C = \str_replace(",", "", number_format(floatval($C_) * (34 / 24.45), 4));
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 34, 5));
+
+        $C = array_sum($hasil1_array) / count($hasil1_array);
+        $C1 = array_sum($hasil2_array) / count($hasil2_array);
+        $C2 = array_sum($hasil3_array) / count($hasil3_array);
+
+
         if (floatval($C) < 1.39)
             $C = '<1.39';
-        if (floatval($C1) < 0.0014)
-            $C1 = '<0.0014';
+        if (floatval($C1) < 0.0022)
+            $C1 = '<0.0022';
         if (floatval($C2) < 0.0010)
             $C2 = '<0.0010';
+
+        $satuan = 'mg/m3';
+
+        $data_pershift = [
+            'Shift 1' => $hasil1_array[0],
+            'Shift 2' => $hasil1_array[1] ?? null,
+            'Shift 3' => $hasil1_array[2] ?? null,
+        ];
+
+        if(count($hasil1_array) == 4){
+            $data_pershift = [
+                'Shift 1' => $hasil1_array[0],
+                'Shift 2' => $hasil1_array[1],
+                'Shift 3' => $hasil1_array[2],
+                'Shift 4' => $hasil1_array[3],
+            ];
+        }
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -70,10 +109,20 @@ class LingkunganHidupH2S
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
+            'C' => isset($C) ? $C : null,
+            'C1' => isset($C1) ? $C1 : null,
+            'C2' => isset($C2) ? $C2 : null,
+            'C3' => isset($C3) ? $C3 : null,
+            'C4' => isset($C4) ? $C4 : null,
+            'C5' => isset($C5) ? $C5 : null,
+            'C6' => isset($C6) ? $C6 : null,
+            'C7' => isset($C7) ? $C7 : null,
+            'C8' => isset($C8) ? $C8 : null,
+            'C9' => isset($C9) ? $C9 : null,
+            'C10' => isset($C10) ? $C10 : null,
+            'C11' => isset($C11) ? $C11 : null,
+            'data_pershift' => count($hasil1_array) > 1 ? $data_pershift : null,
             'satuan' => $satuan,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,

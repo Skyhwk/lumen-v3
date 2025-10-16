@@ -24,11 +24,12 @@ use App\Models\{
     LhpsKebisinganHeader,
     LhpsPencahayaanHeader,
     LhpsIklimHeader,
-    LhpUdaraPsikologiHeader,
+    LhpUdaraPsikologiHeader,LhpsGetaranHeader,
     LhpsEmisiHeader,
     OrderDetail,
     Parameter,
     DraftErgonomiFile,
+    LhpsLingHeader,
     JobTask,
     LhpsAirCustom,
     LhpsAirDetail,
@@ -47,12 +48,13 @@ class PortalController extends Controller
     public function ceklinkApi(Request $request)
     {
         try {
+            
             if ($request->token != null) {
 
                 $cek = GenerateLink::where('token', $request->token)
                     ->where('key', $request->key)
                     ->first();
-
+                
                 $uri = env('APP_URL');
                 if ($cek != null) {
                     if ($request->mode == 'GETDATA') {
@@ -384,23 +386,33 @@ class PortalController extends Controller
                                     $data->no_lhp = $data->order_detail->cfr;
                                 }
                             }
-                        } else if ($cek->quotation_status == 'draft_lhp_getaran') {
-                            $data = LhpsGetaranHeader::with('link', 'order_detail')
+                        } else if ($cek->quotation_status == 'draft_getaran') {
+                            
+                             $data = LhpsGetaranHeader::with('link')
                                 ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
                                 ->first();
                             $uri = env('APP_URL') . '/public/dokumen/LHPS/';
-                            if ($data !== null) {
+                            if ($data) {
+                                $data->flag_status = 'draft';
                                 $data->type = $cek->quotation_status;
+                                $data->filename = $cek->fileName_pdf;
                                 $data->chekjadwal = null;
-                                if ($data->link) {
-                                    $data->link->fileName_pdf = $cek->fileName_pdf;
-                                }
-                                if ($data->order_detail->cfr) {
-                                    $data->no_lhp = $data->order_detail->cfr;
-                                }
                             }
                         } else if ($cek->quotation_status == 'draft_iklim') {
                             $data = LhpsIklimHeader::with('link')
+                                ->where('id', $cek->id_quotation)
+                                ->where('is_active', true)
+                                ->first();
+                            $uri = env('APP_URL') . '/public/dokumen/LHPS/';
+                            if ($data) {
+                                $data->flag_status = 'draft';
+                                $data->type = $cek->quotation_status;
+                                $data->filename = $cek->fileName_pdf;
+                                $data->chekjadwal = null;
+                            }
+                        }else if ($cek->quotation_status == 'draft_ambient'){
+                             $data = LhpsLingHeader::with('link')
                                 ->where('id', $cek->id_quotation)
                                 ->where('is_active', true)
                                 ->first();

@@ -15,17 +15,17 @@
             <tbody>
                 @foreach ($detail as $k => $yy)
                 <tr>
-                    <td class="pd-5-solid-center">{{ $k + 1 }}</td>
-                    <td class="pd-5-solid-left" width="7%" style="text-align: right; border-right: none;"> 
+                    <td class="custom">{{ $k + 1 }}</td>
+                    <td class="custom4" width="7%" style="text-align: right; border-right: none;"> 
                         <sup style=" margin-top: -10px;">{{ $yy['no_sampel'] ?? '' }}</sup> 
                     </td>
-                    <td class="pd-5-solid-left" width="18%" style="border-left: none; text-align: left;"> 
+                    <td class="custom4" width="18%" style="border-left: none; text-align: left;"> 
                         {{ $yy['keterangan'] ?? '' }}
                     </td>
-                    <td class="pd-5-solid-center">{{ $yy['hasil'] ?? '' }}</td>
-                    <td class="pd-5-solid-center">{{ $yy['aktivitas_pekerjaan'] ?? '' }}</td>
-                    <td class="pd-5-solid-center">{{ $yy['durasi_paparan'] ?? '' }} Jam</td>
-                    <td class="pd-5-solid-center">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+                    <td class="custom">{{ $yy['hasil'] ?? '' }}</td>
+                    <td class="custom">{{ $yy['aktivitas_pekerjaan'] ?? '' }}</td>
+                    <td class="custom">{{ $yy['durasi_paparan'] ?? '' }} Jam</td>
+                    <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                 </tr>
                 @endforeach
             </tbody>
