@@ -2308,48 +2308,83 @@ class RequestQuotationController extends Controller
 
     private function groupDataSampling(array $data)
     {
-        $grouped = [];
-    
+        // Step 1: Gabungkan semua data_sampling per periode terlebih dahulu jika semua entri punya periode_kontrak sama
+        $periodeGrouped = [];
         foreach ($data as $periodeItem) {
             $periode = $periodeItem->periode_kontrak ?? null;
-            if (!$periode || empty($periodeItem->data_sampling)) continue;
-    
+            if (!$periode || empty($periodeItem->data_sampling)) {
+                continue;
+            }
+            if (!isset($periodeGrouped[$periode])) {
+                $periodeGrouped[$periode] = [];
+            }
+            // Gabungkan semua data_sampling pada periode yang sama
             foreach ($periodeItem->data_sampling as $sampling) {
-                // Buat key unik untuk mengelompokkan
+                $periodeGrouped[$periode][] = clone $sampling;
+            }
+        }
+
+        $finalGrouped = [];
+        // Untuk setiap periode, lakukan grouping berdasarkan kategori, parameter, dst, lalu sum jumlah_titik-nya
+        foreach ($periodeGrouped as $periode => $samplings) {
+            $detailGrouped = [];
+            foreach ($samplings as $sampling) {
                 $key = md5(json_encode([
                     'kategori_1'      => $sampling->kategori_1,
                     'kategori_2'      => $sampling->kategori_2,
                     'parameter'       => $sampling->parameter,
-                    'jumlah_titik'    => $sampling->jumlah_titik,
                     'total_parameter' => $sampling->total_parameter,
                     'regulasi'        => $sampling->regulasi,
                 ]));
-    
-                // Hapus properti yang tidak diperlukan
+
                 unset($sampling->harga_satuan, $sampling->harga_total, $sampling->volume);
-    
-                if (!isset($grouped[$key])) {
-                    $grouped[$key] = (object)[
+
+                if (!isset($detailGrouped[$key])) {
+                    $detailGrouped[$key] = (object)[
                         'kategori_1'      => $sampling->kategori_1,
                         'kategori_2'      => $sampling->kategori_2,
                         'penamaan_titik'  => [], // default kosong
                         'parameter'       => $sampling->parameter,
-                        'jumlah_titik'    => $sampling->jumlah_titik,
+                        'jumlah_titik'    => (int) $sampling->jumlah_titik,
                         'total_parameter' => $sampling->total_parameter,
                         'periode_kontrak' => [$periode],
                         'biaya_preparasi' => [], // default kosong
                         'regulasi'        => $sampling->regulasi,
                     ];
                 } else {
-                    // Tambahkan periode baru jika belum ada
-                    if (!in_array($periode, $grouped[$key]->periode_kontrak)) {
-                        $grouped[$key]->periode_kontrak[] = $periode;
+                    $detailGrouped[$key]->jumlah_titik += (int) $sampling->jumlah_titik;
+                }
+            }
+            // Setelah digroup dan disum per periode, masukkan ke finalGrouped
+            foreach ($detailGrouped as $key => $item) {
+                $finalKey = md5(json_encode([
+                    'kategori_1'      => $item->kategori_1,
+                    'kategori_2'      => $item->kategori_2,
+                    'parameter'       => $item->parameter,
+                    'total_parameter' => $item->total_parameter,
+                    'regulasi'        => $item->regulasi,
+                ]));
+
+                if (!isset($finalGrouped[$finalKey])) {
+                    $finalGrouped[$finalKey] = clone $item;
+                } else {
+                    // Gabungkan periode_kontrak dan sum jumlah_titik
+                    foreach ($item->periode_kontrak as $perK) {
+                        if (!in_array($perK, $finalGrouped[$finalKey]->periode_kontrak)) {
+                            $finalGrouped[$finalKey]->periode_kontrak[] = $perK;
+                        }
                     }
+                    $finalGrouped[$finalKey]->jumlah_titik += $item->jumlah_titik;
                 }
             }
         }
-    
-        return array_values($grouped);
+        
+        foreach ($finalGrouped as $key => $item) {
+            $periodeCount = count($item->periode_kontrak);
+            $item->jumlah_titik = $periodeCount > 0 ? intval(round($item->jumlah_titik / $periodeCount)) : 0;
+        }
+        
+        return array_values($finalGrouped);
     }
 
     private function summaryPreparasi(array $data)
