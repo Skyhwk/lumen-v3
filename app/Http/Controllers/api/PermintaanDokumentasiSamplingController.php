@@ -76,6 +76,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             $permintaanDokumentasiSampling->no_order = $request->no_order;
             $permintaanDokumentasiSampling->nama_perusahaan = $request->nama_perusahaan;
             $permintaanDokumentasiSampling->alamat_sampling = $request->alamat_sampling;
+            $permintaanDokumentasiSampling->status = 'Need Approval';
             $permintaanDokumentasiSampling->created_by = $this->karyawan;
             $permintaanDokumentasiSampling->created_at = Carbon::now();
             $permintaanDokumentasiSampling->updated_by = $this->karyawan;
@@ -124,6 +125,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         if (in_array($request->attributes->get('user')->karyawan->id, \explode(',', env('AKSES_APPROVAL', '127,13,784')))) {
             $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
 
+            $permintaanDokumentasiSampling->status = 'Rendering PDF';
             $permintaanDokumentasiSampling->is_approved = 1;
             $permintaanDokumentasiSampling->approved_by = $this->karyawan;
             $permintaanDokumentasiSampling->approved_at = Carbon::now();
@@ -171,6 +173,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         if (in_array($request->attributes->get('user')->karyawan->id, \explode(',', env('AKSES_APPROVAL', '127,13,784')))) {
             $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
 
+            $permintaanDokumentasiSampling->status = 'Rejected';
             $permintaanDokumentasiSampling->is_rejected = 1;
             $permintaanDokumentasiSampling->rejected_by = $this->karyawan;
             $permintaanDokumentasiSampling->rejected_at = Carbon::now();
