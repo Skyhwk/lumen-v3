@@ -39,8 +39,8 @@ class SamplingPlanController extends Controller
                 $query->WithTypeModelSub();
             }
         ])
-            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
             ->whereNotNull('no_quotation')
             ->where('is_active', $active);
 
@@ -512,7 +512,7 @@ class SamplingPlanController extends Controller
 
     public function updateJadwal(Request $request)
     {
-
+        
         try {
             //code...
             $dataObject = (object) [
@@ -538,6 +538,8 @@ class SamplingPlanController extends Controller
                 'durasi_lama' => $request->durasi_lama,
                 'tanggal_lama' => $request->tanggal_lama,
                 'tipe_parsial' => $request->tipe_parsial,
+                'isokinetic' => $request->isokinetic,
+                'pendampingan_k3' => $request->pendampingan_k3,
                 'id_cabang' => $request->id_cabang[0],
             ];
 
@@ -601,6 +603,8 @@ class SamplingPlanController extends Controller
                 'kendaraan' => $request->kendaraan,
                 'sampler' => $request->sampler,
                 'driver' => $request->driver,
+                'pendampingan_k3' => $request->pendampingan_k3,
+                'isokinetic' => $request->isokinetic,
                 'id_cabang' => $request->id_cabang[0],
             ];
 

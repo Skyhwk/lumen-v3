@@ -231,7 +231,6 @@ class DokumenFdlController extends Controller
 
     public function detailsData(Request $request)
     {
-        
         try {
             $loggedInUser = $this->karyawan;
 
