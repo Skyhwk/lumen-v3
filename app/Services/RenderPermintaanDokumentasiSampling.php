@@ -74,7 +74,7 @@ class RenderPermintaanDokumentasiSampling
     {
         DB::beginTransaction();
         try {
-            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
+            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="30px" height="30px"><br>' . $qr->kode_qr;
 
             $pdf = new Mpdf([
                 'mode' => 'utf-8',
