@@ -38,6 +38,8 @@ class LingkunganHidupLogam_8J
         $vl = null;
         $st = null;
         $satuan = '';
+        $data_pershift = null;
+
 
         $arr_hasil = [];
 
@@ -70,6 +72,12 @@ class LingkunganHidupLogam_8J
             }
 
             $satuan = 'mg/m³';
+
+            $data_pershift = [
+                'Shift 1' => $arr_hasil[0] ?? null,
+                'Shift 2' => $arr_hasil[1] ?? null,
+                'Shift 3' => $arr_hasil[2] ?? null
+            ];
         }else if($data->tipe_data == 'ambient') {
             $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
@@ -77,21 +85,6 @@ class LingkunganHidupLogam_8J
                 $C = '<0.0128';
             }
             $satuan = 'ug/Nm³';
-        }
-
-        $data_pershift = [
-            'Shift 1' => $arr_hasil[0] ?? null,
-            'Shift 2' => $arr_hasil[1] ?? null,
-            'Shift 3' => $arr_hasil[2] ?? null
-        ];
-
-        if(in_array($data->parameter, ['Pb (24 Jam)'])){
-            $data_pershift = [
-                'Shift 1' => $arr_hasil[0] ?? null,
-                'Shift 2' => $arr_hasil[1] ?? null,
-                'Shift 3' => $arr_hasil[2] ?? null,
-                'Shift 4' => $arr_hasil[3] ?? null
-            ];
         }
 
         // dd($C, $C1, $C2);
