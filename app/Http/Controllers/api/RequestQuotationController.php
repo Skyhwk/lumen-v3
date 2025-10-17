@@ -2357,6 +2357,7 @@ class RequestQuotationController extends Controller
                 }
             }
             // Setelah digroup dan disum per periode, masukkan ke finalGrouped
+            
             foreach ($detailGrouped as $key => $item) {
                 $finalKey = md5(json_encode([
                     'kategori_1'      => $item->kategori_1,
@@ -2364,6 +2365,7 @@ class RequestQuotationController extends Controller
                     'parameter'       => $item->parameter,
                     'total_parameter' => $item->total_parameter,
                     'regulasi'        => $item->regulasi,
+                    'jumlah_titik'    => $item->jumlah_titik,
                 ]));
 
                 if (!isset($finalGrouped[$finalKey])) {
