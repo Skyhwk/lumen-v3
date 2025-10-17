@@ -2335,6 +2335,7 @@ class RequestQuotationController extends Controller
                     'parameter'       => $sampling->parameter,
                     'total_parameter' => $sampling->total_parameter,
                     'regulasi'        => $sampling->regulasi,
+                    'jumlah_titik'    => $sampling->jumlah_titik,
                 ]));
 
                 unset($sampling->harga_satuan, $sampling->harga_total, $sampling->volume);
