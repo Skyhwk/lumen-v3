@@ -910,8 +910,11 @@ class RenderInvoice
                             }
                             // dd($cekArray);
                             $resetData = reset($cekArray);
-                            for ($i = 0; $i < count(array_chunk($resetData->data_sampling, 15)); $i++) {
-                                foreach (array_chunk($resetData->data_sampling, 15)[$i] as $keys => $dataSampling) {
+                            $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
+                                ? $resetData
+                                : $cekArray;
+                            for ($i = 0; $i < count(array_chunk($usingData, 15)); $i++) {
+                                foreach (array_chunk($usingData, 15)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
                                         if ($i == count(array_chunk($cekArray, 15)) - 1) {
                                             $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1 + $tambah;
