@@ -911,8 +911,9 @@ class RenderInvoice
                             // dd($cekArray);
                             $resetData = reset($cekArray);
                             $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
-                                ? $resetData
+                                ? $resetData->data_sampling
                                 : $cekArray;
+                                dd($usingData);
                             for ($i = 0; $i < count(array_chunk($usingData, 15)); $i++) {
                                 foreach (array_chunk($usingData, 15)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
