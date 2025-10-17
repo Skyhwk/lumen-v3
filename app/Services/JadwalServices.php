@@ -303,31 +303,69 @@ class JadwalServices
         
         $dataUpdate = $this->updateJadwal;
         
-        if (
-            $dataUpdate->no_quotation == null ||
-            $dataUpdate->nama_perusahaan == null ||
-            $dataUpdate->jam_mulai == null ||
-            $dataUpdate->jam_selesai == null ||
-            $dataUpdate->kategori == null ||
-            $dataUpdate->warna == null ||
-            $dataUpdate->durasi == null ||
-            $dataUpdate->status == null ||
-            $dataUpdate->batch_id == null ||
-            $dataUpdate->kendaraan == null ||
-            $dataUpdate->sampling == null ||
-            $dataUpdate->karyawan == null ||
-            $dataUpdate->jadwal_id == null ||
-            $dataUpdate->tanggal == null ||
-            $dataUpdate->sampler == null ||
-            // $dataUpdate->driver == null ||
-            $dataUpdate->pendampingan_k3 == null ||
-            // $dataUpdate->isokinetic == null ||
-            // $dataUpdate->durasi_lama == null ||
-            $dataUpdate->tanggal_lama == null
-            // || $dataUpdate->periode == null    //cek di command line karena ada kasus dimana periode null kontrak maupun non kontrak
-        ) {
-            throw new Exception('No Quotation, Nama Perusahaan, Jam Mulai, Jam Selesai, Kategori, Warna, Durasi, Status, Batch Id, Kendaraan, Sampling, Karyawan, Jadwal Id, Tanggal, Sampler, Durasi Lama, Tanggal Lama is required', 401);
+        if ($dataUpdate->no_quotation == null) {
+            throw new Exception('No Quotation is required', 401);
         }
+        if ($dataUpdate->nama_perusahaan == null) {
+            throw new Exception('Nama Perusahaan is required', 401);
+        }
+        if ($dataUpdate->jam_mulai == null) {
+            throw new Exception('Jam Mulai is required', 401);
+        }
+        if ($dataUpdate->jam_selesai == null) {
+            throw new Exception('Jam Selesai is required', 401);
+        }
+        if ($dataUpdate->kategori == null) {
+            throw new Exception('Kategori is required', 401);
+        }
+        if ($dataUpdate->warna == null) {
+            throw new Exception('Warna is required', 401);
+        }
+        if ($dataUpdate->durasi == null) {
+            throw new Exception('Durasi is required', 401);
+        }
+        if ($dataUpdate->status == null) {
+            throw new Exception('Status is required', 401);
+        }
+        if ($dataUpdate->batch_id == null) {
+            throw new Exception('Batch Id is required', 401);
+        }
+        if ($dataUpdate->kendaraan == null) {
+            throw new Exception('Kendaraan is required', 401);
+        }
+        if ($dataUpdate->sampling == null) {
+            throw new Exception('Sampling is required', 401);
+        }
+        if ($dataUpdate->karyawan == null) {
+            throw new Exception('Karyawan is required', 401);
+        }
+        if ($dataUpdate->jadwal_id == null) {
+            throw new Exception('Jadwal Id is required', 401);
+        }
+        if ($dataUpdate->tanggal == null) {
+            throw new Exception('Tanggal is required', 401);
+        }
+        if ($dataUpdate->sampler == null) {
+            throw new Exception('Sampler is required', 401);
+        }
+        // if ($dataUpdate->driver == null) {
+        //     throw new Exception('Driver is required', 401);
+        // }
+        // if ($dataUpdate->pendampingan_k3 == null) {
+        //     throw new Exception('Pendampingan K3 is required', 401);
+        // }
+        // if ($dataUpdate->isokinetic == null) {
+        //     throw new Exception('Isokinetic is required', 401);
+        // }
+        // if ($dataUpdate->durasi_lama == null) {
+        //     throw new Exception('Durasi Lama is required', 401);
+        // }
+        if ($dataUpdate->tanggal_lama == null) {
+            throw new Exception('Tanggal Lama is required', 401);
+        }
+        // if ($dataUpdate->periode == null) {
+        //     throw new Exception('Periode is required', 401);
+        // }
 
         self::$instance->no_quotation = $dataUpdate->no_quotation;
 
