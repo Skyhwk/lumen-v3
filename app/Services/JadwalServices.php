@@ -1345,24 +1345,48 @@ class JadwalServices
     { // add jadwal baru
         $dataAdd = $this->addJadwal;
        
-        if (
-            $dataAdd->id_sampling == null ||
-            $dataAdd->no_quotation == null ||
-            $dataAdd->karyawan == null ||
-            $dataAdd->no_document == null ||
-            $dataAdd->tanggal == null ||
-            $dataAdd->sampler == null ||
-            $dataAdd->kategori == null ||
-            $dataAdd->warna == null ||
-            $dataAdd->durasi == null ||
-            $dataAdd->status == null ||
-            $dataAdd->nama_perusahaan == null ||
-            $dataAdd->alamat == null||
-            $dataAdd->isokinetic == null||
-            $dataAdd->pendampingan_k3 == null
-        ) {
-            throw new Exception("Id Sampling, No Quotation, Karyawan, No Document, Tanggal, Sampler, Kategori, Durasi, Status, Nama Perusahaan, Alamat is required when add jadwal", 401);
+        if ($dataAdd->id_sampling == null) {
+            throw new Exception("Id Sampling is required when add jadwal", 401);
         }
+        if ($dataAdd->no_quotation == null) {
+            throw new Exception("No Quotation is required when add jadwal", 401);
+        }
+        if ($dataAdd->karyawan == null) {
+            throw new Exception("Karyawan is required when add jadwal", 401);
+        }
+        if ($dataAdd->no_document == null) {
+            throw new Exception("No Document is required when add jadwal", 401);
+        }
+        if ($dataAdd->tanggal == null) {
+            throw new Exception("Tanggal is required when add jadwal", 401);
+        }
+        if ($dataAdd->sampler == null) {
+            throw new Exception("Sampler is required when add jadwal", 401);
+        }
+        if ($dataAdd->kategori == null) {
+            throw new Exception("Kategori is required when add jadwal", 401);
+        }
+        if ($dataAdd->warna == null) {
+            throw new Exception("Warna is required when add jadwal", 401);
+        }
+        if ($dataAdd->durasi == null) {
+            throw new Exception("Durasi is required when add jadwal", 401);
+        }
+        if ($dataAdd->status == null) {
+            throw new Exception("Status is required when add jadwal", 401);
+        }
+        if ($dataAdd->nama_perusahaan == null) {
+            throw new Exception("Nama Perusahaan is required when add jadwal", 401);
+        }
+        if ($dataAdd->alamat == null) {
+            throw new Exception("Alamat is required when add jadwal", 401);
+        }
+        // if ($dataAdd->isokinetic == null) {
+        //     throw new Exception("Isokinetic is required when add jadwal", 401);
+        // }
+        // if ($dataAdd->pendampingan_k3 == null) {
+        //     throw new Exception("Pendampingan K3 is required when add jadwal", 401);
+        // }
 
         DB::beginTransaction();
         try {
