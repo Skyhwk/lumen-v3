@@ -538,18 +538,18 @@ class SamplingPlanController extends Controller
                 'durasi_lama' => $request->durasi_lama,
                 'tanggal_lama' => $request->tanggal_lama,
                 'tipe_parsial' => $request->tipe_parsial,
-                'isokinetic' => $request->isokinetic,
-                'pendampingan_k3' => $request->pendampingan_k3,
+                'isokinetic' => (int)$request->isokinetic,
+                'pendampingan_k3' => (int)$request->pendampingan_k3,
                 'id_cabang' => $request->id_cabang[0],
             ];
 
-
+            
             $type = explode('/', $request->no_quotation)[1];
             if ($request->durasi_lama == $request->durasi) {
                 if ($type == 'QTC') {
                     $dataObject->periode = $request->periode;
                 }
-
+                
                 $jadwal = JadwalServices::on('updateJadwal', $dataObject)->updateJadwalSP();
             } else {
                 if ($type == 'QTC') {
