@@ -156,48 +156,6 @@ class JadwalServices
         }
     }
 
-    // public function countJadwalApproved()
-    // {
-    //     if ($this->no_quotation == null) {
-    //         throw new Exception("No Quotation is required", 400);
-    //     }
-
-    //     try {
-    //         $type = explode('/', $this->no_quotation)[1];
-    //         $result = SamplingPlan::with([
-    //             'jadwal' => function ($query) {
-    //                 $query->whereNull('parsial')
-    //                     ->where('is_active', 1)
-    //                     ->select('id_sampling')
-    //                     ->groupBy('id_sampling');
-    //             }
-    //         ])
-    //             ->select('id', 'periode_kontrak')
-    //             ->where('no_quotation', $this->no_quotation)
-    //             ->where('is_active', true)
-    //             ->where('status', 1)
-    //             ->where('is_approved', 1)
-    //             ->groupBy('id', 'periode_kontrak')
-    //             ->whereHas('jadwal', function ($query) {
-    //                 $query->whereNull('parsial')
-    //                     ->where('is_active', 1);
-    //             })
-    //             ->get();
-
-
-    //         if ($type == 'QTC') {
-    //             if ($result->isEmpty()) {
-    //                 $result = SamplingPlan::where('no_quotation', $this->no_quotation)
-    //                     ->where('is_active', true)
-    //                     ->get();
-    //             }
-    //         }
-    //         return count($result);
-    //     } catch (Exception $e) {
-    //         throw new Exception($e->getMessage(), 401);
-    //     }
-    // }
-
     public function countQuotation()
     {
         if ($this->no_quotation == null || $this->quotation_id == null) {
@@ -345,7 +303,6 @@ class JadwalServices
         
         $dataUpdate = $this->updateJadwal;
         
-        
         if (
             $dataUpdate->no_quotation == null ||
             $dataUpdate->nama_perusahaan == null ||
@@ -362,10 +319,10 @@ class JadwalServices
             $dataUpdate->jadwal_id == null ||
             $dataUpdate->tanggal == null ||
             $dataUpdate->sampler == null ||
-            $dataUpdate->driver == null ||
+            // $dataUpdate->driver == null ||
             $dataUpdate->pendampingan_k3 == null ||
-            $dataUpdate->isokinetic == null ||
-            $dataUpdate->durasi_lama == null ||
+            // $dataUpdate->isokinetic == null ||
+            // $dataUpdate->durasi_lama == null ||
             $dataUpdate->tanggal_lama == null
             // || $dataUpdate->periode == null    //cek di command line karena ada kasus dimana periode null kontrak maupun non kontrak
         ) {
