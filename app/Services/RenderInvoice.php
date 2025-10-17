@@ -908,8 +908,10 @@ class RenderInvoice
                             if (isset($values->keterangan_lainnya)) {
                                 $tambah = $tambah + count(json_decode($values->keterangan_lainnya));
                             }
-                            for ($i = 0; $i < count(array_chunk($cekArray, 15)); $i++) {
-                                foreach (array_chunk($cekArray, 15)[$i] as $keys => $dataSampling) {
+                            // dd($cekArray);
+                            $resetData = reset($cekArray);
+                            for ($i = 0; $i < count(array_chunk($resetData->data_sampling, 15)); $i++) {
+                                foreach (array_chunk($resetData->data_sampling, 15)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
                                         if ($i == count(array_chunk($cekArray, 15)) - 1) {
                                             $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1 + $tambah;

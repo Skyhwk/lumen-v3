@@ -647,8 +647,8 @@ class GenerateInvoiceController extends Controller
 
                     DB::table('qr_documents')->insert($dataQr);
 
-
-                    $token = GenerateToken::save('INVOICE', $invoice, $this->karyawan, 'invoice');
+                    $tokenService = new GenerateToken();
+                    $token = $tokenService->save('INVOICE', $invoice, $this->karyawan, 'invoice');
                     // dd('masuk');
 
                     Invoice::where('no_invoice', $request->no_invoice)->update([
