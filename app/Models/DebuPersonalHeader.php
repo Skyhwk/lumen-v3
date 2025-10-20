@@ -26,4 +26,9 @@ class DebuPersonalHeader extends Sector{
     {
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
     }
+
+    public function data_lapangan()
+    {
+        return $this->belongsTo('App\Models\DataLapanganDebuPersonal', 'no_sampel', 'no_sampel');
+    }
 }
