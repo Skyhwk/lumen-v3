@@ -195,6 +195,10 @@ class PermintaanDokumentasiSamplingController extends Controller
     public function rerender(Request $request)
     {
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
-        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, null));
+        $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
+            ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->first();
+
+        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
     }
 }
