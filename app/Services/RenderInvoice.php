@@ -897,9 +897,9 @@ class RenderInvoice
                                 $tambah = $tambah + 1;
                             }
 
-                            if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                                if (is_array(json_decode($values->keterangan_biaya))) {
-                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya));
+                            if ($values->biaya_lain) {
+                                if (is_array(json_decode($values->biaya_lain))) {
+                                    $tambah = $tambah + count(json_decode($values->biaya_lain));
                                 } else {
                                     $tambah = $tambah + 1;
                                 }
@@ -1099,7 +1099,7 @@ class RenderInvoice
                                         }
                                     }
 
-                                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                    if ($values->biaya_lain != null) {
                                         if (isset($values->keterangan_biaya_lain)) {
                                             $pdf->writeHTML('
                                                 <tr>
@@ -1110,13 +1110,13 @@ class RenderInvoice
                                                 </tr>
                                             ');
                                         } else {
-                                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                            $biayaLainArray = json_decode($values->biaya_lain, true);
                                             if (is_array($biayaLainArray)) {
                                                 foreach ($biayaLainArray as $biayaLain) {
                                                     $pdf->writeHTML('
                                                         <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">' . $biayaLain['deskripsi'] . '</td>
                                                         <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td>
                                                         <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
                                                     ');
                                                 }
