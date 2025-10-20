@@ -191,4 +191,10 @@ class PermintaanDokumentasiSamplingController extends Controller
 
         return response()->json(['message' => 'Anda tidak memiliki akses untuk reject permintaan'], 401);
     }
+
+    public function rerender(Request $request)
+    {
+        $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
+        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, null));
+    }
 }
