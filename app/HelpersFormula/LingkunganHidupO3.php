@@ -92,6 +92,9 @@ class LingkunganHidupO3
         // dd($avg_pershift);
 
         $satuan = 'ug/Nm3';
+        if($data->tipe_data == 'ulk'){
+            $satuan = 'mg/Nm3';
+        }
         if(!is_null($mdl) && $avg_hasil_C < $mdl){
             $avg_hasil_C = '<'. $mdl;
         }
