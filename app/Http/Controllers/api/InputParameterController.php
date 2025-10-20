@@ -1309,7 +1309,8 @@ class InputParameterController extends Controller
 							'message'=> $result->message,
 							'status' => $result->status,
 							'line' => $result->line ?? '',
-							'file' => $result->file ?? ''
+							'file' => $result->file ?? '',
+                            'trace' => $result->trace ?? ''
 						], $result->status);
 					}
 				}
@@ -2637,9 +2638,9 @@ class InputParameterController extends Controller
 			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
 			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
 				// dd($data_parameter);
-				if ($request->id_stp == 14) {
-					$parame = 'TSP';
-				}
+				// if ($request->id_stp == 14) {
+				// 	$parame = 'TSP';
+				// }
 				$lingHidup = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
 				$lingKerja = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
 				$lingVolatile = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
@@ -3013,7 +3014,7 @@ class InputParameterController extends Controller
 					// dd($data_shift, $request->ks, $request->kb);
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
-                if(isset($data_kalkulasi->data_pershift)) $data->data_pershift = json_encode($data_kalkulasi->data_pershift);
+                if(isset($data_kalkulasi['data_pershift'])) $data->data_pershift = json_encode($data_kalkulasi['data_pershift']);
 				$data->save();
 
 				// dd($nilQs, $datot, $rerataFlow, $durasiFin, $po->id, $po->tgl_terima, $tekananFin, $suhuFin, $request, $this->karyawan, $par->id, $result);
@@ -3066,7 +3067,8 @@ class InputParameterController extends Controller
 					'message' => 'Error : ' . $e->getMessage(),
 					'line' => $e->getLine(),
 					'file' => $e->getFile(),
-					'status' => 500
+					'status' => 500,
+                    'trace' => $e->getTrace()
 				];
 			}
 		}

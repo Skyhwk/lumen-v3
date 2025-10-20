@@ -40,12 +40,17 @@ class LingkunganHidupNH3
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         if($Vu != 0.0) {
-            $C = \str_replace(",", "", number_format(($ks / floatval($Vu)) * 1000, 4));
+            $C1 = \str_replace(",", "", number_format($ks / floatval($Vu), 4));
         }else {
-            $C = 0;
+            $C1 = 0;
         }
-        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
+        $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
+        $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17.031, 5));
+        $C3 = $C2 * 1000;
+        $C4 = $C3 * 10000;
+
+        $satuan = 'mg/Nm3';
+
         if (floatval($C) < 0.1419)
             $C = '<0.1419';
         if (floatval($C1) < 0.0005)
@@ -70,6 +75,8 @@ class LingkunganHidupNH3
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

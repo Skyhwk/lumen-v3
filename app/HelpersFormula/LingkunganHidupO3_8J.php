@@ -68,20 +68,33 @@ class LingkunganHidupO3_8J
             }
         }
 
-        $avg_pershift = array_map(function ($value) {
+        $C_average = array_map(function ($value) {
             return number_format(array_sum($value) / count($value), 4);
-        }, $data->parameter == 'O3 8J (LK-pm)' ? $C2_value : $C1_value);
+        }, $C_value);
 
-        $avg_hasil = number_format(array_sum($avg_pershift) / count($avg_pershift), 5);
+        $C = number_format(array_sum($C_average) / count($C_average), 5);
 
-        $satuan = 'mg/m3';
-        if ($data->parameter == 'O3 8J (LK-pm)') {
-            $satuan = 'ppm';
-        }
+        $C1_average = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C1_value);
 
-        if (!is_null($mdl) && $avg_hasil < $mdl) {
-            $avg_hasil = '<' . $mdl;
-        }
+        $C1 = number_format(array_sum($C1_average) / count($C1_average), 5);
+
+        $C2_average = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C2_value);
+
+        $C2 = number_format(array_sum($C2_average) / count($C2_average), 5);
+
+        $satuan = 'mg/Nm3';
+
+        if (floatval($C) < 0.1419)
+            $C = '<0.1419';
+        if (floatval($C1) < 0.00014)
+            $C1 = '<0.00014';
+        if (floatval($C2) < 0.00007)
+            $C2 = '<0.00007';
+
 
         // dd($avg_pershift);
         $processed = [
@@ -98,14 +111,27 @@ class LingkunganHidupO3_8J
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'hasil1' => $avg_hasil,
-            'hasil2' => $avg_pershift[0],
-            'hasil3' => $avg_pershift[1] ?? null,
-            'hasil4' => $avg_pershift[2] ?? null,
+            'C' => $C,
+            'C1' => $C1,
+            'C2' => $C2,
+            'C3' => null,
+            'C4' => null,
+            'C5' => null,
+            'C6' => null,
+            'C7' => null,
+            'C8' => null,
+            'C9' => null,
+            'C10' => null,
+            'C11' => null,
+            'C12' => null,
+            'C13' => null,
+            'C14' => null,
+            'C15' => null,
+            'C16' => null,
             'data_pershift' => [
-                'Shift 1' => $avg_pershift[0],
-                'Shift 2' => $avg_pershift[1] ?? null,
-                'Shift 3' => $avg_pershift[2] ?? null
+                'Shift 1' => $C_average[0],
+                'Shift 2' => $C_average[1] ?? null,
+                'Shift 3' => $C_average[2] ?? null
             ],
             'satuan' => $satuan,
             'vl' => $vl,

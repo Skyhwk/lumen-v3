@@ -24,7 +24,7 @@ class LemburController extends Controller
 {
     public function indexUnprocessed(Request $request)
     {
-        $data = FormHeader::on(env('ANDROID'))
+        $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
@@ -83,7 +83,7 @@ class LemburController extends Controller
     public function indexProcessed(Request $request)
     {
 
-        $data = FormHeader::on(env('ANDROID'))
+        $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
@@ -175,7 +175,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on(env('ANDROID'))->where('id', $request->id)->first();
+            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -184,13 +184,13 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on(env('ANDROID'))->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
             $formHeader->status = 'APPROVE HRD';
             $formHeader->save();
 
             foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on(env('ANDROID'))->where('id', $formDetailId)->first();
+                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->approved_hrd_by = $this->karyawan;
                 $formDetail->approved_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
                 $formDetail->save();
@@ -241,7 +241,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on(env('ANDROID'))->where('id', $request->id)->first();
+            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -250,13 +250,13 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on(env('ANDROID'))->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
             $formHeader->status = 'REJECT HRD';
             $formHeader->save();
 
             foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on(env('ANDROID'))->where('id', $formDetailId)->first();
+                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->rejected_hrd_by = $this->karyawan;
                 $formDetail->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
                 $formDetail->keterangan_reject = $request->keterangan;
@@ -305,7 +305,7 @@ class LemburController extends Controller
 
     public function indexUnprocessedFinance(Request $request)
     {
-        $data = FormHeader::on(env('ANDROID'))
+        $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
@@ -353,6 +353,7 @@ class LemburController extends Controller
             ->whereNull('fd.approved_finance_by')
             ->whereNull('fd.rejected_atasan_by')
             ->whereNull('fd.rejected_hrd_by')
+            ->whereNull('fd.rejected_finance_by')
             ->whereYear('fd.tanggal_mulai', $request->periode)
             ->get()
             ->transform(function ($item) {
@@ -426,7 +427,7 @@ class LemburController extends Controller
 
     public function indexProcessedFinance(Request $request)
     {
-        $data = FormHeader::on(env('ANDROID'))
+        $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
             ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
@@ -473,6 +474,7 @@ class LemburController extends Controller
             ->whereNotNull('fd.approved_finance_by')
             ->whereNull('fd.rejected_atasan_by')
             ->whereNull('fd.rejected_hrd_by')
+            ->whereNull('fd.rejected_finance_by')
             ->whereYear('fd.tanggal_mulai', $request->periode)
             ->get()
             ->transform(function ($item) {
@@ -549,7 +551,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on(env('ANDROID'))->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
+            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -558,13 +560,13 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on(env('ANDROID'))->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
             $formHeader->status = 'APPROVE FINANCE';
             $formHeader->save();
 
             foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on(env('ANDROID'))->where('id', $formDetailId)->first();
+                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->approved_finance_by = $this->karyawan;
                 $formDetail->approved_finance_at = Carbon::now()->format('Y-m-d H:i:s');
                 $formDetail->save();
@@ -615,7 +617,7 @@ class LemburController extends Controller
         DB::beginTransaction();
         try {
 
-            $formHeader = FormHeader::on(env('ANDROID'))->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
+            $formHeader = FormHeader::on('android_intilab')->where('id', $request->id)->where('status', 'APPROVE HRD')->first();
 
             if (!$formHeader) {
                 return response()->json([
@@ -624,13 +626,13 @@ class LemburController extends Controller
                 ], 404);
             }
 
-            $formDetailIds = FormDetail::on(env('ANDROID'))->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
+            $formDetailIds = FormDetail::on('android_intilab')->where('no_document', $formHeader->no_document)->pluck('id')->toArray();
 
             $formHeader->status = 'REJECT FINANCE';
             $formHeader->save();
 
             foreach ($formDetailIds as $formDetailId) {
-                $formDetail = FormDetail::on(env('ANDROID'))->where('id', $formDetailId)->first();
+                $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->rejected_finance_by = $this->karyawan;
                 $formDetail->rejected_finance_at = Carbon::now()->format('Y-m-d H:i:s');
                 $formDetail->keterangan_reject = $request->keterangan;

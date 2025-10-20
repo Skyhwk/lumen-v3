@@ -131,6 +131,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
+    public function dataLapanganErgonomi()
+    {
+        return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
+    }
     public function lhps_air()
     {
         return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
@@ -303,6 +307,10 @@ class OrderDetail extends Sector
     public function dataLapanganMicrobiologiUdara()
     {
         return $this->belongsTo(DataLapanganMicrobiologi::class, 'no_sampel', 'no_sampel');
+    }
+    public function detailMicrobiologi()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
     }
 
     public function dataLapanganCahaya()
@@ -493,13 +501,16 @@ class OrderDetail extends Sector
     }
 
     protected $anyDataLapanganRelations = [
+        'detailMicrobiologi',
+        'dataLapanganIklimPanas',
+        'dataLapanganPartikulatMeter',
+        'dataLapanganErgonomi',
+        'dataLapanganPsikologi',
         'dataLapanganAir',
 
         'allDetailLingkunganHidup',
         'allDetailLingkunganKerja',
         'dataLapanganDirectLain',
-        'dataLapanganIklimPanas',
-        'dataLapanganPartikulatMeter',
         'dataLapanganMedanLM',
         'dataLapanganKebisinganPersonal',
         'dataLapanganKebisingan',
@@ -507,11 +518,8 @@ class OrderDetail extends Sector
         'dataLapanganGetaran',
         'dataLapanganDebuPersonal',
         'dataLapanganIklimDingin',
-        'dataLapanganMicrobiologiUdara',
         'dataLapanganSwab',
         'dataLapanganCahaya',
-        'dataLapanganPsikologi',
-        'data_lapangan_ergonomi',
         'dataLapanganSinarUV',
 
         'dataLapanganEmisiCerobong',

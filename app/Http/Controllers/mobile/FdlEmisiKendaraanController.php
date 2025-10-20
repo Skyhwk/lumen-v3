@@ -319,13 +319,13 @@ class FdlEmisiKendaraanController extends Controller
                         $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
                         if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
                             $data_kendaraan = new MasterKendaraan;
-                            $data_kendaraan->merk_kendaraan     = ucfirst($request->merk);
+                            $data_kendaraan->merk_kendaraan     = ucfirst($request->merk_kendaraan);
                             $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
                             if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
                             if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
-                            $data_kendaraan->plat_nomor         = $request->no_plat;
-                            $data_kendaraan->bobot_kendaraan    = $request->bobot_kendaraan;
-                            $data_kendaraan->tahun_pembuatan    = $request->tahun;
+                            $data_kendaraan->plat_nomor         = $request->no_polisi;
+                            $data_kendaraan->bobot_kendaraan    = $request->bobot;
+                            $data_kendaraan->tahun_pembuatan    = $request->tahun_pembuatan;
                             $data_kendaraan->no_mesin            = $request->no_mesin;
                             $data_kendaraan->transmisi            = $request->transmisi;
                             $data_kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;

@@ -276,15 +276,21 @@ class DraftUdaraKebisinganController extends Controller
                 $fileName = null;
                 if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382])) {
 
-                    $master_regulasi = MasterRegulasi::find($id_regulasii);
-                    if ($master_regulasi->deskripsi == 'Kebisingan Lingkungan' || $master_regulasi->deskripsi == 'Kebisingan LH') {
+                    // $master_regulasi = MasterRegulasi::find($id_regulasii);
+                    $parameter = $details->first()->param;
+                    if (strpos($parameter, '24 Jam') !== false) {
+                        $is_sesaat = false;
+                    } else {
+                        $is_sesaat = true;
+                    }
+                    if ($is_sesaat) {
                         $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
                             ->setDataCustom($custom)
                             ->useLampiran(true)
                             ->whereView('DraftKebisinganLh')
                             ->render();
-                    } else if ($master_regulasi->deskripsi == 'Kebisingan LH - 24 Jam' || $master_regulasi->deskripsi == 'Kebisingan Lingkungan (24 Jam)') {
+                    } else {
                         $fileName = LhpTemplate::setDataDetail($details)
                             ->setDataHeader($header)
                             ->setDataCustom($custom)
@@ -312,7 +318,7 @@ class DraftUdaraKebisinganController extends Controller
                 }
                 $header->save();
             }
-
+            // dd('================');
             DB::commit();
             return response()->json([
                 'message' => 'Data draft Kebisingan udara no LHP ' . $request->no_lhp . ' berhasil disimpan',

@@ -120,6 +120,26 @@
                         $fotos[] = ['path' => public_path($dataLapangan->webp_path_lainnya), 'label' => 'Foto Lainnya'];
                     }
 
+                    if (optional($dataLapangan)->webp_path_kiri && file_exists(public_path($dataLapangan->webp_path_kiri))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_kiri), 'label' => 'Foto Kiri'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_kanan && file_exists(public_path($dataLapangan->webp_path_kanan))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_kanan), 'label' => 'Foto Kanan'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_depan && file_exists(public_path($dataLapangan->webp_path_depan))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_depan), 'label' => 'Foto Depan'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_belakang && file_exists(public_path($dataLapangan->webp_path_belakang))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_belakang), 'label' => 'Foto Belakang'];
+                    }
+
+                    if (optional($dataLapangan)->webp_path_lain && file_exists(public_path($dataLapangan->webp_path_lain))) {
+                        $fotos[] = ['path' => public_path($dataLapangan->webp_path_lain), 'label' => 'Foto Lain'];
+                    }
+
                     $colWidth = count($fotos) > 0 ? 100 / count($fotos) : 100;
                 @endphp
 
@@ -130,12 +150,12 @@
                             <tr>
                                 @forelse ($fotos as $foto)
                                     <td width="{{ $colWidth }}%" align="center">
-                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="width: auto; height: 300px;">
+                                        <img src="{{ $foto['path'] }}" alt="{{ $foto['label'] }}" style="max-width: 100%; max-height: 200px; width: auto; height: auto; display: block; margin: 0 auto;">
                                         <div>{{ $foto['label'] }}</div>
                                     </td>
                                 @empty
                                     <td width="100%" align="center">
-                                        <div style="width: 100%; height: 300px; border: 1px solid #ccc; display: table;">
+                                        <div style="width: 100%; height: 500px; border: 1px solid #ccc; display: table;">
                                             <span style="display: table-cell; vertical-align: middle;">Dokumentasi Tidak Tersedia</span>
                                         </div>
                                     </td>

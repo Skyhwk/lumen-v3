@@ -141,9 +141,17 @@ class ReportOrderController extends Controller
                     if ($qtcDetail) {
                         foreach ($qtcDetail as $qtD) {
                             $data_pendukung_sampling = json_decode($qtD->data_pendukung_sampling);
+
                             foreach ($data_pendukung_sampling as &$dps) {
-                                dump($dps);
+                                if (empty($dps->data_sampling) || !is_array($dps->data_sampling)) {
+                                    continue; 
+                                }
+
                                 foreach ($dps->data_sampling as &$ds) {
+                                    if (empty($ds->penamaan_titik) || !is_array($ds->penamaan_titik)) {
+                                        continue;
+                                    }
+
                                     foreach ($ds->penamaan_titik as &$pt) {
                                         $nomor = key((array) $pt);
                                         if ($nomor == explode('/', $request->no_sampel)[1]) {
@@ -161,9 +169,32 @@ class ReportOrderController extends Controller
                                     }
                                 }
                             }
-
                             $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
                             $qtD->save();
+
+                            // foreach ($data_pendukung_sampling as &$dps) {
+                            //     dump($dps);
+                            //     foreach ($dps->data_sampling as &$ds) {
+                            //         foreach ($ds->penamaan_titik as &$pt) {
+                            //             $nomor = key((array) $pt);
+                            //             if ($nomor == explode('/', $request->no_sampel)[1]) {
+                            //                 $pt->$nomor = $request->keterangan_1;
+                            //             }
+                            //             $props = get_object_vars($pt);
+                            //             $nomor = key($props);
+                            //             $titik = $props[$nomor];
+                            //             $reg = !empty($ds->regulasi) ? $ds->regulasi : [];
+                            //             $fullGroupKey = $ds->kategori_1 . ';' . $ds->kategori_2 . ';' . json_encode($reg) . ';' . json_encode($ds->parameter);
+
+                            //             $groupedNamedPoints[$fullGroupKey][$dps->periode_kontrak][] = [
+                            //                 $nomor => $titik
+                            //             ];
+                            //         }
+                            //     }
+                            // }
+
+                            // $qtD->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                            // $qtD->save();
                         }
                     }
 

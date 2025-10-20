@@ -156,48 +156,6 @@ class JadwalServices
         }
     }
 
-    // public function countJadwalApproved()
-    // {
-    //     if ($this->no_quotation == null) {
-    //         throw new Exception("No Quotation is required", 400);
-    //     }
-
-    //     try {
-    //         $type = explode('/', $this->no_quotation)[1];
-    //         $result = SamplingPlan::with([
-    //             'jadwal' => function ($query) {
-    //                 $query->whereNull('parsial')
-    //                     ->where('is_active', 1)
-    //                     ->select('id_sampling')
-    //                     ->groupBy('id_sampling');
-    //             }
-    //         ])
-    //             ->select('id', 'periode_kontrak')
-    //             ->where('no_quotation', $this->no_quotation)
-    //             ->where('is_active', true)
-    //             ->where('status', 1)
-    //             ->where('is_approved', 1)
-    //             ->groupBy('id', 'periode_kontrak')
-    //             ->whereHas('jadwal', function ($query) {
-    //                 $query->whereNull('parsial')
-    //                     ->where('is_active', 1);
-    //             })
-    //             ->get();
-
-
-    //         if ($type == 'QTC') {
-    //             if ($result->isEmpty()) {
-    //                 $result = SamplingPlan::where('no_quotation', $this->no_quotation)
-    //                     ->where('is_active', true)
-    //                     ->get();
-    //             }
-    //         }
-    //         return count($result);
-    //     } catch (Exception $e) {
-    //         throw new Exception($e->getMessage(), 401);
-    //     }
-    // }
-
     public function countQuotation()
     {
         if ($this->no_quotation == null || $this->quotation_id == null) {
@@ -345,32 +303,69 @@ class JadwalServices
         
         $dataUpdate = $this->updateJadwal;
         
-        
-        if (
-            $dataUpdate->no_quotation == null ||
-            $dataUpdate->nama_perusahaan == null ||
-            $dataUpdate->jam_mulai == null ||
-            $dataUpdate->jam_selesai == null ||
-            $dataUpdate->kategori == null ||
-            $dataUpdate->warna == null ||
-            $dataUpdate->durasi == null ||
-            $dataUpdate->status == null ||
-            $dataUpdate->batch_id == null ||
-            $dataUpdate->kendaraan == null ||
-            $dataUpdate->sampling == null ||
-            $dataUpdate->karyawan == null ||
-            $dataUpdate->jadwal_id == null ||
-            $dataUpdate->tanggal == null ||
-            $dataUpdate->sampler == null ||
-            $dataUpdate->driver == null ||
-            $dataUpdate->pendampingan_k3 == null ||
-            $dataUpdate->isokinetic == null ||
-            $dataUpdate->durasi_lama == null ||
-            $dataUpdate->tanggal_lama == null
-            // || $dataUpdate->periode == null    //cek di command line karena ada kasus dimana periode null kontrak maupun non kontrak
-        ) {
-            throw new Exception('No Quotation, Nama Perusahaan, Jam Mulai, Jam Selesai, Kategori, Warna, Durasi, Status, Batch Id, Kendaraan, Sampling, Karyawan, Jadwal Id, Tanggal, Sampler, Durasi Lama, Tanggal Lama is required', 401);
+        if ($dataUpdate->no_quotation == null) {
+            throw new Exception('No Quotation is required', 401);
         }
+        if ($dataUpdate->nama_perusahaan == null) {
+            throw new Exception('Nama Perusahaan is required', 401);
+        }
+        if ($dataUpdate->jam_mulai == null) {
+            throw new Exception('Jam Mulai is required', 401);
+        }
+        if ($dataUpdate->jam_selesai == null) {
+            throw new Exception('Jam Selesai is required', 401);
+        }
+        if ($dataUpdate->kategori == null) {
+            throw new Exception('Kategori is required', 401);
+        }
+        if ($dataUpdate->warna == null) {
+            throw new Exception('Warna is required', 401);
+        }
+        if ($dataUpdate->durasi == null) {
+            throw new Exception('Durasi is required', 401);
+        }
+        if ($dataUpdate->status == null) {
+            throw new Exception('Status is required', 401);
+        }
+        if ($dataUpdate->batch_id == null) {
+            throw new Exception('Batch Id is required', 401);
+        }
+        if ($dataUpdate->kendaraan == null) {
+            throw new Exception('Kendaraan is required', 401);
+        }
+        if ($dataUpdate->sampling == null) {
+            throw new Exception('Sampling is required', 401);
+        }
+        if ($dataUpdate->karyawan == null) {
+            throw new Exception('Karyawan is required', 401);
+        }
+        if ($dataUpdate->jadwal_id == null) {
+            throw new Exception('Jadwal Id is required', 401);
+        }
+        if ($dataUpdate->tanggal == null) {
+            throw new Exception('Tanggal is required', 401);
+        }
+        if ($dataUpdate->sampler == null) {
+            throw new Exception('Sampler is required', 401);
+        }
+        // if ($dataUpdate->driver == null) {
+        //     throw new Exception('Driver is required', 401);
+        // }
+        // if ($dataUpdate->pendampingan_k3 == null) {
+        //     throw new Exception('Pendampingan K3 is required', 401);
+        // }
+        // if ($dataUpdate->isokinetic == null) {
+        //     throw new Exception('Isokinetic is required', 401);
+        // }
+        // if ($dataUpdate->durasi_lama == null) {
+        //     throw new Exception('Durasi Lama is required', 401);
+        // }
+        if ($dataUpdate->tanggal_lama == null) {
+            throw new Exception('Tanggal Lama is required', 401);
+        }
+        // if ($dataUpdate->periode == null) {
+        //     throw new Exception('Periode is required', 401);
+        // }
 
         self::$instance->no_quotation = $dataUpdate->no_quotation;
 
@@ -1350,24 +1345,48 @@ class JadwalServices
     { // add jadwal baru
         $dataAdd = $this->addJadwal;
        
-        if (
-            $dataAdd->id_sampling == null ||
-            $dataAdd->no_quotation == null ||
-            $dataAdd->karyawan == null ||
-            $dataAdd->no_document == null ||
-            $dataAdd->tanggal == null ||
-            $dataAdd->sampler == null ||
-            $dataAdd->kategori == null ||
-            $dataAdd->warna == null ||
-            $dataAdd->durasi == null ||
-            $dataAdd->status == null ||
-            $dataAdd->nama_perusahaan == null ||
-            $dataAdd->alamat == null||
-            $dataAdd->isokinetic == null||
-            $dataAdd->pendampingan_k3 == null
-        ) {
-            throw new Exception("Id Sampling, No Quotation, Karyawan, No Document, Tanggal, Sampler, Kategori, Durasi, Status, Nama Perusahaan, Alamat is required when add jadwal", 401);
+        if ($dataAdd->id_sampling == null) {
+            throw new Exception("Id Sampling is required when add jadwal", 401);
         }
+        if ($dataAdd->no_quotation == null) {
+            throw new Exception("No Quotation is required when add jadwal", 401);
+        }
+        if ($dataAdd->karyawan == null) {
+            throw new Exception("Karyawan is required when add jadwal", 401);
+        }
+        if ($dataAdd->no_document == null) {
+            throw new Exception("No Document is required when add jadwal", 401);
+        }
+        if ($dataAdd->tanggal == null) {
+            throw new Exception("Tanggal is required when add jadwal", 401);
+        }
+        if ($dataAdd->sampler == null) {
+            throw new Exception("Sampler is required when add jadwal", 401);
+        }
+        if ($dataAdd->kategori == null) {
+            throw new Exception("Kategori is required when add jadwal", 401);
+        }
+        if ($dataAdd->warna == null) {
+            throw new Exception("Warna is required when add jadwal", 401);
+        }
+        if ($dataAdd->durasi == null) {
+            throw new Exception("Durasi is required when add jadwal", 401);
+        }
+        if ($dataAdd->status == null) {
+            throw new Exception("Status is required when add jadwal", 401);
+        }
+        if ($dataAdd->nama_perusahaan == null) {
+            throw new Exception("Nama Perusahaan is required when add jadwal", 401);
+        }
+        if ($dataAdd->alamat == null) {
+            throw new Exception("Alamat is required when add jadwal", 401);
+        }
+        // if ($dataAdd->isokinetic == null) {
+        //     throw new Exception("Isokinetic is required when add jadwal", 401);
+        // }
+        // if ($dataAdd->pendampingan_k3 == null) {
+        //     throw new Exception("Pendampingan K3 is required when add jadwal", 401);
+        // }
 
         DB::beginTransaction();
         try {

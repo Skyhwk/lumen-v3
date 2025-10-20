@@ -76,19 +76,27 @@ class LingkunganHidupO3
             return number_format(array_sum($value) / count($value), 4);
         }, $C2_value);
 
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.00014)
-            $C1 = '<0.00014';
-        if (floatval($C2) < 0.00007)
-            $C2 = '<0.00007';
+        $avg_hasil_C = array_sum($C) / count($C);
+
+        $avg_hasil_C1 = array_sum($C1) / count($C1);
+
+        $avg_hasil_C2 = array_sum($C2) / count($C2);
+
+        if (floatval($avg_hasil_C) < 0.1419)
+            $avg_hasil_C = '<0.1419';
+        if (floatval($avg_hasil_C1) < 0.00014)
+            $avg_hasil_C1 = '<0.00014';
+        if (floatval($avg_hasil_C2) < 0.00007)
+            $avg_hasil_C2 = '<0.00007';
 
         // dd($avg_pershift);
-        $avg_hasil = array_sum($C) / count($C);
 
         $satuan = 'ug/Nm3';
-        if(!is_null($mdl) && $avg_hasil < $mdl){
-            $avg_hasil = '<'. $mdl;
+        if($data->tipe_data == 'ulk'){
+            $satuan = 'mg/Nm3';
+        }
+        if(!is_null($mdl) && $avg_hasil_C < $mdl){
+            $avg_hasil_C = '<'. $mdl;
         }
         // dd($avg_hasil);
 
@@ -106,9 +114,9 @@ class LingkunganHidupO3
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'C' => isset($avg_pershift_C) ? $avg_pershift_C : null,
-            'C1' => isset($C1) ? $C1 : null,
-            'C2' => isset($C2) ? $C2 : null,
+            'C' => isset($avg_hasil_C) ? $avg_hasil_C : null,
+            'C1' => isset($avg_hasil_C1) ? $avg_hasil_C1 : null,
+            'C2' => isset($avg_hasil_C2) ? $avg_hasil_C2 : null,
             'C3' => isset($C3) ? $C3 : null,
             'C4' => isset($C4) ? $C4 : null,
             'C5' => isset($C5) ? $C5 : null,
@@ -118,7 +126,6 @@ class LingkunganHidupO3
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
-            'data_hasil' => $C_value,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
