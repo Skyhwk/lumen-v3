@@ -175,6 +175,7 @@ class FdlLingkunganKerjaController extends Controller
                         'Tekanan Udara' => 'tekanan_udara',
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
+                        'Kelembaban 8J' => 'kelembapan',
                         'Suhu 8J (LK)' => 'suhu',
                     ];
 
