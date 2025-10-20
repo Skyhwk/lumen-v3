@@ -38,6 +38,12 @@ class LingkunganHidupNH3_Shift
         $st = null;
         $satuan = null;
 
+        $C_value = [];
+        $C1_value = [];
+        $C2_value = [];
+        $C3_value = [];
+        $C4_value = [];
+
         foreach($data->ks as $key_ks => $item_ks) {
             foreach ($data->average_flow as $key => $value) {
                 // $Vu = \str_replace(",", "",number_format($value * $data->durasi[$key] * (floatval($data->tekanan) / (floatval($data->suhu) + 273)) * (298 / 760), 4));
@@ -53,16 +59,20 @@ class LingkunganHidupNH3_Shift
 
                 $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
                 if($Vu != 0.0) {
-                    $C = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
+                    $C1 = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
                 }else {
-                    $C = 0;
+                    $C1 = 0;
                 }
-                $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+                $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
                 $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
+                $C3 = $C2 * 1000;
+                $C4 = $C3 * 10000;
 
                 $C_value[$key_ks][$key] = $C;
                 $C1_value[$key_ks][$key] = $C1;
                 $C2_value[$key_ks][$key] = $C2;
+                $C3_value[$key_ks][$key] = $C3;
+                $C4_value[$key_ks][$key] = $C4;
             }
         }
 
@@ -78,6 +88,14 @@ class LingkunganHidupNH3_Shift
             return number_format(array_sum($value) / count($value), 4);
         }, $C2_value);
 
+        $C3 = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C3_value);
+
+        $C4 = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C4_value);
+
 
         if (floatval($C) < 0.1419)
             $C = '<0.1419';
@@ -85,6 +103,21 @@ class LingkunganHidupNH3_Shift
             $C1 = '<0.0005';
         if (floatval($C2) < 0.0007)
             $C2 = '<0.0007';
+
+        $data_pershift = [
+            'Shift 1' => $C_value[0],
+            'Shift 2' => $C_value[1] ?? null,
+            'Shift 3' => $C_value[2] ?? null,
+        ];
+
+        if($data->parameter === 'NH3 (24 Jam)'){
+            $data_pershift = [
+                'Shift 1' => $C_value[0],
+                'Shift 2' => $C_value[1] ?? null,
+                'Shift 3' => $C_value[2] ?? null,
+                'Shift 4' => $C_value[3] ?? null,
+            ];
+        }
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -103,11 +136,9 @@ class LingkunganHidupNH3_Shift
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
-            'data_pershift' => [
-                'Shift 1' => $C_value[0],
-                'Shift 2' => $C_value[1] ?? null,
-                'Shift 3' => $C_value[2] ?? null,
-            ],
+            'C3' => $C3,
+            'C4' => $C4,
+            'data_pershift' => $data_pershift,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
