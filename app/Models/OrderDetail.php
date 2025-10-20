@@ -308,6 +308,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganMicrobiologi::class, 'no_sampel', 'no_sampel');
     }
+    public function detailMicrobiologi()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
+    }
 
     public function dataLapanganCahaya()
     {
@@ -497,6 +501,8 @@ class OrderDetail extends Sector
     }
 
     protected $anyDataLapanganRelations = [
+        'detailMicrobiologi',
+        'dataLapanganIklimPanas',
         'dataLapanganPartikulatMeter',
         'dataLapanganErgonomi',
         'dataLapanganPsikologi',
@@ -505,7 +511,6 @@ class OrderDetail extends Sector
         'allDetailLingkunganHidup',
         'allDetailLingkunganKerja',
         'dataLapanganDirectLain',
-        'dataLapanganIklimPanas',
         'dataLapanganMedanLM',
         'dataLapanganKebisinganPersonal',
         'dataLapanganKebisingan',
@@ -513,7 +518,6 @@ class OrderDetail extends Sector
         'dataLapanganGetaran',
         'dataLapanganDebuPersonal',
         'dataLapanganIklimDingin',
-        'dataLapanganMicrobiologiUdara',
         'dataLapanganSwab',
         'dataLapanganCahaya',
         'dataLapanganSinarUV',
