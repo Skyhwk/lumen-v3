@@ -2188,6 +2188,13 @@ class BasOnlineController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "Xylene secara personil sampling (SC)",
+                "requiredCount" => 2,
+                "category" => "4-Udara",
+                "model" => DataLapanganDebuPersonal::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "C O",
                 "requiredCount" => 1,
                 "category" => "4-Udara",
