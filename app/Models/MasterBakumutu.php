@@ -36,4 +36,7 @@ class MasterBakumutu extends Sector
     public function subkontrak() {
         return $this->belongsTo('App\Models\Subkontrak', 'parameter', 'parameter');
     }
+    public function activeHargaParameter() {
+        return $this->hasOne(HargaParameter::class, 'id_parameter', 'id_parameter')->where('is_active', true);
+    }
 }
