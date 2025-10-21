@@ -101,7 +101,6 @@ class InputParameterController extends Controller
 			$ftc = [];
 
             $quota_count = collect();
-
             $repo_quota = json_decode(
                 Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
                 true
@@ -118,7 +117,29 @@ class InputParameterController extends Controller
                 }
             }
 
+            $t_coli_rest = [];
+            $category_prioritized = ['5-Air Laut','54-Air Sungai','72-Air Tanah'];
+
+            // Konversi $join ke array untuk memudahkan pencarian
+            $join_array = $join->toArray(); // Jika $join adalah Collection
+
+            // Kumpulkan sampel berdasarkan kategori prioritas terlebih dahulu
+            $priority_samples = [];
+            $backup_samples = [];
+
             foreach($join as $key => $val) {
+                // Prioritaskan sampel dengan kategori 3 yang termasuk dalam category_prioritized
+                if (in_array($val->kategori_3, $category_prioritized)) {
+                    $priority_samples[$key] = $val;
+                } else {
+                    $backup_samples[$key] = $val;
+                }
+            }
+
+            // Gabungkan: prioritas dulu, kemudian backup
+            $sorted_join = $priority_samples + $backup_samples;
+
+            foreach($sorted_join as $key => $val) {
                 $param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
                     return explode(';', $item)[1];
                 }, json_decode($val->parameter, true)) : [];
@@ -130,7 +151,16 @@ class InputParameterController extends Controller
                     $quota_exceeded = false;
                     $already_counted = false;
                     $index_counted = null;
-                    if ($stp->name !== 'SUBKONTRAK') {
+
+                    $tglBerlaku = isset($quota[$p]) ? Carbon::parse($quota[$p]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    // if(isset($quota[$p])) {
+                    //     dump($tglBerlaku, $tglRequest, $tglRequest >= $tglBerlaku, $p);
+                    // }
+
+                    // --- PERUBAHAN PENTING: Hanya proses quota jika parameter ada dalam $quota dan tanggal request lebih besar atau sama dengan tanggal berlaku
+                    if ($stp->name !== 'SUBKONTRAK' && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -139,72 +169,125 @@ class InputParameterController extends Controller
                             $quota_count[$request->id_stp]->put($p, collect());
                         }
 
-                        if(isset($quota[$p])){
-                            // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                            $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                            $already_counted = true;
+                        }
+
+                        // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                        if ($quota_count[$request->id_stp][$p]->count() >= $quota[$p]->kuota) {
+                            $quota_exceeded = true;
+                        }
+
+                        // --- 3️⃣ Handle Total Coliform khusus untuk kategori non-prioritas
+                        if(in_array($p, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && !in_array($val->kategori_3, $category_prioritized)){
+                            $t_coli_rest[$p][] = $val->no_sampel;
                             if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
-                                $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
-                                $already_counted = true;
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]->reject(fn($item) => $item === $val->no_sampel)->values();
                             }
+                            continue;
+                        }
 
-                            // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
-                            if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
-                                $quota_exceeded = true;
+                        // --- 4️⃣ Jika quota penuh, potong kelebihan dari belakang
+                        if ($quota_exceeded || $already_counted) {
+                            // --- Jika sudah counted, ambil dari index yang sama
+                            if($already_counted){
+                                $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
                             }
-
-                            // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
-                            if ($quota_exceeded || $already_counted) {
-                                // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
-                                if($already_counted){
-                                    $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
-                                }
-                                $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
-                                if ($diff_count > 0) {
-                                    $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
-                                        ->slice(0, $quota[$p])
-                                        ->values();
-                                }
-                                continue;
+                            $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p]->kuota;
+                            if ($diff_count > 0) {
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                    ->slice(0, $quota[$p]->kuota)
+                                    ->values();
                             }
+                            continue;
+                        }
 
-                            // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
-                            if (isset($quota[$p])) {
-                                $currentCount = $quota_count[$request->id_stp][$p]->count();
-                                $maxQuota = $quota[$p];
+                        // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                        $currentCount = $quota_count[$request->id_stp][$p]->count();
+                        $maxQuota = $quota[$p]->kuota;
 
-                                // Hanya tambahkan jika belum mencapai batas quota
-                                if ($currentCount < $maxQuota) {
-                                    $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                        // Hanya tambahkan jika belum mencapai batas quota
+                        if ($currentCount < $maxQuota) {
+                            $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                            $row[$p] = $val->no_sampel;
+                        } else {
+                            // Jika quota penuh, simpan sebagai cadangan untuk parameter ini
+                            $t_coli_rest[$p][] = $val->no_sampel;
+                        }
+
+                    } else {
+                        // --- PARAMETER TANPA QUOTA: Langsung tampilkan tanpa pembatasan
+                        $row[$p] = $val->no_sampel;
+
+                        // Untuk SUBKONTRAK juga langsung tampilkan
+                        if ($stp->name === 'SUBKONTRAK') {
+                            $row[$p] = $val->no_sampel;
+                        }
+                    }
+                }
+
+                if($stp->sample->nama_kategori == 'Air') {
+                    $ftc[] = (object)[
+                        'no_sample' => $val->no_sampel,
+                        'tanggal' => $val->TrackingSatu == null ? '-' : $val->TrackingSatu->ftc_verifier
+                    ];
+                }
+
+                ksort($row);
+                $data[$key] = $row;
+                $inter[$key] = array_fill_keys($diff, '-');
+            }
+
+            // dd($data);
+
+             // Handle cadangan jika quota belum terpenuhi (hanya untuk parameter dengan quota)
+            // dd($quota_count->has($request->id_stp));
+            if ($quota_count->has($request->id_stp)) {
+                foreach ($quota_count[$request->id_stp] as $parameter => $samples) {
+                    // Hanya proses parameter yang ada dalam $quota
+                    $tglBerlaku = isset($quota[$parameter]) ? Carbon::parse($quota[$parameter]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    if (isset($quota[$parameter]->kuota) && $samples->count() < $quota[$parameter]->kuota && $tglRequest >= $tglBerlaku) {
+                        $remaining_quota = $quota[$parameter]->kuota - $samples->count();
+
+                        // Ambil dari cadangan untuk parameter ini
+                        if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota - 1);
+
+                            foreach ($backup_to_add as $backup_sample) {
+                                if ($samples->count() < $quota[$parameter]->kuota) {
+                                    $quota_count[$request->id_stp][$parameter]->push($backup_sample);
+
+                                    // Update data untuk menambahkan sampel cadangan
+                                    foreach ($data as $key => $row) {
+                                        $join_no_samples = array_column($join_array, 'no_sampel');
+                                        if (isset($row[$parameter]) && $row[$parameter] === '-' && in_array($backup_sample, $join_no_samples)) {
+                                            $data[$key][$parameter] = $backup_sample;
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-
-                    // --- 6️⃣ Simpan nomor sampel ke row
-                    if(!$quota_exceeded && !$already_counted) $quota_count[$request->id_stp][$p]->push($val->no_sampel);
-                    $row[$p] = $val->no_sampel;
                 }
+            }
 
-				// dd($val);
-				if($stp->sample->nama_kategori == 'Air') {
-					// dd($val->TrackingSatu->ftc_verifier);
-					$ftc[$key] = (object)[
-						'no_sample' => $val->no_sampel,
-						'tanggal' => $val->TrackingSatu == null ? '-' : $val->TrackingSatu->ftc_verifier
-					];
-				}
-
-				ksort($row);
-				$data[$key] = $row;
-				$inter[$key] = array_fill_keys($diff, '-');
-			}
-
-			$tes = [];
-			$tes0 = [];
+            $tes = [];
+            $tes0 = [];
+            $key_param_rest = [];
 
             foreach($select as $key => $param) {
                 $samples = array_values(array_diff(array_column($data, $param), ['-']));
                 sort($samples);
                 $tes[$key] = $samples;
+
+                if(isset($quota[$param]) && in_array($param, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && count($samples) > 0){
+                    $key_param_rest[$param] =  $key;
+                }
 
                 $inter_samples = array_values(array_diff(array_column($inter, $param), ['-']));
                 sort($inter_samples);
@@ -2104,8 +2187,15 @@ class InputParameterController extends Controller
 
             // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
             if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                    $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                    $parameter_t_coli = 'Total Coliform';
+                    // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                    if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                        $parameter_t_coli = 'Total Coliform (MPN)';
+                    }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                        $parameter_t_coli = 'Total Coliform (NA)';
+                    }
+                    $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                         ->where('required_parameter', $total_coliform)
                         ->where('no_sampel', $request->no_sample)
                         ->where('class_calculate', $method_t_coli)
@@ -2269,8 +2359,15 @@ class InputParameterController extends Controller
 
                 // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
                 if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                    if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                        $parameter_t_coli = 'Total Coliform';
+                        // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                        if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                            $parameter_t_coli = 'Total Coliform (MPN)';
+                        }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                            $parameter_t_coli = 'Total Coliform (NA)';
+                        }
+                        $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
                             ->where('class_calculate', $method_t_coli)
@@ -2452,8 +2549,15 @@ class InputParameterController extends Controller
                 }
 
                 if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                    if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                        $parameter_t_coli = 'Total Coliform';
+                        // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                        if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                            $parameter_t_coli = 'Total Coliform (MPN)';
+                        }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                            $parameter_t_coli = 'Total Coliform (NA)';
+                        }
+                        $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
                             ->where('class_calculate', $method_t_coli)
