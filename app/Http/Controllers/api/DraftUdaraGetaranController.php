@@ -443,20 +443,20 @@ class DraftUdaraGetaranController extends Controller
                 ])->values()->toArray();
             }
 
-            if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
+            if($dataHeader->sub_kategori == "Getaran (Lengan & Tangan)" || $dataHeader->sub_kategori == "Getaran (Seluruh Tubuh)"){
                 $fileName = LhpTemplate::setDataDetail($detail)
-                            ->setDataHeader($dataHeader)
-                            ->useLampiran(true)
-                            ->setDataCustom($groupedByPage)
-                            ->whereView('DraftGetaranPersonal')
-                            ->render();
+                    ->setDataHeader($dataHeader)
+                    ->useLampiran(true)
+                    ->setDataCustom($groupedByPage)
+                    ->whereView('DraftGetaranPersonal')
+                    ->render();
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
-                            ->setDataHeader($dataHeader)
-                            ->useLampiran(true)
-                            ->setDataCustom($groupedByPage)
-                            ->whereView('DraftGetaran')
-                            ->render();
+                    ->setDataHeader($dataHeader)
+                    ->useLampiran(true)
+                    ->setDataCustom($groupedByPage)
+                    ->whereView('DraftGetaran')
+                    ->render();
             }
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
