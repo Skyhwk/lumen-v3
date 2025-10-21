@@ -723,6 +723,10 @@ class DokumenFdlController extends Controller
                     // Generate PDF baru
                     $newFilename = $this->cetakPDF($orderDetails, $signatureData, $orderDetails);
 
+                    if(! $newFilename) {
+                        throw new \Exception('Gagal membuat dokumen PDF Coding Sample');
+                    }
+
                     // Update CS document filename di JSON
                     foreach ($csDocuments as $idx => $doc) {
                         if (isset($doc['no_sampel']) && $doc['no_sampel'] == $request->no_sampel) {
@@ -739,7 +743,6 @@ class DokumenFdlController extends Controller
 
             } catch (\Exception $e) {
                 DB::rollBack();
-                dd($e);
                 return response()->json([
                     'message' => 'Gagal menyimpan data : ' . $e->getMessage(),
                     'line'    => $e->getLine()
@@ -925,7 +928,7 @@ class DokumenFdlController extends Controller
             $pdf->WriteHTML('</body></html>');
             
 
-            $pdf->Output(public_path() . '/dokumen/' . '/cs/' . $filename, 'F');
+            $pdf->Output(public_path() . '/dokumen/' . '/cs/' . $filename);
 
             return $filename;
         } catch (\Exception $ex) {
