@@ -320,15 +320,15 @@ class WsFinalAirController extends Controller
 
 
 			$hasil = $this->hitungKoreksi($request, $type_koreksi, $id, $no_sample, $faktor_koreksi, $parameter, $hasilPengujian);
-
+			
 			$history = new HistoryWsValueAir();
 			$history->id_ws_value_air = $id;
 			$history->no_sampel = $no_sample;
 			$history->parameter = $parameter;
-			$history->hasil = $hasil;
+			$history->hasil = $hasilPengujian;
 			$history->created_by = $this->karyawan;
 			$history->created_at = Carbon::now()->format('Y-m-d H:i:s');
-			$history->save();
+			// $history->save();
 
 			if (is_numeric($hasil)) {
 				$hasil = number_format((float) $hasil, 4, '.', '');
@@ -358,7 +358,7 @@ class WsFinalAirController extends Controller
 	public function rumusAir($request, $faktor_koreksi, $parameter, $hasilPengujian, $air)
 	{
 		try {
-			// dd($faktor_koreksi);
+			$hasil = 0;
 			switch ($parameter) {
 				case 'BOD':
 					if (str_contains($hasilPengujian, '<')) {
