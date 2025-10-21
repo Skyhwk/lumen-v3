@@ -14,8 +14,12 @@ class SalesInController extends Controller
     public function index(Request $request)
     {
         $data = SalesIn::where('is_active', true)->whereYear('tanggal_masuk', $request->year)->orderBy('id', 'DESC');
-
-        return DataTables::of($data)->make(true);
+        
+        return DataTables::of($data)
+        ->filterColumn('tanggal_masuk', function ($query, $keyword) {
+            $query->where('tanggal_masuk', 'like', '%' . $keyword . '%');
+        })
+        ->make(true);
     }
 
     public function create(Request $request)
