@@ -328,7 +328,7 @@ class WsFinalAirController extends Controller
 			$history->hasil = $hasilPengujian;
 			$history->created_by = $this->karyawan;
 			$history->created_at = Carbon::now()->format('Y-m-d H:i:s');
-			// $history->save();
+			$history->save();
 
 			if (is_numeric($hasil)) {
 				$hasil = number_format((float) $hasil, 4, '.', '');
