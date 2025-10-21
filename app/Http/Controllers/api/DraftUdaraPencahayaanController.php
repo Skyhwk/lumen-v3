@@ -1008,7 +1008,8 @@ class DraftUdaraPencahayaanController extends Controller
         $extand = explode("|", $data);
         return $extand;
     }
-        public function updateTanggalLhp(Request $request)
+    
+    public function updateTanggalLhp(Request $request)
     {
         DB::beginTransaction();
         try {

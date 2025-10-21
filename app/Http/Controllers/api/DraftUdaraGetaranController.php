@@ -396,7 +396,7 @@ class DraftUdaraGetaranController extends Controller
         }
     }
 
-     public function updateTanggalLhp(Request $request)
+    public function updateTanggalLhp(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -431,16 +431,32 @@ class DraftUdaraGetaranController extends Controller
 
             // Render ulang file LHP
             $detail = LhpsGetaranDetail::where('id_header', $dataHeader->id)->get();
-            if($dataHeader->sub_kategori == "Getaran (Lengan & Tangan)" || $dataHeader->sub_kategori == "Getaran (Seluruh Tubuh)"){
+
+            $groupedByPage = collect(LhpsGetaranCustom::where('id_header', $dataHeader->id)->get())
+                ->groupBy('page')
+                ->toArray();
+
+            foreach ($groupedByPage as $idx => $cstm) {
+                $groupedByPage[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
+            if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
                 $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->whereView('DraftGetaranPersonal')
-                    ->render();
+                            ->setDataHeader($dataHeader)
+                            ->useLampiran(true)
+                            ->setDataCustom($groupedByPage)
+                            ->whereView('DraftGetaranPersonal')
+                            ->render();
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
-                ->setDataHeader($dataHeader)
-                ->whereView('DraftGetaran')
-                ->render();
+                            ->setDataHeader($dataHeader)
+                            ->useLampiran(true)
+                            ->setDataCustom($groupedByPage)
+                            ->whereView('DraftGetaran')
+                            ->render();
             }
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
