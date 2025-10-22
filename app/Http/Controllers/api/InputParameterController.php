@@ -3639,17 +3639,17 @@ class InputParameterController extends Controller
 				$header->created_at = Carbon::now();
 				$header->save();
 
-				$data_kalkulasi['id_microbio_header'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				// Simpan hasil ke tabel ws_value_microbio
-				WsValueMicrobio::create($data_kalkulasi);
+				// $data_kalkulasi['id_microbio_header'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// // Simpan hasil ke tabel ws_value_microbio
+				// WsValueMicrobio::create($data_kalkulasi);
 
-				// $data_udara = array();
-				// $data_udara['id_microbiologi_header'] = $header->id;
-				// $data_udara['no_sampel'] = $request->no_sample;
-				// $data_udara['hasil1'] = $data_kalkulasi['hasil'];
-				// WsValueUdara::create($data_udara);
+				$data_udara = array();
+				$data_udara['id_microbiologi_header'] = $header->id;
+				$data_udara['no_sampel'] = $request->no_sample;
+				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
 				DB::commit();
@@ -3745,17 +3745,21 @@ class InputParameterController extends Controller
 				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				$data_kalkulasi['id_swab_header'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				// Simpan hasil ke tabel ws_value_swabtest
-				WsValueSwab::create($data_kalkulasi);
+				// $data_kalkulasi['id_swab_header'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// // Simpan hasil ke tabel ws_value_swabtest
+				// WsValueSwab::create($data_kalkulasi);
 
-				// $data_swab = array();
-				// $data_swab['id_swab_header'] = $header->id;
-				// $data_swab['no_sampel'] = $request->no_sample;
-				// $data_swab['hasil1'] = $data_kalkulasi['hasil'];
-				// WsValueUdara::create($data_swab);
+				$data_swab = array();
+				$data_swab['id_swab_header'] = $header->id;
+				$data_swab['no_sampel'] = $request->no_sample;
+				$data_swab['hasil10'] = $data_kalkulasi['hasil'];
+				$data_swab['hasil11'] = $data_kalkulasi['hasil2'];
+                $data_swab['hasil13'] = $data_kalkulasi['hasil3'];
+                $data_swab['hasil14'] = $data_kalkulasi['hasil4'];
+                $data_swab['created_by'] = $this->karyawan;
+				WsValueUdara::create($data_swab);
 
 				// Commit transaksi jika semua berhasil
 				DB::commit();
