@@ -494,7 +494,7 @@ class OrderDetail extends Sector
     {
         return $this->hasMany(DetailLingkunganHidup::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
     }
-    
+
     public function allDetailLingkunganKerja()
     {
         return $this->hasMany(DetailLingkunganKerja::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
@@ -528,24 +528,26 @@ class OrderDetail extends Sector
 
     public function scopeWithAnyDataLapangan($query)
     {
-        return $query->with($this->anyDataLapanganRelations);
+        // pakai new static biar aman di konteks static scope
+        return $query->with((new static)->anyDataLapanganRelations);
     }
 
     public function getAnyDataLapanganAttribute()
     {
+        $hasil = collect();
+
         foreach ($this->anyDataLapanganRelations as $relation) {
-            if ($this->relationLoaded($relation) && !empty($this->{$relation})) {
-                // return $this->{$relation};
+            if ($this->relationLoaded($relation) && $this->{$relation}) {
                 $relasi = $this->{$relation};
 
                 if ($relasi instanceof \Illuminate\Database\Eloquent\Collection) {
-                    return $relasi;
+                    $hasil = $hasil->merge($relasi);
+                } else {
+                    $hasil->push($relasi);
                 }
-
-                return collect([$relasi])->filter();
             }
         }
 
-        return null;
+        return $hasil->isNotEmpty() ? $hasil : null;
     }
 }
