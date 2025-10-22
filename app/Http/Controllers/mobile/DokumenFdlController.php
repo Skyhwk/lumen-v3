@@ -1037,6 +1037,12 @@ class DokumenFdlController extends Controller
 
         // Baca konten file
         $imageContent = file_get_contents($filePath);
+        if($imageContent === false) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'Gagal membaca file'
+            ];
+        }
 
         // Konversi ke base64
         $base64Image = base64_encode($imageContent);
