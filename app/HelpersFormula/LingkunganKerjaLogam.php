@@ -74,8 +74,8 @@ class LingkunganKerjaLogam
             if(in_array($data->parameter, $C2_param)) { // C2
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
             } else if(in_array($data->parameter, $C1_C2_C3_param_new)) { // C1, C2 & C3 New
-                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
-                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd * ($data->tekanan / $Ta) * (298 / 760)));
 
                 // C1 = C2*1000
                 $C = ($C1 * 1000);
@@ -85,20 +85,31 @@ class LingkunganKerjaLogam
                     $C2 = (($C1 / 24.45) * 74.92);
 
                     $C14 = $C2;
-                    $C15 = $C;
-                    $C16 = $C1;
+                    $C15 = $C * 1000;
+
+                    // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                    $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 }else if($data->parameter == 'Ba') {
                     // C (PPM)= (C2 / 24.45)*137,33)
                     $C2 = (($C1 / 24.45) * 137.33);
 
-                    $C15 = $C;
-                    $C16 = $C1;
+                    $C14 = $C2;
+                    $C15 = $C * 1000;
+
+                    // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                    $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 }else if($data->parameter == 'Co') {
                     // C (PPM) = ((((Ct - Cb)*(Vt/1000)*1)/Vstd)*24,45)/58,933
                     $C2 = (((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd) * 24.45 / 58.933);
                 }elseif($data->parameter == 'Cr') {
                     // C (PPM)= (C2 / 24.45)*51,996)
                     $C2 = (($C1 / 24.45) * 51.996);
+
+                    $C14 = $C2;
+                    $C15 = $C * 1000;
+
+                    // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                    $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 }elseif($data->parameter == 'Cu') {
                     // C (PPM)= (C2 / 24.45)*63,546)
                     $C2 = (($C1 / 24.45) * 63.546);
