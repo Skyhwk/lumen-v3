@@ -1374,29 +1374,29 @@ class InputParameterController extends Controller
 				$datlapangank = DataLapanganLingkunganKerja::where('no_sampel', $request->no_sample)->first();
 				$datlapanganV = DataLapanganSenyawaVolatile::where('no_sampel', $request->no_sample)->first();
 				// dd($datlapanganh,$datlapangank);
-				$param = [293, 294, 295, 296, 326, 327, 328, 329, 299, 300, 289, 290, 291, 246, 247, 248, 249, 342, 343, 344, 345, 261, 256, 211, 310, 311, 312, 313, 314, 315, 568, 211, 564, 305, 306, 307, 308, 234, 569, 287, 292, 219];
-				if (!in_array($par->id, $param)) {
-					return response()->json([
-						'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
-					], 404);
-				} else {
-					$result = self::HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganV);
-					// dd($result);
-					if($result->status == 200){
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status
-						], $result->status);
-					}else{
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status,
-							'line' => $result->line ?? '',
-							'file' => $result->file ?? '',
-                            'trace' => $result->trace ?? ''
-						], $result->status);
-					}
-				}
+				// $param = [293, 294, 295, 296, 326, 327, 328, 329, 299, 300, 289, 290, 291, 246, 247, 248, 249, 342, 343, 344, 345, 261, 256, 211, 310, 311, 312, 313, 314, 315, 568, 211, 564, 305, 306, 307, 308, 234, 569, 287, 292, 219];
+				// if (!in_array($par->id, $param)) {
+				// 	return response()->json([
+				// 		'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+				// 	], 404);
+				// } else {
+                $result = self::HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganV);
+                // dd($result);
+                if($result->status == 200){
+                    return response()->json([
+                        'message'=> $result->message,
+                        'status' => $result->status
+                    ], $result->status);
+                }else{
+                    return response()->json([
+                        'message'=> $result->message,
+                        'status' => $result->status,
+                        'line' => $result->line ?? '',
+                        'file' => $result->file ?? '',
+                        'trace' => $result->trace ?? ''
+                    ], $result->status);
+                }
+				// }
 			}
 		}else if(($stp->name == 'SPEKTRO UV-VIS' || $stp->name == 'ICP' || $stp->name == 'GRAVIMETRI') && $stp->sample->nama_kategori == 'Emisi'){
 			$datlapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sample)->first();
