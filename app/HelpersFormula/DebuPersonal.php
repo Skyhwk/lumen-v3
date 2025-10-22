@@ -24,6 +24,11 @@ class DebuPersonal
             $C9 = null;
             $C10 = null;
             $C11 = null;
+            $C12 = null;
+            $C13 = null;
+            $C14 = null;
+            $C15 = null;
+            $C16 = null;
 			$w1 = null;
 			$w2 = null;
 			$b1 = null;
@@ -48,21 +53,21 @@ class DebuPersonal
 			$vl = $average_flow * $average_time;
 			// dd($w1, $w2, $b1, $b2,$vl,$flow, $waktu);
 			if ($vl > 0) {
-				$C1 = ((($w2 - $w1) - ($b2 - $b1)) * 1000) / $vl; // C (mg/m3)
+				$C16 = ((($w2 - $w1) - ($b2 - $b1)) * 1000) / $vl; // C (mg/m3)
 				if ($id_parameter == 222) { // Debu (P8J)
-					$C1 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3) / $vl; // C (mg/m3)
+					$C16 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3) / $vl; // C (mg/m3)
 				}
 			} else {
 				// Jika rerata waktu 0 maka tidak dibagi
 				// Kasus ini terjadi apabila jam mulai dan jam pengambilan sama yang menyebabkan rerata waktu 0
-				$C1 = ((($w2 - $w1) - ($b2 - $b1)) * 1000); // C (mg/m3)
+				$C16 = ((($w2 - $w1) - ($b2 - $b1)) * 1000); // C (mg/m3)
 				if ($id_parameter == 222) { // Debu (P8J)
-					$C1 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3); // C (mg/m3)
+					$C16 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3); // C (mg/m3)
 				}
 			}
 			$vl_formatted = number_format($vl, 1);
 
-			$C = number_format($C1 * 1000, 4); // C (ug/m3)
+			$C15 = number_format($C16 * 1000, 4); // C (ug/m3)
 
 			$satuan = 'mg/m3';
 			$processed = [
@@ -90,6 +95,11 @@ class DebuPersonal
                 'C9' => isset($C9) ? $C9 : null,
                 'C10' => isset($C10) ? $C10 : null,
                 'C11' => isset($C11) ? $C11 : null,
+                'C12' => isset($C12) ? $C12 : null,
+                'C13' => isset($C13) ? $C13 : null,
+                'C14' => isset($C14) ? $C14 : null,
+                'C15' => isset($C15) ? $C15 : null,
+                'C16' => isset($C16) ? $C16 : null,
                 'satuan' => $satuan,
 				'vl' => $vl_formatted,
 				'st' => $st,
