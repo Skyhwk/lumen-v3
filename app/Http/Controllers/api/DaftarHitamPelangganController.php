@@ -51,6 +51,11 @@ class DaftarHitamPelangganController extends Controller
                     $query->whereDoesntHave('order_customer');
                 }
             })
+            ->filterColumn('pelanggan_blacklist.alasan_blacklist', function ($query, $keyword) {
+                $query->whereHas('pelanggan_blacklist', function ($q) use ($keyword) {
+                    $q->where('alasan_blacklist', 'like', "%{$keyword}%");
+                });
+            })
             ->make(true);
     }
 
