@@ -1453,7 +1453,7 @@ class InputParameterController extends Controller
 						->where('parameter', $request->parameter)
 						->where('is_active', true)->first();
 
-					if($par->id == '223') {
+					if(in_array($par->id, [223,224])) {
 						$result = self::HelperDustFall($request, $stp, $po, $header);
 						if($result->status){
 							return response()->json([
@@ -1558,9 +1558,7 @@ class InputParameterController extends Controller
 							->where('is_active', true)
 							->first();
 
-						$par = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-
-						$result = self::HelperMikrobiologi($request, $stp,$po, $par);
+						$result = self::HelperMikrobiologi($request, $stp,$po);
 						if($result->status){
 							return response()->json([
 								'message'=> $result->message,
@@ -1708,17 +1706,13 @@ class InputParameterController extends Controller
 
 						$par = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 
-						$id_param = [337, 227, 340];
-
-						if (in_array($par->id, $id_param)) {
-							$result = self::HelperSwabTest($request, $stp, $po, $par);
-							if($result->status){
-								return response()->json([
-									'message' => $result->message,
-									'status' => $result->status
-								], 200);
-							}
-						}
+                        $result = self::HelperSwabTest($request, $stp, $po);
+                        if($result->status){
+                            return response()->json([
+                                'message' => $result->message,
+                                'status' => $result->status
+                            ], 200);
+                        }
 					}
 				}
 
@@ -2740,6 +2734,25 @@ class InputParameterController extends Controller
 		} else {
 			$parame = $request->parameter;
 			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
+            $tipe_data = null;
+            $isO3 = strpos($data_parameter->nama_lab, 'O3') !== false;
+
+            // dd($datot);
+            $rerata = [];
+            $durasi = [];
+            $tekanan_u = [];
+            $suhu = [];
+            $Qs = [];
+
+            // O3 Kasus Khusus, Bagi 2 Bjir
+            $rerataO3 = [];
+            $durasiO3 = [];
+            $tekanan_uO3 = [];
+            $suhuO3 = [];
+            $QsO3 = [];
+            $ks_all = [];
+            $kb_all = [];
+
 			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
 				// dd($data_parameter);
 				// if ($request->id_stp == 14) {
@@ -2753,7 +2766,6 @@ class InputParameterController extends Controller
 
 					try {
 						$datapangan = '';
-                        $tipe_data = '';
 						if (count($lingHidup) > 0) {
 							$datapangan = $lingHidup;
                             $tipe_data = 'ambient';
@@ -2764,7 +2776,7 @@ class InputParameterController extends Controller
 						}
 						if (count($lingVolatile) > 0) {
                             $datapangan = $lingVolatile;
-                            $tipe_data = 'volatile';
+                            $tipe_data = 'ulk';
 						}
 						// dd($datapangan);
 						if ($datapangan != '') {
@@ -2772,26 +2784,10 @@ class InputParameterController extends Controller
 						} else {
 							$datot = '';
 						}
-						// dd($datot);
-						$rerata = [];
-						$durasi = [];
-						$tekanan_u = [];
-						$suhu = [];
-						$Qs = [];
 
-						// O3 Kasus Khusus, Bagi 2 Bjir
-						$rerataO3 = [];
-						$durasiO3 = [];
-						$tekanan_uO3 = [];
-						$suhuO3 = [];
-						$QsO3 = [];
-						$ks_all = [];
-						$kb_all = [];
 						// dd($ks_all, $kb_all);
 						$nilQs = '';
 						if ($datot > 0 || $datot != '') {
-
-							$isO3 = strpos($data_parameter->nama_lab, 'O3') !== false;
 							$parameterExplode = explode(' ', $data_parameter->nama_lab);
 							$is8Jam = count($parameterExplode) > 1 ? strpos($parameterExplode[1], '8J') !== false : false;
 							foreach ($datapangan as $keye => $vale) {
@@ -2996,7 +2992,12 @@ class InputParameterController extends Controller
 				$datot = 0;
 				$rerataFlow = 0;
 				$durasiFin = 0;
+
 			}
+
+            if (is_null($tipe_data)) {
+                $tipe_data = 'ulk';
+            }
 
 			// dd($durasiFin, $tekananFin, $suhuFin, $nilQs, $datot, $rerataFlow);
 			$check = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
@@ -3052,7 +3053,7 @@ class InputParameterController extends Controller
 			if ($isO3) {
 				$data_parsing->ks = array_chunk(array_map('floatval', $request->ks), 2);
 				$data_parsing->kb = array_chunk(array_map('floatval', $request->kb), 2);
-			} else if(isset($request->ks)){
+			} elseif(isset($request->ks)){
 				$data_parsing->ks = array_map('floatval', $request->ks);
 				$data_parsing->kb = array_map('floatval', $request->kb);
 			}
@@ -3084,9 +3085,9 @@ class InputParameterController extends Controller
 
 			if(isset($data_kalkulasi['status']) == 'error'){
 				return (object)[
-					'message' => $data_kalkulasi['message'],
-					'trace' => $data_kalkulasi['trace'],
-					'line' => $data_kalkulasi['line'],
+					'message' => isset($data_kalkulasi['message']) ? $data_kalkulasi['message'] : null,
+					'trace' => isset($data_kalkulasi['trace']) ? $data_kalkulasi['trace'] : null,
+					'line' => isset($data_kalkulasi['line']) ? $data_kalkulasi['line'] : null,
 					'status' => 500
 				];
 			}
@@ -3118,6 +3119,7 @@ class InputParameterController extends Controller
 					// dd($data_shift, $request->ks, $request->kb);
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
+                // dd(isset($data_kalkulasi['data_pershift']));
                 if(isset($data_kalkulasi['data_pershift'])) $data->data_pershift = json_encode($data_kalkulasi['data_pershift']);
 				$data->save();
 
@@ -3147,6 +3149,7 @@ class InputParameterController extends Controller
                 $data_udara['hasil16'] = isset($data_kalkulasi['C15']) ? $data_kalkulasi['C15'] : null;
                 $data_udara['hasil17'] = isset($data_kalkulasi['C16']) ? $data_kalkulasi['C16'] : null;
 				$data_udara['satuan'] = $data_kalkulasi['satuan'];
+                // dd($data_udara);
 				WsValueUdara::create($data_udara);
 
 				$data_kalkulasi['lingkungan_header_id'] = $data->id;
@@ -3479,7 +3482,7 @@ class InputParameterController extends Controller
 				];
 			}
 
-			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
+			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
 			$tgl_terima = $order_detail->tanggal_terima;
 
@@ -3511,36 +3514,33 @@ class InputParameterController extends Controller
 			DB::beginTransaction();
 			try {
 
-				$header = new DustFallHeader();
-				$header->no_sampel = $request->no_sample;
-				$header->parameter = $request->parameter;
-				$header->template_stp = $request->id_stp;
-				$header->id_parameter = $par->id;
-				$header->note = $request->note;
+				$header                 = new DustFallHeader();
+				$header->no_sampel      = $request->no_sample;
+				$header->parameter      = $request->parameter;
+				$header->template_stp   = $request->id_stp;
+				$header->id_parameter   = $data_parameter->id;
+				$header->note           = $request->note;
 				$header->tanggal_terima = $tgl_terima;
-				$header->is_active = true;
-				$header->created_by = $this->karyawan;
-				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+				$header->is_active      = true;
+				$header->created_by     = $this->karyawan;
+				$header->created_at     = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				$data_kalkulasi['lingkungan_header_id'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				WsValueLingkungan::create($data_kalkulasi);
+				// $data_kalkulasi['lingkungan_header_id'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// WsValueLingkungan::create($data_kalkulasi);
 
-				// $data_udara = array();
-				// $data_udara['id_lingkungan_header'] = $header->id;
-				// $data_udara['no_sampel'] = $request->no_sample;
-				// $data_udara['hasil1'] = $data_kalkulasi['C'];
-				// $data_udara['hasil2'] = $data_kalkulasi['C1'];
-				// $data_udara['hasil3'] = $data_kalkulasi['C2'];
-				// WsValueUdara::create($data_udara);
+				$data_udara = array();
+				$data_udara['id_dustfall_header']   = $header->id;
+				$data_udara['no_sampel']            = $request->no_sample;
+				$data_udara['hasil6']               = $data_kalkulasi['hasil'];
+				$data_udara['satuan']               = $data_kalkulasi['satuan'];
+				WsValueUdara::create($data_udara);
 
 				DB::commit();
-				$this->resultx = 'Value Parameter berhasil disimpan.!';
-				Helpers::saveToLogRequest($this->pathinfo, $this->globaldate, $this->param, $this->useragen, $this->resultx, $this->ip);
 				return response()->json([
-					'message'=> $this->resultx,
+					'message'=> 'Value Parameter berhasil disimpan.!',
 					'par' => $request->parameter
 				], 200);
 			} catch (\Exception $e) {
@@ -3552,11 +3552,13 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperMikrobiologi($request, $stp, $order_detail, $data_parameter){
+	public function HelperMikrobiologi($request, $stp, $order_detail){
 		$fdl = DetailMicrobiologi::where('no_sampel', $request->no_sample)
 			->where('is_active', true)
 			->where('parameter', $request->parameter)
 			->first();
+
+        $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 
 		$header = MicrobioHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
@@ -3677,9 +3679,9 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperSwabTest($request, $stp, $order_detail, $data_parameter) {
+	public function HelperSwabTest($request, $stp, $order_detail) {
 		$fdl = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
-
+        $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 		$header = SwabTestHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
 			->where('is_active', true)
@@ -3738,7 +3740,7 @@ class InputParameterController extends Controller
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
 				$header->template_stp = $request->id_stp;
-				$header->id_parameter = $par->id;
+				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->created_by = $this->karyawan;
