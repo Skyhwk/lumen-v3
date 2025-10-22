@@ -85,19 +85,20 @@ class LingkunganKerjaLogam
                     $C2 = (($C1 / 24.45) * 74.92);
 
                     $C14 = $C2;
-                    $C15 = $C * 1000;
 
                     // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                     $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                    $C15 = $C16 * 1000;
                 }else if($data->parameter == 'Ba') {
                     // C (PPM)= (C2 / 24.45)*137,33)
                     $C2 = (($C1 / 24.45) * 137.33);
 
                     $C14 = $C2;
-                    $C15 = $C * 1000;
+                    $C14 = $C2;
 
                     // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                     $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                    $C15 = $C16 * 1000;
                 }else if($data->parameter == 'Co') {
                     // C (PPM) = ((((Ct - Cb)*(Vt/1000)*1)/Vstd)*24,45)/58,933
                     $C2 = (((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd) * 24.45 / 58.933);
@@ -106,16 +107,28 @@ class LingkunganKerjaLogam
                     $C2 = (($C1 / 24.45) * 51.996);
 
                     $C14 = $C2;
-                    $C15 = $C * 1000;
 
                     // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                     $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                    $C15 = $C16 * 1000;
                 }elseif($data->parameter == 'Cu') {
                     // C (PPM)= (C2 / 24.45)*63,546)
                     $C2 = (($C1 / 24.45) * 63.546);
+
+                    $C14 = $C2;
+
+                    // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                    $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                    $C15 = $C16 * 1000;
                 }else if($data->parameter == 'Fe') {
                     // C (PPM)= (C2 / 24.45)*55,845)
                     $C2 = (($C1 / 24.45) * 55.845);
+
+                    $C14 = $C2;
+
+                    // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                    $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                    $C15 = $C16 * 1000;
                 }
             } else if(in_array($data->parameter, $C2_C3_param)) { // C2, C3
                 // C (mg/m3) = ((Ct - Cb)*Vt*1)/Vstd
@@ -132,12 +145,20 @@ class LingkunganKerjaLogam
 
                 // C (PPM) = ((((Ct - Cb)*(Vt/1000)*1)/Vstd)*24,45)/58,933
                 $C2 = (((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd) * 24.45 / 58.933);
-            } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // C1 , C2, C3, C4, C5
-                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
-                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
 
-                // C (ug/Nm3) = ((Ct - Cb)*Vt*1)/Vstd
-                $C = ((($ks - $kb) * $data->vl * 1) / $Vstd);
+                $C14 = $C2;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                $C15 = $C16 * 1000;
+            } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // C1 , C2, C3, C4, C5
+                // Vstd =  Rerata Laju Alir*t*(Pa/Ta)*(298/760)
+                $Vstd_with_pa = ($data->average_flow * $data->durasi * ($data->tekanan / $Ta) * (298 / 760));
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd_with_pa);
+
+                // C1 = C2*1000
+                $C = $C1 * 1000;
 
                 // C (PPM)= (C2 / 24.45)*112,414)
                 $C2 = ($C1 / 24.45) * 112.414;
@@ -149,8 +170,10 @@ class LingkunganKerjaLogam
                 $C4 = $C2 * 10000;
 
                 $C14 = $C2;
-                $C15 = $C;
-                $C16 = $C1;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                $C15 = $C16 * 1000;
             }
 
             $C = isset($C) ? number_format($C, 6) : '0.000000';
