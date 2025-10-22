@@ -975,14 +975,14 @@ class FdlLingkunganKerjaController extends Controller
                         $satuan = ' %';
                     } else if ($a == 'Suhu') {
                         $satuan = ' °C';
-                    // } else if ($a == 'Laju Ventilasi') {
-                    //     $satuan = ' m/s';
-                    // } else if ($a == 'Laju Ventilasi (8 Jam)') {
-                    //     $satuan = ' m/s';
-                    // } else if ($a == 'Pertukaran Udara') {
-                    //     $satuan = ' m3';
-                    // } else if ($a == 'Tekanan Udara (LK)') {
-                    //     $satuan = ' mmHg';
+                    } else if ($a == 'Laju Ventilasi') {
+                        $satuan = ' m/s';
+                    } else if ($a == 'Laju Ventilasi (8 Jam)') {
+                        $satuan = ' m/s';
+                    } else if ($a == 'Pertukaran Udara') {
+                        $satuan = ' m3';
+                    } else if ($a == 'Tekanan Udara (LK)') {
+                        $satuan = ' mmHg';
                     }
                     $fdlvalue = new DetailLingkunganKerja();
                     $fdlvalue->no_sampel                 = strtoupper(trim($request->no_sample));
