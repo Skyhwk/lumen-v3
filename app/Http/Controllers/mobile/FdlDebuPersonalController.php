@@ -160,7 +160,7 @@ class FdlDebuPersonalController extends Controller
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
                 $orderDetail->save();
             }
 
