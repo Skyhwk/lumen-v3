@@ -60,7 +60,7 @@ class LingkunganKerjaNH3_Shift
                 $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
                 // C (mg/Nm3) = (a/Vu)
                 $C15 = \str_replace(",", "", number_format($item_ks / floatval($Vu_alt), 4));
-                $C16 = $C3 / 1000;
+                $C16 = $C15 / 1000;
 
                 $C14_value[$key_ks][] = $C14;
                 $C15_value[$key_ks][] = $C15;
