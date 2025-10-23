@@ -257,14 +257,16 @@ class FdlMethodRebaController extends Controller
             $data->save();
 
             // UPDATE ORDER DETAIL
-            DB::table('order_detail')
-                ->where('no_sampel', strtoupper(trim($request->no_sample)))
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
                 ->where('kategori_3', 'LIKE', '%27-%')
                 ->orWhere('kategori_3', 'LIKE', '%53-%')
                 ->where('parameter', 'LIKE', '%Ergonomi%')
-                ->update([
-                    'tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
+                ->first();
+
+            if($orderDetail->tanggal_terima == null) {
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->save();
+            }
 
             DB::commit();
             return response()->json([

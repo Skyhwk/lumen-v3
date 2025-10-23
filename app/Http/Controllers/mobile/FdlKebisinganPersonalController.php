@@ -137,9 +137,12 @@ class FdlKebisinganPersonalController extends Controller
                 $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
-                DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+
+                if($orderDetail->tanggal_terima == null){
+                    $orderDetail->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    $orderDetail->save();
+                }
 
                 $nama = $this->karyawan;
                 $this->resultx = "Data Sampling KEBISINGAN PERSONAL Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";
