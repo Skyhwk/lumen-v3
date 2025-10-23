@@ -450,6 +450,12 @@ class WsFinalAirController extends Controller
 						$hasil = $hasil < 0.0056 ? '<0.0056' : $hasil;
 					}
 					break;
+				case 'Total Coliform':
+				case 'F. coli':
+					if ($faktor_koreksi ) {
+						$hasil = (float) str_replace('<', '', $hasilPengujian) * ($faktor_koreksi / 100);
+					}
+					break;
 				case 'NO3':
 					if ($faktor_koreksi == 4.4268) {
 						$hasil = (float) $hasilPengujian / 4.4268;
@@ -586,8 +592,6 @@ class WsFinalAirController extends Controller
 	{
 		DB::beginTransaction();
 		try {
-
-
 			$po = OrderDetail::where('no_sampel', $no_sampel)
 				->where('is_active', 1)
 				->where('parameter', 'like', '%' . $parameter . '%')
