@@ -1157,23 +1157,23 @@ class ReadyOrderController extends Controller
 
             $id_order_header = $data_detail_lama->first()->id_order_header;
 
-            $qr_psikologi = QrPsikologi::where('id_order_header', $id_order_header)->get();
+            // $qr_psikologi = QrPsikologi::where('id_order_header', $id_order_header)->get();
 
-            if ($qr_psikologi->count() > 0) {
-                foreach ($qr_psikologi as $q) {
-                    $data_psikologi = json_decode($q->data);
+            // if ($qr_psikologi->count() > 0) {
+            //     foreach ($qr_psikologi as $q) {
+            //         $data_psikologi = json_decode($q->data);
 
-                    // Pastikan JSON valid
-                    if (json_last_error() === JSON_ERROR_NONE && is_object($data_psikologi)) {
-                        $data_psikologi->no_document = $dataQuotation->no_document;
-                        $data_psikologi->nama_customer = $dataQuotation->nama_perusahaan;
+            //         // Pastikan JSON valid
+            //         if (json_last_error() === JSON_ERROR_NONE && is_object($data_psikologi)) {
+            //             $data_psikologi->no_document = $dataQuotation->no_document;
+            //             $data_psikologi->nama_customer = $dataQuotation->nama_perusahaan;
 
-                        // Simpan perubahan
-                        $q->data = json_encode($data_psikologi);
-                        $q->save();
-                    }
-                }
-            }
+            //             // Simpan perubahan
+            //             $q->data = json_encode($data_psikologi);
+            //             $q->save();
+            //         }
+            //     }
+            // }
 
             $sampel_order_lama = $data_detail_lama->pluck('no_sampel')->toArray();
             $dps_details = json_decode($dataQuotation->data_pendukung_sampling, true);

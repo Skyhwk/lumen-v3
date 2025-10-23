@@ -54,7 +54,7 @@ class LingkunganKerjaNH3_Shift
             $C4 = $C3 * 10000;
 
             if($data->parameter == 'NH3 (24 Jam)' || $data->tipe_data == 'ambient'){
-                $C14 = $C1;
+                $C14 = $C2;
 
                 // Vu = Rerata Laju Alir*t*/1000
                 $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
