@@ -99,7 +99,7 @@ class RequestQrController extends Controller
     public function getInformation(Request $request)
     {
         $data = MasterPelanggan::with(['kontak_pelanggan', 'alamat_pelanggan', 'pic_pelanggan'])
-            ->where('id_pelanggan', $request->id_pelanggan)->first();
+            ->where('id_pelanggan', $request->id_pelanggan)->where('is_active',true)->first();
         switch ($request->mode) {
             case 'non_kontrak':
                 $quotation = QuotationNonKontrak::where('pelanggan_ID', $request->id_pelanggan)

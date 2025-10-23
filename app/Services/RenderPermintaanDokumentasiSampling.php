@@ -143,7 +143,7 @@ class RenderPermintaanDokumentasiSampling
     {
         DB::beginTransaction();
         try {
-            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="30px" height="30px"><br>' . $qr->kode_qr;
+            $qr_img = isset($qr->file) ? '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="30px" height="30px"><br>' . $qr->kode_qr : '';
 
             $pdf = new Mpdf([
                 'mode' => 'utf-8',
@@ -223,6 +223,41 @@ class RenderPermintaanDokumentasiSampling
                     $outputPathLainnya = "{$outputDir}/{$outputNameLainnya}";
                     if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_lainnya, $outputPathLainnya, $watermarkData)) {
                         $dataLapangan->webp_path_lainnya = "request/temp_img/{$noOrder}/{$outputNameLainnya}";
+                    }
+
+                    // Proses gambar 'foto_samping_kiri'
+                    $outputNameKiri = "kiri-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathKiri = "{$outputDir}/{$outputNameKiri}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_samping_kiri, $outputPathKiri, $watermarkData)) {
+                        $dataLapangan->webp_path_kiri = "request/temp_img/{$noOrder}/{$outputNameKiri}";
+                    }
+
+                    // Proses gambar 'foto_samping_kanan'
+                    $outputNameKanan = "kanan-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathKanan = "{$outputDir}/{$outputNameKanan}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_samping_kanan, $outputPathKanan, $watermarkData)) {
+                        $dataLapangan->webp_path_kanan = "request/temp_img/{$noOrder}/{$outputNameKanan}";
+                    }
+
+                    // Proses gambar 'foto_depan'
+                    $outputNameDepan = "depan-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathDepan = "{$outputDir}/{$outputNameDepan}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_depan, $outputPathDepan, $watermarkData)) {
+                        $dataLapangan->webp_path_depan = "request/temp_img/{$noOrder}/{$outputNameDepan}";
+                    }
+
+                    // Proses gambar 'foto_belakang'
+                    $outputNameBelakang = "belakang-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathBelakang = "{$outputDir}/{$outputNameBelakang}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_belakang, $outputPathBelakang, $watermarkData)) {
+                        $dataLapangan->webp_path_belakang = "request/temp_img/{$noOrder}/{$outputNameBelakang}";
+                    }
+
+                    // Proses gambar 'foto_lain'
+                    $outputNameLain = "lain-{$noSampelClean}_{$randomId}.webp";
+                    $outputPathLain = "{$outputDir}/{$outputNameLain}";
+                    if ($this->processAndWatermarkImage(optional($dataLapangan)->foto_lain, $outputPathLain, $watermarkData)) {
+                        $dataLapangan->webp_path_lain = "request/temp_img/{$noOrder}/{$outputNameLain}";
                     }
                 }
             }
