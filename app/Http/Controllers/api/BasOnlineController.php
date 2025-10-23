@@ -1968,7 +1968,7 @@ class BasOnlineController extends Controller
                     if($parameter['category'] == '6-Padatan'){
                         continue; // Skip Padatan
                     }
-                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
+                    if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)' || $parameter['parameter'] == 'Xylene secara personil sampling (SC)') {
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
                     
@@ -2182,6 +2182,13 @@ class BasOnlineController extends Controller
             ],
             [
                 "parameter" => "PM 2.5 (Personil)",
+                "requiredCount" => 2,
+                "category" => "4-Udara",
+                "model" => DataLapanganDebuPersonal::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Xylene secara personil sampling (SC)",
                 "requiredCount" => 2,
                 "category" => "4-Udara",
                 "model" => DataLapanganDebuPersonal::class,

@@ -673,14 +673,28 @@ class DraftUdaraIklimKerjaController extends Controller
             // Render ulang file LHP
             $detail = LhpsIklimDetail::where('id_header', $dataHeader->id)->get();
 
+            $custom = collect(LhpsIklimCustom::where('id_header', $dataHeader->id)->get())
+                ->groupBy('page')
+                ->toArray();
+            foreach ($custom as $idx => $cstm) {
+                $custom[$idx] = collect($cstm)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc']
+                ])->values()->toArray();
+            }
+
             if (in_array('ISBB', json_decode($dataHeader->parameter_uji, true)) || in_array('ISBB (8 Jam)', json_decode($dataHeader->parameter_uji, true))) {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
+                    ->useLampiran(true)
+                    ->setDataCustom($custom)
                     ->whereView('DraftIklimPanas')
                     ->render();
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
+                    ->useLampiran(true)
+                    ->setDataCustom($custom)
                     ->whereView('DraftIklimDingin')
                     ->render();
             }

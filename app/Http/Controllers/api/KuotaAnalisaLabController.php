@@ -56,10 +56,11 @@ class KuotaAnalisaLabController extends Controller
             }
 
 
-            $data->kategori = $request->kategori;
-            $data->parameter_id = $parameter_id;
-            $data->parameter_name = $parameter_name;
-            $data->quota = $request->quota;
+            $data->kategori         = $request->kategori;
+            $data->parameter_id     = $parameter_id;
+            $data->parameter_name   = $parameter_name;
+            $data->quota            = $request->quota;
+            $data->tanggal_berlaku  = Carbon::parse($request->tanggal_berlaku)->format('Y-m-d');
             $data->save();
 
             DB::commit();
