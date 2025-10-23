@@ -2179,16 +2179,15 @@ class InputParameterController extends Controller
                 }
             }
 
-            // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+            $parameter_t_coli = 'Total Coliform';
+            // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+            if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                $parameter_t_coli = 'Total Coliform (MPN)';
+            }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                $parameter_t_coli = 'Total Coliform (NA)';
+            }
+            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
                 if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
-                    $parameter_t_coli = 'Total Coliform';
-                    // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
-                    if(in_array('Total Coliform (MPN)', $filteredParameter)){
-                        $parameter_t_coli = 'Total Coliform (MPN)';
-                    }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
-                        $parameter_t_coli = 'Total Coliform (NA)';
-                    }
                     $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                         ->where('required_parameter', $total_coliform)
                         ->where('no_sampel', $request->no_sample)
@@ -2351,16 +2350,15 @@ class InputParameterController extends Controller
                     }
                 }
 
-                // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                $parameter_t_coli = 'Total Coliform';
+                // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (MPN)';
+                }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (NA)';
+                }
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
                     if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
-                        $parameter_t_coli = 'Total Coliform';
-                        // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
-                        if(in_array('Total Coliform (MPN)', $filteredParameter)){
-                            $parameter_t_coli = 'Total Coliform (MPN)';
-                        }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
-                            $parameter_t_coli = 'Total Coliform (NA)';
-                        }
                         $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
@@ -2542,15 +2540,15 @@ class InputParameterController extends Controller
                     }
                 }
 
-                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
+                $parameter_t_coli = 'Total Coliform';
+                // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (MPN)';
+                }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (NA)';
+                }
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
                     if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
-                        $parameter_t_coli = 'Total Coliform';
-                        // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
-                        if(in_array('Total Coliform (MPN)', $filteredParameter)){
-                            $parameter_t_coli = 'Total Coliform (MPN)';
-                        }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
-                            $parameter_t_coli = 'Total Coliform (NA)';
-                        }
                         $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
