@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupNH3_Shift
+class LingkunganKerjaNH3_Shift
 {
     public function index($data, $id_parameter, $mdl) {
         $ks = null;
@@ -44,36 +44,35 @@ class LingkunganHidupNH3_Shift
         $C3_value = [];
         $C4_value = [];
 
+        // dd($data->durasi);
         foreach($data->ks as $key_ks => $item_ks) {
-            foreach ($data->average_flow as $key => $value) {
-                // $Vu = \str_replace(",", "",number_format($value * $data->durasi[$key] * (floatval($data->tekanan) / (floatval($data->suhu) + 273)) * (298 / 760), 4));
-                // // if($key == 0) dd('Vu : '.$Vu, 'flow :'. $value, 'durasi : '.$data->durasi[$key], 'tekanan : '. $data->tekanan, 'Suhu :'. $data->suhu, 'Avg Penjerapan : '. $item_ks[$key]);
-                // if($Vu != 0.0) {
-                //     $C = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
-                // }else {
-                //     $C = 0;
-                // }
-                // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-                // // dd($C1);
-                // $C2 = \str_replace(",", "", number_format((floatval($C1) / 48) * 24.45, 5));
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / (floatval($data->suhu) + 273)) * (298 / 760), 4));
+            // // if($key == 0) dd('Vu : '.$Vu, 'flow :'. $value, 'durasi : '.$data->durasi[$key], 'tekanan : '. $data->tekanan, 'Suhu :'. $data->suhu, 'Avg Penjerapan : '. $item_ks[$key]);
+            // if($Vu != 0.0) {
+            //     $C = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
+            // }else {
+            //     $C = 0;
+            // }
+            // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+            // // dd($C1);
+            // $C2 = \str_replace(",", "", number_format((floatval($C1) / 48) * 24.45, 5));
 
-                $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-                if($Vu != 0.0) {
-                    $C1 = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
-                }else {
-                    $C1 = 0;
-                }
-                $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
-                $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
-                $C3 = $C2 * 1000;
-                $C4 = $C3 * 10000;
-
-                $C_value[$key_ks][$key] = $C;
-                $C1_value[$key_ks][$key] = $C1;
-                $C2_value[$key_ks][$key] = $C2;
-                $C3_value[$key_ks][$key] = $C3;
-                $C4_value[$key_ks][$key] = $C4;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+            if($Vu != 0.0) {
+                $C1 = \str_replace(",", "", number_format(($item_ks / floatval($Vu)) * 1000, 4));
+            }else {
+                $C1 = 0;
             }
+            $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
+            $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
+            $C3 = $C2 * 1000;
+            $C4 = $C3 * 10000;
+
+            $C_value[$key_ks][] = $C;
+            $C1_value[$key_ks][] = $C1;
+            $C2_value[$key_ks][] = $C2;
+            $C3_value[$key_ks][] = $C3;
+            $C4_value[$key_ks][] = $C4;
         }
 
         $C = array_map(function ($value) {
