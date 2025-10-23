@@ -262,7 +262,7 @@ class GenerateHasilPengujianController extends Controller
                 ]);
 
                 $linkLhp->update([
-                    'token' => $tokenId,
+                    'id_token' => $tokenId,
                     'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token
                 ]);
 
