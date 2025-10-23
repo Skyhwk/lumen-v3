@@ -28,6 +28,7 @@ use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
 use App\Jobs\RenderSamplingPlan;
+use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
 
 
@@ -875,7 +876,6 @@ class ReadyOrderController extends Controller
                             $no++;
                         } else {
                             if (count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
-
                             } else {
                                 $no++;
                             }
@@ -1155,6 +1155,26 @@ class ReadyOrderController extends Controller
                 'no_quotation' => $dataQuotation->no_document
             ]);
 
+            $id_order_header = $data_detail_lama->first()->id_order_header;
+
+            $qr_psikologi = QrPsikologi::where('id_order_header', $id_order_header)->get();
+
+            if ($qr_psikologi->count() > 0) {
+                foreach ($qr_psikologi as $q) {
+                    $data_psikologi = json_decode($q->data);
+
+                    // Pastikan JSON valid
+                    if (json_last_error() === JSON_ERROR_NONE && is_object($data_psikologi)) {
+                        $data_psikologi->no_document = $dataQuotation->no_document;
+                        $data_psikologi->nama_customer = $dataQuotation->nama_perusahaan;
+
+                        // Simpan perubahan
+                        $q->data = json_encode($data_psikologi);
+                        $q->save();
+                    }
+                }
+            }
+
             $sampel_order_lama = $data_detail_lama->pluck('no_sampel')->toArray();
             $dps_details = json_decode($dataQuotation->data_pendukung_sampling, true);
 
@@ -1290,7 +1310,6 @@ class ReadyOrderController extends Controller
                             $no_urut_cfr++;
                         } else {
                             if (count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
-
                             } else {
                                 $no_urut_cfr++;
                             }
@@ -1741,7 +1760,6 @@ class ReadyOrderController extends Controller
                                         $no++;
                                     } else {
                                         if (count($value->parameter) == 1 && $parameter == $value->parameter && $regulasi == $value->regulasi && $this->cekParamDirect($value->parameter)) {
-
                                         } else {
                                             $no++;
                                         }
@@ -2150,7 +2168,6 @@ class ReadyOrderController extends Controller
                             $no_urut_cfr++;
                         } else {
                             if (count($value->parameter) == 1 && $parameter == $value->parameter && json_encode($regulasi) == json_encode($value->regulasi) && $this->cekParamDirect($value->parameter)) {
-
                             } else {
                                 $no_urut_cfr++;
                             }
