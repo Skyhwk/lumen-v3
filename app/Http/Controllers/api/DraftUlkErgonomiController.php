@@ -2837,10 +2837,10 @@ class DraftUlkErgonomiController extends Controller
             };
 
             // Buat 3 versi PDF
-            $pdfDraft = $createPDF('draft')[0];
+            //$pdfDraft = $createPDF('draft')[0];
             $pdfLhp = $createPDF('lhp')[0]; 
-            $pdfLhpDigital = $createPDF('lhp_digital')[0];
-            $pdfFile->name_file = $createPDF('draft')[1];
+            //$pdfLhpDigital = $createPDF('lhp_digital')[0];
+            $pdfFile->name_file = $createPDF('lhp')[1];
             $pdfFile->save();
 
             return response()->json('data berhasil di render',200);
