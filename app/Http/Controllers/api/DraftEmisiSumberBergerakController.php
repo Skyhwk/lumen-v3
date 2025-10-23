@@ -2,72 +2,24 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\HistoryAppReject;
-use App\Models\KonfirmasiLhp;
-use App\Models\MasterKaryawan;
-use App\Models\LhpsEmisiHeader;
-use App\Models\LhpsEmisiDetail;
+// model
+use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
 
-use App\Models\LhpsEmisiHeaderHistory;
-use App\Models\LhpsEmisiDetailHistory;
+// service
+use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail};
 
-use App\Models\LhpsEmisiCHeader;
-use App\Models\LhpsEmisiCDetail;
-
-use App\Models\LhpsEmisiCHeaderHistory;
-use App\Models\LhpsEmisiCDetailHistory;
-
-use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\PengesahanLhp;
-use App\Models\Subkontrak;
-
-use App\Models\DataLapanganEmisiCerobong;
-use App\Models\DataLapanganEmisiKendaraan;
-use App\Models\EmisiCerobongHeader;
-use App\Models\MasterRegulasi;
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Models\QrDocument;
-use App\Services\PrintLhp;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
+// job
 use App\Jobs\RenderLhp;
+
+//iluminate
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-use App\Models\LhpsEmisiCustom;
-use App\Services\LhpTemplate;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-use App\Services\SendEmail;
-
 class DraftEmisiSumberBergerakController extends Controller
 {
-    // public function index(Request $request)
-    // {
-    //     $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
-    //         ->select("id",'cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima',"parameter", DB::raw('group_concat(no_sampel) as no_sampel'))
-    //         ->where('is_approve', 0)
-    //         ->where('is_active', true)
-    //         ->where('status', 2)
-    //         ->where('kategori_2', '5-Emisi')
-    //         ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
-    //         ->groupBy("id",'cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima',"parameter");
-
-    //     // if ($request->kategori == 'ESTB') {
-    //     //     $data1 = OrderDetail::with('orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
-    //     //         ->where('is_approve', 0)
-    //     //         ->where('is_active', true)
-    //     //         ->where('status', 2)
-    //     //         ->where('kategori_2', '5-Emisi')
-    //     //         ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak');
-    //     // }
-    //     return Datatables::of($data1)->make(true);
-    // }
-
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
@@ -100,7 +52,6 @@ class DraftEmisiSumberBergerakController extends Controller
             })
             ->make(true);
     }
-
 
     public function handleSubmitDraft(Request $request)
     {
@@ -301,7 +252,7 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->setDataDetail($detail)
                             ->setDataCustom($custom)
                             ->whereView($view)
-                            ->render();
+                            ->render('downloadLHP');
 
                         $header->file_lhp = $fileName;
 
@@ -404,33 +355,6 @@ class DraftEmisiSumberBergerakController extends Controller
         }
     }
 
-
-    // public function handleMetodeSampling(Request $request)
-    // {
-    //     try {
-    //         $id_parameter = array_map(fn($item) => explode(';', $item)[0], $request->parameter);
-
-    //         $method = Parameter::where('id', $id_parameter)
-    //             ->pluck('method')
-    //             ->map(function ($item) {
-    //                 return $item === null ? '-' : $item;
-    //             })
-    //             ->toArray();
-
-    //         return response()->json([
-    //             'status' => true,
-    //             'message' => 'Available data retrieved successfully',
-    //             'data' => $method
-    //         ], 200);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status' => false,
-    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-    //             'line' => $e->getLine()
-    //         ], 500);
-    //     }
-    // }
-
     public function updateTanggalLhp(Request $request)
     {
         DB::beginTransaction();
@@ -508,125 +432,6 @@ class DraftEmisiSumberBergerakController extends Controller
             ], 500);
         }
     }
-
-    // public function handleDatadetail(Request $request)
-    // {
-    //     try {
-    //         $cfr = OrderDetail::with([
-    //             'subCategory' => function ($query) {
-    //                 $query->select('nama_sub_kategori');
-    //             },
-    //             'category' => function ($query) {
-    //                 $query->select('nama_kategori');
-    //             }
-    //         ])
-    //             ->where('cfr', $request->cfr)
-    //             ->first();
-
-    //         if ($request->category2 == 32 || $request->category2 == 31) {
-    //             $cek_all = OrderDetail::with('orderHeader', 'lhps_emisi.lhpsEmisiCustom')->where('cfr', $cfr->cfr)->where('is_active', true)->get();
-
-    //             if ($cek_all) {
-    //                 $data
-    //             }
-
-    //             $dataTable = [];
-    //             $dataTable2 = [];
-    //             foreach ($cek_all as $key => $values) {
-    //                 $value = DataLapanganEmisiKendaraan::with('emisiOrder')->where('no_sampel', $values->no_sampel)->first();
-
-    //                 $cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->emisiOrder->id_regulasi)
-    //                     ->where('is_active', true)
-    //                     ->get();
-
-    //                 $hc = '-';
-    //                 $co = '-';
-    //                 $op = '-';
-    //                 foreach ($cek_bakumutu as $x => $xx) {
-    //                     if ($xx->parameter == 'HC' || $xx->parameter == 'HC (Bensin)') {
-    //                         $hc = $xx->baku_mutu;
-    //                     } else if ($xx->parameter == 'CO' || $xx->parameter == 'CO (Bensin)') {
-    //                         $co = $xx->baku_mutu;
-    //                     } else if ($xx->parameter == 'Opasitas' || $xx->parameter == 'Opasitas (Solar)') {
-    //                         $op = $xx->baku_mutu;
-    //                     }
-    //                 }
-
-    //                 array_push($dataTable, (object) [
-    //                     'no_sampel' => $value->no_sampel,
-    //                     'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
-    //                     'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
-    //                     'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
-    //                     'hasil_co' => $value->co,
-    //                     'hasil_hc' => $value->hc,
-    //                     'hasil_op' => $value->opasitas,
-    //                     'baku_co' => $co,
-    //                     'baku_hc' => $hc,
-    //                     'baku_op' => $op,
-    //                     'regulasi' => $value->peraturan,
-    //                     'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
-    //                 ]);
-
-    //                 $reqOtherRegs = $request->other_regulasi;
-    //                 if ($reqOtherRegs && count($reqOtherRegs) > 0) {
-    //                     foreach ($reqOtherRegs as $key => $idReg) {
-    //                         if ($values->lhps_emisi && $values->lhps_emisi->lhpsEmisiCustom) {
-    //                             $page = $key + 1;
-    //                             $val = $values->lhps_emisi->lhpsEmisiCustom->where('page', $page)->first()->toArray();
-    //                             $orderDetail = OrderDetail::where('no_sampel', $val['no_sampel'])->first();
-
-    //                             $dataTable2["id_$idReg"][] = [
-    //                                 'no_sampel' => $val['no_sampel'],
-    //                                 'nama_kendaraan' => $orderDetail->keterangan_1 ?? $val['nama_kendaraan'],
-    //                                 'bobot_kendaraan' => $val['bobot_kendaraan'],
-    //                                 'tahun_kendaraan' => $val['tahun_kendaraan'],
-    //                                 'hasil_uji' => $val['hasil_uji'],
-    //                                 'baku_mutu' => $val['baku_mutu'],
-    //                                 'tanggal_sampling' => $val['tanggal_sampling'] ?? $values->tanggal_sampling ?? null,
-    //                             ];
-    //                         } else {
-    //                             $dataTable2["id_$idReg"][] = [
-    //                                 'no_sampel' => $value->no_sampel,
-    //                                 'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
-    //                                 'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
-    //                                 'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
-    //                                 'hasil_co' => $value->co,
-    //                                 'hasil_hc' => $value->hc,
-    //                                 'hasil_op' => $value->opasitas,
-    //                                 'baku_co' => $co,
-    //                                 'baku_hc' => $hc,
-    //                                 'baku_op' => $op,
-    //                                 'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
-    //                             ];
-    //                         }
-    //                     }
-    //                 }
-    //             }
-
-    //             return response()->json([
-    //                 // 'data' => $cfr,
-    //                 'dataAll' => $cek_all[0],
-    //                 // 'datalapangan' => $datalapangan,
-    //                 'data' => $dataTable,
-    //                 'next_page' => json_encode($dataTable2),
-    //                 'keterangan' => [
-    //                     '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-    //                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-    //                     'ẍ Parameter belum terakreditasi.'
-    //                 ],
-    //             ], 200);
-    //         }
-
-    //         return response()->json(['message' => 'Sub Kategori tidak sesuai.!'], 400);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //             'line' => $e->getLine(),
-    //             'file' => $e->getFile()
-    //         ], 500);
-    //     }
-    // }
-
 
     public function handleDatadetail(Request $request)
     {
@@ -909,135 +714,6 @@ class DraftEmisiSumberBergerakController extends Controller
         }
     }
 
-
-    public function handleGenerateLink(Request $request)
-    {
-        DB::beginTransaction();
-        if ($request->category == 32 || $request->category == 31) {
-            try {
-                $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
-                $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-                $fileName = $header->file_lhp;
-                if ($header != null) {
-
-                    $key = $header->no_lhp . str_replace('.', '', microtime(true));
-                    $gen = MD5($key);
-                    $gen_tahun = self::encrypt(DATE('Y-m-d'));
-                    $token = self::encrypt($gen . '|' . $gen_tahun);
-
-                    $insertData = [
-                        'token' => $token,
-                        'key' => $gen,
-                        'id_quotation' => $header->id,
-                        'quotation_status' => "draft_emisi",
-                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                        'fileName_pdf' => $fileName,
-                        'type' => 'draft',
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'created_by' => $this->karyawan
-                    ];
-
-                    $insert = GenerateLink::insertGetId($insertData);
-
-                    $header->is_generated = true;
-                    $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $header->generated_by = $this->karyawan;
-                    $header->id_token = $insert;
-                    $header->expired = Carbon::now()->addYear()->format('Y-m-d');
-                    $header->save();
-                }
-
-                DB::commit();
-                return response()->json([
-                    'message' => 'Generate link success!',
-                ]);
-            } catch (Exception $e) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => $e->getMessage(),
-                ], 401);
-            }
-        } else if ($request->category == 34) {
-            try {
-                $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
-                $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-                $fileName = $header->file_lhp;
-                if ($header != null) {
-
-                    $key = $header->no_lhp . str_replace('.', '', microtime(true));
-                    $gen = MD5($key);
-                    $gen_tahun = self::encrypt(DATE('Y-m-d'));
-                    $token = self::encrypt($gen . '|' . $gen_tahun);
-
-                    $insertData = [
-                        'token' => $token,
-                        'key' => $gen,
-                        'id_quotation' => $header->id,
-                        'quotation_status' => "draft_emisi_cerobong",
-                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                        'fileName_pdf' => $fileName,
-                        'type' => 'draft',
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'created_by' => $this->karyawan
-                    ];
-
-                    $insert = GenerateLink::insertGetId($insertData);
-
-                    $header->is_generated = true;
-                    $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $header->generated_by = $this->karyawan;
-                    $header->id_token = $insert;
-                    $header->expired = Carbon::now()->addYear()->format('Y-m-d');
-                    $header->save();
-                }
-
-                DB::commit();
-                return response()->json([
-                    'message' => 'Generate link success!',
-                ]);
-            } catch (Exception $e) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => $e->getMessage(),
-                ], 401);
-            }
-        } else {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Kategori tidak ditemukan'
-            ], 500);
-        }
-    }
-
-    public function handleRevisi(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-
-            if ($header != null) {
-                if ($header->is_revisi == 1) {
-                    $header->is_revisi = 0;
-                } else {
-                    $header->is_revisi = 1;
-                }
-
-                $header->save();
-            }
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Revisi updated successfully!',
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
-
-
     public function encrypt($data)
     {
         $ENCRYPTION_KEY = 'intilab_jaya';
@@ -1059,25 +735,12 @@ class DraftEmisiSumberBergerakController extends Controller
         $extand = explode("|", $data);
         return $extand;
     }
+    
     public function getUser(Request $request)
     {
         $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
 
         return response()->json($users);
-    }
-
-    public function getLink(Request $request)
-    {
-        try {
-            $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => $request->category == 32 || $request->category == 31 ? 'draft_emisi' : 'draft_emisi_cerobong', 'type' => 'draft'])->first();
-
-            if (!$link) {
-                return response()->json(['message' => 'Link not found'], 404);
-            }
-            return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
-        } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
     }
 
     public function sendEmail(Request $request)
@@ -1138,78 +801,6 @@ class DraftEmisiSumberBergerakController extends Controller
             ], 500);
         }
     }
-
-    // public function handleApprove(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         if (in_array($request->category, [32, 31])) {
-    //             $header = LhpsEmisiHeader::where('id', $request->id)->where('is_active', true)->first();
-    //             // $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-    //             $type = 'LHP_EMISI';
-    //         } else if (in_array($request->category, [34])) {
-    //             $header = LhpsEmisiCHeader::where('id', $request->id)->where('is_active', true)->first();
-    //             // $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-    //             $type = 'LHP_EMISI_C';
-    //         } else {
-    //             return response()->json([
-    //                 'message' => 'Kategori tidak valid'
-    //             ], 400);
-    //         }
-
-    //         $qr = QrDocument::where('id_document', $header->id)
-    //             ->where('type_document', $type)
-    //             ->where('is_active', 1)
-    //             ->where('file', $header->file_qr)
-    //             ->orderBy('id', 'desc')
-    //             ->first();
-
-    //         if ($header != null) {
-    //             $header->is_approve = 1;
-    //             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $header->approved_by = $this->karyawan;
-    //             $header->save();
-
-    //             if ($qr != null) {
-    //                 $dataQr = json_decode($qr->data);
-    //                 $dataQr->Tanggal_Pengesahan = Carbon::now()->locale('id')->isoFormat('YYYY MMMM DD');
-    //                 $dataQr->Disahkan_Oleh = $this->karyawan;
-    //                 $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-    //                 $qr->data = json_encode($dataQr);
-    //                 $qr->save();
-    //             }
-
-    //             OrderDetail::where('cfr', $request->cfr)
-    //                 ->where('is_active', true)
-    //                 ->update([
-    //                     'status' => 3,
-    //                     'is_approve' => 1,
-    //                     'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                     'approved_by' => $this->karyawan
-    //                 ]);
-
-    //             DB::commit();
-    //             return response()->json([
-    //                 'message' => 'Approve no LHP ' . $request->cfr . ' berhasil!',
-    //                 // 'file_name' => $fileName
-    //             ]);
-    //         } else {
-    //             DB::rollBack();
-    //             return response()->json([
-    //                 'message' => 'Data LHPS tidak ditemukan'
-    //             ], 404);
-    //         }
-    //     } catch (Exception $e) {
-    //         DB::rollBack();
-    //         dd($e);
-    //         return response()->json([
-    //             'message' => $e->getMessage(),
-    //             'line' => $e->getLine()
-    //         ], 401);
-    //     }
-    // }
-
-
 
     public function handleApprove(Request $request, $isManual = true)
     {
@@ -1318,181 +909,532 @@ class DraftEmisiSumberBergerakController extends Controller
         }
     }
 
-    /* UNUSED ENDPOINT
-    public function setSignature(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)
-                ->where('is_active', true)->first();
-            if (in_array($request->category, [32, 31])) {
-                $header = LhpsEmisiHeader::where('id', $request->id)->where('is_active', true)->first();
-                $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-            } else if (in_array($request->category, [34])) {
-                $header = LhpsEmisiCHeader::where('id', $request->id)->where('is_active', true)->first();
-                $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-            } else {
-                return response()->json([
-                    'message' => 'Kategori tidak valid'
-                ], 400);
-            }
+    /* non aktif
+        public function handleGenerateLink(Request $request)
+        {
+            DB::beginTransaction();
+            if ($request->category == 32 || $request->category == 31) {
+                try {
+                    $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
+                    $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
+                    $fileName = $header->file_lhp;
+                    if ($header != null) {
 
-            if ($header != null) {
-                $header->is_approve = 1;
-                $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $header->approved_by = $this->karyawan;
-                $header->nama_karyawan = $this->karyawan;
-                $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
-                $header->save();
+                        $key = $header->no_lhp . str_replace('.', '', microtime(true));
+                        $gen = MD5($key);
+                        $gen_tahun = self::encrypt(DATE('Y-m-d'));
+                        $token = self::encrypt($gen . '|' . $gen_tahun);
 
-                $file_qr = new GenerateQrDocumentLhp();
+                        $insertData = [
+                            'token' => $token,
+                            'key' => $gen,
+                            'id_quotation' => $header->id,
+                            'quotation_status' => "draft_emisi",
+                            'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                            'fileName_pdf' => $fileName,
+                            'type' => 'draft',
+                            'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                            'created_by' => $this->karyawan
+                        ];
 
-                $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
-                if ($file_qr) {
-                    $header->file_qr = $file_qr;
-                    $header->save();
-                }
+                        $insert = GenerateLink::insertGetId($insertData);
 
-                if ($order_detail != null) {
-                    $order_detail->status = 3;
-                    $order_detail->is_approve = 1;
-                    $order_detail->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $order_detail->approved_by = $this->karyawan;
-                    $order_detail->save();
-                }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
+                        $header->is_generated = true;
+                        $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $header->generated_by = $this->karyawan;
+                        $header->id_token = $insert;
+                        $header->expired = Carbon::now()->addYear()->format('Y-m-d');
+                        $header->save();
                     }
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'Generate link success!',
+                    ]);
+                } catch (Exception $e) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => $e->getMessage(),
+                    ], 401);
                 }
+            } else if ($request->category == 34) {
+                try {
+                    $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', 1)->first();
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                    $fileName = $header->file_lhp;
+                    if ($header != null) {
 
-                $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-                $this->dispatch($job);
+                        $key = $header->no_lhp . str_replace('.', '', microtime(true));
+                        $gen = MD5($key);
+                        $gen_tahun = self::encrypt(DATE('Y-m-d'));
+                        $token = self::encrypt($gen . '|' . $gen_tahun);
 
-                $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
-                $this->dispatch($job);
+                        $insertData = [
+                            'token' => $token,
+                            'key' => $gen,
+                            'id_quotation' => $header->id,
+                            'quotation_status' => "draft_emisi_cerobong",
+                            'expired' => Carbon::now()->addYear()->format('Y-m-d'),
+                            'fileName_pdf' => $fileName,
+                            'type' => 'draft',
+                            'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                            'created_by' => $this->karyawan
+                        ];
 
-                $job = new RenderLhp($header, $detail, 'downloadLHPFinal', $groupedByPage);
-                $this->dispatch($job);
+                        $insert = GenerateLink::insertGetId($insertData);
 
-                DB::commit();
-                return response()->json([
-                    'message' => 'Signature berhasil diubah'
-                ], 200);
+                        $header->is_generated = true;
+                        $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $header->generated_by = $this->karyawan;
+                        $header->id_token = $insert;
+                        $header->expired = Carbon::now()->addYear()->format('Y-m-d');
+                        $header->save();
+                    }
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'Generate link success!',
+                    ]);
+                } catch (Exception $e) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => $e->getMessage(),
+                    ], 401);
+                }
             } else {
                 DB::rollBack();
                 return response()->json([
-                    'message' => 'Data LHPS tidak ditemukan'
-                ], 404);
+                    'message' => 'Kategori tidak ditemukan'
+                ], 500);
             }
-        } catch (Exception $th) {
-            DB::rollBack();
-            return response()->json([
-                'message' => $th->getMessage(),
-                'line' => $th->getLine(),
-                'file' => $th->getFile()
-            ]);
         }
-    }
-
-    /*public function handleDownload(Request $request)
-    {
-        if ($request->category == 32 || $request->category == 36) {
+        public function handleRevisi(Request $request)
+        {
+            DB::beginTransaction();
             try {
                 $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-                if ($header != null && $header->file_lhp == null) {
-                    $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
-                    // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-
-                    if ($header->file_qr == null) {
-                        $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
-                        $header->save();
-                        GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
+    
+                if ($header != null) {
+                    if ($header->is_revisi == 1) {
+                        $header->is_revisi = 0;
+                    } else {
+                        $header->is_revisi = 1;
                     }
-
-                    $groupedByPage = [];
-                    if (!empty($custom)) {
-                        foreach ($custom as $item) {
-                            $page = $item['page'];
-                            if (!isset($groupedByPage[$page])) {
-                                $groupedByPage[$page] = [];
-                            }
-                            $groupedByPage[$page][] = $item;
-                        }
-                    }
-
-                    $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-                    $this->dispatch($job);
-
-                    $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
-                    $data = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-                    $data->file_lhp = $fileName;
-                    $data->save();
-
-                } else if ($header != null && $header->file_lhp != null) {
-                    $fileName = $header->file_lhp;
+    
+                    $header->save();
                 }
-
+    
+                DB::commit();
                 return response()->json([
-                    'file_name' => env('APP_URL') . '/public/dokumen/LHPS/' . $fileName,
-                    'message' => 'Download file ' . $request->cfr . ' berhasil!'
+                    'message' => 'Revisi updated successfully!',
                 ]);
-            } catch (\Exception $th) {
+            } catch (\Exception $e) {
+                DB::rollBack();
                 return response()->json([
-                    'message' => 'Error download file ' . $th->getMessage(),
-                ], 401);
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                ], 500);
             }
-        } else {
+        }
+        public function getLink(Request $request)
+        {
             try {
-                $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-                if ($header != null && $header->file_lhp == null) {
-                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-                    // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+                $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => $request->category == 32 || $request->category == 31 ? 'draft_emisi' : 'draft_emisi_cerobong', 'type' => 'draft'])->first();
 
-                    if ($header->file_qr == null) {
-                        $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
-                        $header->save();
-                        GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
+                if (!$link) {
+                    return response()->json(['message' => 'Link not found'], 404);
+                }
+                return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
+            } catch (Exception $e) {
+                return response()->json(['message' => $e->getMessage()], 400);
+            }
+        }
+      
+      // versi sebelumnya:
+        public function handleDatadetail(Request $request)
+        {
+            try {
+                $cfr = OrderDetail::with([
+                    'subCategory' => function ($query) {
+                        $query->select('nama_sub_kategori');
+                    },
+                    'category' => function ($query) {
+                        $query->select('nama_kategori');
+                    }
+                ])
+                    ->where('cfr', $request->cfr)
+                    ->first();
+
+                if ($request->category2 == 32 || $request->category2 == 31) {
+                    $cek_all = OrderDetail::with('orderHeader', 'lhps_emisi.lhpsEmisiCustom')->where('cfr', $cfr->cfr)->where('is_active', true)->get();
+
+                    if ($cek_all) {
+                        $data
                     }
 
-                    $groupedByPage = [];
-                    if (!empty($custom)) {
-                        foreach ($custom as $item) {
-                            $page = $item['page'];
-                            if (!isset($groupedByPage[$page])) {
-                                $groupedByPage[$page] = [];
+                    $dataTable = [];
+                    $dataTable2 = [];
+                    foreach ($cek_all as $key => $values) {
+                        $value = DataLapanganEmisiKendaraan::with('emisiOrder')->where('no_sampel', $values->no_sampel)->first();
+
+                        $cek_bakumutu = MasterBakumutu::where('id_regulasi', $value->emisiOrder->id_regulasi)
+                            ->where('is_active', true)
+                            ->get();
+
+                        $hc = '-';
+                        $co = '-';
+                        $op = '-';
+                        foreach ($cek_bakumutu as $x => $xx) {
+                            if ($xx->parameter == 'HC' || $xx->parameter == 'HC (Bensin)') {
+                                $hc = $xx->baku_mutu;
+                            } else if ($xx->parameter == 'CO' || $xx->parameter == 'CO (Bensin)') {
+                                $co = $xx->baku_mutu;
+                            } else if ($xx->parameter == 'Opasitas' || $xx->parameter == 'Opasitas (Solar)') {
+                                $op = $xx->baku_mutu;
                             }
-                            $groupedByPage[$page][] = $item;
+                        }
+
+                        array_push($dataTable, (object) [
+                            'no_sampel' => $value->no_sampel,
+                            'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
+                            'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
+                            'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
+                            'hasil_co' => $value->co,
+                            'hasil_hc' => $value->hc,
+                            'hasil_op' => $value->opasitas,
+                            'baku_co' => $co,
+                            'baku_hc' => $hc,
+                            'baku_op' => $op,
+                            'regulasi' => $value->peraturan,
+                            'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
+                        ]);
+
+                        $reqOtherRegs = $request->other_regulasi;
+                        if ($reqOtherRegs && count($reqOtherRegs) > 0) {
+                            foreach ($reqOtherRegs as $key => $idReg) {
+                                if ($values->lhps_emisi && $values->lhps_emisi->lhpsEmisiCustom) {
+                                    $page = $key + 1;
+                                    $val = $values->lhps_emisi->lhpsEmisiCustom->where('page', $page)->first()->toArray();
+                                    $orderDetail = OrderDetail::where('no_sampel', $val['no_sampel'])->first();
+
+                                    $dataTable2["id_$idReg"][] = [
+                                        'no_sampel' => $val['no_sampel'],
+                                        'nama_kendaraan' => $orderDetail->keterangan_1 ?? $val['nama_kendaraan'],
+                                        'bobot_kendaraan' => $val['bobot_kendaraan'],
+                                        'tahun_kendaraan' => $val['tahun_kendaraan'],
+                                        'hasil_uji' => $val['hasil_uji'],
+                                        'baku_mutu' => $val['baku_mutu'],
+                                        'tanggal_sampling' => $val['tanggal_sampling'] ?? $values->tanggal_sampling ?? null,
+                                    ];
+                                } else {
+                                    $dataTable2["id_$idReg"][] = [
+                                        'no_sampel' => $value->no_sampel,
+                                        'nama_kendaraan' => $value->emisiOrder->kendaraan->merk_kendaraan,
+                                        'bobot' => $value->emisiOrder->kendaraan->bobot_kendaraan,
+                                        'tahun' => $value->emisiOrder->kendaraan->tahun_pembuatan,
+                                        'hasil_co' => $value->co,
+                                        'hasil_hc' => $value->hc,
+                                        'hasil_op' => $value->opasitas,
+                                        'baku_co' => $co,
+                                        'baku_hc' => $hc,
+                                        'baku_op' => $op,
+                                        'tanggal_sampling' => $value->tanggal_sampling ?? $values->tanggal_sampling ?? null,
+                                    ];
+                                }
+                            }
                         }
                     }
 
-                    $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
-                    $this->dispatch($job);
-
-                    $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
-                    $data = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-                    $data->file_lhp = $fileName;
-                    $data->save();
-
-                } else if ($header != null && $header->file_lhp != null) {
-                    $fileName = $header->file_lhp;
+                    return response()->json([
+                        // 'data' => $cfr,
+                        'dataAll' => $cek_all[0],
+                        // 'datalapangan' => $datalapangan,
+                        'data' => $dataTable,
+                        'next_page' => json_encode($dataTable2),
+                        'keterangan' => [
+                            '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                            '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                            'ẍ Parameter belum terakreditasi.'
+                        ],
+                    ], 200);
                 }
 
+                return response()->json(['message' => 'Sub Kategori tidak sesuai.!'], 400);
+            } catch (\Exception $e) {
                 return response()->json([
-                    'file_name' => env('APP_URL') . '/public/dokumen/LHPS/' . $fileName,
-                    'message' => 'Download file ' . $request->cfr . ' berhasil!'
-                ]);
-            } catch (\Exception $th) {
+                    'message' => $e->getMessage(),
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile()
+                ], 500);
+            }
+        }
+        public function handleMetodeSampling(Request $request)
+        {
+            try {
+                $id_parameter = array_map(fn($item) => explode(';', $item)[0], $request->parameter);
+
+                $method = Parameter::where('id', $id_parameter)
+                    ->pluck('method')
+                    ->map(function ($item) {
+                        return $item === null ? '-' : $item;
+                    })
+                    ->toArray();
+
                 return response()->json([
-                    'message' => 'Error download file ' . $th->getMessage(),
+                    'status' => true,
+                    'message' => 'Available data retrieved successfully',
+                    'data' => $method
+                ], 200);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                    'line' => $e->getLine()
+                ], 500);
+            }
+        }
+        public function handleApprove(Request $request)
+        {
+            DB::beginTransaction();
+            try {
+                if (in_array($request->category, [32, 31])) {
+                    $header = LhpsEmisiHeader::where('id', $request->id)->where('is_active', true)->first();
+                    // $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
+                    $type = 'LHP_EMISI';
+                } else if (in_array($request->category, [34])) {
+                    $header = LhpsEmisiCHeader::where('id', $request->id)->where('is_active', true)->first();
+                    // $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                    $type = 'LHP_EMISI_C';
+                } else {
+                    return response()->json([
+                        'message' => 'Kategori tidak valid'
+                    ], 400);
+                }
+
+                $qr = QrDocument::where('id_document', $header->id)
+                    ->where('type_document', $type)
+                    ->where('is_active', 1)
+                    ->where('file', $header->file_qr)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($header != null) {
+                    $header->is_approve = 1;
+                    $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $header->approved_by = $this->karyawan;
+                    $header->save();
+
+                    if ($qr != null) {
+                        $dataQr = json_decode($qr->data);
+                        $dataQr->Tanggal_Pengesahan = Carbon::now()->locale('id')->isoFormat('YYYY MMMM DD');
+                        $dataQr->Disahkan_Oleh = $this->karyawan;
+                        $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                        $qr->data = json_encode($dataQr);
+                        $qr->save();
+                    }
+
+                    OrderDetail::where('cfr', $request->cfr)
+                        ->where('is_active', true)
+                        ->update([
+                            'status' => 3,
+                            'is_approve' => 1,
+                            'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                            'approved_by' => $this->karyawan
+                        ]);
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'Approve no LHP ' . $request->cfr . ' berhasil!',
+                        // 'file_name' => $fileName
+                    ]);
+                } else {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Data LHPS tidak ditemukan'
+                    ], 404);
+                }
+            } catch (Exception $e) {
+                DB::rollBack();
+                dd($e);
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'line' => $e->getLine()
                 ], 401);
             }
         }
-    }*/
+        public function setSignature(Request $request)
+        {
+            DB::beginTransaction();
+            try {
+                $order_detail = OrderDetail::where('no_sampel', $request->no_sampel)
+                    ->where('is_active', true)->first();
+                if (in_array($request->category, [32, 31])) {
+                    $header = LhpsEmisiHeader::where('id', $request->id)->where('is_active', true)->first();
+                    $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
+                } else if (in_array($request->category, [34])) {
+                    $header = LhpsEmisiCHeader::where('id', $request->id)->where('is_active', true)->first();
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                } else {
+                    return response()->json([
+                        'message' => 'Kategori tidak valid'
+                    ], 400);
+                }
+
+                if ($header != null) {
+                    $header->is_approve = 1;
+                    $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $header->approved_by = $this->karyawan;
+                    $header->nama_karyawan = $this->karyawan;
+                    $header->jabatan_karyawan = $request->attributes->get('user')->karyawan->jabatan;
+                    $header->save();
+
+                    $file_qr = new GenerateQrDocumentLhp();
+
+                    $file_qr = $file_qr->insert('LHP_EMISI', $header, $this->karyawan);
+                    if ($file_qr) {
+                        $header->file_qr = $file_qr;
+                        $header->save();
+                    }
+
+                    if ($order_detail != null) {
+                        $order_detail->status = 3;
+                        $order_detail->is_approve = 1;
+                        $order_detail->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $order_detail->approved_by = $this->karyawan;
+                        $order_detail->save();
+                    }
+
+                    $groupedByPage = [];
+                    if (!empty($custom)) {
+                        foreach ($custom as $item) {
+                            $page = $item['page'];
+                            if (!isset($groupedByPage[$page])) {
+                                $groupedByPage[$page] = [];
+                            }
+                            $groupedByPage[$page][] = $item;
+                        }
+                    }
+
+                    $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
+                    $this->dispatch($job);
+
+                    $job = new RenderLhp($header, $detail, 'downloadLHP', $groupedByPage);
+                    $this->dispatch($job);
+
+                    $job = new RenderLhp($header, $detail, 'downloadLHPFinal', $groupedByPage);
+                    $this->dispatch($job);
+
+                    DB::commit();
+                    return response()->json([
+                        'message' => 'Signature berhasil diubah'
+                    ], 200);
+                } else {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Data LHPS tidak ditemukan'
+                    ], 404);
+                }
+            } catch (Exception $th) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => $th->getMessage(),
+                    'line' => $th->getLine(),
+                    'file' => $th->getFile()
+                ]);
+            }
+        }
+        public function handleDownload(Request $request)
+        {
+            if ($request->category == 32 || $request->category == 36) {
+                try {
+                    $header = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+                    if ($header != null && $header->file_lhp == null) {
+                        $detail = LhpsEmisiDetail::where('id_header', $header->id)->get();
+                        // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+
+                        if ($header->file_qr == null) {
+                            $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
+                            $header->save();
+                            GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
+                        }
+
+                        $groupedByPage = [];
+                        if (!empty($custom)) {
+                            foreach ($custom as $item) {
+                                $page = $item['page'];
+                                if (!isset($groupedByPage[$page])) {
+                                    $groupedByPage[$page] = [];
+                                }
+                                $groupedByPage[$page][] = $item;
+                            }
+                        }
+
+                        $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
+                        $this->dispatch($job);
+
+                        $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
+                        $data = LhpsEmisiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+                        $data->file_lhp = $fileName;
+                        $data->save();
+
+                    } else if ($header != null && $header->file_lhp != null) {
+                        $fileName = $header->file_lhp;
+                    }
+
+                    return response()->json([
+                        'file_name' => env('APP_URL') . '/public/dokumen/LHPS/' . $fileName,
+                        'message' => 'Download file ' . $request->cfr . ' berhasil!'
+                    ]);
+                } catch (\Exception $th) {
+                    return response()->json([
+                        'message' => 'Error download file ' . $th->getMessage(),
+                    ], 401);
+                }
+            } else {
+                try {
+                    $header = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+                    if ($header != null && $header->file_lhp == null) {
+                        $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                        // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
+
+                        if ($header->file_qr == null) {
+                            $header->file_qr = 'LHP-' . str_ireplace("/", "_", $header->no_lhp);
+                            $header->save();
+                            GenerateQrDocumentLhp::insert('LHP', $header, $this->karyawan);
+                        }
+
+                        $groupedByPage = [];
+                        if (!empty($custom)) {
+                            foreach ($custom as $item) {
+                                $page = $item['page'];
+                                if (!isset($groupedByPage[$page])) {
+                                    $groupedByPage[$page] = [];
+                                }
+                                $groupedByPage[$page][] = $item;
+                            }
+                        }
+
+                        $job = new RenderLhp($header, $detail, 'downloadWSDraft', $groupedByPage);
+                        $this->dispatch($job);
+
+                        $fileName = 'LHP-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
+                        $data = LhpsEmisiCHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+                        $data->file_lhp = $fileName;
+                        $data->save();
+
+                    } else if ($header != null && $header->file_lhp != null) {
+                        $fileName = $header->file_lhp;
+                    }
+
+                    return response()->json([
+                        'file_name' => env('APP_URL') . '/public/dokumen/LHPS/' . $fileName,
+                        'message' => 'Download file ' . $request->cfr . ' berhasil!'
+                    ]);
+                } catch (\Exception $th) {
+                    return response()->json([
+                        'message' => 'Error download file ' . $th->getMessage(),
+                    ], 401);
+                }
+            }
+        }
+    */
 }
