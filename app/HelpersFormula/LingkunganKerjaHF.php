@@ -30,6 +30,11 @@ class LingkunganKerjaHF
         $C9 = null;
         $C10 = null;
         $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -42,9 +47,36 @@ class LingkunganKerjaHF
         $st = null;
         $satuan = null;
 
-        $C2 = number_format(((((20 / 19) * ($ks - $kb) * $data->fp) / $data->vs) * 24.45) / 20.01,5, '.', '');
+        // Vs (L) = Va*(298/Ta))*(Pa)/760
+        $Vs = number_format(($data->average_flow * $data->durasi) * (298 / $Ta) * (floatval($data->tekanan) / 760),5, '.', '');
+        if(floatval($Vs) > 0) {
+            // C (mg/Nm3) = ((((20/19)*(A-B)*FP)/Vs)
+            $C1 = number_format(((((20 / 19) * ($ks - $kb) * $data->fp) / $Vs)),5, '.', '');
+        }else{
+            $C1 = 0;
+        }
 
-        $satuan = 'ppm';
+        // C1 = C2*1000
+        $C = number_format($C1 * 1000,5, '.', '');
+
+        // C (PPM) = ((((20/19)*(A-B)*FP)/Vs)*24,45)/20,01
+        $C2 = number_format(((((20 / 19) * ($ks - $kb) * $data->fp) / $Vs) * 24.45) / 20.01,5, '.', '');
+
+        $C14 = $C2;
+
+        // Vs (L) = Laju alir*durasi pengambilan
+        $Vs_alt = number_format($data->average_flow * $data->durasi, 5, '.', '');
+        if(floatval($Vs_alt) < 0) {
+            $C16 = 0;
+        }else{
+            // C (mg/m3) = ((((20/19)*(A-B)*FP)/Vs)
+            $C16 = number_format(((((20 / 19) * ($ks - $kb) * $data->fp) / $Vs_alt)),5, '.', '');
+        }
+
+        // C16 = C17*1000
+        $C15 = number_format($C16 * 1000,5, '.', '');
+
+        $satuan = 'mg/Nm3';
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -72,6 +104,11 @@ class LingkunganKerjaHF
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
