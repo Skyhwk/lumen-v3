@@ -25,7 +25,7 @@ use App\Models\OrderHeader;
 use App\Services\SendEmail;
 use App\Services\TemplateLhpp;
 use App\Jobs\JobPrintLhp;
-
+use App\Models\LinkLhp;
 
 class DraftLhpUdaraPsikologiController extends Controller
 {
@@ -354,10 +354,14 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 				// $servicePrint = new PrintLhp();
 				// $servicePrint->printByFilename($data->file_lhp, $detail);
+				$periode = OrderDetail::where('cfr', $data->no_cfr)->where('is_active', true)->first()->periode ?? null;
+				// dd($data, $periode);
+				$cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-				$periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
-                $this->dispatch($job);
+                if($cekLink) {
+					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $periode);
+					$this->dispatch($job);
+                }
 
 				// if (!$servicePrint) {
 				// 	DB::rollBack();
