@@ -63,6 +63,11 @@ class SendEmail
             'email' => null,
             'password' => null,
             'name' => 'Promo Intilab'
+        ],
+        'lhp' => [
+            'email' => null,
+            'password' => null,
+            'name' => 'E-LHP'
         ]
     ];
 
@@ -80,6 +85,8 @@ class SendEmail
         $this->emailConfig['tc']['password'] = env('MAIL_TC_PASSWORD');
         $this->emailConfig['promo']['email'] = env('MAIL_PROMO_USERNAME');
         $this->emailConfig['promo']['password'] = env('MAIL_PROMO_PASSWORD');
+        $this->emailConfig['lhp']['email'] = env('MAIL_LHP_USERNAME');
+        $this->emailConfig['lhp']['password'] = env('MAIL_LHP_PASSWORD');
     }
 
     public static function where($field, $value)
@@ -164,6 +171,11 @@ class SendEmail
         $this->fromType = 'promo';
         return $this;
     }
+    public function fromLhp()
+    {
+        $this->fromType = 'lhp';
+        return $this;
+    }
 
     public function send()
     {
@@ -200,6 +212,8 @@ class SendEmail
                 foreach ($this->replyto as $email) {
                     if ($email == 'admsales01@intilab.com') {
                         $mail->addReplyTo($email, 'Admin Sales');
+                    }elseif ($email == 'adminlhp@intilab.com') {
+                        $mail->addReplyTo($email, 'Admin LHP');
                     } else {
                         $trimTo = preg_replace('/\s+/', '', $email);
                         $mail->addReplyTo($trimTo);
