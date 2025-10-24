@@ -53,17 +53,17 @@ class LingkunganHidupH2S
         foreach ($data->ks as $key => $value) {
             if(floatval($Vu) != 0.0) {
                 // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
-                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45) / 1000, 4);
+                $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45), 4);
             }else {
                 $C1_val = 0;
             }
 
             // C1 = C2*1000
             $C_val = round($C1_val * 1000, 4);
-            if (in_array($data->parameter, ['H2S (8 Jam)','H2S (3 Jam)','H2S (24 Jam)'])) {
-                // C (ug/Nm3) = ((A1-A2)/Vs)*(34/24.45)
-                $C_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45), 4);
-            }
+            // if (in_array($data->parameter, ['H2S (8 Jam)','H2S (3 Jam)','H2S (24 Jam)'])) {
+            //     // C (ug/Nm3) = ((A1-A2)/Vs)*(34/24.45)
+            //     $C_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45), 4);
+            // }
 
             // H2S (PPM) = (A1-A2)/Vs
             $C2_val = round(($value - $data->kb[$key]) / $Vu, 4);
@@ -71,7 +71,7 @@ class LingkunganHidupH2S
             $C14_val = $C2_val;
 
             // H2S (mg/Nm3) = (((A1 - A2)/Rerata laju alir*t)*(34/24,45))/1000
-            $C16_val = round((($value - $data->kb[$key]) / ($data->average_flow * $data->durasi)) * (34 / 24.45) / 1000, 4);
+            $C16_val = round((($value - $data->kb[$key]) / ($data->average_flow * $data->durasi)) * (34 / 24.45), 4);
 
             $C15_val = round($C16_val * 1000, 4);
 
@@ -98,7 +98,7 @@ class LingkunganHidupH2S
         if (floatval($C2) < 0.0010)
             $C2 = '<0.0010';
 
-        $satuan = 'mg/m3';
+        $satuan = 'mg/Nm3';
 
         if(count($hasil1_array) == 4){
             $satuan = 'ug/Nm3';
