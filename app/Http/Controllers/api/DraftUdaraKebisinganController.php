@@ -30,6 +30,7 @@ use App\Services\LhpTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -691,19 +692,29 @@ class DraftUdaraKebisinganController extends Controller
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                     $dataQr->Disahkan_Oleh = $data->nama_karyawan;
+                    $dataQr->Jabatan = $data->jabatan_karyawan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                // $servicePrint = new PrintLhp();
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                }
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();

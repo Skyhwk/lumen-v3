@@ -241,8 +241,6 @@ class DraftAirController extends Controller
 
             $header->file_lhp = $fileName;
 
-            $job = new CombineLHPJob($noLhp, $fileLhp, $noOrder, $periode);
-            $this->dispatch($job);
             // if ($header->is_revisi == 1) {
             //     $header->is_revisi = 0;
             //     $header->is_generated = 0;
@@ -936,6 +934,10 @@ class DraftAirController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+                
+                $periode = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $periode);
+                $this->dispatch($job);
                 // $job = new JobPrintLhp($request->no_sampel);
                 // $this->dispatch($job);
                 // $servicePrint = new PrintLhp();

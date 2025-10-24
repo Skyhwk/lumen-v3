@@ -12,6 +12,7 @@ use App\Models\LhpUdaraPsikologiHeaderHistory;
 use App\Models\QrDocument;
 use App\Services\GenerateQrDocumentLhpp;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 {
 	public function index(Request $request)
 	{
-			$data = OrderDetail::with('dataPsikologi', 'lhp_psikologi')
+		$data = OrderDetail::with('dataPsikologi', 'lhp_psikologi')
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
 			->where('status', 2)
@@ -51,7 +52,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 		return Datatables::of($data)->make(true);
 	}
-	
+
 
 
 	public function getOrder(Request $request)
@@ -119,8 +120,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				}
 
 				// Jika divisinya sama, urutkan berdasarkan angka setelah '/'
-				$noA = preg_match('/\/(\d+)$/', $a->no_sampel ?? $a->nosample ?? '', $matchA) ? (int)$matchA[1] : 0;
-				$noB = preg_match('/\/(\d+)$/', $b->no_sampel ?? $b->nosample ?? '', $matchB) ? (int)$matchB[1] : 0;
+				$noA = preg_match('/\/(\d+)$/', $a->no_sampel ?? $a->nosample ?? '', $matchA) ? (int) $matchA[1] : 0;
+				$noB = preg_match('/\/(\d+)$/', $b->no_sampel ?? $b->nosample ?? '', $matchB) ? (int) $matchB[1] : 0;
 
 				return $noA <=> $noB;
 			});
@@ -289,92 +290,99 @@ class DraftLhpUdaraPsikologiController extends Controller
 		}
 	}
 
-	
-	  public function handleApprove(Request $request)
-    {
-        try {
-         
-            $data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)
-                    ->where('is_active', true)
-                    ->first();
-            
-            $no_lhp = $data->no_cfr;
 
-            $detail = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
-        
-            $qr = QrDocument::where('id_document', $data->id)
-                ->where('type_document', 'LHP_PSIKOLOGI')
-                ->where('is_active', 1)
-                ->where('file', $data->file_qr)
-                ->orderBy('id', 'desc')
-                ->first();
-// dd($data, $noSampel, $detail);
-            if ($data != null) {
-                OrderDetail::where('cfr', $request->cfr)
-                // ->whereIn('no_sampel', $noSampel)
-                ->where('is_active', true)
-                ->where('status', 2)
-                ->update([
-                    'is_approve' => 1,
-                    'status' => 3,
-                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'approved_by' => $this->karyawan
-                ]);
+	public function handleApprove(Request $request)
+	{
+		try {
 
-                
-                $data->is_approve = 1;
-                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->approved_by = $this->karyawan;
-                 if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
-                // dd($data->id_kategori_2);
+			$data = LhpUdaraPsikologiHeader::where('no_cfr', $request->cfr)
+				->where('is_active', true)
+				->first();
 
-                HistoryAppReject::insert([
-                    'no_lhp' => $data->no_cfr,
-                    'no_sampel' => $request->noSampel,
-                    'kategori_2' => $data->id_kategori_2,
-                    'kategori_3' => $data->id_kategori_3,
-                    'menu' => 'Draft Udara',
-                    'status' => 'approved',
-                    'approved_at' => Carbon::now(),
-                    'approved_by' => $this->karyawan
-                ]);
+			$no_lhp = $data->no_cfr;
 
-                if ($qr != null) {
-                    $dataQr = json_decode($qr->data);
-                    $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
-                    $qr->data = json_encode($dataQr);
-                    $qr->save();
-                }
+			$detail = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
-                
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                }
-            }
+			$qr = QrDocument::where('id_document', $data->id)
+				->where('type_document', 'LHP_PSIKOLOGI')
+				->where('is_active', 1)
+				->where('file', $data->file_qr)
+				->orderBy('id', 'desc')
+				->first();
+			// dd($data, $noSampel, $detail);
+			if ($data != null) {
+				OrderDetail::where('cfr', $request->cfr)
+					// ->whereIn('no_sampel', $noSampel)
+					->where('is_active', true)
+					->where('status', 2)
+					->update([
+						'is_approve' => 1,
+						'status' => 3,
+						'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+						'approved_by' => $this->karyawan
+					]);
 
-            DB::commit();
-            return response()->json([
-                'data' => $data,
-                'status' => true,
-                'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove'
-            ], 201);
-        } catch (\Exception $th) {
-            DB::rollBack();
-            dd($th);
-            return response()->json([
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false
-            ], 500);
-        }
-    }
+
+				$data->is_approve = 1;
+				$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+				$data->approved_by = $this->karyawan;
+				if ($data->count_print < 1) {
+					$data->is_printed = 1;
+					$data->count_print = $data->count_print + 1;
+				}
+				// dd($data->id_kategori_2);
+
+				HistoryAppReject::insert([
+					'no_lhp' => $data->no_cfr,
+					'no_sampel' => $request->noSampel,
+					'kategori_2' => $data->id_kategori_2,
+					'kategori_3' => $data->id_kategori_3,
+					'menu' => 'Draft Udara',
+					'status' => 'approved',
+					'approved_at' => Carbon::now(),
+					'approved_by' => $this->karyawan
+				]);
+
+				if ($qr != null) {
+					$dataQr = json_decode($qr->data);
+					$dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
+					$dataQr->Disahkan_Oleh = $data->nama_karyawan;
+					$dataQr->Jabatan = $data->jabatan_karyawan;
+					$qr->data = json_encode($dataQr);
+					$qr->save();
+				}
+
+				// $servicePrint = new PrintLhp();
+				// $servicePrint->printByFilename($data->file_lhp, $detail);
+
+				$periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+
+				// if (!$servicePrint) {
+				// 	DB::rollBack();
+				// 	return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+				// }
+			} else {
+				DB::rollBack();
+				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);
+			}
+
+			DB::commit();
+			return response()->json([
+				'data' => $data,
+				'status' => true,
+				'message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove'
+			], 201);
+		} catch (\Exception $th) {
+			DB::rollBack();
+			dd($th);
+			return response()->json([
+				'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+				'status' => false
+			], 500);
+		}
+	}
 
 
 	public function handleGenerateLink(Request $request)
@@ -516,28 +524,28 @@ class DraftLhpUdaraPsikologiController extends Controller
 			if ($data) {
 
 				$lhpsHistory = $data->replicate();
-                $lhpsHistory->setTable((new LhpUdaraPsikologiHeaderHistory())->getTable());
-                // $lhpsHistory->id = $data->id;
-                $lhpsHistory->created_at = $data->created_at;
-                $lhpsHistory->updated_at = $data->updated_at;
-                $lhpsHistory->deleted_at = Carbon::now();
-                $lhpsHistory->deleted_by = $this->karyawan;
-                $lhpsHistory->save();
+				$lhpsHistory->setTable((new LhpUdaraPsikologiHeaderHistory())->getTable());
+				// $lhpsHistory->id = $data->id;
+				$lhpsHistory->created_at = $data->created_at;
+				$lhpsHistory->updated_at = $data->updated_at;
+				$lhpsHistory->deleted_at = Carbon::now();
+				$lhpsHistory->deleted_by = $this->karyawan;
+				$lhpsHistory->save();
 
 				$oldDetails = LhpUdaraPsikologiDetail::where('id_header', $data->id)->get();
-                if ($oldDetails->isNotEmpty()) {
-                    foreach ($oldDetails as $detail) {
-                        $detailHistory = $detail->replicate();
-                        $detailHistory->setTable((new LhpUdaraPsikologiDetailHistory())->getTable());
-                        // $detailHistory->id = $detail->id;
-                        $detailHistory->created_by = $this->karyawan;
-                        $detailHistory->created_at = Carbon::now();
-                        $detailHistory->save();
-                    }
-                    LhpUdaraPsikologiDetail::where('id_header', $data->id)->delete();
-                }
+				if ($oldDetails->isNotEmpty()) {
+					foreach ($oldDetails as $detail) {
+						$detailHistory = $detail->replicate();
+						$detailHistory->setTable((new LhpUdaraPsikologiDetailHistory())->getTable());
+						// $detailHistory->id = $detail->id;
+						$detailHistory->created_by = $this->karyawan;
+						$detailHistory->created_at = Carbon::now();
+						$detailHistory->save();
+					}
+					LhpUdaraPsikologiDetail::where('id_header', $data->id)->delete();
+				}
 
-				 OrderDetail::where('no_order', $data->no_order)
+				OrderDetail::where('no_order', $data->no_order)
 					->where('cfr', $data->no_cfr)
 					->where('kategori_2', '4-Udara')
 					->where('status', 2)
