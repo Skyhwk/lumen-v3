@@ -59,7 +59,7 @@ class DraftUdaraUmumController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-// Amang
+    // Amang
     public function getKategori(Request $request)
     {
         $kategori = MasterSubKategori::where('id_kategori', 4)
@@ -74,57 +74,57 @@ class DraftUdaraUmumController extends Controller
     }
 
   public function handleMetodeSampling(Request $request)
-{
-    try {
-        $subKategori = explode('-', $request->kategori_3);
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
 
-        // Data utama
-        $data = MetodeSampling::where('kategori', '4-UDARA')
-            ->where('sub_kategori', strtoupper($subKategori[1]))
-            ->get();
+            // Data utama
+            $data = MetodeSampling::where('kategori', '4-UDARA')
+                ->where('sub_kategori', strtoupper($subKategori[1]))
+                ->get();
 
-        $result = $data->toArray();
+            $result = $data->toArray();
 
-        // Jika ada id_lhp, lakukan perbandingan array
-        if ($request->filled('id_lhp')) {
-            $header = LhpsLingHeader::find($request->id_lhp);
+            // Jika ada id_lhp, lakukan perbandingan array
+            if ($request->filled('id_lhp')) {
+                $header = LhpsLingHeader::find($request->id_lhp);
 
-            if ($header) {
-                $headerMetode = json_decode($header->methode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = json_decode($header->methode_sampling, true) ?? [];
 
-                foreach ($data as $key => $value) {
-                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                    $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                    if (!empty($missing)) {
-                        foreach ($missing as $miss) {
-                            $result[] = [
-                                'id' => null,
-                                'metode_sampling' => $miss,
-                                'kategori' => $value->kategori,
-                                'sub_kategori' => $value->sub_kategori,
-                            ];
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss,
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
+                            }
                         }
                     }
                 }
             }
+
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
-
-        return response()->json([
-            'status' => true,
-            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-            'data' => $result,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            'line' => $e->getLine(),
-        ], 500);
     }
-}
 
    public function store(Request $request)
     {
@@ -264,17 +264,17 @@ class DraftUdaraUmumController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
                 ->whereView('DraftUdaraAmbient')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request);
-                }
-            }
+            // if ($header->is_revisi == 1) {
+            //     $header->is_revisi = 0;
+            //     $header->is_generated = 0;
+            //     $header->count_revisi++;
+            //     if ($header->count_revisi > 2) {
+            //         $this->handleApprove($request);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -296,7 +296,7 @@ class DraftUdaraUmumController extends Controller
 
 
  
-         public function handleDatadetail(Request $request)
+    public function handleDatadetail(Request $request)
     {
         try {
             $noSampel = explode(', ', $request->no_sampel);
@@ -548,7 +548,7 @@ class DraftUdaraUmumController extends Controller
         }
     }
 
-  private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+    private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {  
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
             ->where('parameter', $val->parameter)
@@ -579,11 +579,7 @@ class DraftUdaraUmumController extends Controller
         return $entry;
     }
 
-
- 
-  
-
-   public function handleApprove(Request $request, $isManual = true)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
             if($isManual) {
@@ -680,7 +676,7 @@ class DraftUdaraUmumController extends Controller
     }
 
     // Amang
-   public function handleReject(Request $request)
+    public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -834,7 +830,7 @@ class DraftUdaraUmumController extends Controller
         return response()->json($users);
     }
     // Amang
-   public function handleRevisi(Request $request)
+    public function handleRevisi(Request $request)
     {
         DB::beginTransaction();
         try {

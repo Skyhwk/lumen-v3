@@ -330,7 +330,7 @@ class DraftUlkMedanMagnetController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
                 ->whereView('DraftUlkMedanMagnet')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
             if ($header->is_revisi == 1) {

@@ -372,27 +372,27 @@ class DraftUdaraIklimKerjaController extends Controller
                         ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimPanas')
-                        ->render();
+                        ->render('downloadLHPFinal');
                 } else {
                     $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)
                         ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimDingin')
-                        ->render();
+                        ->render('downloadLHPFinal');
                 }
 
 
                 // $fileName = 'LHP-IKLIM_KERJA-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
                 $header->file_lhp = $fileName;
-                if ($header->is_revisi == 1) {
-                    $header->is_revisi = 0;
-                    $header->is_generated = 0;
-                    $header->count_revisi++;
-                    if ($header->count_revisi > 2) {
-                        $this->handleApprove($request, false);
-                    }
-                }
+                // if ($header->is_revisi == 1) {
+                //     $header->is_revisi = 0;
+                //     $header->is_generated = 0;
+                //     $header->count_revisi++;
+                //     if ($header->count_revisi > 2) {
+                //         $this->handleApprove($request, false);
+                //     }
+                // }
                 $header->save();
             }
 
@@ -689,14 +689,14 @@ class DraftUdaraIklimKerjaController extends Controller
                     ->useLampiran(true)
                     ->setDataCustom($custom)
                     ->whereView('DraftIklimPanas')
-                    ->render();
+                    ->render('downloadLHPFinal');
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
                     ->useLampiran(true)
                     ->setDataCustom($custom)
                     ->whereView('DraftIklimDingin')
-                    ->render();
+                    ->render('downloadLHPFinal');
             }
 
 

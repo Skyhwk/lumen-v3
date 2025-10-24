@@ -353,30 +353,30 @@ class DraftUdaraGetaranController extends Controller
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
-                            ->render();
+                            ->render('downloadLHPFinal');
             } else {
                 $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
                             ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaran')
-                            ->render();
+                            ->render('downloadLHPFinal');
             }
 
          
             $header->file_lhp = $fileName;
-            if($newCountRevisi > 2){
-                // dd($request->all());
-                try {
-                    $this->handleApprove($request, false);
-                } catch (\Throwable $th) {
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                        'status'  => false,
-                    ]);
-                }
-            }
+            // if($newCountRevisi > 2){
+            //     // dd($request->all());
+            //     try {
+            //         $this->handleApprove($request, false);
+            //     } catch (\Throwable $th) {
+            //         DB::rollBack();
+            //         return response()->json([
+            //             'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+            //             'status'  => false,
+            //         ]);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -449,14 +449,14 @@ class DraftUdaraGetaranController extends Controller
                     ->useLampiran(true)
                     ->setDataCustom($groupedByPage)
                     ->whereView('DraftGetaranPersonal')
-                    ->render();
+                    ->render('downloadLHPFinal');
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
                     ->useLampiran(true)
                     ->setDataCustom($groupedByPage)
                     ->whereView('DraftGetaran')
-                    ->render();
+                    ->render('downloadLHPFinal');
             }
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();

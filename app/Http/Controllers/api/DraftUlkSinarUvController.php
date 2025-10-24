@@ -280,17 +280,17 @@ class DraftUlkSinarUvController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftUlkSinarUv')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request, false);
-                }
-            }
+            // if ($header->is_revisi == 1) {
+            //     $header->is_revisi = 0;
+            //     $header->is_generated = 0;
+            //     $header->count_revisi++;
+            //     if ($header->count_revisi > 2) {
+            //         $this->handleApprove($request, false);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -552,7 +552,7 @@ class DraftUlkSinarUvController extends Controller
                       $fileName = LhpTemplate::setDataDetail($detail)
                                 ->setDataHeader($dataHeader)
                                 ->whereView('DraftUlkSinarUv')
-                                ->render();
+                                ->render('downloadLHPFinal');
 
                 
                     $dataHeader->file_lhp = $fileName;
