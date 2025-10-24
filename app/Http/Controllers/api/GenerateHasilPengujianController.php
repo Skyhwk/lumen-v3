@@ -37,16 +37,29 @@ class GenerateHasilPengujianController extends Controller
             ->where('no_document', 'LIKE', "%{$search}%")
             ->whereNotIn('flag_status', ['rejected', 'void'])
             ->where('is_active', true)
+            ->whereHas('order')
             ->limit(5)
-            ->get();
+            ->get()
+            ->map(function ($item) {
+                $generatedLink = LinkLhp::where('no_quotation', $item->no_document)->pluck('periode')->toArray();
+                $filteredDetail = $item->detail->filter(fn($detail) => !in_array($detail->periode_kontrak, $generatedLink))->values();
+                $item->setRelation('detail', $filteredDetail);
+                return $item;
+            })
+            ->filter(fn($item) => $item->detail->isNotEmpty())
+            ->values();
 
         $nonKontrak = QuotationNonKontrak::with(['order:id,no_document,no_order', 'order.orderDetail:id_order_header,tanggal_sampling,cfr'])
             ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
             ->where('no_document', 'LIKE', "%{$search}%")
             ->whereNotIn('flag_status', ['rejected', 'void'])
             ->where('is_active', true)
+            ->whereHas('order')
             ->limit(5)
-            ->get();
+            ->get()
+            ->map(fn($item) => LinkLhp::where('no_quotation', $item->no_document)->exists() ? null : $item)
+            ->filter()
+            ->values();
 
         $results = $kontrak->merge($nonKontrak);
         $results->makeHidden(['id']);
