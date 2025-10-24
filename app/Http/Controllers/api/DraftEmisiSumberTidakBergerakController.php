@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\api;
 
 //models
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCCustom};
+use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCCustom,LinkLhp};
 
 // service
 use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail};
 // job
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 //iluminate
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -163,7 +164,10 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         $allDetail[] = $detail; // masukin setiap detail ke array
                     }
 
-                    LhpsEmisiCCustom::where('id_header', $header->id)->delete();
+                    
+                    // dd($request->custom_parameter);
+                    /*
+                    LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
                     foreach ($request->custom_parameter as $page => $values) {
                         foreach ($values as $param => $val) {
                             $custom = new LhpsEmisiCCustom();
@@ -184,7 +188,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                             $custom->save();
                         }
-                    }
+                    } */
+
 
 
                     if ($header != null) {
@@ -209,7 +214,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                             ->setDataDetail($detail)
                             ->setDataCustom($custom)
                             ->whereView($view)
-                            ->render('downloadLHP');
+                            ->render('downloadLHPFinal');
 
                         $header->file_lhp = $fileName;
 
@@ -471,7 +476,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         ->where('is_active', true)
                         ->where('lhps', 1)
                         ->get();
-
                     foreach ($data as $val) {
                         $entry = $this->formatEntry($val, $request->regulasi, $methodsUsed);
                         $mainData[] = $entry;
@@ -530,7 +534,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'C2' => $val->ws_value_cerobong->C2,
             'satuan' => $param->satuan,
             'methode' => $param->method,
-            'baku_mutu' => $val->baku_mutu->baku_mutu,
+            'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
         ];
 
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
@@ -814,13 +818,20 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     $qr->save();
                 }
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                if($cekLink){
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                        $this->dispatch($job);
                 }
+                // $servicePrint = new PrintLhp();
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
+
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
             }
 
             DB::commit();

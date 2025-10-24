@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\api;
 
 // model
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
+use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail};
+use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,CombineLHPService};
 
 // job
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 
 //iluminate
 use Illuminate\Http\Request;
@@ -252,7 +253,7 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->setDataDetail($detail)
                             ->setDataCustom($custom)
                             ->whereView($view)
-                            ->render('downloadLHP');
+                            ->render('downloadLHPFinal');
 
                         $header->file_lhp = $fileName;
 
@@ -262,6 +263,7 @@ class DraftEmisiSumberBergerakController extends Controller
                             $header->count_revisi++;
                             if ($header->count_revisi > 2) {
                                 $this->handleApprove($request, false);
+
                             }
                         }
 
@@ -804,6 +806,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
+        DB::beginTransaction();
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
@@ -878,19 +881,26 @@ class DraftEmisiSumberBergerakController extends Controller
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $data->nama_karyawan;
-                    $dataQr->Jabatan = $data->jabatan_karyawan;
+                    $dataQr->Disahkan_Oleh = $this->karyawan;
+                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                if($cekLink){
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                        $this->dispatch($job);
                 }
+                // $servicePrint = new PrintLhp($data->file_lhp);
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
+
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
             }
 
             DB::commit();
@@ -904,7 +914,8 @@ class DraftEmisiSumberBergerakController extends Controller
             dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false
+                'status' => false,
+                'trace' => $th->getTrace()
             ], 500);
         }
     }
