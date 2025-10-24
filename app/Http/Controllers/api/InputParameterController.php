@@ -53,6 +53,7 @@ use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
 use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Repository;
@@ -133,15 +134,34 @@ class InputParameterController extends Controller
             $priority_samples = [];
             $backup_samples = [];
 
-            foreach($join as $key => $val) {
-                // Prioritaskan sampel dengan kategori 3 yang termasuk dalam category_prioritized
-                if (in_array($val->kategori_3, $category_prioritized)) {
+            foreach ($join as $key => $val) {
+                // Ambil parameter
+                $param = !is_null(json_decode($val->parameter))
+                    ? array_map(function ($item) {
+                        return explode(';', $item)[1];
+                    }, json_decode($val->parameter, true))
+                    : [];
+
+                // Cek apakah ada parameter yang mengandung 'BOD'
+                $isBodExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'BOD');
+                });
+                // Cek apakah ada parameter yang mengandung 'NH3'
+                $isNh3Exist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'NH3');
+                });
+                // Cek apakah ada parameter yang mengandung 'TSS'
+                $isTSSExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'TSS');
+                });
+
+                // Gunakan hasil pengecekan
+                if ((!$isBodExist && !$isNh3Exist && !$isTSSExist) || in_array($val->kategori_3, $category_prioritized)) {
                     $priority_samples[$key] = $val;
                 } else {
                     $backup_samples[$key] = $val;
                 }
             }
-
             // Gabungkan: prioritas dulu, kemudian backup
             $sorted_join = $priority_samples + $backup_samples;
 

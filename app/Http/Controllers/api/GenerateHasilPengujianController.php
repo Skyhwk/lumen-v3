@@ -23,7 +23,7 @@ class GenerateHasilPengujianController extends Controller
 {
     public function index()
     {
-        $linkLhp = LinkLhp::with('token')->where('is_completed', false)->latest()->get();
+        $linkLhp = LinkLhp::with('token')->where('is_emailed', false)->latest()->get();
 
         return Datatables::of($linkLhp)->make(true);
     }
@@ -431,9 +431,10 @@ class GenerateHasilPengujianController extends Controller
                 ->where('body', $request->content)
                 ->where('cc', $request->cc)
                 ->where('bcc', $request->bcc)
+                ->where('replyto', ['adminlhp@intilab.com'])
                 ->where('attachments', $request->attachments)
                 ->where('karyawan', $this->karyawan)
-                ->fromAdmsales()
+                ->fromLhp()
                 ->send();
 
             if ($email) {
