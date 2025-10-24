@@ -27,6 +27,8 @@ $router->group(['prefix' => 'api', 'middleware' => ['auth.token', 'log.request',
     $router->post('mobile', 'BaseMobileController@handle');
 });
 
+$router->post('/api/cekLHP', 'external\LHPHandleController@cekLHP');
+
 $router->get('/api/getJadwal', 'external\JadwalHandler@getJadwal');
 $router->get('/api/showDetailJadwal', 'external\JadwalHandler@getDetailJadwalApi');
 
