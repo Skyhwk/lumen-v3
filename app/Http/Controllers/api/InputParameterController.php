@@ -261,7 +261,7 @@ class InputParameterController extends Controller
 
                         // Ambil dari cadangan untuk parameter ini
                         if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
-                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota - 1);
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota);
 
                             foreach ($backup_to_add as $backup_sample) {
                                 if ($samples->count() < $quota[$parameter]->kuota) {
