@@ -37,6 +37,7 @@ class GenerateHasilPengujianController extends Controller
             ->where('no_document', 'LIKE', "%{$search}%")
             ->whereNotIn('flag_status', ['rejected', 'void'])
             ->where('is_active', true)
+            ->whereHas('order')
             ->limit(5)
             ->get();
 
@@ -45,6 +46,7 @@ class GenerateHasilPengujianController extends Controller
             ->where('no_document', 'LIKE', "%{$search}%")
             ->whereNotIn('flag_status', ['rejected', 'void'])
             ->where('is_active', true)
+            ->whereHas('order')
             ->limit(5)
             ->get();
 
