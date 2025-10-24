@@ -6,7 +6,7 @@ namespace App\Http\Controllers\api;
 use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail};
+use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,LinkLhp};
 
 // job
 use App\Jobs\RenderLhp;
@@ -252,7 +252,7 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->setDataDetail($detail)
                             ->setDataCustom($custom)
                             ->whereView($view)
-                            ->render('downloadLHP');
+                            ->render('downloadLHPFinal');
 
                         $header->file_lhp = $fileName;
 
@@ -262,6 +262,7 @@ class DraftEmisiSumberBergerakController extends Controller
                             $header->count_revisi++;
                             if ($header->count_revisi > 2) {
                                 $this->handleApprove($request, false);
+
                             }
                         }
 
@@ -804,6 +805,15 @@ class DraftEmisiSumberBergerakController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
+
+        /* 
+            $requestLhpEmisiHeader->no_order
+            $requestLhpEmisiHeader->no_quotation
+            $requestLhpEmisiHeader->periode
+            $requestLhpEmisiHeader->no_order
+            $requestLhpEmisiHeader->nama_perusahaan (nama_pelanggan)
+            $requestLinkLhp->jumlah_lhp
+        */
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
@@ -884,13 +894,15 @@ class DraftEmisiSumberBergerakController extends Controller
                     $qr->save();
                 }
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                $linkLhp = new LinkLhp();
+                $linkLhp->insertLinkLhp($data);
+                // $servicePrint = new PrintLhp($data->file_lhp);
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                }
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
             }
 
             DB::commit();
