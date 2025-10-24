@@ -57,7 +57,7 @@ class LingkunganHidupCl2
             $C = \str_replace(",", "", number_format(($ks/$Vu) * 1000, 3));
 
             // C2 = C1/1000
-            $C1 = \str_replace(",", "", number_format((($ks/$Vu) * 1000) / 1000 , 3));
+            $C1 = \str_replace(",", "", number_format(($ks/$Vu) / 1000 , 3));
 
             // C (PPM)= (C2 / 24.45)*71)
             $C2 = \str_replace(",", "", number_format(($C1 / 24.45) * 71, 4));

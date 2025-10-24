@@ -79,12 +79,18 @@ class InputParameterController extends Controller
                 ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
 
-            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+            $quota = KuotaAnalisaParameter::select('parameter_name', 'quota', 'tanggal_berlaku')
                 ->where('kategori', $request->category)
                 ->where('is_active', true)
                 ->get()
-                ->pluck('quota','parameter_name')
-                ->toArray();
+                ->mapWithKeys(function ($item) {
+                    return [
+                        $item->parameter_name => (object)[
+                            'kuota' => $item->quota,
+                            'tanggal_berlaku' => $item->tanggal_berlaku,
+                        ],
+                    ];
+                });
 
 			// dd($join);
 			if($join->isEmpty()) {
@@ -255,7 +261,7 @@ class InputParameterController extends Controller
 
                         // Ambil dari cadangan untuk parameter ini
                         if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
-                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota - 1);
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota);
 
                             foreach ($backup_to_add as $backup_sample) {
                                 if ($samples->count() < $quota[$parameter]->kuota) {

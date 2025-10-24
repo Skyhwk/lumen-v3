@@ -37,9 +37,7 @@ class LingkunganHidupO3_8J
 
         $Ta = floatval($data->suhu) + 273;
 
-        $C_value = [];
-        $C1_value = [];
-        $C2_value = [];
+        $C_value = $C1_value = $C2_value = $C14_value = $C15_value = $C16_value = [];
 
         // dd($data->ks);
         foreach ($data->ks as $key_ks => $item_ks) {
@@ -55,16 +53,18 @@ class LingkunganHidupO3_8J
                 // dd($C1);
                 $C2 = \str_replace(",", "", number_format((floatval($C1) / 48) * 24.45, 5));
 
-                // if (floatval($C) < 0.1419)
-                //     $C = '<0.1419';
-                // if (floatval($C1) < 0.00014)
-                //     $C1 = '<0.00014';
-                // if (floatval($C2) < 0.00007)
-                //     $C2 = '<0.00007';
+                $C14 = $C2;
+                $Vu_alt = \str_replace(",", "", number_format($value * $data->durasi[$key], 4));
+                $C16 = \str_replace(",", "", number_format(floatval($item_ks[$key]) / floatval($Vu_alt), 5));
+                $C15 = $C16;
 
                 $C_value[$key_ks][$key] = $C;
                 $C1_value[$key_ks][$key] = $C1;
                 $C2_value[$key_ks][$key] = $C2;
+
+                $C14_value[$key_ks][$key] = $C14;
+                $C15_value[$key_ks][$key] = $C15;
+                $C16_value[$key_ks][$key] = $C16;
             }
         }
 
@@ -85,6 +85,24 @@ class LingkunganHidupO3_8J
         }, $C2_value);
 
         $C2 = number_format(array_sum($C2_average) / count($C2_average), 5);
+
+        $C14_average = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C14_value);
+
+        $C14 = number_format(array_sum($C14_average) / count($C14_average), 5);
+
+        $C15_average = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C15_value);
+
+        $C15 = number_format(array_sum($C15_average) / count($C15_average), 5);
+
+        $C16_average = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C16_value);
+
+        $C16 = number_format(array_sum($C16_average) / count($C16_average), 5);
 
         $satuan = 'mg/Nm3';
 
@@ -125,9 +143,9 @@ class LingkunganHidupO3_8J
             'C11' => null,
             'C12' => null,
             'C13' => null,
-            'C14' => null,
-            'C15' => null,
-            'C16' => null,
+            'C14' => $C14,
+            'C15' => $C15,
+            'C16' => $C16,
             'data_pershift' => [
                 'Shift 1' => $C_average[0],
                 'Shift 2' => $C_average[1] ?? null,
