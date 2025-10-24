@@ -37,6 +37,7 @@ use App\Jobs\CombineLHPJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -934,10 +935,13 @@ class DraftAirController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-                
                 $periode = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $periode);
-                $this->dispatch($job);
+                $cekLink = LinkLhp::where('no_order', $header->no_order)->where('periode', $periode)->first();
+
+                if($cekLink) {
+                    $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $periode);
+                    $this->dispatch($job);
+                }
                 // $job = new JobPrintLhp($request->no_sampel);
                 // $this->dispatch($job);
                 // $servicePrint = new PrintLhp();
