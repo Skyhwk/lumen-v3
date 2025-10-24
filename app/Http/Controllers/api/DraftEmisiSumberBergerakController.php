@@ -6,10 +6,11 @@ namespace App\Http\Controllers\api;
 use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,LinkLhp};
+use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,LinkLhp,CombineLHPService};
 
 // job
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 
 //iluminate
 use Illuminate\Http\Request;
@@ -805,6 +806,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
+        
 
         /* 
             $requestLhpEmisiHeader->no_order
@@ -814,6 +816,7 @@ class DraftEmisiSumberBergerakController extends Controller
             $requestLhpEmisiHeader->nama_perusahaan (nama_pelanggan)
             $requestLinkLhp->jumlah_lhp
         */
+        DB::beginTransaction();
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
@@ -893,9 +896,11 @@ class DraftEmisiSumberBergerakController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-
-                $linkLhp = new LinkLhp();
-                $linkLhp->insertLinkLhp($data);
+                $getPeriode = OrderDetail::where('cfr',$request->cfr)->where('is_active',1)->first();
+                
+                // $job = new CombineLHPJob($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
+                $job = new CombineLHPService();
+                $job->combine($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
                 // $servicePrint = new PrintLhp($data->file_lhp);
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
 
@@ -905,7 +910,7 @@ class DraftEmisiSumberBergerakController extends Controller
                 // }
             }
 
-            DB::commit();
+            // DB::commit();
             return response()->json([
                 'data' => $data,
                 'status' => true,
