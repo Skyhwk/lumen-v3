@@ -8,6 +8,7 @@ use App\Models\LinkLhp;
 use App\Models\OrderHeader;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class CombineLHPService
 {
@@ -91,7 +92,7 @@ class CombineLHPService
                 $linkLhp->save();
             }
         } catch (\Throwable $th) {
-            dd($th);
+            Log::error($th);
         }
     }
 }
