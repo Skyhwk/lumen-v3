@@ -891,8 +891,8 @@ class DraftEmisiSumberBergerakController extends Controller
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $data->nama_karyawan;
-                    $dataQr->Jabatan = $data->jabatan_karyawan;
+                    $dataQr->Disahkan_Oleh = $this->karyawan;
+                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
@@ -901,6 +901,7 @@ class DraftEmisiSumberBergerakController extends Controller
                 // $job = new CombineLHPJob($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
                 $job = new CombineLHPService();
                 $job->combine($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
+                $this->dispatch($job);
                 // $servicePrint = new PrintLhp($data->file_lhp);
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
 
