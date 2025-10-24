@@ -33,9 +33,8 @@ class CombineLHPService
         DB::beginTransaction();
         try {
             $finalDirectoryPath = public_path('laporan/hasil_pengujian');
-            $finalFilename = $noOrder . $periode ? '_' . $periode : '' . '.pdf';
+            $finalFilename = $periode ? $noOrder . '_' . $periode . '.pdf' : $noOrder . '.pdf';
             $finalFullPath = $finalDirectoryPath . '/' . $finalFilename;
-
             if (!File::isDirectory($finalDirectoryPath)) File::makeDirectory($finalDirectoryPath, 0777, true);
 
             $httpClient = Http::asMultipart();
