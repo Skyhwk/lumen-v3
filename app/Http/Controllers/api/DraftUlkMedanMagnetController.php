@@ -31,12 +31,13 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class DraftUlkMedanMagnetController extends Controller
 {
-    
+
     public function index()
     {
         DB::statement("SET SESSION sql_mode = ''");
@@ -60,17 +61,18 @@ class DraftUlkMedanMagnetController extends Controller
                     ->orWhere('parameter', 'like', '%Medan Listrik%');
             })->get();
 
-            foreach ($data as $item) {
+        foreach ($data as $item) {
             $regsRaw = explode("||", $item->regulasi_all ?? '');
             $allRegs = [];
-            if($item->lhps_medanlm) {
+            if ($item->lhps_medanlm) {
                 $item->lhps_medanlm->hasil_observasi = json_decode($item->lhps_medanlm->hasil_observasi);
                 $item->lhps_medanlm->kesimpulan = json_decode($item->lhps_medanlm->kesimpulan);
                 $item->lhps_medanlm->metode_sampling = json_decode($item->lhps_medanlm->metode_sampling);
             }
-         
+
             foreach ($regsRaw as $reg) {
-                if (empty($reg)) continue;
+                if (empty($reg))
+                    continue;
 
                 // Decode JSON array misal: ["127-Peraturan...", "213-Peraturan..."]
                 $decoded = json_decode($reg, true);
@@ -109,59 +111,59 @@ class DraftUlkMedanMagnetController extends Controller
         ], 201);
     }
 
-      public function handleMetodeSampling(Request $request)
-{
-    try {
-        $subKategori = explode('-', $request->kategori_3);
+    public function handleMetodeSampling(Request $request)
+    {
+        try {
+            $subKategori = explode('-', $request->kategori_3);
 
-        // Data utama
-        $data = MetodeSampling::where('kategori', '4-UDARA')
-            ->where('sub_kategori', strtoupper($subKategori[1]))
-            ->get();
+            // Data utama
+            $data = MetodeSampling::where('kategori', '4-UDARA')
+                ->where('sub_kategori', strtoupper($subKategori[1]))
+                ->get();
 
-        $result = $data->toArray();
+            $result = $data->toArray();
 
-        if ($request->filled('id_lhp')) {
-            $header = LhpsMedanLMHeader::find($request->id_lhp);
+            if ($request->filled('id_lhp')) {
+                $header = LhpsMedanLMHeader::find($request->id_lhp);
 
-            if ($header) {
-                $headerMetode = json_decode($header->metode_sampling, true) ?? [];
+                if ($header) {
+                    $headerMetode = json_decode($header->metode_sampling, true) ?? [];
 
-                foreach ($data as $key => $value) {
-                    $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
+                    foreach ($data as $key => $value) {
+                        $valueMetode = array_map('trim', explode(',', $value->metode_sampling));
 
-                    $missing = array_diff($headerMetode, $valueMetode);
+                        $missing = array_diff($headerMetode, $valueMetode);
 
-                    if (!empty($missing)) {
-                        foreach ($missing as $miss) {
-                            $result[] = [
-                                'id' => null,
-                                'metode_sampling' => $miss,
-                                'kategori' => $value->kategori,
-                                'sub_kategori' => $value->sub_kategori,
-                            ];
+                        if (!empty($missing)) {
+                            foreach ($missing as $miss) {
+                                $result[] = [
+                                    'id' => null,
+                                    'metode_sampling' => $miss,
+                                    'kategori' => $value->kategori,
+                                    'sub_kategori' => $value->sub_kategori,
+                                ];
+                            }
                         }
                     }
                 }
             }
+
+            return response()->json([
+                'status' => true,
+                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data' => $result,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+            ], 500);
         }
-
-        return response()->json([
-            'status' => true,
-            'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-            'data' => $result,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            'line' => $e->getLine(),
-        ], 500);
     }
-}
 
-       public function store(Request $request)
+    public function store(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -175,19 +177,19 @@ class DraftUlkMedanMagnetController extends Controller
                 ->first();
 
             if ($header == null) {
-                $header             = new LhpsMedanLMHeader;
+                $header = new LhpsMedanLMHeader;
                 $header->created_by = $this->karyawan;
                 $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
             } else {
-                $history                = $header->replicate();
+                $history = $header->replicate();
                 $history->setTable((new LhpsMedanLMHeaderHistory())->getTable());
-                $history->created_by    = $this->karyawan;
-                $history->created_at    = Carbon::now()->format('Y-m-d H:i:s');
-                $history->updated_by    = null;
-                $history->updated_at    = null;
+                $history->created_by = $this->karyawan;
+                $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $history->updated_by = null;
+                $history->updated_at = null;
                 $history->save();
-                $header->updated_by     = $this->karyawan;
-                $header->updated_at     = Carbon::now()->format('Y-m-d H:i:s');
+                $header->updated_by = $this->karyawan;
+                $header->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             }
 
             // === 2. Validasi tanggal LHP ===
@@ -210,30 +212,30 @@ class DraftUlkMedanMagnetController extends Controller
             $parameter_uji = !empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
 
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                return ['page' => (int)$page, 'regulasi' => $item];
+                return ['page' => (int) $page, 'regulasi' => $item];
             })->values()->toArray();
             // === 4. Simpan / update header ===
             $header->fill([
-                'no_order'          => $request->no_order ?: null,
-                'no_sampel'         => implode(', ', $request->no_sampel) ?: null,
-                'no_lhp'            => $request->no_lhp ?: null,
-                'no_qt'             => $request->no_penawaran ?: null,
-                'kesimpulan'        => json_encode($request->kesimpulan),
-                'hasil_observasi'   => json_encode($request->observasi),
-                'nama_pelanggan'    => $request->nama_perusahaan ?: null,
-                'alamat_sampling'   => $request->alamat_sampling ?: null,
-                'parameter_uji'     => json_encode($parameter_uji),
-                'id_kategori_2'     => 4,
-                'id_kategori_3'     => 27,
-                'sub_kategori'      => $request->jenis_sampel ?: null,
-                'metode_sampling'   => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
-                'nama_karyawan'     => $nama_perilis,
-                'jabatan_karyawan'  => $jabatan_perilis,
-                'regulasi'          => $request->regulasi ? json_encode($request->regulasi) : null,
-                'regulasi_custom'   => $regulasi_custom ? json_encode($regulasi_custom) : null,
-                'tanggal_lhp'       => $request->tanggal_lhp ?: null,
-                'created_by'        => $this->karyawan,
-                'created_at'        => Carbon::now(),
+                'no_order' => $request->no_order ?: null,
+                'no_sampel' => implode(', ', $request->no_sampel) ?: null,
+                'no_lhp' => $request->no_lhp ?: null,
+                'no_qt' => $request->no_penawaran ?: null,
+                'kesimpulan' => json_encode($request->kesimpulan),
+                'hasil_observasi' => json_encode($request->observasi),
+                'nama_pelanggan' => $request->nama_perusahaan ?: null,
+                'alamat_sampling' => $request->alamat_sampling ?: null,
+                'parameter_uji' => json_encode($parameter_uji),
+                'id_kategori_2' => 4,
+                'id_kategori_3' => 27,
+                'sub_kategori' => $request->jenis_sampel ?: null,
+                'metode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
+                'nama_karyawan' => $nama_perilis,
+                'jabatan_karyawan' => $jabatan_perilis,
+                'regulasi' => $request->regulasi ? json_encode($request->regulasi) : null,
+                'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
+                'tanggal_lhp' => $request->tanggal_lhp ?: null,
+                'created_by' => $this->karyawan,
+                'created_at' => Carbon::now(),
             ]);
 
             $header->save();
@@ -256,18 +258,18 @@ class DraftUlkMedanMagnetController extends Controller
 
                 $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
                 $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
-               
+
                 $cleaned_key_tanggal_sampling = array_map(fn($k) => trim($k, " '\""), array_keys($request->tanggal_sampling));
                 $cleaned_tanggal_sampling = array_combine($cleaned_key_tanggal_sampling, array_values($request->tanggal_sampling));
                 if (array_key_exists($val, $cleaned_noSampel)) {
-                    $detail                     = new LhpsMedanLMDetail;
-                    $detail->id_header          = $header->id;
-                    $detail->parameter          = $val;
-                    $detail->no_sampel          = $cleaned_noSampel[$val];
-                    $detail->satuan             = $cleaned_satuan[$val];
-                    $detail->hasil              = $cleaned_hasil[$val];
-                    $detail->nab                = $cleaned_nab[$val];
-                    $detail->tanggal_sampling                = $cleaned_tanggal_sampling[$val];
+                    $detail = new LhpsMedanLMDetail;
+                    $detail->id_header = $header->id;
+                    $detail->parameter = $val;
+                    $detail->no_sampel = $cleaned_noSampel[$val];
+                    $detail->satuan = $cleaned_satuan[$val];
+                    $detail->hasil = $cleaned_hasil[$val];
+                    $detail->nab = $cleaned_nab[$val];
+                    $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val];
                     $detail->save();
                 }
             }
@@ -279,14 +281,14 @@ class DraftUlkMedanMagnetController extends Controller
                 foreach ($request->custom_no_sampel as $page => $sampel) {
                     foreach ($sampel as $sampel => $hasil) {
                         LhpsMedanLMCustom::create([
-                            'id_header'             => $header->id,
-                            'page'                  => $page,
-                            'no_sampel'             => $request->custom_no_sampel[$page][$sampel] ?? null,
-                            'satuan'                =>  $request->custom_satuan[$page][$sampel],
-                            'parameter'                 =>  $request->custom_parameter[$page][$sampel],
-                            'nab'         => $request->custom_nab[$page][$sampel] ?? null,
-                            'hasil'             => $request->custom_hasil[$page][$sampel] ?? null,
-                            'tanggal_sampling'      => $request->custom_tanggal_sampling[$page][$sampel] ?? null
+                            'id_header' => $header->id,
+                            'page' => $page,
+                            'no_sampel' => $request->custom_no_sampel[$page][$sampel] ?? null,
+                            'satuan' => $request->custom_satuan[$page][$sampel],
+                            'parameter' => $request->custom_parameter[$page][$sampel],
+                            'nab' => $request->custom_nab[$page][$sampel] ?? null,
+                            'hasil' => $request->custom_hasil[$page][$sampel] ?? null,
+                            'tanggal_sampling' => $request->custom_tanggal_sampling[$page][$sampel] ?? null
                         ]);
                     }
                 }
@@ -330,7 +332,7 @@ class DraftUlkMedanMagnetController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
                 ->whereView('DraftUlkMedanMagnet')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
             if ($header->is_revisi == 1) {
@@ -359,9 +361,9 @@ class DraftUlkMedanMagnetController extends Controller
         }
     }
 
-    
-   
-        public function handleDatadetail(Request $request)
+
+
+    public function handleDatadetail(Request $request)
     {
         try {
             $noSampel = explode(', ', $request->no_sampel);
@@ -371,26 +373,26 @@ class DraftUlkMedanMagnetController extends Controller
                 ->where('is_active', true)
                 ->where('no_lhp', $request->cfr)
                 ->first();
-            
+
             // ==============================
             // CASE 1: Jika ada cek_lhp
             // ==============================
             if ($cek_lhp) {
-                $data_entry   = [];
-                $data_custom  = [];
+                $data_entry = [];
+                $data_custom = [];
                 $cek_regulasi = [];
 
                 // Ambil data detail dari LHP (existing entry)
                 foreach ($cek_lhp->lhpsMedanLMDetail as $val) {
                     // if($val->no_sampel == 'AARG012503/024')dd($val);
                     $data_entry[] = [
-                        'id'                => $val->id,
-                        'no_sampel'         => $val->no_sampel,
-                        'parameter'         => $val->parameter,
-                        'satuan'            => $val->satuan,
-                        'hasil'             => $val->hasil,
-                        'nab'               => $val->nab,
-                        'tanggal_sampling'  => $val->tanggal_sampling,
+                        'id' => $val->id,
+                        'no_sampel' => $val->no_sampel,
+                        'parameter' => $val->parameter,
+                        'satuan' => $val->satuan,
+                        'hasil' => $val->hasil,
+                        'nab' => $val->nab,
+                        'tanggal_sampling' => $val->tanggal_sampling,
                     ];
                 }
 
@@ -436,31 +438,32 @@ class DraftUlkMedanMagnetController extends Controller
 
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['page'])) continue;
+                        if (empty($item['page']))
+                            continue;
                         // $id_regulasi = "id_" . $item['id'];
-                            $id_regulasi = (string)"id_" . explode('-',$item['regulasi'])[0];
-                            $page        = $item['page'];
+                        $id_regulasi = (string) "id_" . explode('-', $item['regulasi'])[0];
+                        $page = $item['page'];
 
-                            if (!empty($groupedCustom[$page])) {
-                                foreach ($groupedCustom[$page] as $val) {
-                                    $data_custom[$id_regulasi][] = [
-                                        'id'                => $val->id,
-                                        'no_sampel'         => $val->no_sampel,
-                                        'parameter'         => $val->parameter,
-                                        'satuan'            => $val->satuan,
-                                        'hasil'             => $val->hasil,
-                                        'nab'               => $val->nab,
-                                        'tanggal_sampling'  => $val->tanggal_sampling,
-                                    ];
-                                }
+                        if (!empty($groupedCustom[$page])) {
+                            foreach ($groupedCustom[$page] as $val) {
+                                $data_custom[$id_regulasi][] = [
+                                    'id' => $val->id,
+                                    'no_sampel' => $val->no_sampel,
+                                    'parameter' => $val->parameter,
+                                    'satuan' => $val->satuan,
+                                    'hasil' => $val->hasil,
+                                    'nab' => $val->nab,
+                                    'tanggal_sampling' => $val->tanggal_sampling,
+                                ];
                             }
                         }
                     }
+                }
 
                 // ==============================
                 // Ambil mainData & otherRegulations
                 // ==============================
-                $mainData         = [];
+                $mainData = [];
                 $otherRegulations = [];
 
                 $data = MedanLmHeader::with('ws_udara', 'datalapangan', 'master_parameter')
@@ -471,7 +474,7 @@ class DraftUlkMedanMagnetController extends Controller
                     ->get();
 
                 foreach ($data as $val) {
-                    $entry     = $this->formatEntry($val);
+                    $entry = $this->formatEntry($val);
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
@@ -519,8 +522,8 @@ class DraftUlkMedanMagnetController extends Controller
                 }
 
                 return response()->json([
-                    'status'    => true,
-                    'data'      => $data_entry,
+                    'status' => true,
+                    'data' => $data_entry,
                     'next_page' => $data_custom,
                 ], 201);
             }
@@ -528,7 +531,7 @@ class DraftUlkMedanMagnetController extends Controller
             // ==============================
             // CASE 2: Jika tidak ada cek_lhp
             // ==============================
-            $mainData         = [];
+            $mainData = [];
             $otherRegulations = [];
 
             $data = MedanLmHeader::with('ws_udara', 'datalapangan', 'master_parameter')
@@ -537,11 +540,11 @@ class DraftUlkMedanMagnetController extends Controller
                 ->where('is_active', true)
                 ->where('lhps', 1)
                 ->get();
-                
-                foreach ($data as $val) {
-                    $entry      = $this->formatEntry($val);
-                    $mainData[] = $entry;
-                
+
+            foreach ($data as $val) {
+                $entry = $this->formatEntry($val);
+                $mainData[] = $entry;
+
                 if ($request->other_regulasi) {
                     foreach ($request->other_regulasi as $id_regulasi) {
                         $otherRegulations[$id_regulasi][] = $this->formatEntry($val);
@@ -558,17 +561,17 @@ class DraftUlkMedanMagnetController extends Controller
             }
 
             return response()->json([
-                'status'    => true,
-                'data'      => $mainData,
+                'status' => true,
+                'data' => $mainData,
                 'next_page' => $otherRegulations,
             ], 201);
 
         } catch (\Throwable $e) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line'    => $e->getLine(),
-                'file'    => $e->getFile(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
             ], 500);
         }
     }
@@ -577,46 +580,46 @@ class DraftUlkMedanMagnetController extends Controller
     private function formatEntry($val)
     {
         $entry = [
-            'id'        => $val->id,
-            'parameter'     => $val->parameter,
+            'id' => $val->id,
+            'parameter' => $val->parameter,
         ];
         // Cek apakah getaran personal
         if (in_array($val->parameter, ["Medan Magnit Statis", "Medan Listrik", "Power Density"])) {
 
-            $wsUdara  = isset($val->ws_udara) ? $val->ws_udara : null;
+            $wsUdara = isset($val->ws_udara) ? $val->ws_udara : null;
             $hasil2 = json_decode($wsUdara->hasil1) ?? null;
             return array_merge($entry, [
-                'hasil'             => $hasil2->hasil_mwatt ?? $hasil2->medan_magnet ?? $hasil2->hasil_listrik ?? $hasil2,
-                'parameter'         => $val ? $val->parameter : null,
-                'no_sampel'         => $val ? $val->no_sampel : null,
-                'keterangan'        => $val->master_parameter->nama_regulasi ?? null,
-                'satuan'            =>  $val->parameter == "Power Density"
-                                        ? "mW/cm²"
-                                        : ($val->parameter == "Medan Magnit Statis"
-                                            ? "mT"
-                                            : ($val->parameter == "Medan Listrik"
-                                                ? "tesla"
-                                                : "")),
-                'status'            => $val->master_parameter->status ?? null,
-                'nab'               => $wsUdara ? $wsUdara->nab : null
+                'hasil' => $hasil2->hasil_mwatt ?? $hasil2->medan_magnet ?? $hasil2->hasil_listrik ?? $hasil2,
+                'parameter' => $val ? $val->parameter : null,
+                'no_sampel' => $val ? $val->no_sampel : null,
+                'keterangan' => $val->master_parameter->nama_regulasi ?? null,
+                'satuan' => $val->parameter == "Power Density"
+                    ? "mW/cm²"
+                    : ($val->parameter == "Medan Magnit Statis"
+                        ? "mT"
+                        : ($val->parameter == "Medan Listrik"
+                            ? "tesla"
+                            : "")),
+                'status' => $val->master_parameter->status ?? null,
+                'nab' => $wsUdara ? $wsUdara->nab : null
             ]);
         }
     }
 
-     public function handleApprove(Request $request, $isManual = true)
+    public function handleApprove(Request $request, $isManual = true)
     {
         try {
-            if($isManual) {
-                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
+            if ($isManual) {
+                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
 
-            if (!$konfirmasiLhp) {
-                $konfirmasiLhp = new KonfirmasiLhp();
-                $konfirmasiLhp->created_by = $this->karyawan;
-                $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
-            } else {
-                $konfirmasiLhp->updated_by = $this->karyawan;
-                $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            }
+                if (!$konfirmasiLhp) {
+                    $konfirmasiLhp = new KonfirmasiLhp();
+                    $konfirmasiLhp->created_by = $this->karyawan;
+                    $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                } else {
+                    $konfirmasiLhp->updated_by = $this->karyawan;
+                    $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                }
 
                 $konfirmasiLhp->no_lhp = $request->no_lhp;
                 $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
@@ -630,10 +633,10 @@ class DraftUlkMedanMagnetController extends Controller
                 $konfirmasiLhp->save();
             }
             $data = LhpsMedanLMHeader::where('no_lhp', $request->no_lhp)
-                    ->where('is_active', true)
-                    ->first();
+                ->where('is_active', true)
+                ->first();
             $noSampel = array_map('trim', explode(',', $request->noSampel));
-        
+
             $qr = QrDocument::where('id_document', $data->id)
                 ->where('type_document', 'LHP_IKLIM')
                 ->where('is_active', 1)
@@ -643,20 +646,20 @@ class DraftUlkMedanMagnetController extends Controller
 
             if ($data != null) {
                 OrderDetail::where('cfr', $request->no_lhp)
-                ->whereIn('no_sampel', $noSampel)
-                ->where('is_active', true)
-                ->update([
-                    'is_approve' => 1,
-                    'status' => 3,
-                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'approved_by' => $this->karyawan
-                ]);
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_active', true)
+                    ->update([
+                        'is_approve' => 1,
+                        'status' => 3,
+                        'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                        'approved_by' => $this->karyawan
+                    ]);
 
-                
+
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                 if ($data->count_print < 1) {
+                if ($data->count_print < 1) {
                     $data->is_printed = 1;
                     $data->count_print = $data->count_print + 1;
                 }
@@ -676,11 +679,21 @@ class DraftUlkMedanMagnetController extends Controller
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $dataQr->Disahkan_Oleh = $data->nama_karyawan;
+                    $dataQr->Jabatan = $data->jabatan_karyawan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Udara no LHP ' . $request->no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();
@@ -701,7 +714,7 @@ class DraftUlkMedanMagnetController extends Controller
 
     // Amang
 
-     public function handleReject(Request $request)
+    public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -782,7 +795,7 @@ class DraftUlkMedanMagnetController extends Controller
     }
 
     // Amang
- 
+
     public function generate(Request $request)
     {
         DB::beginTransaction();
@@ -791,7 +804,7 @@ class DraftUlkMedanMagnetController extends Controller
                 ->where('is_active', true)
                 // ->where('id', $request->id)
                 ->first();
-                
+
             if ($header != null) {
                 $key = $header->no_lhp . str_replace('.', '', microtime(true));
                 $gen = MD5($key);
@@ -868,7 +881,7 @@ class DraftUlkMedanMagnetController extends Controller
         }
     }
 
-   public function handleRevisi(Request $request)
+    public function handleRevisi(Request $request)
     {
         DB::beginTransaction();
         try {

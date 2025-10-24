@@ -8,6 +8,7 @@ use App\Models\{
     SamplingPlan,
     QuotationNonKontrak,
     Jadwal,
+    AnalystFormula,
     OrderHeader,
     OrderDetail,
     Invoice,
@@ -3275,5 +3276,33 @@ class TestingController extends Controller
     private function makeDecrypt(string $data)
     {
         return $this->decryptSlice($data);
+    }
+
+    public function checkFormulas(Request $request)
+    {
+        $invalid = [];
+
+        try {
+            foreach ($request->data as $value) {
+            $is_exist = AnalystFormula::where('parameter', trim($value))
+                ->whereHas('param', function ($q) {
+                    $q->where('id_kategori', 4);
+                })
+                ->with('param:id,id_kategori')
+                ->first();
+
+            // kalau gak ada, atau id_kategori-nya bukan 4
+            if (!$is_exist) {
+                $invalid[] = $value;
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'invalid_data' => $invalid,
+        ]);
+        } catch (\Exception $th) {
+            dd($th);
+        }
     }
 }

@@ -53,6 +53,7 @@ use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
 use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Repository;
@@ -79,12 +80,18 @@ class InputParameterController extends Controller
                 ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
 
-            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+            $quota = KuotaAnalisaParameter::select('parameter_name', 'quota', 'tanggal_berlaku')
                 ->where('kategori', $request->category)
                 ->where('is_active', true)
                 ->get()
-                ->pluck('quota','parameter_name')
-                ->toArray();
+                ->mapWithKeys(function ($item) {
+                    return [
+                        $item->parameter_name => (object)[
+                            'kuota' => $item->quota,
+                            'tanggal_berlaku' => $item->tanggal_berlaku,
+                        ],
+                    ];
+                });
 
 			// dd($join);
 			if($join->isEmpty()) {
@@ -127,15 +134,34 @@ class InputParameterController extends Controller
             $priority_samples = [];
             $backup_samples = [];
 
-            foreach($join as $key => $val) {
-                // Prioritaskan sampel dengan kategori 3 yang termasuk dalam category_prioritized
-                if (in_array($val->kategori_3, $category_prioritized)) {
+            foreach ($join as $key => $val) {
+                // Ambil parameter
+                $param = !is_null(json_decode($val->parameter))
+                    ? array_map(function ($item) {
+                        return explode(';', $item)[1];
+                    }, json_decode($val->parameter, true))
+                    : [];
+
+                // Cek apakah ada parameter yang mengandung 'BOD'
+                $isBodExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'BOD');
+                });
+                // Cek apakah ada parameter yang mengandung 'NH3'
+                $isNh3Exist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'NH3');
+                });
+                // Cek apakah ada parameter yang mengandung 'TSS'
+                $isTSSExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'TSS');
+                });
+
+                // Gunakan hasil pengecekan
+                if ((!$isBodExist && !$isNh3Exist && !$isTSSExist) || in_array($val->kategori_3, $category_prioritized)) {
                     $priority_samples[$key] = $val;
                 } else {
                     $backup_samples[$key] = $val;
                 }
             }
-
             // Gabungkan: prioritas dulu, kemudian backup
             $sorted_join = $priority_samples + $backup_samples;
 
@@ -255,7 +281,7 @@ class InputParameterController extends Controller
 
                         // Ambil dari cadangan untuk parameter ini
                         if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
-                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota - 1);
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota);
 
                             foreach ($backup_to_add as $backup_sample) {
                                 if ($samples->count() < $quota[$parameter]->kuota) {
