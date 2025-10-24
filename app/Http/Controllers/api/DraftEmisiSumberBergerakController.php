@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\api;
 
 // model
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom};
+use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,LinkLhp,CombineLHPService};
+use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail,CombineLHPService};
 
 // job
 use App\Jobs\RenderLhp;
@@ -806,16 +806,6 @@ class DraftEmisiSumberBergerakController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
-        
-
-        /* 
-            $requestLhpEmisiHeader->no_order
-            $requestLhpEmisiHeader->no_quotation
-            $requestLhpEmisiHeader->periode
-            $requestLhpEmisiHeader->no_order
-            $requestLhpEmisiHeader->nama_perusahaan (nama_pelanggan)
-            $requestLinkLhp->jumlah_lhp
-        */
         DB::beginTransaction();
         try {
             if ($isManual) {
@@ -896,12 +886,14 @@ class DraftEmisiSumberBergerakController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-                $getPeriode = OrderDetail::where('cfr',$request->cfr)->where('is_active',1)->first();
-                
-                // $job = new CombineLHPJob($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
-                $job = new CombineLHPService();
-                $job->combine($request->no_lhp, $data->file_lhp, $data->no_order, $getPeriode->periode);
-                $this->dispatch($job);
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+
+                if($cekLink){
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                        $this->dispatch($job);
+                }
                 // $servicePrint = new PrintLhp($data->file_lhp);
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
 
@@ -911,7 +903,7 @@ class DraftEmisiSumberBergerakController extends Controller
                 // }
             }
 
-            // DB::commit();
+            DB::commit();
             return response()->json([
                 'data' => $data,
                 'status' => true,
@@ -922,7 +914,8 @@ class DraftEmisiSumberBergerakController extends Controller
             dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false
+                'status' => false,
+                'trace' => $th->getTrace()
             ], 500);
         }
     }

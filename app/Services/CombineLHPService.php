@@ -29,7 +29,7 @@ class CombineLHPService
         if (!$noLhp) return response()->json(['message' => 'No. LHP is required'], 400);
         if (!$fileLhp) return response()->json(['message' => 'LHP File is required'], 400);
         if (!$noOrder) return response()->json(['message' => 'No. Order is required'], 400);
-
+        
         DB::beginTransaction();
         try {
             $finalDirectoryPath = public_path('laporan/hasil_pengujian');
