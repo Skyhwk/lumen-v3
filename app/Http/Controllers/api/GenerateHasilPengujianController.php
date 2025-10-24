@@ -23,7 +23,7 @@ class GenerateHasilPengujianController extends Controller
 {
     public function index()
     {
-        $linkLhp = LinkLhp::with('token')->where('is_completed', false)->latest()->get();
+        $linkLhp = LinkLhp::with('token')->where('is_emailed', false)->latest()->get();
 
         return Datatables::of($linkLhp)->make(true);
     }
