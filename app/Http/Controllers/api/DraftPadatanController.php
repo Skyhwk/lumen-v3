@@ -758,8 +758,8 @@ class DraftPadatanController extends Controller
                 if ($qr != null) {
                     $dataQr = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->locale('id')->isoFormat('YYYY MMMM DD');
-                    $dataQr->Disahkan_Oleh = $this->karyawan;
-                    $dataQr->Jabatan = $request->attributes->get('user')->karyawan->jabatan;
+                    $dataQr->Disahkan_Oleh = $header->nama_karyawan;
+                    $dataQr->Jabatan = $header->jabatan_karyawan;
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }

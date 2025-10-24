@@ -431,9 +431,10 @@ class GenerateHasilPengujianController extends Controller
                 ->where('body', $request->content)
                 ->where('cc', $request->cc)
                 ->where('bcc', $request->bcc)
+                ->where('replyto', ['adminlhp@intilab.com'])
                 ->where('attachments', $request->attachments)
                 ->where('karyawan', $this->karyawan)
-                ->fromAdmsales()
+                ->fromLhp()
                 ->send();
 
             if ($email) {
