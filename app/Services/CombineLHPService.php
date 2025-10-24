@@ -16,9 +16,9 @@ class CombineLHPService
 {
     protected $karyawan;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
-        $karyawan = $request->attributes->get('user')->karyawan;
+        $karyawan = request()->attributes->get('user')->karyawan;
         if (!$karyawan) return response()->json(['message' => 'Karyawan not found'], 404);
 
         $this->karyawan = $karyawan->nama_lengkap;
