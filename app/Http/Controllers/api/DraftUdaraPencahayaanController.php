@@ -31,6 +31,7 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Models\KonfirmasiLhp;
 use App\Models\LhpsPencahayaanCustom;
 use App\Models\PengesahanLhp;
@@ -327,17 +328,17 @@ class DraftUdaraPencahayaanController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
                 ->whereView('DraftPencahayaan')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request, false);
-                }
-            }
+            // if ($header->is_revisi == 1) {
+            //     $header->is_revisi = 0;
+            //     $header->is_generated = 0;
+            //     $header->count_revisi++;
+            //     if ($header->count_revisi > 2) {
+            //         $this->handleApprove($request, false);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -710,13 +711,23 @@ class DraftUdaraPencahayaanController extends Controller
                     $qr->save();
                 }
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                // $servicePrint = new PrintLhp();
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                }
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft LHP Pencahayaan no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();
@@ -1054,7 +1065,7 @@ class DraftUdaraPencahayaanController extends Controller
                 ->useLampiran(true)
                 ->whereView('DraftPencahayaan')
                 ->render();
-
+           
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
 

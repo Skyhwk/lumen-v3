@@ -31,6 +31,7 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -331,7 +332,7 @@ class DraftUlkMedanMagnetController extends Controller
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
                 ->whereView('DraftUlkMedanMagnet')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
             if ($header->is_revisi == 1) {
@@ -683,6 +684,16 @@ class DraftUlkMedanMagnetController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Udara no LHP ' . $request->no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();

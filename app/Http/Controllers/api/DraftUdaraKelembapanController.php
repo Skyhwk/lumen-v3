@@ -51,6 +51,7 @@ use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -1609,6 +1610,16 @@ class DraftUdaraKelembapanController extends Controller
                         $qr->data = json_encode($dataQr);
                         $qr->save();
                     }
+
+                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                    $this->dispatch($job);
+                } else {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'Data draft LHP air no sampel ' . $request->no_lhp . ' tidak ditemukan',
+                        'status' => false
+                    ], 404);
                 }
 
                 DB::commit();

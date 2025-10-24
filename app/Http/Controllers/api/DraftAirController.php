@@ -25,6 +25,7 @@ use App\Models\PengesahanLhp;
 use App\Models\KonfirmasiLhp;
 
 
+
 use App\Services\TemplateLhps;
 use App\Services\SendEmail;
 use App\Services\LhpTemplate;
@@ -32,6 +33,7 @@ use App\Services\GenerateQrDocumentLhp;
 use App\Services\PrintLhp;
 
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -235,17 +237,18 @@ class DraftAirController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request, false);
-                }
-            }
+
+            // if ($header->is_revisi == 1) {
+            //     $header->is_revisi = 0;
+            //     $header->is_generated = 0;
+            //     $header->count_revisi++;
+            //     if ($header->count_revisi > 2) {
+            //         $this->handleApprove($request, false);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -310,7 +313,7 @@ class DraftAirController extends Controller
                 ->setDataHeader($dataHeader)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
-                ->render();
+                ->render('downloadLHPFinal');
 
             if ($dataHeader->file_lhp != $fileName) {
                 // ada perubahan nomor lhp yang artinya di token harus di update
@@ -931,15 +934,19 @@ class DraftAirController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+                
+                $periode = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $periode);
+                $this->dispatch($job);
                 // $job = new JobPrintLhp($request->no_sampel);
                 // $this->dispatch($job);
-                $servicePrint = new PrintLhp();
-                $servicePrint->print($request->no_sampel);
+                // $servicePrint = new PrintLhp();
+                // $servicePrint->print($request->no_sampel);
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Approve Data', 'status' => '401'], 401);
-                }
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Approve Data', 'status' => '401'], 401);
+                // }
 
 
 

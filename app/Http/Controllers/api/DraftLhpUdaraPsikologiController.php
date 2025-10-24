@@ -12,6 +12,7 @@ use App\Models\LhpUdaraPsikologiHeaderHistory;
 use App\Models\QrDocument;
 use App\Services\GenerateQrDocumentLhpp;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -351,20 +352,27 @@ class DraftLhpUdaraPsikologiController extends Controller
 					$qr->save();
 				}
 
-				$servicePrint = new PrintLhp();
-				$servicePrint->printByFilename($data->file_lhp, $detail);
+				// $servicePrint = new PrintLhp();
+				// $servicePrint->printByFilename($data->file_lhp, $detail);
 
-				if (!$servicePrint) {
-					DB::rollBack();
-					return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-				}
+				$periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+
+				// if (!$servicePrint) {
+				// 	DB::rollBack();
+				// 	return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+				// }
+			} else {
+				DB::rollBack();
+				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);
 			}
 
 			DB::commit();
 			return response()->json([
 				'data' => $data,
 				'status' => true,
-				'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove'
+				'message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove'
 			], 201);
 		} catch (\Exception $th) {
 			DB::rollBack();

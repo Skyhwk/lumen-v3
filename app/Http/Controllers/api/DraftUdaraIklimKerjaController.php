@@ -28,6 +28,7 @@ use App\Services\LhpTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -373,27 +374,27 @@ class DraftUdaraIklimKerjaController extends Controller
                         ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimPanas')
-                        ->render();
+                        ->render('downloadLHPFinal');
                 } else {
                     $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)
                         ->useLampiran(true)
                         ->setDataCustom($custom)
                         ->whereView('DraftIklimDingin')
-                        ->render();
+                        ->render('downloadLHPFinal');
                 }
 
 
                 // $fileName = 'LHP-IKLIM_KERJA-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
                 $header->file_lhp = $fileName;
-                if ($header->is_revisi == 1) {
-                    $header->is_revisi = 0;
-                    $header->is_generated = 0;
-                    $header->count_revisi++;
-                    if ($header->count_revisi > 2) {
-                        $this->handleApprove($request, false);
-                    }
-                }
+                // if ($header->is_revisi == 1) {
+                //     $header->is_revisi = 0;
+                //     $header->is_generated = 0;
+                //     $header->count_revisi++;
+                //     if ($header->count_revisi > 2) {
+                //         $this->handleApprove($request, false);
+                //     }
+                // }
                 $header->save();
             }
 
@@ -691,14 +692,14 @@ class DraftUdaraIklimKerjaController extends Controller
                     ->useLampiran(true)
                     ->setDataCustom($custom)
                     ->whereView('DraftIklimPanas')
-                    ->render();
+                    ->render('downloadLHPFinal');
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
                     ->useLampiran(true)
                     ->setDataCustom($custom)
                     ->whereView('DraftIklimDingin')
-                    ->render();
+                    ->render('downloadLHPFinal');
             }
 
 
@@ -803,13 +804,23 @@ class DraftUdaraIklimKerjaController extends Controller
 
                 $detail = LhpsIklimDetail::where('id_header', $data->id)->get();
 
-                $servicePrint = new PrintLhp();
-                $servicePrint->printByFilename($data->file_lhp, $detail);
+                // $servicePrint = new PrintLhp();
+                // $servicePrint->printByFilename($data->file_lhp, $detail);
 
-                if (!$servicePrint) {
-                    DB::rollBack();
-                    return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                }
+                // if (!$servicePrint) {
+                //     DB::rollBack();
+                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+                // }
+
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                $this->dispatch($job);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Iklim no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();

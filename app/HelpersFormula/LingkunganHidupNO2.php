@@ -29,6 +29,11 @@ class LingkunganHidupNO2
         $C9 = null;
         $C10 = null;
         $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -58,6 +63,20 @@ class LingkunganHidupNO2
 
         // C (PPM) = 24.45*(C(mg/m3)/46)
         $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 46, 5));
+
+        $C14 = $C2;
+
+        $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
+
+        if(floatval($Vu_alt) != 0.0) {
+            // C (ug/Nm3) = (a/Vu)*(10/25)*1000
+            $C15 = \str_replace(",", "", number_format(($ks / floatval($Vu_alt)) * (10 / 25) * 1000, 4));
+        }else{
+            $C15 = 0;
+        }
+
+        $C16 = \str_replace(",", "", number_format(floatval($C15) / 1000, 5));
+
 
         if (floatval($C) < 5.83)
             $C = '<5.83';
@@ -94,6 +113,11 @@ class LingkunganHidupNO2
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'satuan' => $satuan,
             'satuan' => $satuan,
             'vl' => $vl,
