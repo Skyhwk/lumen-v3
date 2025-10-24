@@ -71,7 +71,7 @@ class LingkunganHidupH2S
             $C14_val = $C2_val;
 
             // H2S (mg/Nm3) = (((A1 - A2)/Rerata laju alir*t)*(34/24,45))/1000
-            $C16_val = round((($value - $data->kb[$key]) / ($data->average_flow * $data->durasi)) * (34 / 24.45) / 1000, 4);
+            $C16_val = round((($value - $data->kb[$key]) / ($data->average_flow * $data->durasi)) * (34 / 24.45), 4);
 
             $C15_val = round($C16_val * 1000, 4);
 
