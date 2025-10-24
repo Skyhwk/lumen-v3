@@ -320,12 +320,12 @@ class WsFinalAirController extends Controller
 
 
 			$hasil = $this->hitungKoreksi($request, $type_koreksi, $id, $no_sample, $faktor_koreksi, $parameter, $hasilPengujian);
-
+			
 			$history = new HistoryWsValueAir();
 			$history->id_ws_value_air = $id;
 			$history->no_sampel = $no_sample;
 			$history->parameter = $parameter;
-			$history->hasil = $hasil;
+			$history->hasil = $hasilPengujian;
 			$history->created_by = $this->karyawan;
 			$history->created_at = Carbon::now()->format('Y-m-d H:i:s');
 			$history->save();
@@ -358,7 +358,7 @@ class WsFinalAirController extends Controller
 	public function rumusAir($request, $faktor_koreksi, $parameter, $hasilPengujian, $air)
 	{
 		try {
-			// dd($faktor_koreksi);
+			$hasil = 0;
 			switch ($parameter) {
 				case 'BOD':
 					if (str_contains($hasilPengujian, '<')) {
@@ -448,6 +448,12 @@ class WsFinalAirController extends Controller
 					if ($faktor_koreksi >= 10 && $faktor_koreksi <= 95) {
 						$hasil = (float) str_replace('<', '', $hasilPengujian) * ($faktor_koreksi / 100);
 						$hasil = $hasil < 0.0056 ? '<0.0056' : $hasil;
+					}
+					break;
+				case 'Total Coliform':
+				case 'F. coli':
+					if ($faktor_koreksi ) {
+						$hasil = (float) str_replace('<', '', $hasilPengujian) * ($faktor_koreksi / 100);
 					}
 					break;
 				case 'NO3':
@@ -586,8 +592,6 @@ class WsFinalAirController extends Controller
 	{
 		DB::beginTransaction();
 		try {
-
-
 			$po = OrderDetail::where('no_sampel', $no_sampel)
 				->where('is_active', 1)
 				->where('parameter', 'like', '%' . $parameter . '%')

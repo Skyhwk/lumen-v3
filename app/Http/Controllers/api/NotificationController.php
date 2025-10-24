@@ -15,19 +15,45 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)->where('is_active', true)->get();
+        // Ambil total jumlah notifikasi yang belum dibaca
+        $unreadCount = Notification::where('user_id', $this->user_id)
+            ->where('is_active', true)
+            ->where('is_read', false)
+            ->count();
 
-        return response()->json(['data'=>$data]);
+        // Ambil 5 notifikasi terbaru yang belum dibaca
+        $unreadNotifications = Notification::where('user_id', $this->user_id)
+            ->where('is_active', true)
+            ->where('is_read', false)
+            ->latest()
+            ->take(5)
+            ->get();
+
+        return response()->json([
+            'data' => $unreadNotifications,
+            'unread_count' => $unreadCount,
+        ]);
     }
+
 
     public function getNotification(Request $request)
     {
-        $data = Notification::where('user_id', $this->user_id)
-        ->where('is_active', true)
-        ->orderBy('created_at', 'desc')
-        ->get();
+        $perPage = $request->input('per_page', 10);
 
-        return response()->json(['data'=>$data]);
+        $data = Notification::where('user_id', $this->user_id)
+            ->where('is_active', true)
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => $data->items(),
+            'pagination' => [
+                'current_page' => $data->currentPage(),
+                'per_page' => $data->perPage(),
+                'total' => $data->total(),
+                'last_page' => $data->lastPage(),
+            ],
+        ]);
     }
 
     public function readNotificationAll(Request $request)

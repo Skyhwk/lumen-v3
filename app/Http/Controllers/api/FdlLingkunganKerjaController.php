@@ -175,6 +175,7 @@ class FdlLingkunganKerjaController extends Controller
                         'Tekanan Udara' => 'tekanan_udara',
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
+                        'Kelembaban 8J' => 'kelembapan',
                         'Suhu 8J (LK)' => 'suhu',
                     ];
 
@@ -276,7 +277,7 @@ class FdlLingkunganKerjaController extends Controller
                         foreach ($foundParams as $index => $param) {
                             $column = $targetParams[$param];
                             $is8Jam = Str::contains($param, ['8J', '8 Jam']);
-                            $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
+                            // $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
                             $details = $is8Jam ? $details8Jam : $detailsSesaat;
 
                             // Handle kolom auto_laju
@@ -287,7 +288,8 @@ class FdlLingkunganKerjaController extends Controller
 
                             // Ambil rata-rata nilai parameter
                             $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
-                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
+                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), 4) : null;
+                            // $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
 
                             $satuan = null;
                             $lowerParam = strtolower($param);

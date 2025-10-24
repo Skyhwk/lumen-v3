@@ -49,6 +49,7 @@ class FdlLingkunganKerjaController extends Controller
             })
             ->where('is_active', 1)->first();
 
+
             if (is_null($data)) {
                 return response()->json([
                     'message' => 'No Sample tidak ditemukan di kategori FDL Lingkungan Kerja'
@@ -971,59 +972,76 @@ class FdlLingkunganKerjaController extends Controller
                 });
                 foreach($filteredParameters as $a){
                     $satuan = '';
+                    $shift_pengujian = '';
+
                     if ($a == 'Kelembaban') {
                         $satuan = ' %';
                     } else if ($a == 'Suhu') {
                         $satuan = ' °C';
-                    // } else if ($a == 'Laju Ventilasi') {
-                    //     $satuan = ' m/s';
-                    // } else if ($a == 'Laju Ventilasi (8 Jam)') {
-                    //     $satuan = ' m/s';
-                    // } else if ($a == 'Pertukaran Udara') {
-                    //     $satuan = ' m3';
-                    // } else if ($a == 'Tekanan Udara (LK)') {
-                    //     $satuan = ' mmHg';
+                    } else if ($a == 'Laju Ventilasi') {
+                        $satuan = ' m/s';
+                    } else if ($a == 'Laju Ventilasi (8 Jam)') {
+                        $satuan = ' m/s';
+                        $shift_pengujian = '8 Jam-' . json_encode($request->shift_pengambilan);
+                    } else if ($a == 'Pertukaran Udara') {
+                        $satuan = ' m3';
+                    } else if ($a == 'Tekanan Udara (LK)') {
+                        $satuan = ' mmHg';
                     }
+
+                    // 🛑 Tambahkan filter agar parameter tanpa durasi tidak diproses jika shift L2
+                    $isDurasi = str_contains($a, '8 Jam') || str_contains($a, '6 Jam') || str_contains($a, '24 Jam');
+
+                    if ($request->shift_pengambilan != 'L1' && !$isDurasi) {
+                        continue; // skip parameter ini
+                    }
+
                     $fdlvalue = new DetailLingkunganKerja();
-                    $fdlvalue->no_sampel                 = strtoupper(trim($request->no_sample));
-                    if ($request->penamaan_titik != '') $fdlvalue->keterangan            = $request->penamaan_titik;
-                    if ($request->keterangan_2 != '') $fdlvalue->keterangan_2          = $request->keterangan_2;
-                    if ($request->koordinat != '') $fdlvalue->titik_koordinat             = $request->koordinat;
-                    if ($request->latitude != '') $fdlvalue->latitude                            = $request->latitude;
-                    if ($request->longitude != '') $fdlvalue->longitude                        = $request->longitude;
-                    if ($request->lokasi != '') $fdlvalue->lokasi                         = $request->lokasi;
-                    $fdlvalue->parameter                                               = $a;
-                    if ($request->cuaca != '') $fdlvalue->cuaca                        = $request->cuaca;
-                    if ($request->laju_ventilasi != '') $fdlvalue->laju_ventilasi                = $request->laju_ventilasi;
-                    if ($request->intensitas_kebauan != '') $fdlvalue->intensitas              = $request->intensitas_kebauan;
-                    if ($request->aktifitas_pekerja != '') $fdlvalue->aktifitas                = $request->aktifitas_pekerja;
-                    if ($request->jarak_sumber_cemaran != '') $fdlvalue->jarak_sumber_cemaran                        = $request->jarak_sumber_cemaran;
-                    if ($request->jam_pengambilan != '') $fdlvalue->waktu_pengukuran                        = $request->jam_pengambilan;
-                    if ($request->kecepatan_angin != '') $fdlvalue->kecepatan_angin                        = $request->kecepatan_angin;
-                    $fdlvalue->kategori_pengujian                                                   = 'Sesaat';
-                    $fdlvalue->shift_pengambilan                   = 'Sesaat';
-                    if ($request->catatan_kondisi_lapangan != '') $fdlvalue->catatan_kondisi_lapangan                          = $request->catatan_kondisi_lapangan;
-                    if ($request->suhu != '') $fdlvalue->suhu                          = $request->suhu;
-                    if ($request->kelembaban != '') $fdlvalue->kelembapan                        = $request->kelembaban;
-                    if ($request->tekanan_udara != '') $fdlvalue->tekanan_udara                     = $request->tekanan_udara;
-                    if ($request->deskripsi_bau != '') $fdlvalue->deskripsi_bau                  = $request->deskripsi_bau;
-                    if ($request->metode_pengukuran != '') $fdlvalue->metode_pengukuran                      = $request->metode_pengukuran;
-                    if ($request->permission != '') $fdlvalue->permission                      = $request->permission;
-                    $fdlvalue->satuan                       = $satuan;
+                    $fdlvalue->no_sampel = strtoupper(trim($request->no_sample));
+                    if ($request->penamaan_titik != '') $fdlvalue->keterangan = $request->penamaan_titik;
+                    if ($request->keterangan_2 != '') $fdlvalue->keterangan_2 = $request->keterangan_2;
+                    if ($request->koordinat != '') $fdlvalue->titik_koordinat = $request->koordinat;
+                    if ($request->latitude != '') $fdlvalue->latitude = $request->latitude;
+                    if ($request->longitude != '') $fdlvalue->longitude = $request->longitude;
+                    if ($request->lokasi != '') $fdlvalue->lokasi = $request->lokasi;
+                    $fdlvalue->parameter = $a;
+                    if ($request->cuaca != '') $fdlvalue->cuaca = $request->cuaca;
+                    if ($request->laju_ventilasi != '') $fdlvalue->laju_ventilasi = $request->laju_ventilasi;
+                    if ($request->intensitas_kebauan != '') $fdlvalue->intensitas = $request->intensitas_kebauan;
+                    if ($request->aktifitas_pekerja != '') $fdlvalue->aktifitas = $request->aktifitas_pekerja;
+                    if ($request->jarak_sumber_cemaran != '') $fdlvalue->jarak_sumber_cemaran = $request->jarak_sumber_cemaran;
+                    if ($request->jam_pengambilan != '') $fdlvalue->waktu_pengukuran = $request->jam_pengambilan;
+                    if ($request->kecepatan_angin != '') $fdlvalue->kecepatan_angin = $request->kecepatan_angin;
+
+                    $fdlvalue->kategori_pengujian = $shift_pengujian != '' ? $shift_pengujian : 'Sesaat';
+                    $fdlvalue->shift_pengambilan = $shift_pengujian != '' ? $request->shift_pengambilan : 'Sesaat';
+
+                    if ($request->catatan_kondisi_lapangan != '') $fdlvalue->catatan_kondisi_lapangan = $request->catatan_kondisi_lapangan;
+                    if ($request->suhu != '') $fdlvalue->suhu = $request->suhu;
+                    if ($request->kelembaban != '') $fdlvalue->kelembapan = $request->kelembaban;
+                    if ($request->tekanan_udara != '') $fdlvalue->tekanan_udara = $request->tekanan_udara;
+                    if ($request->deskripsi_bau != '') $fdlvalue->deskripsi_bau = $request->deskripsi_bau;
+                    if ($request->metode_pengukuran != '') $fdlvalue->metode_pengukuran = $request->metode_pengukuran;
+                    if ($request->permission != '') $fdlvalue->permission = $request->permission;
+
+                    $fdlvalue->satuan = $satuan;
+
                     if ($request->statFoto == 'adaFoto') {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = self::convertImg($request->foto_alat, 2, $this->user_id);
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
                     } else {
-                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel   = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
-                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel     = self::convertImg($request->foto_alat, 2, $this->user_id);
-                        if ($request->foto_lain != '') $fdlvalue->foto_lain                 = self::convertImg($request->foto_lain, 3, $this->user_id);
+                        if ($request->foto_lokasi_sampel != '') $fdlvalue->foto_lokasi_sampel = self::convertImg($request->foto_lokasi_sampel, 1, $this->user_id);
+                        if ($request->foto_alat != '') $fdlvalue->foto_kondisi_sampel = self::convertImg($request->foto_alat, 2, $this->user_id);
+                        if ($request->foto_lain != '') $fdlvalue->foto_lain = self::convertImg($request->foto_lain, 3, $this->user_id);
                     }
-                    $fdlvalue->created_by                                                  = $this->karyawan;
-                    $fdlvalue->created_at                                                 = Carbon::now()->format('Y-m-d H:i:s');
+
+                    $fdlvalue->created_by = $this->karyawan;
+                    $fdlvalue->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $fdlvalue->save();
                 }
             }
+
             if (is_null($fdl)) {
                 $data = new DataLapanganLingkunganKerja();
                 $data->no_sampel                 = strtoupper(trim($request->no_sample));
@@ -1034,9 +1052,12 @@ class FdlLingkunganKerjaController extends Controller
                 $data->save();
             }
 
-            DB::table('order_detail')
-                ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+
+            if($orderDetail->tanggal_terima == null){
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->save();
+            }
 
             $header = DB::table('lingkungan_header')
                 ->where('no_sampel', strtoupper(trim($request->no_sample)))

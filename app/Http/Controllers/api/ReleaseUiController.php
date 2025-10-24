@@ -17,7 +17,7 @@ class ReleaseUiController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Frontend')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Frontend')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 

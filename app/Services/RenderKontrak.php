@@ -2601,7 +2601,7 @@ class RenderKontrak
     
         foreach ($data as $item) {
             // Buat kunci unik berdasarkan kategori_1, kategori_2, dan regulasi
-            $key = $item->kategori_1 . '|' . $item->kategori_2 . '|' . implode(',',$item->parameter) . '|' . implode(',', (array) $item->regulasi);
+            $key = $item->kategori_1 . '|' . $item->kategori_2 . '|' . implode(',',$item->parameter) . '|' . implode(',', (array) $item->regulasi) . '|' . $item->jumlah_titik;
             
             if (!isset($result[$key])) {
                 // Inisialisasi object baru

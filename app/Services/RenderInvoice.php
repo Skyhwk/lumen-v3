@@ -897,9 +897,9 @@ class RenderInvoice
                                 $tambah = $tambah + 1;
                             }
 
-                            if ($values->biaya_lain != null && $values->biaya_lain > 0) {
-                                if (is_array(json_decode($values->keterangan_biaya))) {
-                                    $tambah = $tambah + count(json_decode($values->keterangan_biaya));
+                            if ($values->biaya_lain) {
+                                if (is_array(json_decode($values->biaya_lain))) {
+                                    $tambah = $tambah + count(json_decode($values->biaya_lain));
                                 } else {
                                     $tambah = $tambah + 1;
                                 }
@@ -910,18 +910,22 @@ class RenderInvoice
                             }
                             // dd($cekArray);
                             $resetData = reset($cekArray);
-                            for ($i = 0; $i < count(array_chunk($resetData->data_sampling, 15)); $i++) {
-                                foreach (array_chunk($resetData->data_sampling, 15)[$i] as $keys => $dataSampling) {
+                            $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
+                                ? $resetData->data_sampling
+                                : $cekArray;
+                            // dd($usingData);
+                            for ($i = 0; $i < count(array_chunk($usingData, 12)); $i++) {
+                                foreach (array_chunk($usingData, 12)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
-                                        if ($i == count(array_chunk($cekArray, 15)) - 1) {
-                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1 + $tambah;
+                                        if ($i == count(array_chunk($usingData, 12)) - 1) {
+                                            $rowspan = count(array_chunk($usingData, 12)[$i]) + 1 + $tambah;
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                                                 <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document .'<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1;
+                                            $rowspan = count(array_chunk($usingData, 12)[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
@@ -1027,7 +1031,7 @@ class RenderInvoice
 
                                 }
 
-                                $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
+                                $isLastElement = $i == count(array_chunk($usingData, 12)) - 1;
 
                                 if ($isLastElement) {
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
@@ -1096,7 +1100,7 @@ class RenderInvoice
                                         }
                                     }
 
-                                    if ($values->biaya_lain != null && $values->biaya_lain > 0) {
+                                    if ($values->biaya_lain != null) {
                                         if (isset($values->keterangan_biaya_lain)) {
                                             $pdf->writeHTML('
                                                 <tr>
@@ -1107,13 +1111,13 @@ class RenderInvoice
                                                 </tr>
                                             ');
                                         } else {
-                                            $biayaLainArray = json_decode($values->keterangan_biaya, true);
+                                            $biayaLainArray = json_decode($values->biaya_lain, true);
                                             if (is_array($biayaLainArray)) {
                                                 foreach ($biayaLainArray as $biayaLain) {
                                                     $pdf->writeHTML('
                                                         <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">' . $biayaLain['deskripsi'] . '</td>
                                                         <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
-                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td>
                                                         <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
                                                     ');
                                                 }

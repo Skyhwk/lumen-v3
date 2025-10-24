@@ -131,6 +131,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
+    public function dataLapanganErgonomi()
+    {
+        return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
+    }
     public function lhps_air()
     {
         return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
@@ -303,6 +307,10 @@ class OrderDetail extends Sector
     public function dataLapanganMicrobiologiUdara()
     {
         return $this->belongsTo(DataLapanganMicrobiologi::class, 'no_sampel', 'no_sampel');
+    }
+    public function detailMicrobiologi()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
     }
 
     public function dataLapanganCahaya()
@@ -486,20 +494,23 @@ class OrderDetail extends Sector
     {
         return $this->hasMany(DetailLingkunganHidup::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
     }
-    
+
     public function allDetailLingkunganKerja()
     {
         return $this->hasMany(DetailLingkunganKerja::class, 'no_sampel', 'no_sampel')->orderBy('parameter')->orderBy('shift_pengambilan');
     }
 
     protected $anyDataLapanganRelations = [
+        'detailMicrobiologi',
+        'dataLapanganIklimPanas',
+        'dataLapanganPartikulatMeter',
+        'dataLapanganErgonomi',
+        'dataLapanganPsikologi',
         'dataLapanganAir',
 
         'allDetailLingkunganHidup',
         'allDetailLingkunganKerja',
         'dataLapanganDirectLain',
-        'dataLapanganIklimPanas',
-        'dataLapanganPartikulatMeter',
         'dataLapanganMedanLM',
         'dataLapanganKebisinganPersonal',
         'dataLapanganKebisingan',
@@ -507,11 +518,8 @@ class OrderDetail extends Sector
         'dataLapanganGetaran',
         'dataLapanganDebuPersonal',
         'dataLapanganIklimDingin',
-        'dataLapanganMicrobiologiUdara',
         'dataLapanganSwab',
         'dataLapanganCahaya',
-        'dataLapanganPsikologi',
-        'data_lapangan_ergonomi',
         'dataLapanganSinarUV',
 
         'dataLapanganEmisiCerobong',
@@ -520,24 +528,26 @@ class OrderDetail extends Sector
 
     public function scopeWithAnyDataLapangan($query)
     {
-        return $query->with($this->anyDataLapanganRelations);
+        // pakai new static biar aman di konteks static scope
+        return $query->with((new static)->anyDataLapanganRelations);
     }
 
     public function getAnyDataLapanganAttribute()
     {
+        $hasil = collect();
+
         foreach ($this->anyDataLapanganRelations as $relation) {
-            if ($this->relationLoaded($relation) && !empty($this->{$relation})) {
-                // return $this->{$relation};
+            if ($this->relationLoaded($relation) && $this->{$relation}) {
                 $relasi = $this->{$relation};
 
                 if ($relasi instanceof \Illuminate\Database\Eloquent\Collection) {
-                    return $relasi;
+                    $hasil = $hasil->merge($relasi);
+                } else {
+                    $hasil->push($relasi);
                 }
-
-                return collect([$relasi])->filter();
             }
         }
 
-        return null;
+        return $hasil->isNotEmpty() ? $hasil : null;
     }
 }

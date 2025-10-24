@@ -82,6 +82,11 @@ class LingkunganHidupCl
         $C3 = number_format($C3, 4, '.', '');
         $C4 = number_format($C4, 4, '.', '');
 
+        $C14 = $C2;
+        // C (ug/m3) = ((((A-B)*5))/(LAJU ALIR*DURASI))*1000
+        $C15 = round(((($ks - $kb) * 5) / ($data->average_flow * $data->durasi)) * 1000, 4);
+        $C16 = $C15;
+
 
         $Vs = $Vu;
 

@@ -203,10 +203,10 @@ class RequestSamplingPlanController extends Controller
             "periode" => $request->periode_kontrak != "" ? $request->periode_kontrak : null,
             "karyawan" => $this->karyawan,
             'driver' => $request->driver ?? null,
-            "isokinetic" => $request->isokinetic,
-            "pendampingan_k3" => $request->pendampingan_k3
+            "isokinetic" => (int)$request->isokinetic,
+            "pendampingan_k3" => (int)$request->pendampingan_k3
         ];
-       
+        
         $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
 
         if ($addJadwal) {

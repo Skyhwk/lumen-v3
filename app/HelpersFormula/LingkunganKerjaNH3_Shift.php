@@ -4,7 +4,7 @@ namespace App\HelpersFormula;
 
 use Carbon\Carbon;
 
-class LingkunganHidupNH3_Shift
+class LingkunganKerjaNH3_Shift
 {
     public function index($data, $id_parameter, $mdl) {
         $ks = null;
@@ -38,53 +38,114 @@ class LingkunganHidupNH3_Shift
         $st = null;
         $satuan = null;
 
+        $C_value = $C1_value = $C2_value = $C3_value = $C4_value = $C14_value = $C15_value = $C16_value = [];
+
+        // dd($data->durasi);
         foreach($data->ks as $key_ks => $item_ks) {
-            foreach ($data->average_flow as $key => $value) {
-                // $Vu = \str_replace(",", "",number_format($value * $data->durasi[$key] * (floatval($data->tekanan) / (floatval($data->suhu) + 273)) * (298 / 760), 4));
-                // // if($key == 0) dd('Vu : '.$Vu, 'flow :'. $value, 'durasi : '.$data->durasi[$key], 'tekanan : '. $data->tekanan, 'Suhu :'. $data->suhu, 'Avg Penjerapan : '. $item_ks[$key]);
-                // if($Vu != 0.0) {
-                //     $C = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
-                // }else {
-                //     $C = 0;
-                // }
-                // $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-                // // dd($C1);
-                // $C2 = \str_replace(",", "", number_format((floatval($C1) / 48) * 24.45, 5));
-
-                $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-                if($Vu != 0.0) {
-                    $C = \str_replace(",", "", number_format(($item_ks[$key] / floatval($Vu)) * 1000, 4));
-                }else {
-                    $C = 0;
-                }
-                $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
-                $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
-
-                $C_value[$key_ks][$key] = $C;
-                $C1_value[$key_ks][$key] = $C1;
-                $C2_value[$key_ks][$key] = $C2;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+            if($Vu != 0.0) {
+                $C1 = \str_replace(",", "", number_format(($item_ks / floatval($Vu)) * 1000, 4));
+            }else {
+                $C1 = 0;
             }
+            $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
+            $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
+            $C3 = $C2 * 1000;
+            $C4 = $C3 * 10000;
+
+            if($data->parameter == 'NH3 (24 Jam)' || $data->tipe_data == 'ambient'){
+                $C14 = $C2;
+
+                // Vu = Rerata Laju Alir*t*/1000
+                $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
+                // C (mg/Nm3) = (a/Vu)
+                $C15 = \str_replace(",", "", number_format($item_ks / floatval($Vu_alt), 4));
+                $C16 = $C15 / 1000;
+
+                $C14_value[$key_ks][] = $C14;
+                $C15_value[$key_ks][] = $C15;
+                $C16_value[$key_ks][] = $C16;
+            }
+
+            $C_value[$key_ks][] = $C;
+            $C1_value[$key_ks][] = $C1;
+            $C2_value[$key_ks][] = $C2;
+            $C3_value[$key_ks][] = $C3;
+            $C4_value[$key_ks][] = $C4;
         }
 
         $C = array_map(function ($value) {
             return number_format(array_sum($value) / count($value), 4);
         }, $C_value);
 
+        $C_average = number_format(array_sum($C) / count($C), 4);
+
         $C1 = array_map(function ($value) {
             return number_format(array_sum($value) / count($value), 4);
         }, $C1_value);
+
+        $C1_average = number_format(array_sum($C1) / count($C1), 4);
 
         $C2 = array_map(function ($value) {
             return number_format(array_sum($value) / count($value), 4);
         }, $C2_value);
 
+        $C2_average = number_format(array_sum($C2) / count($C2), 4);
 
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.0005)
-            $C1 = '<0.0005';
-        if (floatval($C2) < 0.0007)
-            $C2 = '<0.0007';
+        $C3 = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C3_value);
+
+        $C3_average = number_format(array_sum($C3) / count($C3), 4);
+
+        $C4 = array_map(function ($value) {
+            return number_format(array_sum($value) / count($value), 4);
+        }, $C4_value);
+
+        $C4_average = number_format(array_sum($C4) / count($C4), 4);
+
+        if($data->parameter == 'NH3 (24 Jam)' || $data->tipe_data == 'ambient'){
+            $C14 = array_map(function ($value) {
+                return number_format(array_sum($value) / count($value), 4);
+            }, $C14_value);
+
+            $C14_average = number_format(array_sum($C14) / count($C14), 4);
+
+            $C15 = array_map(function ($value) {
+                return number_format(array_sum($value) / count($value), 4);
+            }, $C15_value);
+
+            $C15_average = number_format(array_sum($C15) / count($C15), 4);
+
+            $C16 = array_map(function ($value) {
+                return number_format(array_sum($value) / count($value), 4);
+            }, $C16_value);
+
+            $C16_average = number_format(array_sum($C16) / count($C16), 4);
+        }
+
+
+        if (floatval($C_average) < 0.1419)
+            $C_average = '<0.1419';
+        if (floatval($C1_average) < 0.0005)
+            $C1_average = '<0.0005';
+        if (floatval($C2_average) < 0.0007)
+            $C2_average = '<0.0007';
+
+        $data_pershift = [
+            'Shift 1' => $C_value[0],
+            'Shift 2' => $C_value[1] ?? null,
+            'Shift 3' => $C_value[2] ?? null,
+        ];
+
+        if($data->parameter === 'NH3 (24 Jam)'){
+            $data_pershift = [
+                'Shift 1' => $C_value[0],
+                'Shift 2' => $C_value[1] ?? null,
+                'Shift 3' => $C_value[2] ?? null,
+                'Shift 4' => $C_value[3] ?? null,
+            ];
+        }
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -100,14 +161,15 @@ class LingkunganHidupNH3_Shift
             'w2' => $w2,
             'b1' => $b1,
             'b2' => $b2,
-            'C' => $C,
-            'C1' => $C1,
-            'C2' => $C2,
-            'data_pershift' => [
-                'Shift 1' => $C_value[0],
-                'Shift 2' => $C_value[1] ?? null,
-                'Shift 3' => $C_value[2] ?? null,
-            ],
+            'C' => $C_average,
+            'C1' => $C1_average,
+            'C2' => $C2_average,
+            'C3' => $C3_average,
+            'C4' => $C4_average,
+            'C14' => $C14_average ?? null,
+            'C15' => $C15_average ?? null,
+            'C16' => $C16_average ?? null,
+            'data_pershift' => $data_pershift,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,
