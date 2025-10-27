@@ -310,7 +310,7 @@ class GenerateHasilPengujianController extends Controller
                 $httpClient->attach('metadata', json_encode($fileMetadata));
                 // $httpClient->attach('final_password', $orderHeader->id_pelanggan);
 
-                $pythonServiceUrl = env('PDF_COMBINER_SERVICE', 'http://127.0.01:2999') . '/merge';
+                $pythonServiceUrl = env('PDF_COMBINER_SERVICE', 'http://127.0.0.1:2999') . '/merge';
                 $response = $httpClient->post($pythonServiceUrl);
 
                 if (!$response->successful()) {
