@@ -20,7 +20,8 @@ use App\Models\QrDocument;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\PermintaanDokumentasiSampling;
-
+use App\Services\RenderPermintaanDokumentasiSampling;
+use Illuminate\Support\Facades\Http;
 
 class PermintaanDokumentasiSamplingController extends Controller
 {
@@ -154,7 +155,9 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $qr->save();
 
-            $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
+            // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
+            
+            Http::post('http://127.0.0.1:3999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]);
 
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
@@ -202,5 +205,16 @@ class PermintaanDokumentasiSamplingController extends Controller
         $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
 
         return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
+    }
+
+    public function renderPdf(Request $request)
+    {
+        $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
+        $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
+            ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->first();
+
+        $service = new RenderPermintaanDokumentasiSampling();
+        $service->renderPdf($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode);
     }
 }
