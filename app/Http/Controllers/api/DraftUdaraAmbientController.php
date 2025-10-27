@@ -915,7 +915,7 @@ class DraftUdaraAmbientController extends Controller
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
                 if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
                     $this->dispatch($job);
                 }
                 

@@ -1684,7 +1684,7 @@ class DraftUdaraKebauanController extends Controller
                     }
 
                     $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
                     $this->dispatch($job);
                 } else {
                     DB::rollBack();

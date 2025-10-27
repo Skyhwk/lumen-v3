@@ -14,17 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class CombineLHPService
 {
-    protected $karyawan;
-
-    public function __construct()
-    {
-        $karyawan = request()->attributes->get('user')->karyawan;
-        if (!$karyawan) return response()->json(['message' => 'Karyawan not found'], 404);
-
-        $this->karyawan = $karyawan->nama_lengkap;
-    }
-
-    public function combine($noLhp, $fileLhp, $noOrder, $periode = null)
+    public function combine($noLhp, $fileLhp, $noOrder, $karyawan, $periode = null)
     {
         if (!$noLhp) return response()->json(['message' => 'No. LHP is required'], 400);
         if (!$fileLhp) return response()->json(['message' => 'LHP File is required'], 400);
@@ -87,13 +77,13 @@ class CombineLHPService
                 $linkLhp->list_lhp_rilis = json_encode([$noLhp]);
                 $linkLhp->jumlah_lhp = $orderHeader->orderDetail->pluck('cfr')->unique()->count();
                 $linkLhp->is_completed = $orderHeader->orderDetail->pluck('cfr')->unique()->count() == 1;
-                $linkLhp->created_by = $this->karyawan;
+                $linkLhp->created_by = $karyawan;
                 $linkLhp->created_at = Carbon::now();
             }
 
             $linkLhp->filename = $finalFilename;
 
-            $linkLhp->updated_by = $this->karyawan;
+            $linkLhp->updated_by = $karyawan;
             $linkLhp->updated_at = Carbon::now();
 
             $linkLhp->save();
