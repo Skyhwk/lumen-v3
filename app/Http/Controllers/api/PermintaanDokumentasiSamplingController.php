@@ -157,7 +157,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
             
-            Http::post('http://127.0.0.1:3999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]);
+            Http::post('http://127.0.0.1:2999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]);
 
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
