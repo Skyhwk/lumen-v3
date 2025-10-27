@@ -187,9 +187,12 @@ class RenderPermintaanDokumentasiSampling
             $detail = OrderDetail::withAnyDataLapangan()
                 ->where('no_order', $data->no_order)
                 ->where('is_active', true)
-                ->get();
+                ->get()
+                ->filter(fn($item) => $item->any_data_lapangan);
 
             foreach ($detail as $item) {
+                if (!$item->any_data_lapangan) continue;
+
                 foreach ($item->any_data_lapangan as $dataLapangan) {
                     $noOrder = $data->no_order;
                     $noSampelClean = str_replace('/', '_', $item->no_sampel);
@@ -288,7 +291,7 @@ class RenderPermintaanDokumentasiSampling
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error($e->getMessage());
+            Log::error($e->getMessage() . ' on line: ' . $e->getLine());
             return response()->json([
                 'message' => $e->getMessage(),
                 'line' => $e->getLine()
