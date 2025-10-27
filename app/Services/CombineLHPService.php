@@ -30,16 +30,49 @@ class CombineLHPService
             $httpClient = Http::asMultipart();
             $fileMetadata = [];
 
-            $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
-            if (File::exists($lhpPath)) {
-                $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
-                $fileMetadata[] = 'skyhwk12';
+            $linkLhp = LinkLhp::where('no_order', $noOrder);
+            if ($periode) $linkLhp->where('periode', $periode);
+            $linkLhp = $linkLhp->latest()->first();
+
+            if ($linkLhp) {
+                if ($linkLhp->list_lhp_rilis) {
+                    $lhpRilis = json_decode($linkLhp->list_lhp_rilis, true);
+                    array_push($lhpRilis, $noLhp);
+                    sort($lhpRilis, SORT_NATURAL);
+
+                    foreach ($lhpRilis as $item) {
+                        $existingFile = "LHP-" . str_replace('/', '-', $item) . ".pdf";
+
+                        if ($existingFile !== $fileLhp) {
+                            $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $existingFile);
+
+                            if (File::exists($lhpPath)) {
+                                $httpClient->attach('pdfs[]', File::get($lhpPath), $existingFile);
+                                $fileMetadata[] = 'skyhwk12';
+                            }
+                        } else {
+                            $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
+
+                            if (File::exists($lhpPath)) {
+                                $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
+                                $fileMetadata[] = 'skyhwk12';
+                            }
+                        }
+                    }
+                } else { // kalo blm ada samsek
+                    $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
+
+                    if (File::exists($lhpPath)) {
+                        $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
+                        $fileMetadata[] = 'skyhwk12';
+                    }
+                }
             }
 
             $httpClient->attach('metadata', json_encode($fileMetadata));
             // $httpClient->attach('final_password', $orderHeader->id_pelanggan);
 
-            $response = $httpClient->post(env('PDF_COMBINER_SERVICE', 'http://127.0.01:2999') . '/merge');
+            $response = $httpClient->post(env('PDF_COMBINER_SERVICE', 'http://127.0.0.1:2999') . '/merge');
 
             if (!$response->successful()) {
                 throw new \Exception('Python PDF Service failed (' . $response->status() . '): ' . $response->body());
