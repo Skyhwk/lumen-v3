@@ -51,6 +51,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
+use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -1622,8 +1623,12 @@ class DraftUdaraMikrobiologiController extends Controller
                     }
 
                     $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $periode);
-                    $this->dispatch($job);
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+
+                    if($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                        $this->dispatch($job);
+                    }
 
                 } else {
                     DB::rollBack();

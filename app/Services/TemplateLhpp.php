@@ -674,7 +674,7 @@ class TemplateLhpp
                     </table>
                 ');
         if ($mode_download == 'downloadLHP') {
-            $dir = public_path('dokumen/LHP/');
+            $dir = public_path('dokumen/LHP_DOWNLOAD/');
             if (!file_exists($dir)) {
                 mkdir($dir, 0777, true);
             }
