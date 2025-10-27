@@ -248,7 +248,7 @@ class InputParameterController extends Controller
                         $row[$p] = $val->no_sampel;
 
                         // Untuk SUBKONTRAK juga langsung tampilkan
-                        if ($stp->name === 'SUBKONTRAK') {
+                        if (in_array($stp->name, ['SUBKONTRAK','OTHER'])) {
                             $row[$p] = $val->no_sampel;
                         }
                     }
