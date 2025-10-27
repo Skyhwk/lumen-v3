@@ -37,6 +37,8 @@ class LHPHandleController extends BaseController
                         return response()->json(['message' => 'Document found but file not exists'], 403);
                     }
                     // return response()->json(['message' => 'Document found', 'data' => $dataLhp->filename], 200);
+                } else if ($dataLhp && $dataLhp->filename == null || $dataLhp->filename == ''){
+                    return response()->json(['message' => 'Document found but file not exists'], 403);
                 } else {
                     return response()->json(['message' => 'Document not found'], 404);
                 }
