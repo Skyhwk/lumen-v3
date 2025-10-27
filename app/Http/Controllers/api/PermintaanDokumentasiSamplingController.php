@@ -154,7 +154,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $qr->save();
 
-            $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
+            $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
 
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
@@ -199,7 +199,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             ->where('type_document', 'permintaan_dokumentasi_sampling')
             ->first();
 
-        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
+        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
 
         return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
     }
