@@ -251,7 +251,7 @@ class DraftUdaraPencahayaanController extends Controller
                 if (array_key_exists($val, $cleaned_noSampel)) {
                     $detail = new LhpsPencahayaanDetail;
                     $detail->id_header = $header->id;
-                    $detail->param = $val;
+                    $detail->param = $request->parameter_header;
                     $detail->no_sampel = $cleaned_noSampel[$val];
                     $detail->lokasi_keterangan = $cleaned_lokasi[$val];
                     $detail->hasil_uji = $cleaned_hasil_uji[$val];
