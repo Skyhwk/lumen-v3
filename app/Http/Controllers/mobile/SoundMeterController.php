@@ -10,6 +10,7 @@ use App\Models\DetailSoundMeter;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceIntilab;
+use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,9 +104,12 @@ class SoundMeterController extends Controller
                 ]);
             }
 
-            $update = DB::table('order_detail')
-                ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
+
+            if($orderDetail->tanggal_terima == null){
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->save();
+            }
 
             $nama = $this->karyawan;
             $this->resultx = "Data Sampling KEBISINGAN Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";

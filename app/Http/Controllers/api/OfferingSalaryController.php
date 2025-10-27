@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Models\{
@@ -515,6 +516,14 @@ class OfferingSalaryController extends Controller
                 $karyawan->updated_at = $request->personal['id_kandidat'] ? $timestamp : null;
             }
 
+            $checkNikKaryawan = MasterKaryawan::where('nik_karyawan',  $request->employee['nik'])->first();
+
+            if ($checkNikKaryawan) {
+                return response()->json([
+                    'message' => 'Nik karyawan sudah ada'
+                ], 500);
+            }
+
             if ($request->hasFile('personal.image')) {
                 $profilePicture = $request->file('personal.image');
                 $imageName = $request->personal['nik_ktp'] . '_' . str_replace(' ', '_', $request->personal['nama_lengkap']) . '.' . $profilePicture->getClientOriginalExtension();
@@ -537,6 +546,7 @@ class OfferingSalaryController extends Controller
             $karyawan->tgl_nikah = $request->personal['marital_date'] != '' ? $request->personal['marital_date'] : $karyawan->tgl_nikah;
             $karyawan->shio = $request->personal['shio'] != '' ? $request->personal['shio'] : $karyawan->shio;
             $karyawan->elemen = $request->personal['elemen'] != '' ? $request->personal['elemen'] : $karyawan->elemen;
+
 
             $karyawan->nik_karyawan = $request->employee['nik'] != '' ? $request->employee['nik'] : $karyawan->nik_karyawan;
             $karyawan->email = $request->employee['email'] != '' ? $request->employee['email'] : $karyawan->email;
@@ -646,7 +656,6 @@ class OfferingSalaryController extends Controller
                     $pengalaman->alasan_keluar = $experience['alasan_keluar'] != '' ? $experience['alasan_keluar'] : $pengalaman->alasan_keluar;
                     // dd($pengalaman);
                     $pengalaman->save();
-
                 }
             }
 

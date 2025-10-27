@@ -174,9 +174,12 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                DB::table('order_detail')
-                    ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                    ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+
+                if($orderDetail->tanggal_terima == null){
+                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                    $orderDetail->save();
+                }
 
                 InsertActivityFdl::by($this->user_id)->action('input')->target("Hasil Isokinetik pada nomor sampel $request->no_sample")->save();
 
