@@ -28,6 +28,27 @@ class DataLimbahController extends Controller
                 ->addColumn('tanggal_sampling', function ($row) {
                     return $row->order ? $row->order->tanggal_sampling : '-';
                 })
+                ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                    $query->whereHas('order', function ($q) use ($keyword) {
+                        $q->where('tanggal_sampling', 'like', "%$keyword%");
+                    });
+                })
+                ->addColumn('no_sampel', function ($row) {
+                    return $row->order ? $row->order->no_sampel : '-';
+                })
+                ->filterColumn('no_sampel', function ($query, $keyword) {
+                    $query->whereHas('order', function ($q) use ($keyword) {
+                        $q->where('no_sampel', 'like', "%$keyword%");
+                    });
+                })
+                ->addColumn('status', function ($row) {
+                    return $row->order ? $row->order->status : '-';
+                })
+                ->filterColumn('status', function ($query, $keyword) {
+                    $query->whereHas('order', function ($q) use ($keyword) {
+                        $q->where('status', 'like', "%$keyword%");
+                    });
+                })
                 ->make(true);
         } catch (\Exception $e) {
             return response()->json([
@@ -80,7 +101,7 @@ class DataLimbahController extends Controller
                 $data->created_by = $this->karyawan;
                 $data->created_at = date('Y-m-d H:i:s');
                 $data->save();
-    
+
                 $message = 'Data Limbah berhasil disimpan';
             }
 
@@ -112,7 +133,7 @@ class DataLimbahController extends Controller
                 return response()->json([
                     'message' => 'Data not Found'
                 ], 404);
-            }  
+            }
         } catch (\Exception $th) {
             return response()->json([
                 'message' => $th->getMessage(),

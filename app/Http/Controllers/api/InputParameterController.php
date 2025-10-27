@@ -186,7 +186,7 @@ class InputParameterController extends Controller
                     // }
 
                     // --- PERUBAHAN PENTING: Hanya proses quota jika parameter ada dalam $quota dan tanggal request lebih besar atau sama dengan tanggal berlaku
-                    if ($stp->name !== 'SUBKONTRAK' && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
+                    if (!in_array($stp->name, ['SUBKONTRAK','OTHER']) && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -248,7 +248,7 @@ class InputParameterController extends Controller
                         $row[$p] = $val->no_sampel;
 
                         // Untuk SUBKONTRAK juga langsung tampilkan
-                        if ($stp->name === 'SUBKONTRAK') {
+                        if (in_array($stp->name, ['SUBKONTRAK','OTHER'])) {
                             $row[$p] = $val->no_sampel;
                         }
                     }

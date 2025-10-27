@@ -121,6 +121,12 @@ class MasterKaryawanController extends Controller
                 }
 
                 if ($request->has('employee')) {
+                    $checkNikKaryawan = MasterKaryawan::where('nik_karyawan',  $request->employee['nik'])->first();
+                    if ($checkNikKaryawan) {
+                        return response()->json([
+                            'message' => 'Nik karyawan sudah ada'
+                        ], 500);
+                    }
                     $dataKaryawan['nik_karyawan'] = $request->employee['nik'];
                     $dataKaryawan['email'] = $request->employee['email'];
                     $dataKaryawan['email_pribadi'] = $request->employee['email_pribadi'];
@@ -235,6 +241,12 @@ class MasterKaryawanController extends Controller
                 }
 
                 if ($request->has('employee')) {
+                    $checkNikKaryawan = MasterKaryawan::where('nik_karyawan',  $request->employee['nik'])->first();
+                    if ($checkNikKaryawan) {
+                        return response()->json([
+                            'message' => 'Nik karyawan sudah ada'
+                        ], 500);
+                    }
                     $dataKaryawan['nik_karyawan'] = $request->employee['nik'];
                     $dataKaryawan['email'] = $request->employee['email'];
                     $dataKaryawan['email_pribadi'] = $request->employee['email_pribadi'];
