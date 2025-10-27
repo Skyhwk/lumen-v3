@@ -270,7 +270,7 @@ class RequestQuotationController extends Controller
                 if ($count == 0) {
                     $message = "Pelanggan $request->id_pelanggan belum pernah melakukan penawaran.";
                     $data = MasterPelanggan::with(['kontak_pelanggan', 'alamat_pelanggan', 'pic_pelanggan'])
-                        ->where('id_pelanggan', $request->id_pelanggan)->first();
+                        ->where('id_pelanggan', $request->id_pelanggan)->where('is_active', true)->first();
                     $status = 201;
                 } else {
                     $message = "Pelanggan $request->id_pelanggan sudah melakukan penawaran sebanyak $count kali.";
@@ -293,7 +293,7 @@ class RequestQuotationController extends Controller
                 if ($count == 0) {
                     $message = "Pelanggan $request->id_pelanggan belum pernah melakukan penawaran.";
                     $data = MasterPelanggan::with(['kontak_pelanggan', 'alamat_pelanggan', 'pic_pelanggan'])
-                        ->where('id_pelanggan', $request->id_pelanggan)->first();
+                        ->where('id_pelanggan', $request->id_pelanggan)->where('is_active', true)->first();
                     $status = 201;
                 } else {
                     $message = "Pelanggan $request->id_pelanggan sudah melakukan penawaran sebanyak $count kali.";
@@ -2335,6 +2335,7 @@ class RequestQuotationController extends Controller
                     'parameter'       => $sampling->parameter,
                     'total_parameter' => $sampling->total_parameter,
                     'regulasi'        => $sampling->regulasi,
+                    'jumlah_titik'    => $sampling->jumlah_titik,
                 ]));
 
                 unset($sampling->harga_satuan, $sampling->harga_total, $sampling->volume);
@@ -2356,6 +2357,7 @@ class RequestQuotationController extends Controller
                 }
             }
             // Setelah digroup dan disum per periode, masukkan ke finalGrouped
+
             foreach ($detailGrouped as $key => $item) {
                 $finalKey = md5(json_encode([
                     'kategori_1'      => $item->kategori_1,
@@ -2363,6 +2365,7 @@ class RequestQuotationController extends Controller
                     'parameter'       => $item->parameter,
                     'total_parameter' => $item->total_parameter,
                     'regulasi'        => $item->regulasi,
+                    'jumlah_titik'    => $item->jumlah_titik,
                 ]));
 
                 if (!isset($finalGrouped[$finalKey])) {
@@ -2378,12 +2381,12 @@ class RequestQuotationController extends Controller
                 }
             }
         }
-        
+
         foreach ($finalGrouped as $key => $item) {
             $periodeCount = count($item->periode_kontrak);
             $item->jumlah_titik = $periodeCount > 0 ? intval(round($item->jumlah_titik / $periodeCount)) : 0;
         }
-        
+
         return array_values($finalGrouped);
     }
 
@@ -2393,14 +2396,14 @@ class RequestQuotationController extends Controller
         foreach ($data as $periodeItem) {
             $periode = $periodeItem->periode_kontrak ?? null;
             if (!$periode || empty($periodeItem->biaya_preparasi)) continue;
-            
+
             if ($periodeItem->biaya_preparasi != null || $periodeItem->biaya_preparasi != "") {
                 foreach ($periodeItem->biaya_preparasi as $pre) {
                     $summary[] = $pre->Harga;
                 }
             }
         }
-        
+
         return array_sum($summary);
     }
 
@@ -2418,7 +2421,7 @@ class RequestQuotationController extends Controller
 
             if (isset($payload->keterangan_tambahan))
                 $keterangan_tambahan = $payload->keterangan_tambahan;
-            
+
             foreach ($data_pendukung as $item) {
                 foreach ($item->data_sampling as $pengujian) {
                     $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
@@ -2503,7 +2506,7 @@ class RequestQuotationController extends Controller
                     $dataH->biaya_lain = null;
                     $dataH->total_biaya_lain = 0;
                 }
-                
+
                 $custom_disc = [];
                 if (isset($data_diskon->custom_discount) && !empty($data_diskon->custom_discount)) {
                     $custom_disc = array_map(function ($disc) {
@@ -2518,7 +2521,7 @@ class RequestQuotationController extends Controller
                 }
 
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
-                
+
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
 
                 foreach ($dataPendukungHeader as $i => $item) {
@@ -2584,11 +2587,11 @@ class RequestQuotationController extends Controller
 
                     array_push($data_pendukung_h, $data_sampling[$i]);
                 }
-                
+
                 //=======================================END LOOP DATA PENDUKUNG HEADER=======================================
-                
+
                 $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
-                
+
                 $period_pendukung = [];
 
                 for ($c = 0; $c < count($data_wilayah->wilayah_data); $c++) {
@@ -2663,7 +2666,7 @@ class RequestQuotationController extends Controller
                 }
 
                 $dataLama = json_decode($dataH->data_lama);
-                
+
                 // =====================PROSES DETAIL DATA=========================================
                 foreach ($data_pendukung as $x => $pengujian){
                     $cek = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataH->id)->where('periode_kontrak', $pengujian->periode_kontrak)->first();
@@ -2696,7 +2699,7 @@ class RequestQuotationController extends Controller
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
-                        
+
                         $parameters = [];
                         $id_parameter = [];
                         foreach ($sampling->parameter as $item) {
@@ -2707,7 +2710,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-                        
+
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -2716,7 +2719,7 @@ class RequestQuotationController extends Controller
                                 ->where('nama_parameter', $parameter)
                                 ->orderBy('id', 'ASC')
                                 ->get();
-                            
+
                             if (count($ambil_data) > 1) {
                                 $found = false;
                                 foreach ($ambil_data as $xc => $zx) {
@@ -2755,7 +2758,7 @@ class RequestQuotationController extends Controller
 
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
-                        
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
@@ -2800,7 +2803,7 @@ class RequestQuotationController extends Controller
                         'periode_kontrak' => $pengujian->periode_kontrak,
                         'data_sampling' => $pengujian->data_sampling
                     ];
-                    
+
                     $dataD->data_pendukung_sampling = json_encode($data_sampling, JSON_UNESCAPED_UNICODE);
                     // end data sampling
                     $dataD->harga_air = $harga_air;
@@ -2828,7 +2831,7 @@ class RequestQuotationController extends Controller
 
                     $data_lain = $data_pendukung_lain;
                     $biaya_lain = 0;
-                    
+
                     for ($c = 0; $c < count($data_wilayah->wilayah_data); $c++) {
                         if (in_array($pengujian->periode_kontrak, $data_wilayah->wilayah_data[$c]->periode)) {
 
@@ -3055,7 +3058,7 @@ class RequestQuotationController extends Controller
                             $dataD->status_sampling = $data_wilayah->wilayah_data[$c]->status_sampling;
                         }
                     }
-                    
+
                     // =======================================================================DATA DISKON===========================================================================
                     // ==================================================DISKON ANALISA=============================================================================================
                     $isPeriodeDiskonExist = false;
@@ -3364,7 +3367,7 @@ class RequestQuotationController extends Controller
                     }
 
                     //============= BIAYA PREPARASI
-                    
+
                     $dataD->biaya_preparasi = json_encode($pengujian->biaya_preparasi);
                     $array_harga_preparasi = array_map(function ($pre) {
                         if (isset($pre->Harga)) {
@@ -3375,7 +3378,7 @@ class RequestQuotationController extends Controller
                             return 0;
                         }
                     }, $pengujian->biaya_preparasi);
-                    
+
                     $harga_preparasi = array_sum($array_harga_preparasi);
                     $dataD->total_biaya_preparasi = $harga_preparasi;
                     $grand_total += $harga_preparasi;
@@ -3532,7 +3535,7 @@ class RequestQuotationController extends Controller
 
                 if (isset($payload->keterangan_tambahan) && $payload->keterangan_tambahan != null)
                     $editH->keterangan_tambahan = json_encode($payload->keterangan_tambahan);
-                
+
                     $jumlahHari = 30; // default
                 if (isset($payload->syarat_ketentuan->pembayaran) && is_array($payload->syarat_ketentuan->pembayaran)) {
                     foreach ($payload->syarat_ketentuan->pembayaran as $item) {
@@ -3545,9 +3548,9 @@ class RequestQuotationController extends Controller
                         }
                     }
                 }
-                
+
                 $tgl = date('Y-m-d', strtotime("+{$jumlahHari} days", strtotime(DATE('Y-m-d'))));
-                
+
                 $editH->expired = $tgl;
                 $editH->total_harga_air = $Dd[0]->harga_air;
                 $editH->total_harga_udara = $Dd[0]->harga_udara;
@@ -3625,8 +3628,8 @@ class RequestQuotationController extends Controller
                         $no_qt_lama = $cek_order->no_document;
                         $no_qt_baru = $dataH->no_document;
                         $id_order = $data_lama->id_order;
-                    } 
-                } 
+                    }
+                }
 
                 // dd('==========================');
                 JobTask::insert([
@@ -3887,7 +3890,7 @@ class RequestQuotationController extends Controller
                 }, $data_wilayah->wilayah_data));
 
                 $dataH->status_sampling = count($uniqueStatusSampling) === 1 ? $uniqueStatusSampling[0] : null;
-                
+
                 $data_transport_h = [];
                 $data_pendukung_h = [];
                 $data_s = [];
@@ -3929,7 +3932,7 @@ class RequestQuotationController extends Controller
                 }
                 // END CUSTOM DISCOUNT
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
-                
+
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
                 foreach ($dataPendukungHeader as $i => $item) {
                     $param = $item->parameter;
@@ -3999,7 +4002,7 @@ class RequestQuotationController extends Controller
                 $total_biaya_preparasi = $this->summaryPreparasi($data_pendukung);
                 $dataH->total_biaya_preparasi = $total_biaya_preparasi;
                 $dataH->data_pendukung_sampling = json_encode(array_values($data_pendukung_h), JSON_UNESCAPED_UNICODE);
-                
+
                 $period_pendukung = [];
 
                 for ($c = 0; $c < count($data_wilayah->wilayah_data); $c++) {
@@ -4043,7 +4046,7 @@ class RequestQuotationController extends Controller
                 $dataH->created_by = $dataOld->created_by;
                 $dataH->created_at = $dataOld->created_at;
                 $dataH->save();
-                
+
                 // =====================PROSES DETAIL DATA=========================================
                 foreach ($data_pendukung as $x => $pengujian){
                     $dataD = new QuotationKontrakD;
@@ -4071,7 +4074,7 @@ class RequestQuotationController extends Controller
                         $id_kategori = \explode("-", $sampling->kategori_1)[0];
                         $kategori = \explode("-", $sampling->kategori_1)[1];
                         $regulasi = (empty($sampling->regulasi) || $sampling->regulasi == '' || (is_array($sampling->regulasi) && count($sampling->regulasi) == 1 && $sampling->regulasi[0] == '')) ? [] : $sampling->regulasi;
-                        
+
                         $parameters = [];
                         $id_parameter = [];
                         foreach ($sampling->parameter as $item) {
@@ -4082,7 +4085,7 @@ class RequestQuotationController extends Controller
                                 $id_parameter[] = $cek_par->id;
                             }
                         }
-                        
+
                         $harga_parameter = [];
                         $volume_parameter = [];
 
@@ -4091,7 +4094,7 @@ class RequestQuotationController extends Controller
                                 ->where('nama_parameter', $parameter)
                                 ->orderBy('id', 'ASC')
                                 ->get();
-                            
+
                             if (count($ambil_data) > 1) {
                                 $found = false;
                                 foreach ($ambil_data as $xc => $zx) {
@@ -4130,7 +4133,7 @@ class RequestQuotationController extends Controller
 
                         // Update data_sampling agar jika digunakan di luar foreach sudah terupdate
                         $jumlah_titik = ($sampling->jumlah_titik === null || $sampling->jumlah_titik === '') ? 0 : $sampling->jumlah_titik;
-                        
+
                         $pengujian->data_sampling[$i]->total_parameter = count($sampling->parameter);
                         $pengujian->data_sampling[$i]->regulasi = $regulasi;
                         $pengujian->data_sampling[$i]->harga_satuan = $har_db;
@@ -4175,7 +4178,7 @@ class RequestQuotationController extends Controller
                         'periode_kontrak' => $pengujian->periode_kontrak,
                         'data_sampling' => $pengujian->data_sampling
                     ];
-                    
+
                     $dataD->data_pendukung_sampling = json_encode($data_sampling, JSON_UNESCAPED_UNICODE);
                     // end data sampling
                     $dataD->harga_air = $harga_air;
@@ -4203,7 +4206,7 @@ class RequestQuotationController extends Controller
 
                     $data_lain = $data_pendukung_lain;
                     $biaya_lain = 0;
-                    
+
                     for ($c = 0; $c < count($data_wilayah->wilayah_data); $c++) {
                         if (in_array($pengujian->periode_kontrak, $data_wilayah->wilayah_data[$c]->periode)) {
 
@@ -4430,7 +4433,7 @@ class RequestQuotationController extends Controller
                             $dataD->status_sampling = $data_wilayah->wilayah_data[$c]->status_sampling;
                         }
                     }
-                    
+
                     // =======================================================================DATA DISKON===========================================================================
                     // ==================================================DISKON ANALISA=============================================================================================
                     $isPeriodeDiskonExist = false;
@@ -4739,7 +4742,7 @@ class RequestQuotationController extends Controller
                     }
 
                     //============= BIAYA PREPARASI
-                    
+
                     $dataD->biaya_preparasi = json_encode($pengujian->biaya_preparasi);
                     $array_harga_preparasi = array_map(function ($pre) {
                         if (isset($pre->Harga)) {
@@ -4897,14 +4900,14 @@ class RequestQuotationController extends Controller
                                             SUM(total_dpp) as total_dpp,
                                             SUM(piutang) as piutang,
                                             SUM(biaya_akhir) as biaya_akhir FROM request_quotation_kontrak_D WHERE id_request_quotation_kontrak_h = '$dataH->id' GROUP BY id_request_quotation_kontrak_h ");
-                
+
                 $editH = QuotationKontrakH::where('id', $dataH->id)
                     ->first();
                 $editH->syarat_ketentuan = json_encode($payload->syarat_ketentuan);
-                
+
                 if (isset($payload->keterangan_tambahan) && $payload->keterangan_tambahan != null)
                     $editH->keterangan_tambahan = json_encode($payload->keterangan_tambahan);
-                
+
                 $jumlahHari = 30; // default
                 if (isset($payload->syarat_ketentuan->pembayaran) && is_array($payload->syarat_ketentuan->pembayaran)) {
                     foreach ($payload->syarat_ketentuan->pembayaran as $item) {
@@ -4917,9 +4920,9 @@ class RequestQuotationController extends Controller
                         }
                     }
                 }
-                
+
                 $tgl = date('Y-m-d', strtotime("+{$jumlahHari} days", strtotime(DATE('Y-m-d'))));
-                
+
                 $editH->expired = $tgl;
                 $editH->total_harga_air = $Dd[0]->harga_air;
                 $editH->total_harga_udara = $Dd[0]->harga_udara;
@@ -5816,7 +5819,7 @@ class RequestQuotationController extends Controller
 
     public function getLastNoSampel(Request $request){
         $data_lama = QuotationKontrakH::where('no_document', $request->no_quotation)->first()->data_lama;
-        
+
         if (!$data_lama) {
             return response()->json([
                 'message' => 'Data not found',
@@ -5824,7 +5827,7 @@ class RequestQuotationController extends Controller
             ], 404);
         }
         $data_lama = json_decode($data_lama);
-        
+
         $data = OrderDetail::where('id_order_header', $data_lama->id_order)->where('is_active', 1)->orderBy('no_sampel', 'desc')->first()->no_sampel;
 
         if (!$data) {

@@ -57,10 +57,16 @@ class LingkunganHidupCl2
             $C = \str_replace(",", "", number_format(($ks/$Vu) * 1000, 3));
 
             // C2 = C1/1000
-            $C1 = \str_replace(",", "", number_format((($ks/$Vu) * 1000) / 1000 , 3));
+            $C1 = \str_replace(",", "", number_format(($ks/$Vu) / 1000 , 3));
 
             // C (PPM)= (C2 / 24.45)*71)
             $C2 = \str_replace(",", "", number_format(($C1 / 24.45) * 71, 4));
+
+            $C14 = $C2;
+            // C (ug/m3) = (A/(Laju alir*durasi))*1000
+            $C15 = \str_replace(",", "", number_format(($ks/($data->average_flow*$data->durasi)) * 1000, 3));
+
+            $C16 = \str_replace(",", "", number_format($C15 / 1000 , 3));
         }
         if (floatval($C) < 4.000)
             $C = '<4.000';
@@ -97,6 +103,11 @@ class LingkunganHidupCl2
             'C9' => isset($C9) ? $C9 : null,
             'C10' => isset($C10) ? $C10 : null,
             'C11' => isset($C11) ? $C11 : null,
+            'C12' => isset($C12) ? $C12 : null,
+            'C13' => isset($C13) ? $C13 : null,
+            'C14' => isset($C14) ? $C14 : null,
+            'C15' => isset($C15) ? $C15 : null,
+            'C16' => isset($C16) ? $C16 : null,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

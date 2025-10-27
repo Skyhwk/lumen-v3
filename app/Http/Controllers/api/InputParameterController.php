@@ -53,6 +53,7 @@ use App\Services\AutomatedFormula;
 use App\Models\AnalystFormula as Formula;
 use App\Models\KuotaAnalisaParameter;
 use Illuminate\Support\Facades\Exception;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Repository;
@@ -79,12 +80,18 @@ class InputParameterController extends Controller
                 ->orderBy('no_sampel', 'asc');
 			$join = $join->get();
 
-            $quota = KuotaAnalisaParameter::select('parameter_name','quota')
+            $quota = KuotaAnalisaParameter::select('parameter_name', 'quota', 'tanggal_berlaku')
                 ->where('kategori', $request->category)
                 ->where('is_active', true)
                 ->get()
-                ->pluck('quota','parameter_name')
-                ->toArray();
+                ->mapWithKeys(function ($item) {
+                    return [
+                        $item->parameter_name => (object)[
+                            'kuota' => $item->quota,
+                            'tanggal_berlaku' => $item->tanggal_berlaku,
+                        ],
+                    ];
+                });
 
 			// dd($join);
 			if($join->isEmpty()) {
@@ -101,7 +108,6 @@ class InputParameterController extends Controller
 			$ftc = [];
 
             $quota_count = collect();
-
             $repo_quota = json_decode(
                 Repository::dir('filtered_quota_sampel')->key($request->tgl)->get(),
                 true
@@ -118,7 +124,48 @@ class InputParameterController extends Controller
                 }
             }
 
-            foreach($join as $key => $val) {
+            $t_coli_rest = [];
+            $category_prioritized = ['5-Air Laut','54-Air Sungai','72-Air Tanah'];
+
+            // Konversi $join ke array untuk memudahkan pencarian
+            $join_array = $join->toArray(); // Jika $join adalah Collection
+
+            // Kumpulkan sampel berdasarkan kategori prioritas terlebih dahulu
+            $priority_samples = [];
+            $backup_samples = [];
+
+            foreach ($join as $key => $val) {
+                // Ambil parameter
+                $param = !is_null(json_decode($val->parameter))
+                    ? array_map(function ($item) {
+                        return explode(';', $item)[1];
+                    }, json_decode($val->parameter, true))
+                    : [];
+
+                // Cek apakah ada parameter yang mengandung 'BOD'
+                $isBodExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'BOD');
+                });
+                // Cek apakah ada parameter yang mengandung 'NH3'
+                $isNh3Exist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'NH3');
+                });
+                // Cek apakah ada parameter yang mengandung 'TSS'
+                $isTSSExist = collect($param)->contains(function ($item) {
+                    return Str::contains($item, 'TSS');
+                });
+
+                // Gunakan hasil pengecekan
+                if ((!$isBodExist && !$isNh3Exist && !$isTSSExist) || in_array($val->kategori_3, $category_prioritized)) {
+                    $priority_samples[$key] = $val;
+                } else {
+                    $backup_samples[$key] = $val;
+                }
+            }
+            // Gabungkan: prioritas dulu, kemudian backup
+            $sorted_join = $priority_samples + $backup_samples;
+
+            foreach($sorted_join as $key => $val) {
                 $param = !is_null(json_decode($val->parameter)) ? array_map(function($item) {
                     return explode(';', $item)[1];
                 }, json_decode($val->parameter, true)) : [];
@@ -130,7 +177,16 @@ class InputParameterController extends Controller
                     $quota_exceeded = false;
                     $already_counted = false;
                     $index_counted = null;
-                    if ($stp->name !== 'SUBKONTRAK') {
+
+                    $tglBerlaku = isset($quota[$p]) ? Carbon::parse($quota[$p]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    // if(isset($quota[$p])) {
+                    //     dump($tglBerlaku, $tglRequest, $tglRequest >= $tglBerlaku, $p);
+                    // }
+
+                    // --- PERUBAHAN PENTING: Hanya proses quota jika parameter ada dalam $quota dan tanggal request lebih besar atau sama dengan tanggal berlaku
+                    if ($stp->name !== 'SUBKONTRAK' && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -139,72 +195,125 @@ class InputParameterController extends Controller
                             $quota_count[$request->id_stp]->put($p, collect());
                         }
 
-                        if(isset($quota[$p])){
-                            // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        // --- 1️⃣ Cek apakah sample sudah pernah terhitung
+                        if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
+                            $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
+                            $already_counted = true;
+                        }
+
+                        // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
+                        if ($quota_count[$request->id_stp][$p]->count() >= $quota[$p]->kuota) {
+                            $quota_exceeded = true;
+                        }
+
+                        // --- 3️⃣ Handle Total Coliform khusus untuk kategori non-prioritas
+                        if(in_array($p, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && !in_array($val->kategori_3, $category_prioritized)){
+                            $t_coli_rest[$p][] = $val->no_sampel;
                             if ($quota_count[$request->id_stp][$p]->contains($val->no_sampel)) {
-                                $index_counted = $quota_count[$request->id_stp][$p]->search($val->no_sampel);
-                                $already_counted = true;
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]->reject(fn($item) => $item === $val->no_sampel)->values();
                             }
+                            continue;
+                        }
 
-                            // --- 2️⃣ Jika belum counted, cek apakah quota sudah penuh
-                            if (isset($quota[$p]) && $quota_count[$request->id_stp][$p]->count() >= $quota[$p]) {
-                                $quota_exceeded = true;
+                        // --- 4️⃣ Jika quota penuh, potong kelebihan dari belakang
+                        if ($quota_exceeded || $already_counted) {
+                            // --- Jika sudah counted, ambil dari index yang sama
+                            if($already_counted){
+                                $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
                             }
-
-                            // --- 3️⃣ Jika quota penuh, potong kelebihan dari belakang
-                            if ($quota_exceeded || $already_counted) {
-                                // --- 4️⃣ Jika sudah counted, ambil dari index yang sama
-                                if($already_counted){
-                                    $row[$p] = $quota_count[$request->id_stp][$p][$index_counted] ?? '-';
-                                }
-                                $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p];
-                                if ($diff_count > 0) {
-                                    $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
-                                        ->slice(0, $quota[$p])
-                                        ->values();
-                                }
-                                continue;
+                            $diff_count = $quota_count[$request->id_stp][$p]->count() - $quota[$p]->kuota;
+                            if ($diff_count > 0) {
+                                $quota_count[$request->id_stp][$p] = $quota_count[$request->id_stp][$p]
+                                    ->slice(0, $quota[$p]->kuota)
+                                    ->values();
                             }
+                            continue;
+                        }
 
-                            // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
-                            if (isset($quota[$p])) {
-                                $currentCount = $quota_count[$request->id_stp][$p]->count();
-                                $maxQuota = $quota[$p];
+                        // --- 5️⃣ Jika belum penuh, tambahkan ke quota_count
+                        $currentCount = $quota_count[$request->id_stp][$p]->count();
+                        $maxQuota = $quota[$p]->kuota;
 
-                                // Hanya tambahkan jika belum mencapai batas quota
-                                if ($currentCount < $maxQuota) {
-                                    $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                        // Hanya tambahkan jika belum mencapai batas quota
+                        if ($currentCount < $maxQuota) {
+                            $quota_count[$request->id_stp][$p]->push($val->no_sampel);
+                            $row[$p] = $val->no_sampel;
+                        } else {
+                            // Jika quota penuh, simpan sebagai cadangan untuk parameter ini
+                            $t_coli_rest[$p][] = $val->no_sampel;
+                        }
+
+                    } else {
+                        // --- PARAMETER TANPA QUOTA: Langsung tampilkan tanpa pembatasan
+                        $row[$p] = $val->no_sampel;
+
+                        // Untuk SUBKONTRAK juga langsung tampilkan
+                        if ($stp->name === 'SUBKONTRAK') {
+                            $row[$p] = $val->no_sampel;
+                        }
+                    }
+                }
+
+                if($stp->sample->nama_kategori == 'Air') {
+                    $ftc[] = (object)[
+                        'no_sample' => $val->no_sampel,
+                        'tanggal' => $val->TrackingSatu == null ? '-' : $val->TrackingSatu->ftc_verifier
+                    ];
+                }
+
+                ksort($row);
+                $data[$key] = $row;
+                $inter[$key] = array_fill_keys($diff, '-');
+            }
+
+            // dd($data);
+
+             // Handle cadangan jika quota belum terpenuhi (hanya untuk parameter dengan quota)
+            // dd($quota_count->has($request->id_stp));
+            if ($quota_count->has($request->id_stp)) {
+                foreach ($quota_count[$request->id_stp] as $parameter => $samples) {
+                    // Hanya proses parameter yang ada dalam $quota
+                    $tglBerlaku = isset($quota[$parameter]) ? Carbon::parse($quota[$parameter]->tanggal_berlaku) : Carbon::parse($request->tgl)->addDay(7);
+                    $tglRequest = Carbon::parse($request->tgl);
+
+                    if (isset($quota[$parameter]->kuota) && $samples->count() < $quota[$parameter]->kuota && $tglRequest >= $tglBerlaku) {
+                        $remaining_quota = $quota[$parameter]->kuota - $samples->count();
+
+                        // Ambil dari cadangan untuk parameter ini
+                        if (isset($t_coli_rest[$parameter]) && count($t_coli_rest[$parameter]) > 0) {
+                            $backup_to_add = array_slice($t_coli_rest[$parameter], 0, $remaining_quota);
+
+                            foreach ($backup_to_add as $backup_sample) {
+                                if ($samples->count() < $quota[$parameter]->kuota) {
+                                    $quota_count[$request->id_stp][$parameter]->push($backup_sample);
+
+                                    // Update data untuk menambahkan sampel cadangan
+                                    foreach ($data as $key => $row) {
+                                        $join_no_samples = array_column($join_array, 'no_sampel');
+                                        if (isset($row[$parameter]) && $row[$parameter] === '-' && in_array($backup_sample, $join_no_samples)) {
+                                            $data[$key][$parameter] = $backup_sample;
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-
-                    // --- 6️⃣ Simpan nomor sampel ke row
-                    if(!$quota_exceeded && !$already_counted) $quota_count[$request->id_stp][$p]->push($val->no_sampel);
-                    $row[$p] = $val->no_sampel;
                 }
+            }
 
-				// dd($val);
-				if($stp->sample->nama_kategori == 'Air') {
-					// dd($val->TrackingSatu->ftc_verifier);
-					$ftc[$key] = (object)[
-						'no_sample' => $val->no_sampel,
-						'tanggal' => $val->TrackingSatu == null ? '-' : $val->TrackingSatu->ftc_verifier
-					];
-				}
-
-				ksort($row);
-				$data[$key] = $row;
-				$inter[$key] = array_fill_keys($diff, '-');
-			}
-
-			$tes = [];
-			$tes0 = [];
+            $tes = [];
+            $tes0 = [];
+            $key_param_rest = [];
 
             foreach($select as $key => $param) {
                 $samples = array_values(array_diff(array_column($data, $param), ['-']));
                 sort($samples);
                 $tes[$key] = $samples;
+
+                if(isset($quota[$param]) && in_array($param, ['Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)']) && count($samples) > 0){
+                    $key_param_rest[$param] =  $key;
+                }
 
                 $inter_samples = array_values(array_diff(array_column($inter, $param), ['-']));
                 sort($inter_samples);
@@ -1291,28 +1400,29 @@ class InputParameterController extends Controller
 				$datlapangank = DataLapanganLingkunganKerja::where('no_sampel', $request->no_sample)->first();
 				$datlapanganV = DataLapanganSenyawaVolatile::where('no_sampel', $request->no_sample)->first();
 				// dd($datlapanganh,$datlapangank);
-				$param = [293, 294, 295, 296, 326, 327, 328, 329, 299, 300, 289, 290, 291, 246, 247, 248, 249, 342, 343, 344, 345, 261, 256, 211, 310, 311, 312, 313, 314, 315, 568, 211, 564, 305, 306, 307, 308, 234, 569, 287, 292, 219];
-				if (!in_array($par->id, $param)) {
-					return response()->json([
-						'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
-					], 404);
-				} else {
-					$result = self::HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganV);
-					// dd($result);
-					if($result->status == 200){
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status
-						], $result->status);
-					}else{
-						return response()->json([
-							'message'=> $result->message,
-							'status' => $result->status,
-							'line' => $result->line ?? '',
-							'file' => $result->file ?? ''
-						], $result->status);
-					}
-				}
+				// $param = [293, 294, 295, 296, 326, 327, 328, 329, 299, 300, 289, 290, 291, 246, 247, 248, 249, 342, 343, 344, 345, 261, 256, 211, 310, 311, 312, 313, 314, 315, 568, 211, 564, 305, 306, 307, 308, 234, 569, 287, 292, 219];
+				// if (!in_array($par->id, $param)) {
+				// 	return response()->json([
+				// 		'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+				// 	], 404);
+				// } else {
+                $result = self::HelperLingkungan($request, $stp, $datlapanganh, $datlapangank, $datlapanganV);
+                // dd($result);
+                if($result->status == 200){
+                    return response()->json([
+                        'message'=> $result->message,
+                        'status' => $result->status
+                    ], $result->status);
+                }else{
+                    return response()->json([
+                        'message'=> $result->message,
+                        'status' => $result->status,
+                        'line' => $result->line ?? '',
+                        'file' => $result->file ?? '',
+                        'trace' => $result->trace ?? ''
+                    ], $result->status);
+                }
+				// }
 			}
 		}else if(($stp->name == 'SPEKTRO UV-VIS' || $stp->name == 'ICP' || $stp->name == 'GRAVIMETRI') && $stp->sample->nama_kategori == 'Emisi'){
 			$datlapangan = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sample)->first();
@@ -1369,7 +1479,7 @@ class InputParameterController extends Controller
 						->where('parameter', $request->parameter)
 						->where('is_active', true)->first();
 
-					if($par->id == '223') {
+					if(in_array($par->id, [223,224])) {
 						$result = self::HelperDustFall($request, $stp, $po, $header);
 						if($result->status){
 							return response()->json([
@@ -1474,9 +1584,7 @@ class InputParameterController extends Controller
 							->where('is_active', true)
 							->first();
 
-						$par = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-
-						$result = self::HelperMikrobiologi($request, $stp,$po, $par);
+						$result = self::HelperMikrobiologi($request, $stp,$po);
 						if($result->status){
 							return response()->json([
 								'message'=> $result->message,
@@ -1624,17 +1732,13 @@ class InputParameterController extends Controller
 
 						$par = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 
-						$id_param = [337, 227, 340];
-
-						if (in_array($par->id, $id_param)) {
-							$result = self::HelperSwabTest($request, $stp, $po, $par);
-							if($result->status){
-								return response()->json([
-									'message' => $result->message,
-									'status' => $result->status
-								], 200);
-							}
-						}
+                        $result = self::HelperSwabTest($request, $stp, $po);
+                        if($result->status){
+                            return response()->json([
+                                'message' => $result->message,
+                                'status' => $result->status
+                            ], 200);
+                        }
 					}
 				}
 
@@ -2101,10 +2205,16 @@ class InputParameterController extends Controller
                 }
             }
 
-            // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                    $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+            $parameter_t_coli = 'Total Coliform';
+            // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+            if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                $parameter_t_coli = 'Total Coliform (MPN)';
+            }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                $parameter_t_coli = 'Total Coliform (NA)';
+            }
+            if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
+                if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                    $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                         ->where('required_parameter', $total_coliform)
                         ->where('no_sampel', $request->no_sample)
                         ->where('class_calculate', $method_t_coli)
@@ -2266,10 +2376,16 @@ class InputParameterController extends Controller
                     }
                 }
 
-                // dd(!is_null($method_t_coli), in_array($request->parameter, $total_coliform), in_array('Total Coliform', $filteredParameter));
-                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                $parameter_t_coli = 'Total Coliform';
+                // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (MPN)';
+                }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (NA)';
+                }
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
+                    if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
                             ->where('class_calculate', $method_t_coli)
@@ -2450,9 +2566,16 @@ class InputParameterController extends Controller
                     }
                 }
 
-                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2]['Total Coliform']))){
-                    if(in_array($request->parameter, $total_coliform) && in_array('Total Coliform', $filteredParameter)){
-                        $hitung_otomatis = AutomatedFormula::where('parameter', 'Total Coliform')
+                $parameter_t_coli = 'Total Coliform';
+                // 'Total Coliform','Total Coliform (MPN)' ,'Total Coliform (NA)'
+                if(in_array('Total Coliform (MPN)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (MPN)';
+                }elseif(in_array('Total Coliform (NA)', $filteredParameter)){
+                    $parameter_t_coli = 'Total Coliform (NA)';
+                }
+                if(!is_null($method_t_coli) && (isset($quota_count[2]) && !in_array($request->no_sample, $quota_count[2][$parameter_t_coli]))){
+                    if(in_array($request->parameter, $total_coliform) && (in_array('Total Coliform', $filteredParameter) || in_array('Total Coliform (MPN)', $filteredParameter) || in_array('Total Coliform (NA)', $filteredParameter))){
+                        $hitung_otomatis = AutomatedFormula::where('parameter', $parameter_t_coli)
                             ->where('required_parameter', $total_coliform)
                             ->where('no_sampel', $request->no_sample)
                             ->where('class_calculate', $method_t_coli)
@@ -2590,21 +2713,20 @@ class InputParameterController extends Controller
 						];
 					}
 
-					$data_kalkulasi['lingkungan_header_id'] = $header->id;
-					$data_kalkulasi['no_sampel'] = $request->no_sample;
-					$data_kalkulasi['created_by'] = $this->karyawan;
-					$satuan = $data_kalkulasi['satuan'];
-					unset($data_kalkulasi['satuan']);
-					WsValueLingkungan::create($data_kalkulasi);
+					// $data_kalkulasi['lingkungan_header_id'] = $header->id;
+					// $data_kalkulasi['no_sampel'] = $request->no_sample;
+					// $data_kalkulasi['created_by'] = $this->karyawan;
+					// $satuan = $data_kalkulasi['satuan'];
+					// unset($data_kalkulasi['satuan']);
+					// WsValueLingkungan::create($data_kalkulasi);
 
-					// $data_udara = array();
-					// $data_udara['id_lingkungan_header'] = $header->id;
-					// $data_udara['no_sampel'] = $request->no_sample;
-					// $data_udara['hasil1'] = $data_kalkulasi['C'];
-					// $data_udara['hasil2'] = $data_kalkulasi['C1'];
-					// $data_udara['hasil3'] = $data_kalkulasi['C2'];
-					// $data_udara['satuan'] = $satuan;
-					// WsValueUdara::create($data_udara);
+					$data_udara = array();
+					$data_udara['id_lingkungan_header'] = $header->id;
+					$data_udara['no_sampel'] = $request->no_sample;
+					$data_udara['hasil16'] = $data_kalkulasi['C15'];
+					$data_udara['hasil17'] = $data_kalkulasi['C16'];
+					$data_udara['satuan'] = $data_kalkulasi['satuan'];
+					WsValueUdara::create($data_udara);
 
 					DB::commit();
 					return (object)[
@@ -2635,11 +2757,30 @@ class InputParameterController extends Controller
 		} else {
 			$parame = $request->parameter;
 			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
+            $tipe_data = null;
+            $isO3 = strpos($data_parameter->nama_lab, 'O3') !== false;
+
+            // dd($datot);
+            $rerata = [];
+            $durasi = [];
+            $tekanan_u = [];
+            $suhu = [];
+            $Qs = [];
+
+            // O3 Kasus Khusus, Bagi 2 Bjir
+            $rerataO3 = [];
+            $durasiO3 = [];
+            $tekanan_uO3 = [];
+            $suhuO3 = [];
+            $QsO3 = [];
+            $ks_all = [];
+            $kb_all = [];
+
 			if ($datlapanganh != null || $datlapangank != null || $datlapanganV != null) {
 				// dd($data_parameter);
-				if ($request->id_stp == 14) {
-					$parame = 'TSP';
-				}
+				// if ($request->id_stp == 14) {
+				// 	$parame = 'TSP';
+				// }
 				$lingHidup = DetailLingkunganHidup::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
 				$lingKerja = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
 				$lingVolatile = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->get();
@@ -2648,7 +2789,6 @@ class InputParameterController extends Controller
 
 					try {
 						$datapangan = '';
-                        $tipe_data = '';
 						if (count($lingHidup) > 0) {
 							$datapangan = $lingHidup;
                             $tipe_data = 'ambient';
@@ -2659,7 +2799,7 @@ class InputParameterController extends Controller
 						}
 						if (count($lingVolatile) > 0) {
                             $datapangan = $lingVolatile;
-                            $tipe_data = 'volatile';
+                            $tipe_data = 'ulk';
 						}
 						// dd($datapangan);
 						if ($datapangan != '') {
@@ -2667,26 +2807,10 @@ class InputParameterController extends Controller
 						} else {
 							$datot = '';
 						}
-						// dd($datot);
-						$rerata = [];
-						$durasi = [];
-						$tekanan_u = [];
-						$suhu = [];
-						$Qs = [];
 
-						// O3 Kasus Khusus, Bagi 2 Bjir
-						$rerataO3 = [];
-						$durasiO3 = [];
-						$tekanan_uO3 = [];
-						$suhuO3 = [];
-						$QsO3 = [];
-						$ks_all = [];
-						$kb_all = [];
 						// dd($ks_all, $kb_all);
 						$nilQs = '';
 						if ($datot > 0 || $datot != '') {
-
-							$isO3 = strpos($data_parameter->nama_lab, 'O3') !== false;
 							$parameterExplode = explode(' ', $data_parameter->nama_lab);
 							$is8Jam = count($parameterExplode) > 1 ? strpos($parameterExplode[1], '8J') !== false : false;
 							foreach ($datapangan as $keye => $vale) {
@@ -2884,14 +3008,15 @@ class InputParameterController extends Controller
 					];
 				}
 			} else {
-				// dd("data Lapangan null");
-				$tekananFin = 0;
-				$suhuFin = 0;
-				$nilQs = 0;
-				$datot = 0;
-				$rerataFlow = 0;
-				$durasiFin = 0;
+				return (object)[
+					'message' => 'Data lapangan belum diinputkan oleh Sampler.',
+					'status' => 404
+				];
 			}
+
+            if (is_null($tipe_data)) {
+                $tipe_data = 'ulk';
+            }
 
 			// dd($durasiFin, $tekananFin, $suhuFin, $nilQs, $datot, $rerataFlow);
 			$check = OrderDetail::where('no_sampel', $request->no_sample)->where('is_active', true)->first();
@@ -2947,7 +3072,7 @@ class InputParameterController extends Controller
 			if ($isO3) {
 				$data_parsing->ks = array_chunk(array_map('floatval', $request->ks), 2);
 				$data_parsing->kb = array_chunk(array_map('floatval', $request->kb), 2);
-			} else if(isset($request->ks)){
+			} elseif(isset($request->ks)){
 				$data_parsing->ks = array_map('floatval', $request->ks);
 				$data_parsing->kb = array_map('floatval', $request->kb);
 			}
@@ -2979,9 +3104,9 @@ class InputParameterController extends Controller
 
 			if(isset($data_kalkulasi['status']) == 'error'){
 				return (object)[
-					'message' => $data_kalkulasi['message'],
-					'trace' => $data_kalkulasi['trace'],
-					'line' => $data_kalkulasi['line'],
+					'message' => isset($data_kalkulasi['message']) ? $data_kalkulasi['message'] : null,
+					'trace' => isset($data_kalkulasi['trace']) ? $data_kalkulasi['trace'] : null,
+					'line' => isset($data_kalkulasi['line']) ? $data_kalkulasi['line'] : null,
 					'status' => 500
 				];
 			}
@@ -3013,6 +3138,7 @@ class InputParameterController extends Controller
 					// dd($data_shift, $request->ks, $request->kb);
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
+                // dd(isset($data_kalkulasi['data_pershift']));
                 if(isset($data_kalkulasi['data_pershift'])) $data->data_pershift = json_encode($data_kalkulasi['data_pershift']);
 				$data->save();
 
@@ -3042,6 +3168,7 @@ class InputParameterController extends Controller
                 $data_udara['hasil16'] = isset($data_kalkulasi['C15']) ? $data_kalkulasi['C15'] : null;
                 $data_udara['hasil17'] = isset($data_kalkulasi['C16']) ? $data_kalkulasi['C16'] : null;
 				$data_udara['satuan'] = $data_kalkulasi['satuan'];
+                // dd($data_udara);
 				WsValueUdara::create($data_udara);
 
 				$data_kalkulasi['lingkungan_header_id'] = $data->id;
@@ -3066,7 +3193,8 @@ class InputParameterController extends Controller
 					'message' => 'Error : ' . $e->getMessage(),
 					'line' => $e->getLine(),
 					'file' => $e->getFile(),
-					'status' => 500
+					'status' => 500,
+                    'trace' => $e->getTrace()
 				];
 			}
 		}
@@ -3373,7 +3501,7 @@ class InputParameterController extends Controller
 				];
 			}
 
-			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
+			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
 			$tgl_terima = $order_detail->tanggal_terima;
 
@@ -3405,36 +3533,33 @@ class InputParameterController extends Controller
 			DB::beginTransaction();
 			try {
 
-				$header = new DustFallHeader();
-				$header->no_sampel = $request->no_sample;
-				$header->parameter = $request->parameter;
-				$header->template_stp = $request->id_stp;
-				$header->id_parameter = $par->id;
-				$header->note = $request->note;
+				$header                 = new DustFallHeader();
+				$header->no_sampel      = $request->no_sample;
+				$header->parameter      = $request->parameter;
+				$header->template_stp   = $request->id_stp;
+				$header->id_parameter   = $data_parameter->id;
+				$header->note           = $request->note;
 				$header->tanggal_terima = $tgl_terima;
-				$header->is_active = true;
-				$header->created_by = $this->karyawan;
-				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+				$header->is_active      = true;
+				$header->created_by     = $this->karyawan;
+				$header->created_at     = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				$data_kalkulasi['lingkungan_header_id'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				WsValueLingkungan::create($data_kalkulasi);
+				// $data_kalkulasi['lingkungan_header_id'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// WsValueLingkungan::create($data_kalkulasi);
 
-				// $data_udara = array();
-				// $data_udara['id_lingkungan_header'] = $header->id;
-				// $data_udara['no_sampel'] = $request->no_sample;
-				// $data_udara['hasil1'] = $data_kalkulasi['C'];
-				// $data_udara['hasil2'] = $data_kalkulasi['C1'];
-				// $data_udara['hasil3'] = $data_kalkulasi['C2'];
-				// WsValueUdara::create($data_udara);
+				$data_udara = array();
+				$data_udara['id_dustfall_header']   = $header->id;
+				$data_udara['no_sampel']            = $request->no_sample;
+				$data_udara['hasil6']               = $data_kalkulasi['hasil'];
+				$data_udara['satuan']               = $data_kalkulasi['satuan'];
+				WsValueUdara::create($data_udara);
 
 				DB::commit();
-				$this->resultx = 'Value Parameter berhasil disimpan.!';
-				Helpers::saveToLogRequest($this->pathinfo, $this->globaldate, $this->param, $this->useragen, $this->resultx, $this->ip);
 				return response()->json([
-					'message'=> $this->resultx,
+					'message'=> 'Value Parameter berhasil disimpan.!',
 					'par' => $request->parameter
 				], 200);
 			} catch (\Exception $e) {
@@ -3446,11 +3571,13 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperMikrobiologi($request, $stp, $order_detail, $data_parameter){
+	public function HelperMikrobiologi($request, $stp, $order_detail){
 		$fdl = DetailMicrobiologi::where('no_sampel', $request->no_sample)
 			->where('is_active', true)
 			->where('parameter', $request->parameter)
 			->first();
+
+        $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 
 		$header = MicrobioHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
@@ -3533,17 +3660,17 @@ class InputParameterController extends Controller
 				$header->created_at = Carbon::now();
 				$header->save();
 
-				$data_kalkulasi['id_microbio_header'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				// Simpan hasil ke tabel ws_value_microbio
-				WsValueMicrobio::create($data_kalkulasi);
+				// $data_kalkulasi['id_microbio_header'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// // Simpan hasil ke tabel ws_value_microbio
+				// WsValueMicrobio::create($data_kalkulasi);
 
-				// $data_udara = array();
-				// $data_udara['id_microbiologi_header'] = $header->id;
-				// $data_udara['no_sampel'] = $request->no_sample;
-				// $data_udara['hasil1'] = $data_kalkulasi['hasil'];
-				// WsValueUdara::create($data_udara);
+				$data_udara = array();
+				$data_udara['id_microbiologi_header'] = $header->id;
+				$data_udara['no_sampel'] = $request->no_sample;
+				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
 				DB::commit();
@@ -3571,9 +3698,9 @@ class InputParameterController extends Controller
 		}
 	}
 
-	public function HelperSwabTest($request, $stp, $order_detail, $data_parameter) {
+	public function HelperSwabTest($request, $stp, $order_detail) {
 		$fdl = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
-
+        $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 		$header = SwabTestHeader::where('no_sampel', $request->no_sample)
 			->where('parameter', $request->parameter)
 			->where('is_active', true)
@@ -3632,24 +3759,28 @@ class InputParameterController extends Controller
 				$header->no_sampel = $request->no_sample;
 				$header->parameter = $request->parameter;
 				$header->template_stp = $request->id_stp;
-				$header->id_parameter = $par->id;
+				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				$data_kalkulasi['id_swab_header'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				// Simpan hasil ke tabel ws_value_swabtest
-				WsValueSwab::create($data_kalkulasi);
+				// $data_kalkulasi['id_swab_header'] = $header->id;
+				// $data_kalkulasi['no_sampel'] = $request->no_sample;
+				// $data_kalkulasi['created_by'] = $this->karyawan;
+				// // Simpan hasil ke tabel ws_value_swabtest
+				// WsValueSwab::create($data_kalkulasi);
 
-				// $data_swab = array();
-				// $data_swab['id_swab_header'] = $header->id;
-				// $data_swab['no_sampel'] = $request->no_sample;
-				// $data_swab['hasil1'] = $data_kalkulasi['hasil'];
-				// WsValueUdara::create($data_swab);
+				$data_swab = array();
+				$data_swab['id_swab_header'] = $header->id;
+				$data_swab['no_sampel'] = $request->no_sample;
+				$data_swab['hasil10'] = $data_kalkulasi['hasil'];
+				$data_swab['hasil11'] = $data_kalkulasi['hasil2'];
+                $data_swab['hasil13'] = $data_kalkulasi['hasil3'];
+                $data_swab['hasil14'] = $data_kalkulasi['hasil4'];
+                $data_swab['created_by'] = $this->karyawan;
+				WsValueUdara::create($data_swab);
 
 				// Commit transaksi jika semua berhasil
 				DB::commit();

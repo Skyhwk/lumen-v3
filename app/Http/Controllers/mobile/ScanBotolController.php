@@ -39,7 +39,7 @@ class ScanBotolController extends Controller
             $parameters = null;
             if (isset($datachek[1])) {
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
-                $data = OrderDetail::where('no_sampel', $request->no_sampel)->first();
+                $data = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
                 foreach ($dataDisplay as $item) {
@@ -73,6 +73,7 @@ class ScanBotolController extends Controller
                 // dd('www');
                 $data = OrderDetail::whereNotNull('persiapan')
                     ->whereJsonContains('persiapan', ['koding' => $request->no_sampel])
+                    ->where('is_active', true)
                     ->first();
                 // dd($data);
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->first();

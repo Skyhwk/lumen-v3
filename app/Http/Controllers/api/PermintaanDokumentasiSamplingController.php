@@ -191,4 +191,16 @@ class PermintaanDokumentasiSamplingController extends Controller
 
         return response()->json(['message' => 'Anda tidak memiliki akses untuk reject permintaan'], 401);
     }
+
+    public function rerender(Request $request)
+    {
+        $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
+        $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
+            ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->first();
+
+        $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr));
+
+        return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
+    }
 }
