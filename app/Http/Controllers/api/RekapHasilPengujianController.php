@@ -24,7 +24,7 @@ class RekapHasilPengujianController extends Controller
         return Datatables::of($linkLhp)->make(true);
     }
 
-    public function reject(Request $request)
+    public function reject(Request $request) 
     {
         $linkLhp = LinkLhp::find($request->id);
         $linkLhp->update(['is_emailed' => false]);
