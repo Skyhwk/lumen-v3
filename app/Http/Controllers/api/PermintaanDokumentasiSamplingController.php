@@ -157,7 +157,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
             
-            Http::post('http://127.0.0.1:2999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]);
+            Http::post('http://127.0.0.1:2999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]); // kirim ke python
 
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
                 ->title('Berhasil approve permintaan')
@@ -195,7 +195,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         return response()->json(['message' => 'Anda tidak memiliki akses untuk reject permintaan'], 401);
     }
 
-    public function rerender(Request $request)
+    public function rerender(Request $request) // buat postman
     {
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
@@ -207,7 +207,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         return response()->json(['message' => 'Proses rerender telah dimulai'], 200);
     }
 
-    public function renderPdf(Request $request)
+    public function renderPdf(Request $request) // tangkep dari python
     {
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
