@@ -71,6 +71,8 @@ class LingkunganKerjaLogam
             $C2_C3_param = ['Ni','Sb','Se','Sn','Zn','Al'];
             $C1_C2_C3_param = ['Co'];
             $C1_C2_C3_C4_C5_param = ['Cd'];
+            $ICP_aneh = ['Molybdenum (LK)','Vanadium (LK)','Titanium (LK)'];
+
             if(in_array($data->parameter, $C2_param)) { // Hg, Mn
                 // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd / ($data->tekanan / $Ta) * (298 / 760)));
@@ -201,8 +203,8 @@ class LingkunganKerjaLogam
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
             } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // Cd
-                // Vstd =  Rerata Laju Alir*t*(Pa/Ta)*(298/760)
-                $Vstd_with_pa = ($data->average_flow * $data->durasi * ($data->tekanan / $Ta) * (298 / 760));
+                // Vstd (Nm3) = (Q*([(298*P0)/((T0+273)*760)]^0,5))*t
+                $Vstd_with_pa = round($data->nilQs * $data->durasi,6);
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd_with_pa);
 
@@ -223,6 +225,41 @@ class LingkunganKerjaLogam
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
+            }else if(in_array($data->parameter, $ICP_aneh)){
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd / ($data->tekanan / $Ta) * (298 / 760)));
+
+                // C1 = C2*1000
+                $C = ($C1 * 1000);
+
+                // C (PPM)= (C2 / 24.45)*74,92)
+                $C2 = ($C1 / 24.45) * 74.92;
+
+                $C14 = $C2;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                $C15 = $C16 * 1000;
+            }
+
+            if($data->parameter == 'Pb'){
+                // Vstd (Nm3) = (Q*([(298*P0)/((T0+273)*760)]^0,5))*t
+                $Vstd_alt = round((($data->nilQs * ((298 * $data->tekanan) / ($Ta * 760))) ** 0.5) * $data->durasi, 6);
+
+                // C (mg/Nm3) = (((Ct - Cb)*Vt*(S/St))/Vstd)/1000
+                $C1 = (($ks - $kb) * $data->vl * ($data->st / $Vstd_alt) / 1000);
+
+                // "C1 (ug/Nm3) = C2 * 1000"
+                $C = $C1 * 1000;
+
+                // C (PPM)= (C2 / 24.45)*207,2)
+                $C2 = ($C1 / 24.45) * 207.2;
+
+                $C14 = $C2;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                $C15 = $C16 * 1000;
             }
 
             $C = isset($C) ? number_format($C, 6) : '0.000000';
@@ -230,6 +267,9 @@ class LingkunganKerjaLogam
             $C2 = isset($C2) ? number_format($C2, 6) : '0.000000';
             $C3 = isset($C3) ? number_format($C3, 6) : '0.000000';
             $C4 = isset($C4) ? number_format($C4, 6) : '0.000000';
+            $C14 = isset($C14) ? number_format($C14, 6) : '0.000000';
+            $C15 = isset($C15) ? number_format($C15, 6) : '0.000000';
+            $C16 = isset($C16) ? number_format($C16, 6) : '0.000000';
             // MDL Handler
             if(in_array($data->parameter, ['As','Ba'])){
                 $C1 = number_format($C1, 6);

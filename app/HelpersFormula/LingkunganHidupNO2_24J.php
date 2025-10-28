@@ -3,7 +3,7 @@
 namespace App\HelpersFormula;
 
 use Carbon\Carbon;
-class LingkunganHidupNO2_8J
+class LingkunganHidupNO2_24J
 {
     public function index($data, $id_parameter, $mdl) {
 
@@ -112,6 +112,7 @@ class LingkunganHidupNO2_8J
                 'Shift 1' => $hasil1_array[0],
                 'Shift 2' => $hasil1_array[1] ?? null,
                 'Shift 3' => $hasil1_array[2] ?? null,
+                'Shift 4' => $hasil1_array[3] ?? null,
             ],
             'satuan' => $satuan,
             'vl' => $vl,

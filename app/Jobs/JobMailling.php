@@ -35,6 +35,9 @@ class JobMailling extends Job
         $attachments = $this->attachments;
 
         foreach ($to as $email) {
+            if (strpos($email, '@') === false) {
+                continue;
+            }
             $email = SendEmail::where('to', $email)
             ->where('subject', $subject)
             ->where('body', $content)
