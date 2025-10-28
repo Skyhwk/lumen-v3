@@ -16,6 +16,20 @@ class LingkunganHidupPM_TSP
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C3 = null;
+        $C4 = null;
+        $C5 = null;
+        $C6 = null;
+        $C7 = null;
+        $C8 = null;
+        $C9 = null;
+        $C10 = null;
+        $C11 = null;
+        $C12 = null;
+        $C13 = null;
+        $C14 = null;
+        $C15 = null;
+        $C16 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -28,7 +42,9 @@ class LingkunganHidupPM_TSP
         $st = null;
         $satuan = null;
 
-        if ($data->kateg_tsp == '11') { // Udara Ambient / Udara Lingkungan Hidup
+        $use_vstd = ['TSP','TSP (24 Jam)'];
+        $use_V = ['TSP (6 Jam)','TSP (8 Jam)'];
+        if (in_array($data->tipe_data, $use_vstd)) {
             $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
             if((int)$Vstd <= 0) {
                 $C = 0;
@@ -58,12 +74,12 @@ class LingkunganHidupPM_TSP
             $w1 = $data->w1;
             $w2 = $data->w2;
 
-        } else if ($data->kateg_tsp == '27') { // Udara Lingkungan Kerja
+        } else if (in_array($data->tipe_data, $use_V)) {
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));
             // dd($dur, $rerataFlow, $V);
-            $C = \str_replace(",", "", number_format(((($data->w2 - $data->w1) - ($data->b2 - $data->b1)) / $V) * 1000, 6));
-            $C1 = \str_replace(",", "", number_format(floatval($C) * 1000 , 6));
+            $C16 = \str_replace(",", "", number_format(((($data->w2 - $data->w1) - ($data->b2 - $data->b1)) / $V) * 1000, 6));
+            $C15 = \str_replace(",", "", number_format(floatval($C16) / 1000 , 6));
             // if ($id_param == 345) {
             // 	if (floatval($C) < 0.0021)
             // 		$C = '<0.0021';
@@ -110,6 +126,8 @@ class LingkunganHidupPM_TSP
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C15' => $C15,
+            'C16' => $C16,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,
