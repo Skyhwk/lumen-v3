@@ -133,7 +133,12 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $permintaanDokumentasiSampling->save();
 
-            $qr = new QrDocument();
+            $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
+                ->where('type_document', 'permintaan_dokumentasi_sampling')
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$qr) $qr = new QrDocument();
 
             $qr->id_document = $permintaanDokumentasiSampling->id;
             $qr->type_document = 'permintaan_dokumentasi_sampling';
@@ -143,11 +148,10 @@ class PermintaanDokumentasiSamplingController extends Controller
             $qr->data = json_encode([
                 'no_document' => $permintaanDokumentasiSampling->no_document,
                 'type_document' => 'permintaan_dokumentasi_sampling',
-                'no_quotation' => $request->no_quotation,
-                'no_order' => $request->no_order,
-                'periode' => Carbon::parse($request->periode)->translatedFormat('F Y'),
-                'tanggal_sampling' => Carbon::parse($request->tanggal_sampling)->translatedFormat('d F Y'),
-                'nama_perusahaan' => $request->nama_perusahaan
+                'no_quotation' => $permintaanDokumentasiSampling->no_quotation,
+                'no_order' => $permintaanDokumentasiSampling->no_order,
+                'periode' => $permintaanDokumentasiSampling->periode ? Carbon::parse($permintaanDokumentasiSampling->periode)->translatedFormat('F Y') : '-',
+                'nama_perusahaan' => $permintaanDokumentasiSampling->nama_perusahaan
             ]);
 
             $qr->created_by = $this->karyawan;
@@ -156,7 +160,7 @@ class PermintaanDokumentasiSamplingController extends Controller
             $qr->save();
 
             // $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $request->periode));
-            
+
             Http::post('http://127.0.0.1:2999/request/doc-sampling', ['id' => $permintaanDokumentasiSampling->id]); // kirim ke python
 
             Notification::whereIn('id', \explode(',', env('AKSES_APPROVAL', '127,13,784')))
@@ -200,6 +204,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
             ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->where('is_active', 1)
             ->first();
 
         $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
@@ -212,6 +217,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
             ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->where('is_active', 1)
             ->first();
 
         $service = new RenderPermintaanDokumentasiSampling();
