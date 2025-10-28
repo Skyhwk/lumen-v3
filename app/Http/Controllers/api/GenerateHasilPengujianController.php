@@ -28,41 +28,49 @@ class GenerateHasilPengujianController extends Controller
         return Datatables::of($linkLhp)->make(true);
     }
 
-    public function searchQuotations(Request $request)
+    public function searchOrders(Request $request)
     {
         $search = $request->input('q');
 
-        $kontrak = QuotationKontrakH::with(['detail:id_request_quotation_kontrak_h,periode_kontrak', 'order:id,no_document,no_order', 'order.orderDetail:id_order_header,periode,tanggal_sampling,cfr'])
-            ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
-            ->where('no_document', 'LIKE', "%{$search}%")
-            ->whereNotIn('flag_status', ['rejected', 'void'])
-            ->where('is_active', true)
-            ->whereHas('order')
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                $generatedLink = LinkLhp::where('no_quotation', $item->no_document)->pluck('periode')->toArray();
-                $filteredDetail = $item->detail->filter(fn($detail) => !in_array($detail->periode_kontrak, $generatedLink))->values();
-                $item->setRelation('detail', $filteredDetail);
-                return $item;
-            })
-            ->filter(fn($item) => $item->detail->isNotEmpty())
-            ->values();
+        // $kontrak = QuotationKontrakH::with(['detail:id_request_quotation_kontrak_h,periode_kontrak', 'order:id,no_document,no_order', 'order.orderDetail:id_order_header,periode,tanggal_sampling,cfr'])
+        //     ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
+        //     ->where('no_document', 'LIKE', "%{$search}%")
+        //     ->whereNotIn('flag_status', ['rejected', 'void'])
+        //     ->where('is_active', true)
+        //     ->whereHas('order')
+        //     ->limit(5)
+        //     ->get()
+        //     ->map(function ($item) {
+        //         $generatedLink = LinkLhp::where('no_quotation', $item->no_document)->pluck('periode')->toArray();
+        //         $filteredDetail = $item->detail->filter(fn($detail) => !in_array($detail->periode_kontrak, $generatedLink))->values();
+        //         $item->setRelation('detail', $filteredDetail);
+        //         return $item;
+        //     })
+        //     ->filter(fn($item) => $item->detail->isNotEmpty())
+        //     ->values();
 
-        $nonKontrak = QuotationNonKontrak::with(['order:id,no_document,no_order', 'order.orderDetail:id_order_header,tanggal_sampling,cfr'])
-            ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
-            ->where('no_document', 'LIKE', "%{$search}%")
-            ->whereNotIn('flag_status', ['rejected', 'void'])
+        // $nonKontrak = QuotationNonKontrak::with(['order:id,no_document,no_order', 'order.orderDetail:id_order_header,tanggal_sampling,cfr'])
+        //     ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
+        //     ->where('no_document', 'LIKE', "%{$search}%")
+        //     ->whereNotIn('flag_status', ['rejected', 'void'])
+        //     ->where('is_active', true)
+        //     ->whereHas('order')
+        //     ->limit(5)
+        //     ->get()
+        //     ->map(fn($item) => LinkLhp::where('no_quotation', $item->no_document)->exists() ? null : $item)
+        //     ->filter()
+        //     ->values();
+
+        // $results = $kontrak->merge($nonKontrak);
+
+        $results = OrderHeader::with('orderDetail')
+            ->where('no_order', 'like', "%{$search}%")
             ->where('is_active', true)
-            ->whereHas('order')
             ->limit(5)
             ->get()
-            ->map(fn($item) => LinkLhp::where('no_quotation', $item->no_document)->exists() ? null : $item)
+            ->map(fn($item) => LinkLhp::where('no_order', $item->no_order)->exists() ? null : $item->makeHidden(['id']))
             ->filter()
             ->values();
-
-        $results = $kontrak->merge($nonKontrak);
-        $results->makeHidden(['id']);
 
         return response()->json($results, 200);
     }
@@ -281,7 +289,7 @@ class GenerateHasilPengujianController extends Controller
                 return response()->json(['message' => 'Hasil Pengujian berhasil digenerate'], 200);
             } else { // save dgn lhp
                 $finalDirectoryPath = public_path('laporan/hasil_pengujian');
-                $finalFilename = $request->no_order . $request->periode ? '_' . $request->periode : '' . '.pdf';
+                $finalFilename = $request->periode ? $request->no_order . '_' . $request->periode . '.pdf' : $request->no_order . '.pdf';
                 $finalFullPath = $finalDirectoryPath . '/' . $finalFilename;
 
                 if (!File::isDirectory($finalDirectoryPath)) {
