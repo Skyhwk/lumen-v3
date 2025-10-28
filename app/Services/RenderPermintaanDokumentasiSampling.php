@@ -17,7 +17,6 @@ class RenderPermintaanDokumentasiSampling
     private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
     {
         $originalPath = public_path('dokumentasi/sampling/' . $originalFileName);
-        Log::info("Fetching image from PATH: $originalPath");
 
         if (!$originalFileName || !File::exists($originalPath)) {
             Log::warning("Image not found: $originalPath");
@@ -26,15 +25,12 @@ class RenderPermintaanDokumentasiSampling
 
         try {
             $img = Image::make($originalPath);
-
-            // ✅ 1️⃣ Resize untuk menjaga proporsionalitas (maksimal 1500px)
             $maxWidth = 1500;
             $img->resize($maxWidth, null, function ($constraint) {
                 $constraint->aspectRatio();
                 $constraint->upsize();
             });
 
-            // ✅ 2️⃣ Simpan sementara hasil kompres
             $tempCompressed = tempnam(sys_get_temp_dir(), 'cmp');
             $quality = 80;
             $maxSizeKB = 500;
@@ -54,10 +50,7 @@ class RenderPermintaanDokumentasiSampling
                 } while ($sizeKB > $maxSizeKB && $quality > 30);
             }
 
-            // ✅ 3️⃣ Buka kembali versi hasil kompres
             $finalImg = Image::make($tempCompressed);
-
-            // ✅ 4️⃣ Hitung ukuran font secara dinamis berdasarkan dimensi
             $width = $finalImg->width();
             $height = $finalImg->height();
 
@@ -100,11 +93,8 @@ class RenderPermintaanDokumentasiSampling
                 });
             }
 
-            // ✅ 5️⃣ Simpan hasil akhir (watermark + kompres)
             $outputPath = preg_replace('/\.\w+$/', $supportsWebp ? '.webp' : '.jpg', $outputPath);
             $finalImg->save($outputPath, $quality, $supportsWebp ? 'webp' : 'jpg');
-
-            Log::info("✅ Base font size: $baseFontSize from $width x $height Final saved {$outputPath} ({$sizeKB}KB @ quality {$quality})");
 
             unlink($tempCompressed);
             return true;
@@ -118,8 +108,6 @@ class RenderPermintaanDokumentasiSampling
 
     public function renderPdf($permintaanDokumentasiSampling, $qr, $periode = null)
     {
-        Log::info("=== RENDERING PDF REQ DOC SAMPLING: {$permintaanDokumentasiSampling->no_quotation} ({$permintaanDokumentasiSampling->no_order}) ===");
-
         DB::beginTransaction();
 
         try {
@@ -127,7 +115,6 @@ class RenderPermintaanDokumentasiSampling
                 ? '<img src="' . public_path("qr_documents/{$qr->file}.svg") . '" width="30" height="30"><br>' . e($qr->kode_qr)
                 : '';
 
-            // ✅ Konfigurasi mPDF fokus efisiensi
             $pdf = new Mpdf([
                 'mode' => 'utf-8',
                 'format' => 'A4',
@@ -240,7 +227,6 @@ class RenderPermintaanDokumentasiSampling
             ]);
 
             DB::commit();
-            Log::info("✅ PDF READY: {$filePath}");
 
             $tempImgDir = public_path("request/temp_img/{$noOrder}");
             if (File::exists($tempImgDir)) {
