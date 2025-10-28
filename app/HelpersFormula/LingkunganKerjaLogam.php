@@ -201,8 +201,8 @@ class LingkunganKerjaLogam
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
             } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // Cd
-                // Vstd =  Rerata Laju Alir*t*(Pa/Ta)*(298/760)
-                $Vstd_with_pa = ($data->average_flow * $data->durasi * ($data->tekanan / $Ta) * (298 / 760));
+                // Vstd (Nm3) = (Q*([(298*P0)/((T0+273)*760)]^0,5))*t
+                $Vstd_with_pa = round($data->nilQs * $data->durasi,6);
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd_with_pa);
 
