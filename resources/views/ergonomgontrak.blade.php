@@ -3,10 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian</title>
-   
-    @if(!empty($cssGlobal))
-        <style>{!! $cssGlobal !!}</style>
-    @endif
 
     @if(!empty($spesifik))
         <style>{!! $spesifik !!}</style>
@@ -23,28 +19,28 @@
                     <table class="info-table">
                         <tr>
                             <td class="label-column">1. Tangan Dominan</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->Identitas_Umum->{'Tangan Dominan'} }}</div>
+                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->tangan_dominan }}</div>
                             </td>
                         </tr>
                         <tr>
                             <td class="label-column">2. Mata Kerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->Identitas_Umum->{'Masa Kerja'} }}</div>
+                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->masa_kerja }}</div>
                             </td>
                         </tr>
                         <tr>
                             <td class="label-column">3. Merasakan Kelelahan Mental Setelah Bekerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->Identitas_Umum->{'Lelah Mental'} }}</div>
+                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->lelah_mental }}</div>
                             </td>
                         </tr>
                         <tr>
                             <td class="label-column">4. Merasakan Kelelahan Fisik Setelah Bekerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->Identitas_Umum->{'Lelah Fisik'} }}</div>
+                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->lelah_fisik }}</div>
                             </td>
                         </tr>
                         <tr>
                             <td class="label-column">5. Merasakan Ketidaknyamanan/Nyeri/Sakit Dalam Satu Tahun Terakhir
                             </td>
-                            <td> <div class="text-input-space">{{ $pengukuran->Identitas_Umum->{'Rasa Sakit'} }}</div>
+                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->rasa_sakit }}</div>
                             </td>
                         </tr>
                     </table>
@@ -57,63 +53,65 @@
                     <div class="section-title">HASIL ANALISIS SURVEI LANJUTAN GANGGUAN OTOT DAN RANGKA</div>
                     <div class="image-placeholder-container">
                         <div class="image-placeholder">
-                            <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}" alt="Body Map" class="body-map">
+                            <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}"
+                            style="width: 160px; height: auto; object-fit: contain; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; display: block; margin: 0 auto;"
+                            alt="Body Map"/>
                         </div>
                         <div class="body-parts-list-container">
                             <table class="body-parts-list">
                                 <tr>
                                     <td><span>1 = Leher</span></td>
                                     <td>
-                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_leher !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_leher->Poin : 0 }}</div>
+                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_leher !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_leher->poin : 0 }}</div>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td><span>2 = Bahu</span></td>
                                     <td>
-                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_bahu->Poin : 0 }}</div>
+                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_bahu->poin : 0 }}</div>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td><span>3 = Punggung Atas</span></td>
                                     <td>
-                                        <div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Atas->Poin : 0 }}</div>
+                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->poin : 0 }}</div>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td><span>4 = Lengan</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_lengan !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_lengan->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lengan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lengan->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>5 = Siku</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_siku !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_siku->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_siku !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_siku->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>6 = Punggung Bawah</span></td>
-                                    <td><div class="input-line">{{( $pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Bawah !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->Sakit_Punggung_Bawah->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{( $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>7 = Tangan</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_tangan !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_tangan->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_tangan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_tangan->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>8 = Pinggul</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_pinggul !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_pinggul->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_pinggul !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_pinggul->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>9 = Paha</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_paha !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_paha->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_paha !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_paha->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>10 = Lutut</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_lutut !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_lutut->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lutut !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lutut->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>11 = Betis</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_betis !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_betis->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_betis !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_betis->poin : 0 }}</div></td>
                                 </tr>
                                 <tr>
                                     <td><span>12 = Kaki</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->Keluhan_Bagian_Tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->Keluhan_Bagian_Tubuh->sakit_kaki->Poin : 0 }}</div></td>
+                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_kaki->poin : 0 }}</div></td>
                                 </tr>
                             </table>
                             
@@ -176,7 +174,7 @@
                         </tr>
                         <tr>
                             <td>Periode Analisis</td>
-                            <td> <div class="text-input-space">{{ $personal->periode_analis }}</div>
+                            <td> <div class="text-input-space">{{ $personal->periode_analisis }}</div>
                             </td>
                         </tr>
                         <tr>

@@ -131,7 +131,7 @@ class Helper
 
             // 2. Handle nested arrays recursively.
             if (is_array($value)) {
-                $value = self::normalize_format_key($value); // Use 'self::' or 'static::' for static method calls.
+                $value = self::normalize_format_key($value,$asObject); // Use 'self::' or 'static::' for static method calls.
             }
 
             // 3. Assign the value to the new normalized key.

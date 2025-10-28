@@ -55,6 +55,7 @@ class TemplateLhpErgonomi
             }
 
             $pengukuran->result = $result;
+            
             $personal = (object) [
                 "no_sampel" => $dataRula->no_sampel,
                 "nama_pekerja" => $dataRula->nama_pekerja,
@@ -119,7 +120,7 @@ class TemplateLhpErgonomi
                     "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                     "periode_analisis" => null,
                 ];
-           
+        //    dd($pengukuran);
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
             return $html;
@@ -186,7 +187,7 @@ class TemplateLhpErgonomi
             $pengukuran->sebelum->skor_kanan_sebelum = $kananSebelumOnly;
             $pengukuran->setelah->skor_kiri_setelah = $kiriSetelahOnly;
             $pengukuran->setelah->skor_kanan_setelah = $kananSetelahOnly;
-    
+            
             // dd($pengukuran); //kategori_risiko, tindakan_perbaikan
             foreach (['sebelum', 'setelah'] as $waktu) {
                 # code...
@@ -441,9 +442,9 @@ class TemplateLhpErgonomi
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
 
             
-            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran['Tubuh_Bagian_Atas']);
+            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran->tubuh_bagian_atas);
             
-            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran['Tubuh_Bagian_Bawah']);
+            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran->tubuh_bagian_bawah);
             
             $groupedAtas  = $this->groupByKategori($dataAtas);
             $groupedBawah  = $this->groupByKategori($dataBawah);
@@ -497,9 +498,9 @@ class TemplateLhpErgonomi
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
             
-            $masa_kerja = $pengukuran->Identitas_Umum->{'Masa Kerja'};
-            $fisik = $pengukuran->Identitas_Umum->{'Lelah Fisik'};
-            $mental = $pengukuran->Identitas_Umum->{'Lelah Mental'};
+            $masa_kerja = $pengukuran->identitas_umum->masa_kerja;
+            $fisik = $pengukuran->identitas_umum->lelah_fisik;
+            $mental = $pengukuran->identitas_umum->lelah_mental;
             $masa_kerja_map = [
                 '0' => 'Kurang dari 3 Bulan',
                 '1' => '3 Bulan - 1 Tahun',
@@ -515,9 +516,9 @@ class TemplateLhpErgonomi
                 "4" => "Unknown"
             ];
     
-            $pengukuran->Identitas_Umum->{'Masa Kerja'} =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
-            $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
-            $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
+            $pengukuran->identitas_umum->masa_kerja =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
+            $pengukuran->identitas_umum->lelah_mental =$fisikMentalMap[$mental] ?? 'Unknow';
+            $pengukuran->identitas_umum->lelah_fisik =$fisikMentalMap[$fisik] ?? 'Unknow';
             
             $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik','ttd'))->render();
             return $html;
