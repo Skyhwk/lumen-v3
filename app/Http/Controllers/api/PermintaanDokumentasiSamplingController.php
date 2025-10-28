@@ -135,6 +135,7 @@ class PermintaanDokumentasiSamplingController extends Controller
 
             $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
                 ->where('type_document', 'permintaan_dokumentasi_sampling')
+                ->where('is_active', 1)
                 ->first();
 
             if (!$qr) $qr = new QrDocument();
@@ -203,6 +204,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
             ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->where('is_active', 1)
             ->first();
 
         $this->dispatch(new RenderPdfPermintaanDokumentasiSampling($permintaanDokumentasiSampling, $qr, $permintaanDokumentasiSampling->periode));
@@ -215,6 +217,7 @@ class PermintaanDokumentasiSamplingController extends Controller
         $permintaanDokumentasiSampling = PermintaanDokumentasiSampling::find($request->id);
         $qr = QrDocument::where('id_document', $permintaanDokumentasiSampling->id)
             ->where('type_document', 'permintaan_dokumentasi_sampling')
+            ->where('is_active', 1)
             ->first();
 
         $service = new RenderPermintaanDokumentasiSampling();
