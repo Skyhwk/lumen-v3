@@ -21,9 +21,26 @@ class HasilPengujianController extends Controller
 {
     public function index()
     {
-        $orders = OrderHeader::select('id', 'no_document', 'tanggal_penawaran', 'no_order', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'alamat_sampling')
+        $orders = OrderHeader::with('orderDetail')->select('id', 'no_document', 'tanggal_penawaran', 'no_order', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'alamat_sampling')
             ->where('is_active', true)
-            ->latest();
+            ->latest()
+            ->get()
+            ->map(function ($item) {
+                if ($item->orderDetail) {
+                    $details = $item->orderDetail;
+
+                    // timpa isi relasi orderDetail dengan hasil pluck
+                    $item->order_detail = [
+                        'periode'          => $details->pluck('periode')->filter()->unique()->values(),
+                        'tanggal_sampling' => $details->pluck('tanggal_sampling')->filter()->unique()->values(),
+                        'tanggal_terima'   => $details->pluck('tanggal_terima')->filter()->unique()->values(),
+                    ];
+
+                    unset($item->orderDetail);
+                }
+
+                return $item;
+            });
 
         return DataTables::of($orders)->make(true);
     }
@@ -116,8 +133,8 @@ class HasilPengujianController extends Controller
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
-                    if(in_array($item->kategori_3, $kategori_validation)){ 
-                       $steps['analisa']['date'] = $tglSampling;
+                    if (in_array($item->kategori_3, $kategori_validation)) {
+                        $steps['analisa']['date'] = $tglSampling;
                     } else {
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
                     }

@@ -170,7 +170,6 @@ class FdlEmisiKendaraanController extends Controller
                     $no_sequen = 'EMISI' . $cek_po->id;
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
-                    $keterangan = $request->merk . ', ' . $request->tahun;
 
                     $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                     if ($cek_po != null) {
@@ -275,7 +274,28 @@ class FdlEmisiKendaraanController extends Controller
                     $no_sequen = 'EMISI' . $cek_po->id;
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
-                    $keterangan = $request->merk . ', ' . $request->tahun;
+
+                    // $fields = [
+                    //     'merk_kendaraan' => 'Tolong isi merk kendaraan!',
+                    //     'tahun_pembuatan' => 'Tolong isi tahun pembuatan!',
+                    //     'bobot' => 'Tolong isi Bobot kendaraan!',
+                    //     'no_mesin' => 'Tolong isi no mesin!',
+                    //     'no_polisi' => 'Tolong isi no polisi!',
+                    //     'km' => 'Tolong isi km!',
+                    //     'kapasitas_cc' => 'Tolong isi cc!',
+                    //     'transmisi' => 'Tolong isi transmisi!',
+                    // ];
+
+                    // foreach ($fields as $key => $message) {
+                    //     if (!isset($request->$key) || $request->$key === null) {
+                    //         return response()->json(['message' => $message], 401);
+                    //     }
+                    // }
+
+                    if (!isset($request->merk_kendaraan) || $request->merk_kendaraan === null) {
+                        return response()->json(['message' => 'Tolong isi Merk Kendaraan!'], 401);
+                    }
+
 
                     $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                     if ($cek_po != null) {

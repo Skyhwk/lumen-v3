@@ -84,6 +84,12 @@ class FdlKebisinganController extends Controller
                 }
             }
 
+            if(!isset($request->foto_lok)){
+                return response()->json([
+                    'message' => 'Tolong tambahkan Dokumentasi Lokasi !'
+                ], 401);
+            }
+
             if(!isset($request->jenis_durasi)){
                 return response()->json([
                     'message' => 'Pilih Jenis Durasi !'
