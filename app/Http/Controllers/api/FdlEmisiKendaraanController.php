@@ -767,40 +767,32 @@ class FdlEmisiKendaraanController extends Controller
                                 if($request->oli[0]!=NULL && $request->oli[1]!=NULL && $request->oli[2]!=NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                             }
 
-                            if (!isset($kendaraan) || !isset($kendaraan->id_kendaraan)) {
+                            $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
+                            if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
                                 $data_kendaraan = new MasterKendaraan;
-                            } else {
-                                $data_kendaraan = MasterKendaraan::find($kendaraan->id_kendaraan) ?? new MasterKendaraan;
-                            }
+                                $data_kendaraan->merk_kendaraan     = ucfirst($request->merk);
+                                $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
+                                if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
+                                if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
+                                $data_kendaraan->plat_nomor         = $request->no_plat;
+                                $data_kendaraan->bobot_kendaraan    = $request->bobot;
+                                $data_kendaraan->tahun_pembuatan    = $request->tahun;
+                                $data_kendaraan->no_mesin            = $request->no_mesin;
+                                $data_kendaraan->transmisi            = $request->transmisi;
+                                $data_kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;
+                                $data_kendaraan->km                 = $request->km;
+                                $data_kendaraan->cc                 = $request->cc;
+                                $data_kendaraan->created_by                = $this->karyawan;
+                                $data_kendaraan->created_at             = Carbon::now()->format('Y-m-d H:i:s');
+                                $data_kendaraan->save();
 
-                            // 🔹 Isi data (baik create maupun update)
-                            $data_kendaraan->merk_kendaraan      = ucfirst($request->merk_kendaraan);
-                            $data_kendaraan->id_bbm              = $request->jenis_kendaraan;
-                            $data_kendaraan->jenis_bbm           = ($request->jenis_kendaraan == 31) ? "Bensin" : "Solar";
-                            $data_kendaraan->plat_nomor          = $request->no_polisi;
-                            $data_kendaraan->bobot_kendaraan     = $request->bobot;
-                            $data_kendaraan->tahun_pembuatan     = $request->tahun_pembuatan;
-                            $data_kendaraan->no_mesin            = $request->no_mesin;
-                            $data_kendaraan->transmisi           = $request->transmisi;
-                            $data_kendaraan->kategori_kendaraan  = $request->kategori_kendaraan;
-                            $data_kendaraan->km                  = $request->km;
-                            $data_kendaraan->cc                  = $request->kapasitas_cc;
-
-                            // bedakan create/update metadata
-                            if (!$data_kendaraan->exists) {
-                                $data_kendaraan->created_by = $this->karyawan;
-                                $data_kendaraan->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                            } else {
-                                $data_kendaraan->updated_by = $this->karyawan;
-                                $data_kendaraan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                            }
-                            $data_kendaraan->save();
-
-                            // 🔹 Update QR
-                            $qr = MasterQr::where('kode', $request->kode_qr)->first();
-                            if ($qr) {
+                                $qr = MasterQr::where('kode', $request->kode_qr)->first();
                                 $qr->status = 1;
                                 $qr->id_kendaraan = $data_kendaraan->id;
+                                $qr->save();
+                            } else {
+                                $qr = MasterQr::where('kode', $request->kode_qr)->first();
+                                $qr->status = 1;
                                 $qr->save();
                             }
 
