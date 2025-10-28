@@ -17,7 +17,10 @@ class TemplateStpController extends Controller
             ->where('is_active', $request->active);
 
         if (isset($request->kategori) && $request->kategori != '') {
-            $data->where('sampleName', 'like', '%' . $request->kategori . '%');
+            // $data->where('sampleName', 'like', '%' . $request->kategori . '%');
+            $data->whereHas('sample', function ($q) use ($request) {
+                $q->where('nama_kategori', 'like', '%' . $request->kategori . '%');
+            });
         }
 
         if(isset($request->name) && $request->name != '') {
@@ -29,8 +32,8 @@ class TemplateStpController extends Controller
         }
 
         return Datatables::of($data)
-            ->addColumn('sampleName', function ($data) { 
-                return $data->sample ? (string) $data->sample->nama_kategori : 'Nama tidak ditemukan'; 
+            ->addColumn('sampleName', function ($data) {
+                return $data->sample ? (string) $data->sample->nama_kategori : 'Nama tidak ditemukan';
             })
             ->rawColumns(['sampleName'])
             ->make(true);

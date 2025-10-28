@@ -115,8 +115,11 @@ class PayrollKaryawanController extends Controller
         try {
             PayrollHeader::where('id', $request->id)
                 ->update([
-                    'deleted_by' => $this->karyawan,
-                    'deleted_at' => DATE('Y-m-d H:i:s'),
+                    'is_approve' => false,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                    'rejected_by' => $this->karyawan,
+                    'rejected_at' => DATE('Y-m-d H:i:s')
                 ]);
 
             DB::commit();

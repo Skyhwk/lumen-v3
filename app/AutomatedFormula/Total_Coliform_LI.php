@@ -110,6 +110,9 @@ class Total_Coliform_LI
             $insert->template_stp       = 2;
             $insert->created_by         = 'SYSTEM';
             $insert->created_at         = Carbon::now();
+            $insert->is_approved        = true;
+            $insert->approved_by         = 'SYSTEM';
+            $insert->approved_at         = Carbon::now();
             $insert->save();
 
             $ws_hasil                   = new WsValueAir();

@@ -27,7 +27,7 @@ class LemburController extends Controller
         $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
             ->select(
                 'form_header.id',
                 'form_header.no_document',
@@ -86,7 +86,7 @@ class LemburController extends Controller
         $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
             ->select(
                 'form_header.id',
                 'form_header.no_document',
@@ -308,7 +308,7 @@ class LemburController extends Controller
         $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
             ->select(
                 'form_header.id',
                 'form_header.no_document',
@@ -430,7 +430,7 @@ class LemburController extends Controller
         $data = FormHeader::on('android_intilab')
             ->leftJoin('intilab_apps.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
-            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.user_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
             ->select(
                 'form_header.id',
                 'form_header.no_document',
