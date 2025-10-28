@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 class Helper
 {
    public static function tanggal_indonesia($tanggal)
-    {
+   {
         $bulan = array(
             1 => 'Januari',
             'Februari',
@@ -89,5 +89,54 @@ class Helper
             ]);
         }
 
+    }
+
+    /**
+     * Recursively normalizes the keys of an array.
+     *
+     * This function converts all array keys to lowercase and removes spaces (' ') and hyphens ('-').
+     * It traverses nested arrays to ensure all keys, regardless of depth, are standardized.
+     *
+     * @param array $data The input array whose keys need to be normalized.
+     * @return array The array with all keys converted to lowercase and free of spaces and hyphens.
+     *
+     * @example
+     * // Input:
+     * // $input = [
+     * //     'First Name' => 'John',
+     * //     'Last-Name' => 'Doe',
+     * //     'Contact Info' => [
+     * //         'E Mail' => 'john.doe@example.com',
+     * //         'Phone-Number' => '1234567890'
+     * //     ]
+     * // ];
+     *
+     * // Output of normalize_format_key($input):
+     * // [
+     * //     'firstname' => 'John',
+     * //     'lastname' => 'Doe',
+     * //     'contactinfo' => [
+     * //         'email' => 'john.doe@example.com',
+     * //         'phonenumber' => '1234567890'
+     * //     ]
+     * // ]
+    */
+    public static function normalize_format_key(array $data, bool $asObject = false) 
+    {
+        $normalize_data = [];
+        foreach ($data as $key => $value) {
+            // 1. Convert the key to a string (if not already) and apply normalization rules.
+            //    Rules: convert to lowercase and remove spaces and hyphens.
+            $newKey = strtolower(str_replace([' ', '-'], '_', (string) $key));
+
+            // 2. Handle nested arrays recursively.
+            if (is_array($value)) {
+                $value = self::normalize_format_key($value); // Use 'self::' or 'static::' for static method calls.
+            }
+
+            // 3. Assign the value to the new normalized key.
+            $normalize_data[$newKey] = $value;
+        }
+        return $asObject ? (object) $normalize_data : $normalize_data;
     }
 }
