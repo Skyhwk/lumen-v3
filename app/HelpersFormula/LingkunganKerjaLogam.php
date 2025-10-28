@@ -71,6 +71,8 @@ class LingkunganKerjaLogam
             $C2_C3_param = ['Ni','Sb','Se','Sn','Zn','Al'];
             $C1_C2_C3_param = ['Co'];
             $C1_C2_C3_C4_C5_param = ['Cd'];
+            $ICP_aneh = ['Molybdenum (LK)','Vanadium (LK)','Titanium (LK)'];
+
             if(in_array($data->parameter, $C2_param)) { // Hg, Mn
                 // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd / ($data->tekanan / $Ta) * (298 / 760)));
@@ -217,6 +219,21 @@ class LingkunganKerjaLogam
 
                 // C(%) = C3 x 10000
                 $C4 = $C2 * 10000;
+
+                $C14 = $C2;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+                $C15 = $C16 * 1000;
+            }else if(in_array($data->parameter, $ICP_aneh)){
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd / ($data->tekanan / $Ta) * (298 / 760)));
+
+                // C1 = C2*1000
+                $C = ($C1 * 1000);
+
+                // C (PPM)= (C2 / 24.45)*74,92)
+                $C2 = ($C1 / 24.45) * 74.92;
 
                 $C14 = $C2;
 
