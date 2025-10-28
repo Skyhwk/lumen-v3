@@ -68,12 +68,34 @@ class LingkunganKerjaLogam
         } else {
             $C2_param = ["Hg", "Mn"];
             $C1_C2_C3_param_new = ["As", "Ba", "Cr", "Cu", "Fe"];
-            $C2_C3_param = ['Ni'];
+            $C2_C3_param = ['Ni','Sb','Se','Sn','Zn','Al'];
             $C1_C2_C3_param = ['Co'];
             $C1_C2_C3_C4_C5_param = ['Cd'];
-            if(in_array($data->parameter, $C2_param)) { // C2
-                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
-            } else if(in_array($data->parameter, $C1_C2_C3_param_new)) { // C1, C2 & C3 New
+            if(in_array($data->parameter, $C2_param)) { // Hg, Mn
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd / ($data->tekanan / $Ta) * (298 / 760)));
+
+                // C1 = C2*1000
+                $C = ($C1 * 1000);
+
+                if($data->parameter == 'Hg') {
+                    // C (PPM)= (C2 / 24.45)*200,59)
+                    $C2 = (($C1 / 24.45) * 200.59);
+                }else{
+                    // C (PPM)= (C2 / 24.45)*54,94)
+                    $C2 = (($C1 / 24.45) * 54.94);
+                }
+
+                $C14 = $C2;
+
+                // Vstd = (Rerata Laju alir x Durasi Pengambilan sampel)/1000"
+                $Vstd_alt = number_format(($data->average_flow * $data->durasi) / 1000, 6);
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd_alt);
+
+                // C16 = C17*1000
+                $C15 = ($C16 * 1000);
+            } else if(in_array($data->parameter, $C1_C2_C3_param_new)) { // As, Ba, Cr, Cu, Fe
                 // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
                 $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd * ($data->tekanan / $Ta) * (298 / 760)));
 
@@ -130,13 +152,40 @@ class LingkunganKerjaLogam
                     $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                     $C15 = $C16 * 1000;
                 }
-            } else if(in_array($data->parameter, $C2_C3_param)) { // C2, C3
-                // C (mg/m3) = ((Ct - Cb)*Vt*1)/Vstd
-                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+            } else if(in_array($data->parameter, $C2_C3_param)) { // Ni, Sb, Se, Sn, Zn, Al
+                // C (mg/Nm3) = (((Ct - Cb)*(Vt/1000)*1) / (Vstd*(Pa/Ta)*(298/760))
+                $C1 = ((($ks - $kb) * ($data->vl / 1000) * 1) / ($Vstd * ($data->tekanan / $Ta) * (298 / 760)));
 
-                // C (PPM) = (C(mg/m3)*24,45)/58,69
-                $C2 = (($C1 * 24.45) / 58.69);
-            }else if(in_array($data->parameter, $C1_C2_C3_param)) { // C1, C2, C3
+                // C1 = C2 * 1000
+                $C = ($C1 * 1000);
+
+                if($data->parameter == 'Ni') {
+                    // C (PPM) = (C(mg/m3)/24,45)*58,69
+                    $C2 = (($C1 / 24.45) * 58.69);
+                }else if($data->parameter == 'Sb') {
+                    // C (PPM)= (C2 / 24.45)*121,76)
+                    $C2 = (($C1 / 24.45) * 121.76);
+                }else if($data->parameter == 'Se') {
+                    // C (PPM)= (C2 / 24.45)*78,97)
+                    $C2 = (($C1 / 24.45) * 78.97);
+                }else if($data->parameter == 'Sn') {
+                    // C (PPM)= (C2 / 24.45)*118,71)
+                    $C2 = (($C1 / 24.45) * 118.71);
+                }else if($data->parameter == 'Zn') {
+                    // C (PPM)= (C2 / 24.45)*65,38)
+                    $C2 = (($C1 / 24.45) * 65.38);
+                }else {
+                    // C (PPM)= (C2 / 24.45)*26,98)
+                    $C2 = (($C1 / 24.45) * 26.98);
+                }
+
+                $C14 = $C2;
+
+                // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
+                $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
+
+                $C15 = $C16 * 1000;
+            }else if(in_array($data->parameter, $C1_C2_C3_param)) { // Co
                 // C (ug/Nm3) = ((Ct - Cb)*Vt*1)/Vstd
                 $C = ((($ks - $kb) * $data->vl * 1) / $Vstd);
 
@@ -151,7 +200,7 @@ class LingkunganKerjaLogam
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
-            } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // C1 , C2, C3, C4, C5
+            } else if(in_array($data->parameter, $C1_C2_C3_C4_C5_param)) { // Cd
                 // Vstd =  Rerata Laju Alir*t*(Pa/Ta)*(298/760)
                 $Vstd_with_pa = ($data->average_flow * $data->durasi * ($data->tekanan / $Ta) * (298 / 760));
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)

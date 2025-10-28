@@ -49,6 +49,15 @@ class LingkunganHidupNH3
         $C3 = $C2 * 1000;
         $C4 = $C3 * 10000;
 
+        $C14 = $C2;
+
+        // Vu = Rerata Laju Alir*t*/1000
+        $Vu_alt = str_replace(",", "", number_format($data->average_flow * $data->durasi / 1000, 4));
+        $C15 = str_replace(",", "", number_format($ks / floatval($Vu_alt), 4));
+
+        // C17 = C16/1000
+        $C16 = str_replace(",", "", number_format(floatval($C15) / 1000, 5));
+
         $satuan = 'mg/Nm3';
 
         if (floatval($C) < 0.1419)
@@ -77,6 +86,9 @@ class LingkunganHidupNH3
             'C2' => $C2,
             'C3' => $C3,
             'C4' => $C4,
+            'C14' => $C14,
+            'C15' => $C15,
+            'C16' => $C16,
             'satuan' => $satuan,
             'vl' => $vl,
             'st' => $st,

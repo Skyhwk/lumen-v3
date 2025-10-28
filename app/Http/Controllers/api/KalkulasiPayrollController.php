@@ -689,7 +689,7 @@ class KalkulasiPayrollController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payroll header data deleted successfully'
+                'message' => 'Payroll header data approved successfully'
             ], 200);
         } catch (\Throwable $th){
             return response()->json(['message' => $th->getMessage()], 500);

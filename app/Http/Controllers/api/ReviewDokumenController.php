@@ -24,56 +24,101 @@ use Illuminate\Database\Eloquent\Collection;
 class ReviewDokumenController extends Controller
 {
 
+    // public function index()
+    // {
+    //     $today = Carbon::now()->format('Y-m-d');
+
+    //     // Ambil semua parameter expired dan aktif, sekaligus
+    //     $expiredParameters = Parameter::select('id', 'nama_lab', 'id_kategori')
+    //         ->where('is_expired', 1)
+    //         ->where('is_active', 1)
+    //         ->get()
+    //         ->groupBy('id_kategori');
+
+    //     // Ambil semua kategori aktif
+    //     $kategori = MasterKategori::where('is_active', 1)->get();
+
+    //     // Siapkan array untuk id kategori_2
+    //     $kategoriLabels = [];
+    //     foreach ($kategori as $kat) {
+    //         $kategoriLabels[$kat->id] = $kat->id . '-' . $kat->nama_kategori;
+    //     }
+
+    //     $allData = collect();
+
+    //     foreach ($expiredParameters as $kategoriId => $parameters) {
+    //         // Ambil list nama_lab
+    //         $paramNames = $parameters->map(function ($param) {
+    //             return $param->id . ';' . $param->nama_lab;
+    //         })->values()->toArray();
+
+    //         // Pastikan ada kategori label
+    //         // if (!isset($kategoriLabels[$kategoriId])) continue;
+
+    //         // $kategoriLabel = $kategoriLabels[$kategoriId];
+
+    //         // Query order detail hanya untuk kategori dan parameter yang sesuai
+    //         $orderDetails = OrderDetail::with('orderHeader')->where('is_active', true)
+    //             ->whereDate('tanggal_sampling', '>', $today)
+    //             // ->where('kategori_2', $kategoriLabel)
+    //             ->where('kategori_2', '1-Air')
+    //             ->where(function ($query) use ($paramNames) {
+    //                 foreach ($paramNames as $name) {
+    //                     $query->orWhereJsonContains('parameter', $name);
+    //                 }
+    //             })
+    //             ->orderBy('tanggal_sampling', 'asc')
+    //             ->get();
+
+    //         $allData = $allData->merge($orderDetails);
+    //     }
+
+    //     return DataTables::of($allData)
+    //         ->editColumn('tanggal_sampling', function ($row) {
+    //             return Carbon::parse($row->tanggal_sampling)->format('Y-m-d');
+    //         })
+    //         ->make(true);
+    // }
+
+
     public function index()
     {
-        $today = "2025-08-12";
+        $today = Carbon::now()->format('Y-m-d');
 
-        // Ambil semua parameter expired dan aktif, sekaligus
         $expiredParameters = Parameter::select('id', 'nama_lab', 'id_kategori')
             ->where('is_expired', 1)
             ->where('is_active', 1)
-            ->get()
-            ->groupBy('id_kategori');
+            ->get();
 
-        // Ambil semua kategori aktif
-        $kategori = MasterKategori::where('is_active', 1)->get();
-
-        // Siapkan array untuk id kategori_2
-        $kategoriLabels = [];
-        foreach ($kategori as $kat) {
-            $kategoriLabels[$kat->id] = $kat->id . '-' . $kat->nama_kategori;
+        if ($expiredParameters->isEmpty()) {
+            return DataTables::of(collect())->make(true);
         }
 
-        $allData = collect();
+        $paramNames = $expiredParameters->map(function ($param) {
+            return $param->id . ';' . $param->nama_lab;
+        })->values()->toArray();
 
-        foreach ($expiredParameters as $kategoriId => $parameters) {
-            // Ambil list nama_lab
-            $paramNames = $parameters->map(function ($param) {
-                return $param->id . ';' . $param->nama_lab;
-            })->values()->toArray();
 
-            // Pastikan ada kategori label
-            // if (!isset($kategoriLabels[$kategoriId])) continue;
 
-            // $kategoriLabel = $kategoriLabels[$kategoriId];
+        $orderDetails = OrderDetail::with([
+            'orderHeader'
+        ])
+            ->where('is_active', true)
+            ->whereDate('tanggal_sampling', '>', $today)
+            ->where('kategori_2', '1-Air')
+            ->where(function ($query) use ($paramNames) {
+                // Gunakan whereRaw untuk optimasi query JSON
+                $conditions = collect($paramNames)->map(function ($name) {
+                    return "JSON_CONTAINS(parameter, '\"" . addslashes($name) . "\"')";
+                })->implode(' OR ');
 
-            // Query order detail hanya untuk kategori dan parameter yang sesuai
-            $orderDetails = OrderDetail::with('orderHeader')->where('is_active', true)
-                ->whereDate('tanggal_sampling', '>', $today)
-                // ->where('kategori_2', $kategoriLabel)
-                ->where('kategori_2', '1-Air')
-                ->where(function ($query) use ($paramNames) {
-                    foreach ($paramNames as $name) {
-                        $query->orWhereJsonContains('parameter', $name);
-                    }
-                })
-                ->orderBy('tanggal_sampling', 'asc')
-                ->get();
+                $query->whereRaw("({$conditions})");
+            })
+            ->orderBy('tanggal_sampling', 'asc')
+            ->get();
 
-            $allData = $allData->merge($orderDetails);
-        }
 
-        return DataTables::of($allData)
+        return DataTables::of($orderDetails)
             ->editColumn('tanggal_sampling', function ($row) {
                 return Carbon::parse($row->tanggal_sampling)->format('Y-m-d');
             })
@@ -140,27 +185,32 @@ class ReviewDokumenController extends Controller
         }
         $data = Parameter::whereIn('nama_lab', $param)
             ->where('is_active', 1)
-            ->where('id_kategori',(int)$request->kategori)
+            ->where('id_kategori', (int) $request->kategori)
             ->where('is_expired', 1)
             ->get();
 
         return response()->json($data);
     }
 
-     public function updateData(Request $request)
+    public function updateData(Request $request)
     {
         DB::beginTransaction();
         try {
             //---------------Proses Quotation--------------------------------
+
             $noQt = $request->no_document;
-            if(\explode('/',$noQt)[1] == 'QTC'){
+            if (\explode('/', $noQt)[1] == 'QTC') {
                 // kontrak
                 $dataQuotation = QuotationKontrakH::where('no_document', $noQt)->first();
+                if (!$dataQuotation) {
+                    return response()->json(['message' => 'Quotation Tidak Ditemukan'], 404);
+                }
+
                 $dataQuotationDetail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataQuotation->id)->get();
                 foreach ($dataQuotationDetail as $item) {
                     $dataPendukungSampling = array_values(json_decode($item->data_pendukung_sampling, true))[0]['data_sampling'] ?? json_decode($item->data_pendukung_sampling, true);
                     foreach ($dataPendukungSampling as $keys => $value) {
-                        if($value['regulasi'] == $request->regulasi){
+                        if ($value['regulasi'] == $request->regulasi) {
                             if ($request->existing !== null && $request->pengganti !== null) {
                                 foreach ($value['parameter'] as $index => $param) {
                                     $key = array_search($param, $request->existing);
@@ -168,7 +218,7 @@ class ReviewDokumenController extends Controller
                                         $value['parameter'][$index] = $request->pengganti[$key];
                                     }
                                 }
-                                
+
                                 $dataPendukungSampling[$keys]['parameter'] = $value['parameter'];
                             }
                         }
@@ -180,8 +230,8 @@ class ReviewDokumenController extends Controller
                 }
 
                 $dataPendukungHeader = json_decode($dataQuotation->data_pendukung_sampling, true);
-                foreach($dataPendukungHeader as $keys => $value){
-                    if($value['regulasi'] == $request->regulasi){
+                foreach ($dataPendukungHeader as $keys => $value) {
+                    if ($value['regulasi'] == $request->regulasi) {
                         if ($request->existing !== null && $request->pengganti !== null) {
                             foreach ($value['parameter'] as $index => $param) {
                                 $key = array_search($param, $request->existing);
@@ -197,14 +247,13 @@ class ReviewDokumenController extends Controller
                     $dataQuotation->data_pendukung_sampling = json_encode($dataPendukungHeader);
                     $dataQuotation->save();
                 }
-
             } else {
                 // nnon kontrak
                 $dataQuotation = QuotationNonKontrak::where('no_document', $noQt)->first();
                 $dataPendukungSampling = json_decode($dataQuotation->data_pendukung_sampling, true);
 
-                foreach($dataPendukungSampling as $keys => $value){
-                    if($value['regulasi'] == $request->regulasi){
+                foreach ($dataPendukungSampling as $keys => $value) {
+                    if ($value['regulasi'] == $request->regulasi) {
                         if ($request->existing !== null && $request->pengganti !== null) {
                             foreach ($value['parameter'] as $index => $param) {
                                 $key = array_search($param, $request->existing);
@@ -225,15 +274,15 @@ class ReviewDokumenController extends Controller
 
             //---------------Proses Order Detail--------------------------------
             $dataOrderDetail = OrderDetail::where('no_order', $request->no_order)->where('is_active', true)->get();
-            
-            foreach($dataOrderDetail as $item){
+
+            foreach ($dataOrderDetail as $item) {
                 $regulasiExist = json_decode($item->regulasi, true) ?? [];
-                if($regulasiExist == $request->regulasi){
+                if ($regulasiExist == $request->regulasi) {
                     $parameterExist = json_decode($item->parameter, true) ?? [];
-                    if($request->existing !== null && $request->pengganti !== null) {
-                        foreach($parameterExist as $index => $param){
+                    if ($request->existing !== null && $request->pengganti !== null) {
+                        foreach ($parameterExist as $index => $param) {
                             $key = array_search($param, $request->existing);
-                            if($key !== false && isset($request->pengganti[$key])){
+                            if ($key !== false && isset($request->pengganti[$key])) {
                                 $parameterExist[$index] = $request->pengganti[$key];
                             }
                         }

@@ -16,7 +16,7 @@ class ReleaseBackendController extends Controller
 {
     public function index(Request $request)
     {
-        $releaseSystem = ReleaseSystem::where('system', 'Backend')->get();
+        $releaseSystem = ReleaseSystem::where('system', 'Backend')->orderBy('id', 'desc')->get();
         return response()->json(['success' => true, 'data' => $releaseSystem], 200);
     }
 
