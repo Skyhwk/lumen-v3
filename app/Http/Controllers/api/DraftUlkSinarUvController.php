@@ -27,7 +27,9 @@ use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Models\KonfirmasiLhp;
+use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -280,17 +282,17 @@ class DraftUlkSinarUvController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftUlkSinarUv')
-                ->render();
+                ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            if ($header->is_revisi == 1) {
-                $header->is_revisi = 0;
-                $header->is_generated = 0;
-                $header->count_revisi++;
-                if ($header->count_revisi > 2) {
-                    $this->handleApprove($request, false);
-                }
-            }
+            // if ($header->is_revisi == 1) {
+            //     $header->is_revisi = 0;
+            //     $header->is_generated = 0;
+            //     $header->count_revisi++;
+            //     if ($header->count_revisi > 2) {
+            //         $this->handleApprove($request, false);
+            //     }
+            // }
             $header->save();
 
             DB::commit();
@@ -651,6 +653,19 @@ class DraftUlkSinarUvController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
+                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+
+                if($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $this->dispatch($job);
+                }
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft LHP sinar uv dengan no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'status' => false
+                ], 404);
             }
 
             DB::commit();
