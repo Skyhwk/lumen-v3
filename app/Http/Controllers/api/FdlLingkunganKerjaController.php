@@ -296,13 +296,13 @@ class FdlLingkunganKerjaController extends Controller
 
                             if (Str::contains($lowerParam, 'suhu')) {
                                 $satuan = '°C';
-                                $c13 = $rataRata; //°C c12
+                                $c12 = $rataRata; //°C
                             } elseif (Str::contains($lowerParam, 'kelembaban')) {
                                 $satuan = '%';
-                                $c6 = $rataRata; //% c5
+                                $c5 = $rataRata; //%
                             } elseif (Str::contains($lowerParam, 'laju ventilasi')) {
                                 $satuan = 'm/s';
-                                $c9 = $rataRata; //m/s c8
+                                $c8 = $rataRata; //m/s
                             } elseif (Str::contains($lowerParam, 'tekanan udara')) {
                                 $satuan = 'mmHg';
                             }
@@ -347,7 +347,6 @@ class FdlLingkunganKerjaController extends Controller
                                     'C9' => $c10,
                                     'C10' => $c11,
                                     'C11' => $c12,
-                                    'C12' => $c13,
                                     'tanggal_terima' =>$tanggalTerima,
                                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                                     'created_by' => $this->karyawan,
