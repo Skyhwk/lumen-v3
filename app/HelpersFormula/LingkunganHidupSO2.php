@@ -42,7 +42,7 @@ class LingkunganHidupSO2
         $C_value = $C1_value = $C2_value = $C14_value = $C15_value = $C16_value = [];
 
         $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
-        foreach ($data->key as $key => $value) {
+        foreach ($data->ks as $key => $value) {
             if ($Vu != 0.0) {
                 $C = \str_replace(",", "", number_format((floatval($value) / floatval($Vu)) * 1000, 4));
             } else {
