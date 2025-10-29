@@ -633,7 +633,7 @@ class FdlMethodBahayaErgonomiController extends Controller
             if (is_file($foto_belakang)) {
                 unlink($foto_belakang);
             }
-            InsertActivityFdl::by($this->user_id)->action('delete')->target("Bahaya Ergonomi pada nomor sampel $data->no_sampel")->save();
+            InsertActivityFdl::by($this->user_id)->action('delete')->target("Bahaya Ergonomi pada nomor sampel $cek->no_sampel")->save();
             $cek->delete();
             return response()->json([
                 'message' => 'Data has ben Deleted',
