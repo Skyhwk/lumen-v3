@@ -296,23 +296,23 @@
                         <tr>
                             <td>1</td>
                             <td class="text-left">Jarak Tangan Horizontal (cm)</td>
-                            <td>{{ $pengukuran->lokasi_tangan->{'Horizontal Awal'}  }}</td>
-                            <td>{{ $pengukuran->lokasi_tangan->{'Horizontal Akhir'} }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->horizontal_awal  }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->horizontal_akhir }}</td>
                             <td class="text-left">Jarak horizontal/proyeksi tangan yang memegang beban dengan titik
                                 pusat tubuh</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Jarak Tangan Vertikal (cm)</td>
-                            <td>{{ $pengukuran->lokasi_tangan->{'Vertikal Awal'} }}</td>
-                            <td>{{ $pengukuran->lokasi_tangan->{'Vertikal Akhir'} }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->vertikal_awal }}</td>
+                            <td>{{ $pengukuran->lokasi_tangan->vertikal_akhir }}</td>
                             <td class="text-left">Jarak vertikal posisi tangan yang memegang beban terhadap lantai</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Sudut Asimetris (°)</td>
-                            <td>{{$pengukuran->sudut_asimetris->Awal}}</td>
-                            <td>{{$pengukuran->sudut_asimetris->Akhir}}</td>
+                            <td>{{$pengukuran->sudut_asimetris->awal}}</td>
+                            <td>{{$pengukuran->sudut_asimetris->akhir}}</td>
                             <td class="text-left">Sudut asimetri gerakan yang dibentuk antara bagian dan kaki</td>
                         </tr>
                     </tbody>
