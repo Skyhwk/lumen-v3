@@ -699,6 +699,11 @@ class DraftEmisiSumberBergerakController extends Controller
                 }
             }
 
+            OrderDetail::where('cfr', $data->cfr)
+                ->update([
+                    'status' => 1
+                ]);
+
             $data->status = 1;
             $data->save();
 
