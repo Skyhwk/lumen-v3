@@ -893,8 +893,9 @@ class DokumenFdlController extends Controller
                 ');
             }
             $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
-            $sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
-            if($sign_sampler->status === 'error' || $sign_pic->status === 'error'){
+            $sign_pic = null;
+            if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+            if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
                 return response()->json([
                     'message' => $sign_pic->message ?? $sign_sampler->message
                 ],400);
