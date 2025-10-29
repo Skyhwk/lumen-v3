@@ -23,7 +23,7 @@
                         </td>
                         <td class="custom">{{ $yy['hasil_uji'] }}</td>
                         <td class="custom">{{ $yy['titik_koordinat'] }}</td>
-                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                     </tr>
                 @endforeach
             </tbody>
