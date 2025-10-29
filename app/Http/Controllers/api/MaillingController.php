@@ -36,8 +36,9 @@ class MaillingController extends Controller
             }
             
             $to = $request->input('to');
+
             $subject = $request->input('subject');
-            $content = $request->input('content');
+            $content = preg_replace('/&nbsp;/', ' ', $request->input('content'));
             $attachments = [];
             
             // Proses file attachments dan simpan path-nya saja

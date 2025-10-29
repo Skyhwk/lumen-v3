@@ -27,7 +27,7 @@
                         <td class="custom">{{ $yy['leq_lm'] }}</td>
                         <td class="custom">{{ $yy['leq_lsm'] }}</td>
                         <td class="custom">{{ $yy['titik_koordinat'] }}</td>
-                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
 
                       
                     </tr>
