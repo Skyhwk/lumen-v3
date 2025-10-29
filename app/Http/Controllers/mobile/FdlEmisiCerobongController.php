@@ -32,7 +32,7 @@ class FdlEmisiCerobongController extends Controller
     {
         if (isset($request->no_sample) && $request->no_sample != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-            ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
+            ->where('kategori_2', '5-Emisi')
             ->where('is_active', 1)->first();
             
             $partikulat = json_decode(
