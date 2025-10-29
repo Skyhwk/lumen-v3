@@ -72,9 +72,6 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
-            $w1 = $data->w1;
-            $w2 = $data->w2;
-
         } else if (in_array($data->parameter, $use_V)) {
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));
@@ -103,12 +100,13 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
-            $w1 = $data->w1;
-            $w2 = $data->w2;
-            $b1 = $data->b1;
-            $b2 = $data->b2;
-            // dd($C);
         }
+
+        $w1 = $data->w1;
+        $w2 = $data->w2;
+        $b1 = $data->b1 ?? null;
+        $b2 = $data->b2 ?? null;
+
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,

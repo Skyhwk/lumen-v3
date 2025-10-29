@@ -133,17 +133,17 @@ class LingkunganKerjaNH3_Shift
             $C2_average = '<0.0007';
 
         $data_pershift = [
-            'Shift 1' => $C_value[0],
-            'Shift 2' => $C_value[1] ?? null,
-            'Shift 3' => $C_value[2] ?? null,
+            'Shift 1' => $C[0],
+            'Shift 2' => $C[1] ?? null,
+            'Shift 3' => $C[2] ?? null,
         ];
 
         if($data->parameter === 'NH3 (24 Jam)'){
             $data_pershift = [
-                'Shift 1' => $C_value[0],
-                'Shift 2' => $C_value[1] ?? null,
-                'Shift 3' => $C_value[2] ?? null,
-                'Shift 4' => $C_value[3] ?? null,
+                'Shift 1' => $C[0],
+                'Shift 2' => $C[1] ?? null,
+                'Shift 3' => $C[2] ?? null,
+                'Shift 4' => $C[3] ?? null,
             ];
         }
 
