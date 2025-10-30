@@ -488,7 +488,7 @@ class DraftUdaraKebisinganController extends Controller
                     'leq_lsm'             => $val->ws_udara->hasil1 ?? null,
                     'hasil_uji'       => $val->ws_udara->hasil1 ?? null,
                     'nab'             => $val->ws_udara->nab ?? null,
-                    'tanggal_sampling' => Carbon::parse($tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY')
+                    'tanggal_sampling' => $tanggal_sampling ?? null,
                 ];
             })->values()->toArray();
 
@@ -528,39 +528,14 @@ class DraftUdaraKebisinganController extends Controller
                     $custom[] = $detail;
                 }
 
-                $bulanMap = [
-                    'Januari' => 'January',
-                    'Februari' => 'February',
-                    'Maret' => 'March',
-                    'April' => 'April',
-                    'Mei' => 'May',
-                    'Juni' => 'June',
-                    'Juli' => 'July',
-                    'Agustus' => 'August',
-                    'September' => 'September',
-                    'Oktober' => 'October',
-                    'November' => 'November',
-                    'Desember' => 'December',
-                ];
-
-
-
                 $detail = collect($detail)
-                ->sortBy(function ($item) use ($bulanMap) {
-                    $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
-                    return sprintf('%010d-%s', Carbon::parse($tgl)->timestamp, $item['no_sampel']);
-                })
+                ->sortBy('tanggal_sampling')
                 ->values()
                 ->toArray();
 
                 foreach ($custom as $idx => $cstm) {
                     $custom[$idx] = collect($cstm)
-                        ->sortBy(function ($item) use ($bulanMap) {
-                            $tgl = str_replace(array_keys($bulanMap), array_values($bulanMap), $item['tanggal_sampling']);
-                            $timestamp = Carbon::parse($tgl)->timestamp;
-
-                            return sprintf('%010d-%s', $timestamp, $item['no_sampel']);
-                        })
+                        ->sortBy('tanggal_sampling')
                         ->values()
                         ->toArray();
                 }
