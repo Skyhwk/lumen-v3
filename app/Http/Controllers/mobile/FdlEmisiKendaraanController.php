@@ -225,7 +225,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->co        = $co;
                         $data_fdl->hc        = $hc;
                         $data_fdl->o2        = $o2;
-                        $data_fdl->lamda    = $request->lamda;
+                        $data_fdl->lamda    = $request->lambda;
                         $data_fdl->opasitas = $opasitas;
                         $data_fdl->nilai_km = $nilai_k;
                         $data_fdl->rpm        = $rpm;
