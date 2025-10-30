@@ -9,6 +9,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use Illuminate\Http\Request;
+use App\Services\getBawahan;
 
 use App\Models\TargetSales;
 use App\Models\MasterKaryawan;
@@ -97,144 +98,49 @@ class DashboardSalesController extends Controller
         return response()->json($result);
     }
 
-    // public function targetSales(Request $request)
-    // {
-    //     $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-    //     switch ($jabatan) {
-    //         case 24: // Sales Staff
-    //             $sales = MasterKaryawan::where('id', $this->user_id)->first();
-    //             $target = TargetSales::where('user_id', $sales->id)->where('year', Carbon::now()->format('Y'))->first();
+    public function getSales(Request $request)
+    {
+        // $user_id = $this->user_id;
+        $user_id = 890;
+        $bawahan = GetBawahan::where('id', $user_id)->get()->pluck('id')->toArray();
+        $bawahan = array_values(array_unique($bawahan));
+        
+        $salesList = MasterKaryawan::where('is_active', true)
+            ->where('jabatan', 'like', '%Manager%')
+            ->where('id', '!=', $user_id)
+            ->whereIn('id', $bawahan)
+            ->where('is_active', true)
+            ->orderBy('jabatan', 'asc')
+            ->select('id', 'nama_lengkap', 'jabatan')
+            ->get();
+        
+        if($salesList){
+            foreach ($salesList as $sales) {
+                $bawahans = MasterKaryawan::whereIn('id', GetBawahan::where('id', $sales->id)->get()->pluck('id')->toArray())
+                    ->where('is_active', true)
+                    ->where('id', '!=', $sales->id)
+                    ->whereIn('id_jabatan', [21, 24, 148]) // spv, sales, executive
+                    ->select('id', 'nama_lengkap', 'jabatan')
+                    ->orderBy('jabatan', 'asc')
+                    ->get()
+                    ->toArray();
+                $sales->bawahan = $bawahans;
+            }
+            $sales = $salesList;
+        } else {
+            $sales = MasterKaryawan::whereIn('id', GetBawahan::where('id', $user_id)->get()->pluck('id')->toArray())
+                ->where('is_active', true)
+                ->whereIn('id_jabatan', [21, 24, 148]) // spv, sales, executive
+                ->select('id', 'nama_lengkap', 'jabatan')
+                ->orderBy('jabatan', 'asc')
+                ->get()
+                ->toArray();
+        }
 
-    //             $startDate = Carbon::now()->startOfDay();
-    //             $endDate = Carbon::now()->endOfDay();
 
-    //             if ($request->rangeFilter == 'Weekly') {
-    //                 $startDate = Carbon::now()->startOfWeek()->startOfDay();
-    //                 $endDate = Carbon::now()->endOfWeek()->endOfDay();
-    //             }
-
-    //             if ($request->rangeFilter == 'Monthly') {
-    //                 $startDate = Carbon::now()->startOfMonth()->startOfDay();
-    //                 $endDate = Carbon::now()->endOfMonth()->endOfDay();
-    //             }
-
-    //             $query = collect([
-    //                 QuotationKontrakH::class,
-    //                 QuotationNonKontrak::class
-    //             ])->flatMap(
-    //                 fn($model) =>
-    //                 $model::where('is_active', true)
-    //                     ->where('sales_id', $sales->id)
-    //                     ->whereBetween('tanggal_penawaran', [$startDate, $endDate])
-    //                     ->get()
-    //             );
-
-    //             $currentMonth = strtolower(Carbon::now()->format('M'));
-
-    //             $targetStats = [[
-    //                 'name' => $sales->nama_lengkap,
-    //                 'target' => isset($target->$currentMonth) ? $target->$currentMonth : 0,
-    //                 'actual' =>  $query->sum('grand_total'),
-    //             ]];
-    //             break;
-
-    //         case 21: // Sales Supervisor
-    //             $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
-    //             array_push($bawahan, $this->user_id);
-
-    //             $sales = MasterKaryawan::where('is_active', true)
-    //                 ->whereIn('id', $bawahan)
-    //                 ->orderBy('nama_lengkap', 'asc')
-    //                 ->get();
-
-    //             $targetStats = [];
-    //             foreach ($sales as &$item) {
-    //                 $target = TargetSales::where('user_id', $item->id)
-    //                     ->where('year', Carbon::now()->format('Y'))
-    //                     ->first();
-
-    //                 $startDate = Carbon::now()->startOfDay();
-    //                 $endDate = Carbon::now()->endOfDay();
-
-    //                 if ($request->rangeFilter == 'Weekly') {
-    //                     $startDate = Carbon::now()->startOfWeek()->startOfDay();
-    //                     $endDate = Carbon::now()->endOfWeek()->endOfDay();
-    //                 }
-
-    //                 if ($request->rangeFilter == 'Monthly') {
-    //                     $startDate = Carbon::now()->startOfMonth()->startOfDay();
-    //                     $endDate = Carbon::now()->endOfMonth()->endOfDay();
-    //                 }
-
-    //                 $query = collect([
-    //                     QuotationKontrakH::class,
-    //                     QuotationNonKontrak::class
-    //                 ])->flatMap(
-    //                     fn($model) =>
-    //                     $model::where('is_active', true)
-    //                         ->where('sales_id', $item->id)
-    //                         ->whereBetween('tanggal_penawaran', [$startDate, $endDate])
-    //                         ->get()
-    //                 );
-
-    //                 $currentMonth = strtolower(Carbon::now()->format('M'));
-
-    //                 $targetStats[] = [
-    //                     'name' => $item->nama_lengkap,
-    //                     'target' => isset($target->$currentMonth) ? $target->$currentMonth : 0,
-    //                     'actual' =>  $query->sum('grand_total'),
-    //                 ];
-    //             }
-    //             break;
-
-    //         default:
-    //             $sales = MasterKaryawan::where('is_active', true)
-    //                 ->whereIn('id_jabatan', [24, 21]) // STAFF & SPV
-    //                 ->orWhere('id', 41) // Novva Novita Ayu Putri Rukmana 
-    //                 ->orderBy('nama_lengkap', 'asc')
-    //                 ->get();
-
-    //             $targetStats = [];
-    //             foreach ($sales as &$item) {
-    //                 $target = TargetSales::where('user_id', $item->id)
-    //                     ->where('year', Carbon::now()->format('Y'))
-    //                     ->first();
-
-    //                 $startDate = Carbon::now()->startOfDay();
-    //                 $endDate = Carbon::now()->endOfDay();
-
-    //                 if ($request->rangeFilter == 'Weekly') {
-    //                     $startDate = Carbon::now()->startOfWeek()->startOfDay();
-    //                     $endDate = Carbon::now()->endOfWeek()->endOfDay();
-    //                 }
-
-    //                 if ($request->rangeFilter == 'Monthly') {
-    //                     $startDate = Carbon::now()->startOfMonth()->startOfDay();
-    //                     $endDate = Carbon::now()->endOfMonth()->endOfDay();
-    //                 }
-
-    //                 $query = collect([
-    //                     QuotationKontrakH::class,
-    //                     QuotationNonKontrak::class
-    //                 ])->flatMap(
-    //                     fn($model) =>
-    //                     $model::where('is_active', true)
-    //                         ->where('sales_id', $item->id)
-    //                         ->whereBetween('tanggal_penawaran', [$startDate, $endDate])
-    //                         ->get()
-    //                 );
-
-    //                 $currentMonth = strtolower(Carbon::now()->format('M'));
-
-    //                 $targetStats[] = [
-    //                     'name' => $item->nama_lengkap,
-    //                     'target' => isset($target->$currentMonth) ? $target->$currentMonth : 0,
-    //                     'actual' =>  $query->sum('grand_total'),
-    //                 ];
-    //             }
-    //             break;
-    //     }
-
-    //     return response()->json($targetStats, 200);
-    // }
+        return response()->json([
+            'sales' => $sales,
+            'message' => 'Sales data retrieved successfully',
+        ], 200);
+    }
 }
