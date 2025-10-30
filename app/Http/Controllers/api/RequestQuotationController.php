@@ -5828,7 +5828,7 @@ class RequestQuotationController extends Controller
         }
         $data_lama = json_decode($data_lama);
 
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->where('is_active', 1)->orderBy('no_sampel', 'desc')->first()->no_sampel;
+        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
 
         if (!$data) {
             return response()->json([
