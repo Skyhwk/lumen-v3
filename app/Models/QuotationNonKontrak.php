@@ -119,4 +119,9 @@ class QuotationNonKontrak extends Sector
                 $query->where('is_active', true);
             }]);
     }
+
+    public function alasanVoidQt()
+    {
+        return $this->hasOne(AlasanVoidQt::class, 'no_quotation', 'no_document');
+    }
 }

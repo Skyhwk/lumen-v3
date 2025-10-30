@@ -110,7 +110,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					} else {
 						$item->nab = null;
 					}
-					
+
 					$regulasi = json_decode($item->order_detail->regulasi);
 					$item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
 				}
@@ -203,12 +203,47 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
 				$item->method = $bakuMutu->method ?? null;
 				$item->nama_header = $bakuMutu->nama_header ?? null;
-			
+
 			}
 
+			return Datatables::of($processedData)
+                ->addColumn('nilai_uji', function ($item) {
+                    $satuanIndexMap = [
+                        "µg/m³" => 17,
+                        "mg/m³" => 16,
+                        "BDS" => 15,
+                        "CFU/M²" => 14,
+                        "CFU/25cm²" => 13,
+                        "°C" => 12,
+                        "CFU/100 cm²" => 11,
+                        "CFU/m²" => 10,
+                        "CFU/m³" => 9,
+                        "m/s" => 8,
+                        "f/cc" => 7,
+                        "Ton/km²/Bulan" => 6,
+                        "%" => 5,
+                        "ppb" => 4,
+                        "ppm" => 3,
+                        "mg/m³" => 2,
+                        "μg/Nm³" => 1
+                    ];
 
-			return Datatables::of($processedData)->make(true);
+                    $index = $satuanIndexMap[$item->satuan] ?? 1;
 
+                    if (!$item->ws_udara) {
+                        return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+                    }
+
+                    // Coba f_koreksi_{index}, lalu hasil{index}, lalu fallback ke lingkungan
+                    $fKoreksiKey = "f_koreksi_$index";
+                    $hasilKey = "hasil$index";
+
+                    return $item->ws_udara->$fKoreksiKey
+                        ?? $item->ws_udara->$hasilKey
+                        ?? $item->ws_value_lingkungan->f_koreksi_c
+                        ?? '-';
+                })
+                ->make(true);
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
@@ -848,7 +883,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->where('lingkungan_header_id', $lingkungan->id)
 				->where('is_active', 1)
 				->first();
-			
+
 			$wsUdara = WsValueUdara::where('no_sampel', $no_sampel)
 				->where('id_lingkungan_header', $lingkungan->id)
 				->where('is_active', 1)
