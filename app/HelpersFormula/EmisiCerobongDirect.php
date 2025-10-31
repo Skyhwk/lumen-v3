@@ -3,6 +3,16 @@
 namespace App\HelpersFormula;
 
 class EmisiCerobongDirect {
+    private function avgFromJson($json) {
+        if (!$json) return null;
+
+        $values = json_decode($json, true);
+        if (!is_array($values)) return null;
+
+        $numbers = array_map('floatval', array_values($values));
+        return count($numbers) > 0 ? array_sum($numbers) / count($numbers) : null;
+    }
+
     public function index($data, $id_parameter, $mdl){
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
@@ -22,7 +32,6 @@ class EmisiCerobongDirect {
         $paramCOP = ["CO (P)"];
         $paramO2P = ["O2 (P)"];
 
-
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
 
@@ -36,26 +45,16 @@ class EmisiCerobongDirect {
         $no_p = $data->no_populasi;
         $co_p = $data->co_populasi;
 
-        function avgFromJson($json) {
-            if (!$json) return null;
-
-            $values = json_decode($json, true);
-            if (!is_array($values)) return null;
-
-            $numbers = array_map('floatval', array_values($values));
-            return count($numbers) > 0 ? array_sum($numbers) / count($numbers) : null;
-        }
-
         // gunakan fungsi untuk rata-rata
-        $avg_so2p = avgFromJson($so2_p);
-        $avg_no2p = avgFromJson($no2_p);
-        $avg_o2p = avgFromJson($o2_p);
-        $avg_co2p = avgFromJson($co2_p);
-        $avg_velocity_p = avgFromJson($velocity_p);
-        $avg_suhu_cerobong_p = avgFromJson($suhu_cerobong_p);
-        $avg_nox_p = avgFromJson($nox_p);
-        $avg_no_p = avgFromJson($no_p);
-        $avg_co_p = avgFromJson($co_p);
+        $avg_so2p = $this->avgFromJson($so2_p);
+        $avg_no2p = $this->avgFromJson($no2_p);
+        $avg_o2p = $this->avgFromJson($o2_p);
+        $avg_co2p = $this->avgFromJson($co2_p);
+        $avg_velocity_p = $this->avgFromJson($velocity_p);
+        $avg_suhu_cerobong_p = $this->avgFromJson($suhu_cerobong_p);
+        $avg_nox_p = $this->avgFromJson($nox_p);
+        $avg_no_p = $this->avgFromJson($no_p);
+        $avg_co_p = $this->avgFromJson($co_p);
 
         $satuan = NULL;
 
@@ -140,24 +139,45 @@ class EmisiCerobongDirect {
             $c1 = round($c2 * 1000, 1);
             $c5 = $c5 < 0.02 ? '<0.02' : $c5;
             $satuan = 'ppm';
-        } else if(in_array($id_parameter, $paramSO2P)){
-            $c5 = round($avg_so2p, 1);
-            $c4 = round(($c5 / 64.066) * 24.45, 1);
-            $c3 = round($c4 * 1000, 1);
-            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
-            $satuan = 'ppm';
+        } else if (in_array($id_parameter, $paramSO2P)) {
+            
+            if ($avg_so2p !== null) {
+                $c5 = round($avg_so2p, 1);
+                $c4 = round(($c5 / 64.066) * 24.45, 1);
+                $c3 = round($c4 * 1000, 1);
+                $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+                $c1 = round($c2 * 1000, 1);
+                $satuan = 'ppm';
+            } else {
+                $c1 = $c2 = $c3 = $c4 = $c5 = null;
+                $satuan = null;
+            }
+
         } else if (in_array($id_parameter, $paramCOP)) {
-            $c5 = round($avg_cop, 1);
-            $c4 = round(($c5 / 28.01) * 24.45, 1);
-            $c3 = round($c4 * 1000, 1);
-            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
-            $satuan = 'ppm';
-        } else if(in_array($id_parameter, $paramO2P)){
-            $c6 = round($avg_no2p, 1);
-            $satuan = '%';
+
+            if ($avg_cop !== null) {
+                $c5 = round($avg_cop, 1);
+                $c4 = round(($c5 / 28.01) * 24.45, 1);
+                $c3 = round($c4 * 1000, 1);
+                $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+                $c1 = round($c2 * 1000, 1);
+                $satuan = 'ppm';
+            } else {
+                $c1 = $c2 = $c3 = $c4 = $c5 = null;
+                $satuan = null;
+            }
+
+        } else if (in_array($id_parameter, $paramO2P)) {
+
+            if ($avg_no2p !== null) {
+                $c6 = round($avg_no2p, 1);
+                $satuan = '%';
+            } else {
+                $c6 = null;
+                $satuan = null;
+            }
         }
+
         
         return [
             'C1' => $c1,
