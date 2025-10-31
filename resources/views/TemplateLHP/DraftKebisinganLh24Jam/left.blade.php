@@ -21,19 +21,17 @@
             </thead>
             <tbody>
                 @foreach ($detail as $k => $yy)
-       
                     <tr>
                         <td class="custom">{{ $k + 1 }}</td>
                         <td class="custom4"><sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
-                          {{ $yy['lokasi_keterangan'] }}
+                        {{ $yy['lokasi_keterangan'] }}
                         </td>
                         <td class="custom">{{ $yy['leq_ls'] }}</td>
                         <td class="custom">{{ $yy['leq_lm'] }}</td>
                         <td class="custom">{{ $yy['leq_lsm'] }}</td>
                         <td class="custom">{{ $yy['titik_koordinat'] }}</td>
-                        <td class="custom">{{ $yy['tanggal_sampling'] }}</td>
+                        <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
 
-                      
                     </tr>
                 @endforeach
             </tbody>

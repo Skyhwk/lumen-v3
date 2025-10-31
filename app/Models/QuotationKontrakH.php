@@ -130,4 +130,8 @@ class QuotationKontrakH extends Sector
             }]);
     }
 
+    public function alasanVoidQt()
+    {
+        return $this->hasOne(AlasanVoidQt::class, 'no_quotation', 'no_document');
+    }
 }
