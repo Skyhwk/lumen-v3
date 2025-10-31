@@ -749,26 +749,30 @@ class JadwalServices
         
         $dataUpdate = $this->updateJadwalKategori;
 
-        if (
-            $dataUpdate->no_quotation == null ||
-            $dataUpdate->nama_perusahaan == null ||
-            $dataUpdate->jam_mulai == null ||
-            $dataUpdate->jam_selesai == null ||
-            $dataUpdate->kategori == null ||
-            $dataUpdate->warna == null ||
-            $dataUpdate->durasi == null ||
-            $dataUpdate->status == null ||
-            $dataUpdate->batch_id == null ||
-            $dataUpdate->kendaraan == null ||
-            $dataUpdate->sampling == null ||
-            $dataUpdate->karyawan == null ||
-            $dataUpdate->jadwal_id == null ||
-            $dataUpdate->tanggal == null ||
-            $dataUpdate->sampler == null ||
-            $dataUpdate->durasi_lama == null ||
-            $dataUpdate->tanggal_lama == null
-        ) {
-            throw new Exception('No Quotation, Nama Perusahaan, Jam Mulai, Jam Selesai, Kategori, Warna, Note, Durasi, Status, Batch Id, Urutan, Kendaraan, Sampling, Karyawan, Jadwal Id, Tanggal, Sampler, Durasi Lama, Tanggal Lama is required', 401);
+        $requiredFields = [
+            'no_quotation'    => 'No Quotation',
+            'nama_perusahaan' => 'Nama Perusahaan',
+            'jam_mulai'       => 'Jam Mulai',
+            'jam_selesai'     => 'Jam Selesai',
+            'kategori'        => 'Kategori',
+            'warna'           => 'Warna',
+            'durasi'          => 'Durasi',
+            'status'          => 'Status',
+            'batch_id'        => 'Batch Id',
+            'kendaraan'       => 'Kendaraan',
+            'sampling'        => 'Sampling',
+            'karyawan'        => 'Karyawan',
+            'jadwal_id'       => 'Jadwal Id',
+            'tanggal'         => 'Tanggal',
+            'sampler'         => 'Sampler',
+            'durasi_lama'     => 'Durasi Lama',
+            'tanggal_lama'    => 'Tanggal Lama'
+        ];
+
+        foreach ($requiredFields as $field => $fieldName) {
+            if ($dataUpdate->$field == null) {
+                throw new Exception($fieldName . ' is required', 401);
+            }
         }
 
 
