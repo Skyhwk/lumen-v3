@@ -1573,11 +1573,14 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
-
+                    if($data_order->periode != null){
+                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
+                    }else{
+                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
+                    }
+                    
                     if($cekLink){
-                        $job = new CombineLHPJob($data_order->cfr, $data->nama_file, $data_order->no_order, $this->karyawan, $data_order->periode);
+                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $data_order->periode);
                         $this->dispatch($job);
                     }
                     
@@ -1597,7 +1600,7 @@ class DraftUlkErgonomiController extends Controller
                 ], 500);
             }
         }
-    }
+    } 
 
     // Amang
     public function handleReject(Request $request)
@@ -1816,8 +1819,10 @@ class DraftUlkErgonomiController extends Controller
             );
 
             // Siapkan folder untuk menyimpan file
-            $dir = public_path("draft_ergonomi");
-            $folders = ['draft', 'lhp', 'lhp_digital'];
+            /* $dir = public_path("draft_ergonomi");
+            $folders = ['draft', 'lhp', 'lhp_digital']; */
+            $dir = public_path("dokumen");
+            $folders = ['LHP', 'LHP_DOWNLOAD', 'LHPS'];
             
             foreach ($folders as $folder) {
                 if (!file_exists("$dir/$folder")) {
@@ -2708,8 +2713,9 @@ class DraftUlkErgonomiController extends Controller
                         break;
                         
                     case 'lhp':
-                        // LHP: tanpa watermark + footer tanpa QR
-                        $pdf->showWatermarkImage = false;
+                        // LHP: watermark + footer tanpa QR
+                        $pdf->SetWatermarkImage(public_path('logo-watermark.png'), -1, '', [110, 35]);
+                        $pdf->showWatermarkImage = true;
                         $file_qr = public_path('qr_documents/' . $pdfFile->file_qr . '.svg');
                         $footerHtml = '
                             <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
@@ -2839,8 +2845,9 @@ class DraftUlkErgonomiController extends Controller
                 }
                 
                 // Simpan file
-                $namaFile = 'LHP_Ergonomi_'.str_replace('/', '_', $noSampel).'.pdf';
-                $pathFile = $dir.'/'.$type.'/'.$namaFile;
+                $namaFile = 'LHP-'.str_replace('/', '-', $noSampel).'.pdf';
+                // $pathFile = $dir.'/'.$type.'/'.$namaFile;
+                $pathFile = $dir.'/'.'LHP_DOWNLOAD'.'/'.$namaFile;
                 $pdf->Output($pathFile, 'F');
                 return [$pdf,$namaFile];
             };

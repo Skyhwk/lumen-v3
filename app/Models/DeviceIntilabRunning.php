@@ -23,6 +23,10 @@ class DeviceIntilabRunning extends Sector {
         return $this->belongsTo(DeviceIntilab::class, 'device_id');
     }
 
+    public function alat() {
+        return $this->belongsTo(DeviceIntilab::class, 'device_id');
+    }
+
     public function getKodeAlatAttribute() {
         return $this->device->kode;
     }
@@ -33,5 +37,9 @@ class DeviceIntilabRunning extends Sector {
 
     public function getNamaAttribute() {
         return $this->device->nama;
+    }
+
+    public function offlineReason(){
+        return $this->hasMany(DeviceOfflineReason::class, 'device_running_id', 'id');
     }
 }

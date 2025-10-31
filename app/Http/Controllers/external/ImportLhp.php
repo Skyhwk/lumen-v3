@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers\external;
 
+use App\Models\LhpsEmisiCHeader;
+use App\Models\LhpsEmisiHeader;
+use App\Models\LhpsKebisinganHeader;
+use App\Models\LhpsLingHeader;
 use App\Models\Parameter;
 use App\Models\OrderDetail;
+use App\Services\GenerateQrDocumentLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Lumen\Routing\Controller as BaseController;
@@ -363,14 +368,14 @@ class ImportLhp extends BaseController
                 ];
             }
 
-            if (DB::table('lhps_air_header_2025')->where('no_lhp', $noLhp)->exists()) {
+            if (DB::table('lhps_air_header')->where('no_lhp', $noLhp)->exists()) {
                 return response()->json([
                     'message' => 'No LHP sudah ada',
                 ], 400);
             }
 
-            $header = DB::table('lhps_air_header_2025')->insertGetId($insert);
-            // dump(DB::table('lhps_air_header_2025')->find($header));
+            $header = DB::table('lhps_air_header')->insertGetId($insert);
+            // dump(DB::table('lhps_air_header')->find($header));
 
             /**
              * LHPS AIR DETAIL
@@ -480,11 +485,11 @@ class ImportLhp extends BaseController
                         'methode' => $lastValue !== '-' ? str_replace('\\', '', $lastValue) : null,
                     ];
 
-                    $detail = DB::table('lhps_air_detail_2025')->insert($insert);
+                    $detail = DB::table('lhps_air_detail')->insert($insert);
                 }
                 $no++;
             }
-            // dump(DB::table('lhps_air_detail_2025')->where('id_header', $header)->get());
+            // dump(DB::table('lhps_air_detail')->where('id_header', $header)->get());
             DB::commit();
             return response()->json([
                 'message' => 'Data LHP Air berhasil diimport',
@@ -710,7 +715,7 @@ class ImportLhp extends BaseController
             }
 
             //get detail informasi pelanggan
-            $pelanggan = OrderDetail::where('cfr', str_replace(' ', '', $noLhp))
+            $pelanggan = OrderDetail::with('orderHeader')->where('cfr', str_replace(' ', '', $noLhp))
                 ->where('no_sampel', str_replace(' ', '', $noSample))
                 ->first();
 
@@ -735,17 +740,65 @@ class ImportLhp extends BaseController
                     'deskripsi_titik' => $pelanggan->keterangan_1,
                     'tanggal_sampling' => $pelanggan->tanggal_sampling,
                     'header_table' => $headTable,
+                    'no_qt' => $pelanggan->orderHeader->no_document,
+                    'status_sampling' => $pelanggan->no_quotation,
+                    'alamat_sampling' => $pelanggan->orderHeader->alamat_sampling,
+                    'id_kategori_2' => explode('-', $pelanggan->kategori_2)[0],
+                    'id_kategori_3' => explode('-', $pelanggan->kategori_3)[0],
+                    // 'methode_sampling' => "", // gtau drmna
+                    'tanggal_terima' => $pelanggan->tanggal_terima,
+                    // 'periode_analisa' =>
+                    'regulasi' => $pelanggan->regulasi,
+                    // 'regulasi_custom' =>
+                    // 'keterangan' =>
+                    // 'suhu' =>
+                    // 'cuaca' =>
+                    // 'arah_angin' =>
+                    // 'kelembapan' =>
+                    // 'kec_angin' =>
+                    // 'titik_koordinat' =>
+                    'nama_karyawan' => 'Abidah Walfathiyyah',
+                    'jabatan_karyawan' => 'Technical Control Supervisor',
+                    // 'file_qr' => ''
+                    // 'file_lhp' =>
+                    // 'tanggal_lhp' =>
+                    // 'created_by' =>
+                    // 'created_at' =>
+                    // 'updated_by' =>
+                    // 'updated_at' =>
+                    // 'approved_by' =>
+                    // 'approved_at' =>
+                    // 'rejected_by' =>
+                    // 'rejected_at' =>
+                    // 'deleted_by' =>
+                    // 'deleted_at' =>
+                    // 'is_generated' =>
+                    // 'generated_by' =>
+                    // 'generated_at' =>
+                    // 'is_emailed' =>
+                    // 'emailed_by' =>
+                    // 'emailed_at' =>
+                    // 'id_token' =>
+                    // 'expired' =>
                 ];
             }
             // dd($insert);
-            if (DB::table('lhps_ling_header_2025')->where('no_lhp', $noLhp)->exists()) {
+            if (DB::table('lhps_ling_header')->where('no_lhp', $noLhp)->exists()) {
                 return response()->json([
                     'message' => 'No LHP sudah ada',
                 ], 400);
             }
 
-            $header = DB::table('lhps_ling_header_2025')->insertGetId($insert);
-            // dump(DB::table('lhps_ling_header_2025')->find($header));
+            $header = DB::table('lhps_ling_header')->insertGetId($insert);
+
+            $lhpsLingHeader = LhpsLingHeader::find($header);
+            $file_qr = new GenerateQrDocumentLhp();
+            if ($path = $file_qr->insert('LHP_UDARA', $lhpsLingHeader, 'Abidah Walfathiyyah')) {
+                $lhpsLingHeader->file_qr = $path;
+                $lhpsLingHeader->save();
+            }
+
+            // dump(DB::table('lhps_ling_header')->find($header));
 
             /**
              * LHPS UDARA DETAIL
@@ -866,11 +919,11 @@ class ImportLhp extends BaseController
                         'methode' => $lastValue !== '-' ? str_replace('\\', '', $lastValue) : null,
                     ];
 
-                    $detail = DB::table('lhps_ling_detail_2025')->insert($insert);
+                    $detail = DB::table('lhps_ling_detail')->insert($insert);
                 }
                 $no++;
             }
-            // dump(DB::table('lhps_ling_detail_2025')->where('id_header', $header)->get());
+            // dump(DB::table('lhps_ling_detail')->where('id_header', $header)->get());
             DB::commit();
             return response()->json([
                 'message' => 'Data berhasil diimport',
@@ -901,6 +954,7 @@ class ImportLhp extends BaseController
             }
 
             $file = $request->file('file');
+            $originalName = $file->getClientOriginalName();
 
             // Validasi jenis file
             if (!in_array($file->getClientOriginalExtension(), ['xlsx', 'xls'])) {
@@ -967,25 +1021,25 @@ class ImportLhp extends BaseController
             }
 
             // Validasi header wajib
-            foreach ($requiredHeaders as $header) {
-                if (empty($headerPositions[$header])) {
-                    return response()->json([
-                        'message' => "Header $header tidak ditemukan dalam file Excel",
-                    ], 400);
-                }
-            }
+            // foreach ($requiredHeaders as $header) {
+            //     if (empty($headerPositions[$header])) {
+            //         return response()->json([
+            //             'message' => "Header $header tidak ditemukan dalam file Excel",
+            //         ], 400);
+            //     }
+            // }
 
             $highestRow = $worksheet->getHighestRow();
 
             // Ambil posisi lokasi keterangan sampel
-            $lokasiRow = $headerPositions['LOKASIKETERANGANSAMPEL']['row'];
-            $lokasiCol = $headerPositions['LOKASIKETERANGANSAMPEL']['col'];
+            $lokasiRow = isset($headerPositions['LOKASIKETERANGANSAMPEL']) ? $headerPositions['LOKASIKETERANGANSAMPEL']['row'] : null;
+            $lokasiCol = isset($headerPositions['LOKASIKETERANGANSAMPEL']) ? $headerPositions['LOKASIKETERANGANSAMPEL']['col'] : null;
             $kolomPar = $this->number_to_alphabet($lokasiCol + 1);
             $getBarisValue = $lokasiRow + 3;
 
             // Ambil posisi titik koordinat
-            $koordinatRow = $headerPositions['TITIKKOORDINAT']['row'];
-            $koordinatCol = $headerPositions['TITIKKOORDINAT']['col'];
+            $koordinatRow = isset($headerPositions['TITIKKOORDINAT']) ? $headerPositions['TITIKKOORDINAT']['row'] : null;
+            $koordinatCol = isset($headerPositions['TITIKKOORDINAT']) ? $headerPositions['TITIKKOORDINAT']['col'] : null;
             $kolomSpe = $this->number_to_alphabet($koordinatCol + 1);
             $barisSpe = $koordinatRow + 3;
 
@@ -1018,6 +1072,14 @@ class ImportLhp extends BaseController
             $jenisSample = $worksheet->getCell($kolomJen . $barisJen)->getOldCalculatedValue()
                 ?? $worksheet->getCell($kolomJen . $barisJen)->getCalculatedValue()
                 ?? $worksheet->getCell($kolomJen . $barisJen)->getValue();
+
+            if (strtolower($jenisSample) == 'lingkungan kerja') {
+                if (stripos($originalName, '24 Jam')) {
+                    $jenisSample = 'Kebisingan 24 Jam';
+                } else {
+                    $jenisSample = 'Kebisingan';
+                }
+            }
 
             if (empty($noLhp)) {
                 return response()->json([
@@ -1057,14 +1119,27 @@ class ImportLhp extends BaseController
                     'nama_pelanggan' => $pelanggan->nama_perusahaan,
                     'alamat_sampling' => $pelanggan->alamat_perusahaan,
                     'parameter_uji' => $pelanggan->param,
-                    'id_kategori_3' => $pelanggan->kategori_3,
+                    'id_kategori_3' => explode('-', $pelanggan->kategori_3)[0],
                     'sub_kategori' => $jenisSample,
                     'regulasi' => $modifiedData == null ? $modifiedData : json_encode($modifiedData),
                     'tanggal_sampling' => $pelanggan->tanggal_sampling,
+                    // 'no_sampel' => json_encode()
+                    'no_qt' => $pelanggan->no_quotation,
+                    'id_kategori_2' => explode('-', $pelanggan->kategori_2)[0],
+                    'deskripsi_titik' => $pelanggan->keterangan_1,
+                    'nama_karyawan' => 'Abidah Walfathiyyah',
+                    'jabatan_karyawan' => 'Technical Control Supervisor',
                 ];
             }
 
-            $header = DB::table('lhps_kebisingan_header_2025')->insertGetId($insert);
+            $header = DB::table('lhps_kebisingan_header')->insertGetId($insert);
+
+            $lhpsKebisinganHeader = LhpsKebisinganHeader::find($header);
+            $file_qr = new GenerateQrDocumentLhp();
+            if ($path = $file_qr->insert('LHP_KEBISINGAN', $lhpsKebisinganHeader, 'Abidah Walfathiyyah')) {
+                $lhpsKebisinganHeader->file_qr = $path;
+                $lhpsKebisinganHeader->save();
+            }
 
             /**
              * LHPS KEBISINGAN DETAIL
@@ -1142,8 +1217,7 @@ class ImportLhp extends BaseController
                             'titik_koordinat' => $titikKoordinat,
                         ];
 
-                        DB::table('lhps_kebisingan_detail_2025')->insert($insert);
-
+                        DB::table('lhps_kebisingan_detail')->insert($insert);
                     } else if (strtoupper($jenisSample) == 'KEBISINGAN 24 JAM') {
                         // Ambil nomor sampel
                         $kolomSample = $this->number_to_alphabet($lokasiCol + 1);
@@ -1212,8 +1286,7 @@ class ImportLhp extends BaseController
                             'titik_koordinat' => $titikKoordinat,
                         ];
 
-                        DB::table('lhps_kebisingan_detail_2025')->insert($insert);
-
+                        DB::table('lhps_kebisingan_detail')->insert($insert);
                     } else {
                         DB::rollBack();
                         return response()->json([
@@ -1229,12 +1302,658 @@ class ImportLhp extends BaseController
                 'message' => 'Data LHP Kebisingan berhasil diimport',
                 'header_id' => $header
             ], 201);
-
         } catch (Exception $e) {
             DB::rollBack();
             // Log error untuk debugging
             \Log::error('Import LHP Kebisingan Error: ' . $e->getMessage());
             \Log::error('Import LHP Kebisingan Trace: ' . $e->getTraceAsString());
+
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat mengimport data',
+                'error' => $e->getMessage() . ', Line : ' . $e->getLine()
+            ], 500);
+        }
+    }
+
+    public function indexEmisi(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            // Validasi file upload
+            if (!$request->hasFile('file')) {
+                return response()->json([
+                    'message' => 'File tidak ditemukan',
+                ], 400);
+            }
+
+            $file = $request->file('file');
+
+            // Validasi jenis file
+            if (!in_array($file->getClientOriginalExtension(), ['xlsx', 'xls'])) {
+                return response()->json([
+                    'message' => 'Format file tidak didukung. Gunakan format Excel (.xlsx atau .xls)',
+                ], 400);
+            }
+
+            $reader = IOFactory::createReader('Xlsx');
+            $spreadsheet = $reader->load($file->getRealPath());
+
+            // Cek apakah sheet 'LHP' ada
+            if (!$spreadsheet->sheetNameExists('LHP')) {
+                return response()->json([
+                    'message' => 'Sheet LHP tidak ditemukan dalam file Excel',
+                ], 400);
+            }
+
+            $worksheet = $spreadsheet->getSheetByName('LHP');
+
+            /**
+             * LHPS EMISI HEADER
+             */
+            $results = [];
+            foreach ($worksheet->getRowIterator() as $row) {
+                $cellIterator = $row->getCellIterator();
+                $cellIterator->setIterateOnlyExistingCells(FALSE);
+                $row_content = [];
+                foreach ($cellIterator as $cel) {
+                    try {
+                        $value = $cel->getOldCalculatedValue()
+                            ?? $cel->getCalculatedValue()
+                            ?? $cel->getValue();
+
+                        if ($value === false || $value === '') {
+                            $value = $cel->getValue();
+                        }
+                    } catch (\Throwable $e) {
+                        $value = $cel->getOldCalculatedValue()
+                            ?? $cel->getValue();
+
+                        if ($value === false || $value === '') {
+                            $value = $cel->getValue();
+                        }
+                    }
+                    array_push($row_content, $value);
+                }
+                $results[] = $row_content;
+            }
+
+            // Cari posisi header-header yang diperlukan
+            $headerPositions = $this->findHeaderPositions($results, 'udara');
+
+            // Validasi header wajib
+            $requiredHeaders = ['PARAMETER', 'SPESIFIKASIMETODE', 'NOLHP', 'NOSAMPEL', 'JENISSAMPEL'];
+            foreach ($requiredHeaders as $header) {
+                if (empty($headerPositions[$header])) {
+                    return response()->json([
+                        'message' => "Header $header tidak ditemukan dalam file Excel",
+                    ], 400);
+                }
+            }
+
+            $highestRow = $worksheet->getHighestRow();
+
+            // Ambil posisi parameter
+            $parameterRow = $headerPositions['PARAMETER']['row'];
+            $parameterCol = $headerPositions['PARAMETER']['col'];
+            $parameterStartRow = $parameterRow + 3; // Data dimulai 2 baris setelah header
+
+            // Ambil posisi spesifikasi metode
+            $spesifikasiRow = $headerPositions['SPESIFIKASIMETODE']['row'];
+            $spesifikasiCol = $headerPositions['SPESIFIKASIMETODE']['col'];
+
+            // Tentukan range kolom untuk data parameter
+            $kolomPar = $this->number_to_alphabet($parameterCol + 1);
+            $kolomSpe = $this->number_to_alphabet($spesifikasiCol + 1);
+
+            // Cek apakah ada data di kolom spesifikasi pada baris pertama data
+            $cellValue = $worksheet->getCell($kolomSpe . ($spesifikasiRow + 2))->getOldCalculatedValue()
+                ?? $worksheet->getCell($kolomSpe . ($spesifikasiRow + 2))->getCalculatedValue()
+                ?? $worksheet->getCell($kolomSpe . ($spesifikasiRow + 2))->getValue();
+            if ($cellValue === null || $cellValue === '') {
+                // Jika kosong, extend satu kolom ke kanan
+                $kolomSpe = $this->number_to_alphabet($spesifikasiCol + 2);
+            }
+
+            // Ambil data parameter
+            $getHeader = $worksheet->rangeToArray($kolomPar . $parameterStartRow . ':' . $kolomSpe . $highestRow);
+            // Proses header baku mutu
+            $headTable = NULL;
+            if (!empty($headerPositions['BAKUMUTU'])) {
+                $bakuRow = $headerPositions['BAKUMUTU']['row'];
+                $bakuCol = $headerPositions['BAKUMUTU']['col'];
+                $kolomBak = $this->number_to_alphabet($bakuCol + 1);
+                $barisMutu = $bakuRow + 3; // Data baku mutu biasanya 2 baris setelah header
+
+                $cellValue = $worksheet->getCell($kolomBak . $barisMutu)->getOldCalculatedValue()
+                    ?? $worksheet->getCell($kolomBak . $barisMutu)->getCalculatedValue()
+                    ?? $worksheet->getCell($kolomBak . $barisMutu)->getValue();
+                if ($cellValue !== null && $cellValue !== '') {
+                    $getBaku = $this->filterArray($worksheet->getMergeCells(), $kolomBak . ($bakuRow + 1));
+                    $v = [];
+                    foreach ($getBaku as $vv) {
+                        $explode = explode(':', $vv);
+                        if (count($explode) >= 2) {
+                            $startCell = $explode[0];
+                            $endCell = $explode[1];
+
+                            if (strlen($startCell) >= 2) {
+                                $split = str_split($startCell, 1);
+                                $split1 = str_split($endCell, 1);
+                                $cov = intval($split[1]);
+                                $cov1 = intval($split1[1]);
+                                $rangeData = $worksheet->rangeToArray($split[0] . $cov . ':' . $split1[0] . $cov1);
+                                if (!empty($rangeData)) {
+                                    $v = array_merge($v, $rangeData);
+                                    $v = reset($rangeData);
+                                }
+                            }
+                        }
+                    }
+                    $headTable = json_encode($v);
+                }
+            }
+            // Proses parameter
+            $param = [];
+            foreach ($getHeader as $valhead) {
+                //cek nama parameter di excel kosong atau tidak
+                if (isset($valhead[1]) && $valhead[1] !== null && $valhead[1] !== "" && !empty($valhead[1])) {
+                    //cek method di excel kosong atau tidak
+                    $lastValue = end($valhead);
+                    if ($lastValue == '-' || $lastValue === null) {
+                        $method = 'nama_regulasi = ? AND method IS NULL';
+                        $nameParam = Parameter::select('nama_lab')
+                            ->where('id_kategori', 4) // Kategori udara
+                            ->whereRaw($method, [$valhead[1]])
+                            ->first();
+                    } else {
+                        $nameParam = Parameter::select('nama_lab')
+                            ->where('id_kategori', 4) // Kategori udara
+                            ->where(function ($query) use ($valhead, $lastValue) {
+                                $query->where('nama_regulasi', $valhead[1])
+                                    ->orWhere('method', $lastValue);
+                            })
+                            ->first();
+                    }
+                    if ($nameParam == NULL) {
+                        array_push($param, $valhead[1]);
+                    } else {
+                        array_push($param, $nameParam->nama_lab);
+                    }
+                }
+            }
+
+            // Ambil data LHP, Sample, dan Jenis Sample
+            $lhpRow = $headerPositions['NOLHP']['row'];
+            $lhpCol = $headerPositions['NOLHP']['col'];
+            $kolomLhp = $this->number_to_alphabet($lhpCol + 1);
+            $barisLhp = $lhpRow + 2; // Data biasanya 1 baris setelah header
+
+            $sampleRow = $headerPositions['NOSAMPEL']['row'];
+            $sampleCol = $headerPositions['NOSAMPEL']['col'];
+            $kolomSam = $this->number_to_alphabet($sampleCol + 1);
+            $barisSam = $sampleRow + 2;
+
+            $jenisRow = $headerPositions['JENISSAMPEL']['row'];
+            $jenisCol = $headerPositions['JENISSAMPEL']['col'];
+            $kolomJen = $this->number_to_alphabet($jenisCol + 1);
+            $barisJen = $jenisRow + 2;
+
+            $noLhp = $worksheet->getCell($kolomLhp . $barisLhp)->getOldCalculatedValue()
+                ?? $worksheet->getCell($kolomLhp . $barisLhp)->getCalculatedValue()
+                ?? $worksheet->getCell($kolomLhp . $barisLhp)->getValue();
+            $noSample = $worksheet->getCell($kolomSam . $barisSam)->getOldCalculatedValue()
+                ?? $worksheet->getCell($kolomSam . $barisSam)->getCalculatedValue()
+                ?? $worksheet->getCell($kolomSam . $barisSam)->getValue();
+            $jenisSample = $worksheet->getCell($kolomJen . $barisJen)->getOldCalculatedValue()
+                ?? $worksheet->getCell($kolomJen . $barisJen)->getCalculatedValue()
+                ?? $worksheet->getCell($kolomJen . $barisJen)->getValue();
+
+            if (empty($noLhp)) {
+                return response()->json([
+                    'message' => 'No LHP tidak ditemukan atau kosong',
+                ], 400);
+            }
+
+            $noOrder = explode('/', $noLhp);
+
+            if (count($noOrder) > 2) {
+                $noLhp = implode('/', array_slice($noOrder, 0, 2));
+            }
+
+            //get detail informasi pelanggan
+            $pelanggan = OrderDetail::with('orderHeader')->where('cfr', str_replace(' ', '', $noLhp))
+                ->where('no_sampel', str_replace(' ', '', $noSample))
+                ->first();
+
+            if ($jenisSample == 'Emisi Sumber Tidak Bergerak') {
+                $insert = [];
+                if ($pelanggan == null) {
+                    $insert = [
+                        'no_order' => str_replace(' ', '', $noOrder[0]),
+                        'no_lhp' => str_replace(' ', '', $noLhp),
+                        'no_sampel' => $noSample,
+                        'parameter_uji' => json_encode($param),
+                        'sub_kategori' => $jenisSample,
+                        'header_table' => $headTable,
+                    ];
+                } else {
+                    $insert = [
+                        'no_order' => str_replace(' ', '', $noOrder[0]),
+                        'no_lhp' => str_replace(' ', '', $noLhp),
+                        'no_sampel' => $noSample,
+                        'parameter_uji' => json_encode($param),
+                        'sub_kategori' => $jenisSample,
+                        'nama_pelanggan' => $pelanggan->nama_perusahaan,
+                        'deskripsi_titik' => $pelanggan->keterangan_1,
+                        'tanggal_sampling' => $pelanggan->tanggal_sampling,
+                        // 'header_table' => $headTable,
+                        'no_quotation' => $pelanggan->orderHeader->no_document,
+                        // 'status_sampling' => $pelanggan->no_quotation,
+                        'alamat_sampling' => $pelanggan->orderHeader->alamat_sampling,
+                        'kategori' => ucwords(explode('-', $pelanggan->kategori_2)[1]),
+                        'id_kategori_2' => explode('-', $pelanggan->kategori_2)[0],
+                        'id_kategori_3' => explode('-', $pelanggan->kategori_3)[0],
+                        // 'methode_sampling' => "", // gtau drmna
+                        // 'tgl_lhp' => date('Y-m-d'),
+                        // 'periode_analisa' =>
+                        'regulasi' => $pelanggan->regulasi,
+                        // 'regulasi_custom' =>
+                        // 'keterangan' =>
+                        // 'suhu' =>
+                        // 'cuaca' =>
+                        // 'arah_angin' =>
+                        // 'kelembapan' =>
+                        // 'kec_angin' =>
+                        // 'titik_koordinat' =>
+                        'nama_karyawan' => 'Abidah Walfathiyyah',
+                        'jabatan_karyawan' => 'Technical Control Supervisor',
+                        // 'file_qr' => ''
+                        // 'file_lhp' =>
+                        // 'tanggal_lhp' =>
+                        // 'created_by' =>
+                        // 'created_at' => date('Y-m-d H:i:s'),
+                        // 'updated_by' =>
+                        // 'updated_at' =>
+                        // 'approved_by' =>
+                        // 'approved_at' =>
+                        // 'rejected_by' =>
+                        // 'rejected_at' =>
+                        // 'deleted_by' =>
+                        // 'deleted_at' =>
+                        // 'is_generated' =>
+                        // 'generated_by' =>
+                        // 'generated_at' =>
+                        // 'is_emailed' =>
+                        // 'emailed_by' =>
+                        // 'emailed_at' =>
+                        // 'id_token' =>
+                        // 'expired' =>
+                    ];
+                }
+                // dd($insert);
+                if (DB::table('lhps_emisic_header')->where('no_lhp', $noLhp)->exists()) {
+                    return response()->json([
+                        'message' => 'No LHP sudah ada',
+                    ], 400);
+                }
+                
+                $header = DB::table('lhps_emisic_header')->insertGetId($insert);
+    
+                $LhpsEmisiCHeader = LhpsEmisiCHeader::find($header);
+                $file_qr = new GenerateQrDocumentLhp();
+                if ($path = $file_qr->insert('LHP_EMISI', $LhpsEmisiCHeader, 'Abidah Walfathiyyah')) {
+                    $LhpsEmisiCHeader->file_qr = $path;
+                    $LhpsEmisiCHeader->save();
+                }
+    
+                // dump(DB::table('lhps_emisi_header')->find($header));
+    
+                /**
+                 * LHPS UDARA DETAIL
+                 */
+                $no = 0;
+                foreach ($getHeader as $value) {
+                    //cek nama parameter di excel kosong atau tidak
+                    if (isset($value[1]) && $value[1] !== null && $value[1] !== "" && !empty($value[1])) {
+                        //cek method di excel kosong atau tidak
+                        $lastValue = end($value);
+                        if ($lastValue == '-' || $lastValue === null) {
+                            $method = 'nama_regulasi = ? AND method IS NULL';
+                            $nameParam = Parameter::select('nama_lab')
+                                ->where('id_kategori', 4) // Kategori udara
+                                ->whereRaw($method, [$value[1]])
+                                ->first();
+                        } else {
+                            $nameParam = Parameter::select('nama_lab')
+                                ->where('id_kategori', 4) // Kategori udara
+                                ->where(function ($query) use ($value, $lastValue) {
+                                    $query->where('nama_regulasi', $value[1])
+                                        ->orWhere('method', $lastValue);
+                                })
+                                ->first();
+                        }
+    
+                        $parameter_lab = ($nameParam == NULL) ? NULL : $nameParam->nama_lab;
+    
+                        $val = [];
+                        if (!empty($headerPositions['BAKUMUTU'])) {
+                            $bakuRow = $headerPositions['BAKUMUTU']['row'];
+                            $bakuCol = $headerPositions['BAKUMUTU']['col'];
+                            $kolomBak = $this->number_to_alphabet($bakuCol + 1);
+                            $barisMutu = $bakuRow + 3; // Data baku mutu biasanya 2 baris setelah header
+    
+                            $cellValue = $worksheet->getCell($kolomBak . $barisMutu)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomBak . $barisMutu)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomBak . $barisMutu)->getValue();
+    
+                            if ($cellValue !== null && $cellValue !== '') {
+                                $getBaku = $this->filterArray($worksheet->getMergeCells(), $kolomBak . ($bakuRow + 1));
+                                // get baku mutu untuk lhps detail
+                                foreach ($getBaku as $values) {
+                                    $explode = explode(':', $values);
+                                    if (count($explode) >= 2) {
+                                        $startCell = $explode[0];
+                                        $endCell = $explode[1];
+    
+                                        if (strlen($startCell) >= 2) {
+                                            $split = str_split($startCell, 1);
+                                            $split1 = str_split($endCell, 1);
+                                            $cov = intval($split[1]) + 1 + $no; // Sesuaikan dengan baris data
+                                            $cov1 = intval($split1[1]) + 1 + $no;
+                                            $rangeData = $worksheet->rangeToArray($split[0] . $cov . ':' . $split1[0] . $cov1);
+                                            if (!empty($rangeData)) {
+                                                foreach ($rangeData as $k => $vals) {
+                                                    $val = $vals;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                $kolomHas = $this->number_to_alphabet($bakuCol + 1);
+                                $barisHas = $bakuRow + 2 + $no; // Sesuaikan dengan nomor urut data
+                                $cellValue = $worksheet->getCell($kolomHas . $barisHas)->getOldCalculatedValue()
+                                    ?? $worksheet->getCell($kolomHas . $barisHas)->getCalculatedValue()
+                                    ?? $worksheet->getCell($kolomHas . $barisHas)->getValue();
+                                $val = [$cellValue];
+                            }
+                        }
+    
+                        // get durasi detail (khusus untuk udara)
+                        $durasi = null;
+                        if (!empty($headerPositions['DURASI'])) {
+                            $durasiRow = $headerPositions['DURASI']['row'];
+                            $durasiCol = $headerPositions['DURASI']['col'];
+                            $kolomDur = $this->number_to_alphabet($durasiCol + 1);
+                            $barisDur = $durasiRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $durasi = $worksheet->getCell($kolomDur . $barisDur)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomDur . $barisDur)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomDur . $barisDur)->getValue();
+                        }
+    
+                        // get satuan detail
+                        $satuan = null;
+                        if (!empty($headerPositions['SATUAN'])) {
+                            $satuanRow = $headerPositions['SATUAN']['row'];
+                            $satuanCol = $headerPositions['SATUAN']['col'];
+                            $kolomSat = $this->number_to_alphabet($satuanCol + 1);
+                            $barisSat = $satuanRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $satuan = $worksheet->getCell($kolomSat . $barisSat)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomSat . $barisSat)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomSat . $barisSat)->getValue();
+                        }
+    
+                        //get hasil uji untuk lhps detail
+                        $hasilUji = null;
+                        if (!empty($headerPositions['HASILUJI'])) {
+                            $hasilRow = $headerPositions['HASILUJI']['row'];
+                            $hasilCol = $headerPositions['HASILUJI']['col'];
+                            $kolomHas = $this->number_to_alphabet($hasilCol + 1);
+                            $barisHas = $hasilRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $hasilUji = $worksheet->getCell($kolomHas . $barisHas)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomHas . $barisHas)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomHas . $barisHas)->getValue();
+                        }
+    
+                        $insert = [
+                            'id_header' => $header,
+                            'akr' => isset($value[0]) ? $value[0] : null,
+                            'parameter_lab' => $parameter_lab,
+                            'parameter' => $value[1],
+                            // 'durasi' => $durasi,
+                            'C' => $hasilUji,
+                            'baku_mutu' => json_encode($val),
+                            'satuan' => $satuan,
+                            'spesifikasi_metode' => $lastValue !== '-' ? str_replace('\\', '', $lastValue) : null,
+                        ];
+    
+                        $detail = DB::table('lhps_emisic_detail')->insert($insert);
+                    }
+                    $no++;
+                }
+                // dump(DB::table('lhps_emisi_detail')->where('id_header', $header)->get());
+                DB::commit();
+                return response()->json([
+                    'message' => 'Data berhasil diimport',
+                    'header_id' => $header
+                ], 201);
+            } else {
+                $insert = [];
+                if ($pelanggan == null) {
+                    $insert = [
+                        'no_order' => str_replace(' ', '', $noOrder[0]),
+                        'no_lhp' => str_replace(' ', '', $noLhp),
+                        'no_sampel' => $noSample,
+                        'parameter_uji' => json_encode($param),
+                        'sub_kategori' => $jenisSample,
+                        'header_table' => $headTable,
+                    ];
+                } else {
+                    $insert = [
+                        'no_order' => str_replace(' ', '', $noOrder[0]),
+                        'no_lhp' => str_replace(' ', '', $noLhp),
+                        // 'no_sampel' => $noSample,
+                        'parameter_uji' => json_encode($param),
+                        'sub_kategori' => $jenisSample,
+                        'nama_pelanggan' => $pelanggan->nama_perusahaan,
+                        // 'deskripsi_titik' => $pelanggan->keterangan_1,
+                        'tanggal_sampling' => $pelanggan->tanggal_sampling,
+                        // 'header_table' => $headTable,
+                        'no_quotation' => $pelanggan->orderHeader->no_document,
+                        // 'status_sampling' => $pelanggan->no_quotation,
+                        'alamat_sampling' => $pelanggan->orderHeader->alamat_sampling,
+                        'id_kategori_2' => explode('-', $pelanggan->kategori_2)[0],
+                        'id_kategori_3' => explode('-', $pelanggan->kategori_3)[0],
+                        // 'methode_sampling' => "", // gtau drmna
+                        'tgl_lhp' => date('Y-m-d'),
+                        // 'periode_analisa' =>
+                        'regulasi' => $pelanggan->regulasi,
+                        // 'regulasi_custom' =>
+                        // 'keterangan' =>
+                        // 'suhu' =>
+                        // 'cuaca' =>
+                        // 'arah_angin' =>
+                        // 'kelembapan' =>
+                        // 'kec_angin' =>
+                        // 'titik_koordinat' =>
+                        'nama_karyawan' => 'Abidah Walfathiyyah',
+                        'jabatan_karyawan' => 'Technical Control Supervisor',
+                        // 'file_qr' => ''
+                        // 'file_lhp' =>
+                        // 'tanggal_lhp' =>
+                        // 'created_by' =>
+                        'created_at' => date('Y-m-d H:i:s'),
+                        // 'updated_by' =>
+                        // 'updated_at' =>
+                        // 'approved_by' =>
+                        // 'approved_at' =>
+                        // 'rejected_by' =>
+                        // 'rejected_at' =>
+                        // 'deleted_by' =>
+                        // 'deleted_at' =>
+                        // 'is_generated' =>
+                        // 'generated_by' =>
+                        // 'generated_at' =>
+                        // 'is_emailed' =>
+                        // 'emailed_by' =>
+                        // 'emailed_at' =>
+                        // 'id_token' =>
+                        // 'expired' =>
+                    ];
+                }
+                // dd($insert);
+                if (DB::table('lhps_emisi_header')->where('no_lhp', $noLhp)->exists()) {
+                    return response()->json([
+                        'message' => 'No LHP sudah ada',
+                    ], 400);
+                }
+    
+                $header = DB::table('lhps_emisi_header')->insertGetId($insert);
+    
+                $LhpsEmisiHeader = LhpsEmisiHeader::find($header);
+                $file_qr = new GenerateQrDocumentLhp();
+                if ($path = $file_qr->insert('LHP_EMISI', $LhpsEmisiHeader, 'Abidah Walfathiyyah')) {
+                    $LhpsEmisiHeader->file_qr = $path;
+                    $LhpsEmisiHeader->save();
+                }
+    
+                // dump(DB::table('lhps_emisi_header')->find($header));
+    
+                /**
+                 * LHPS UDARA DETAIL
+                 */
+                $no = 0;
+                foreach ($getHeader as $value) {
+                    //cek nama parameter di excel kosong atau tidak
+                    if (isset($value[1]) && $value[1] !== null && $value[1] !== "" && !empty($value[1])) {
+                        //cek method di excel kosong atau tidak
+                        $lastValue = end($value);
+                        if ($lastValue == '-' || $lastValue === null) {
+                            $method = 'nama_regulasi = ? AND method IS NULL';
+                            $nameParam = Parameter::select('nama_lab')
+                                ->where('id_kategori', 4) // Kategori udara
+                                ->whereRaw($method, [$value[1]])
+                                ->first();
+                        } else {
+                            $nameParam = Parameter::select('nama_lab')
+                                ->where('id_kategori', 4) // Kategori udara
+                                ->where(function ($query) use ($value, $lastValue) {
+                                    $query->where('nama_regulasi', $value[1])
+                                        ->orWhere('method', $lastValue);
+                                })
+                                ->first();
+                        }
+    
+                        $parameter_lab = ($nameParam == NULL) ? NULL : $nameParam->nama_lab;
+    
+                        $val = [];
+                        if (!empty($headerPositions['BAKUMUTU'])) {
+                            $bakuRow = $headerPositions['BAKUMUTU']['row'];
+                            $bakuCol = $headerPositions['BAKUMUTU']['col'];
+                            $kolomBak = $this->number_to_alphabet($bakuCol + 1);
+                            $barisMutu = $bakuRow + 3; // Data baku mutu biasanya 2 baris setelah header
+    
+                            $cellValue = $worksheet->getCell($kolomBak . $barisMutu)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomBak . $barisMutu)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomBak . $barisMutu)->getValue();
+    
+                            if ($cellValue !== null && $cellValue !== '') {
+                                $getBaku = $this->filterArray($worksheet->getMergeCells(), $kolomBak . ($bakuRow + 1));
+                                // get baku mutu untuk lhps detail
+                                foreach ($getBaku as $values) {
+                                    $explode = explode(':', $values);
+                                    if (count($explode) >= 2) {
+                                        $startCell = $explode[0];
+                                        $endCell = $explode[1];
+    
+                                        if (strlen($startCell) >= 2) {
+                                            $split = str_split($startCell, 1);
+                                            $split1 = str_split($endCell, 1);
+                                            $cov = intval($split[1]) + 1 + $no; // Sesuaikan dengan baris data
+                                            $cov1 = intval($split1[1]) + 1 + $no;
+                                            $rangeData = $worksheet->rangeToArray($split[0] . $cov . ':' . $split1[0] . $cov1);
+                                            if (!empty($rangeData)) {
+                                                foreach ($rangeData as $k => $vals) {
+                                                    $val = $vals;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                $kolomHas = $this->number_to_alphabet($bakuCol + 1);
+                                $barisHas = $bakuRow + 2 + $no; // Sesuaikan dengan nomor urut data
+                                $cellValue = $worksheet->getCell($kolomHas . $barisHas)->getOldCalculatedValue()
+                                    ?? $worksheet->getCell($kolomHas . $barisHas)->getCalculatedValue()
+                                    ?? $worksheet->getCell($kolomHas . $barisHas)->getValue();
+                                $val = [$cellValue];
+                            }
+                        }
+    
+                        // get durasi detail (khusus untuk udara)
+                        $durasi = null;
+                        if (!empty($headerPositions['DURASI'])) {
+                            $durasiRow = $headerPositions['DURASI']['row'];
+                            $durasiCol = $headerPositions['DURASI']['col'];
+                            $kolomDur = $this->number_to_alphabet($durasiCol + 1);
+                            $barisDur = $durasiRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $durasi = $worksheet->getCell($kolomDur . $barisDur)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomDur . $barisDur)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomDur . $barisDur)->getValue();
+                        }
+    
+                        // get satuan detail
+                        $satuan = null;
+                        if (!empty($headerPositions['SATUAN'])) {
+                            $satuanRow = $headerPositions['SATUAN']['row'];
+                            $satuanCol = $headerPositions['SATUAN']['col'];
+                            $kolomSat = $this->number_to_alphabet($satuanCol + 1);
+                            $barisSat = $satuanRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $satuan = $worksheet->getCell($kolomSat . $barisSat)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomSat . $barisSat)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomSat . $barisSat)->getValue();
+                        }
+    
+                        //get hasil uji untuk lhps detail
+                        $hasilUji = null;
+                        if (!empty($headerPositions['HASILUJI'])) {
+                            $hasilRow = $headerPositions['HASILUJI']['row'];
+                            $hasilCol = $headerPositions['HASILUJI']['col'];
+                            $kolomHas = $this->number_to_alphabet($hasilCol + 1);
+                            $barisHas = $hasilRow + 3 + $no; // Sesuaikan dengan nomor urut data
+                            $hasilUji = $worksheet->getCell($kolomHas . $barisHas)->getOldCalculatedValue()
+                                ?? $worksheet->getCell($kolomHas . $barisHas)->getCalculatedValue()
+                                ?? $worksheet->getCell($kolomHas . $barisHas)->getValue();
+                        }
+    
+                        $insert = [
+                            'id_header' => $header,
+                            // 'akr' => isset($value[0]) ? $value[0] : null,
+                            'parameter_lab' => $parameter_lab,
+                            'parameter' => $value[1],
+                            'durasi' => $durasi,
+                            'hasil_uji' => $hasilUji,
+                            'baku_mutu' => json_encode($val),
+                            'satuan' => $satuan,
+                            // 'methode' => $lastValue !== '-' ? str_replace('\\', '', $lastValue) : null,
+                        ];
+    
+                        $detail = DB::table('lhps_emisi_detail')->insert($insert);
+                    }
+                    $no++;
+                }
+                // dump(DB::table('lhps_emisi_detail')->where('id_header', $header)->get());
+                DB::commit();
+                return response()->json([
+                    'message' => 'Data berhasil diimport',
+                    'header_id' => $header
+                ], 201);
+            }
+        } catch (Exception $e) {
+            DB::rollBack();
+            // Log error untuk debugging
+            \Log::error('Import LHP Emisi Error: ' . $e->getMessage());
+            \Log::error('Import LHP Emisi Trace: ' . $e->getTraceAsString());
 
             return response()->json([
                 'message' => 'Terjadi kesalahan saat mengimport data',
