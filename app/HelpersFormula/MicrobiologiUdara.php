@@ -11,14 +11,11 @@ class MicrobiologiUdara
 		try {
 			$processed = array();
 
-			if ($data->metode == 'sieve_impactor') {
-				$rumus = $data->nilai_feller;
-				$processed['hasil'] = $rumus;
-			} else {
-				$jumlah_coloni = array_sum($data->jumlah_coloni) / count($data->jumlah_coloni);
-				$rumus = number_format(($jumlah_coloni / $data->volume), 4);
-				$processed['hasil'] = $rumus;
-			}
+            $jumlah_coloni = array_sum($data->jumlah_coloni) / count($data->jumlah_coloni);
+            $rumus = number_format(($jumlah_coloni / $data->volume), 4);
+            $processed['hasil'] = $rumus;
+
+            $processed['satuan'] = 'CFU/m3';
 
 			return $processed;
 		} catch (\Exception $e) {
