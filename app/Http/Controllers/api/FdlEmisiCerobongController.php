@@ -218,7 +218,6 @@ class FdlEmisiCerobongController extends Controller
                     'C1' => $data_kalkulasi['C2'] ?? null,
                     'C2' => $data_kalkulasi['C3'] ?? null,
                     'C3' => $data_kalkulasi['C4'] ?? null,
-                    'C3_persen' => $data_kalkulasi['C3_persen'] ?? null,
                     'C4' => $data_kalkulasi['C5'] ?? null,
                     'C5' => $data_kalkulasi['C6'] ?? null,
                     'C6' => $data_kalkulasi['C7'] ?? null,
