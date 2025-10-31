@@ -9,7 +9,7 @@ class FungalAngkaKuman {
     public function index($data, $id_parameter, $mdl) {
 
         // C = Jumlah Koloni (CFU) / Volume udara (mL)
-        $rumus = number_format(($data->jumlah_coloni / $data->volume), 2);
+        $rumus = number_format(((array_sum($data->jumlah_coloni) / count($data->jumlah_coloni)) / $data->volume), 2);
 
         $satuan = 'CFU/m3';
 
