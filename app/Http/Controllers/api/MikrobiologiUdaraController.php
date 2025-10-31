@@ -117,7 +117,7 @@ class MikrobiologiUdaraController extends Controller
             $data->deleted_by = $this->karyawan;
             $data->save();
 
-            $ws_value = WsValueUdara::where('lingkungan_header_id', $request->id)->where('is_active', true)->first();
+            $ws_value = WsValueUdara::where('id_microbiologi_header', $request->id)->where('is_active', true)->first();
             if($ws_value){
                 $ws_value->is_active = false;
                 $ws_value->save();
