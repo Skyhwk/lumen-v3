@@ -71,7 +71,6 @@ class GenerateHasilPengujianController extends Controller
             ->map(fn($item) => LinkLhp::where('no_order', $item->no_order)->exists() ? null : $item->makeHidden(['id']))
             ->filter()
             ->values();
-
         return response()->json($results, 200);
     }
 
