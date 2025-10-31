@@ -159,7 +159,10 @@ class FdlEmisiCerobongController extends Controller
                     }
                 }
             }
-            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx'];
+            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 
+                'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx', 'Effisiensi Pembakaran', 'Eff. Pembakaran', 
+                'CO', 'C O', 'SO2 (P)', 'CO (P)', 'O2 (P)'
+            ];
                         // ambil nama parameter dari order
             $orderedParameters = array_column($parameterList, 'nama');
 

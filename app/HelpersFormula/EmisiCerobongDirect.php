@@ -13,13 +13,49 @@ class EmisiCerobongDirect {
         $paramOpasitas = ["Opasitas", "Opasitas (ESTB)"];
         $paramSuhu = ["Suhu"];
         $paramVelocity = ["Velocity"];
-        $paramNO2 = ["NO2","NOx","NO"];
+        $paramNO2 = ["NO2","NOx"];
+        $paramNO = ["NO"];
         $paramSO2 = ["SO2"];
+        $paramCO = ["CO"];
         $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
+        $paramSO2P = ["SO2 (P)"];
+        $paramCOP = ["CO (P)"];
+        $paramO2P = ["O2 (P)"];
+
 
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
 
+        $so2_p = $data->so2_populasi;
+        $no2_p = $data->no2_populasi;
+        $o2_p = $data->o2_populasi;
+        $co2_p = $data->co2_populasi;
+        $velocity_p = $data->velocity_populasi;
+        $suhu_cerobong_p = $data->t_flue_populasi;
+        $nox_p = $data->nox_populasi;
+        $no_p = $data->no_populasi;
+        $co_p = $data->co_populasi;
+
+        function avgFromJson($json) {
+            if (!$json) return null;
+
+            $values = json_decode($json, true);
+            if (!is_array($values)) return null;
+
+            $numbers = array_map('floatval', array_values($values));
+            return count($numbers) > 0 ? array_sum($numbers) / count($numbers) : null;
+        }
+
+        // gunakan fungsi untuk rata-rata
+        $avg_so2p = avgFromJson($so2_p);
+        $avg_no2p = avgFromJson($no2_p);
+        $avg_o2p = avgFromJson($o2_p);
+        $avg_co2p = avgFromJson($co2_p);
+        $avg_velocity_p = avgFromJson($velocity_p);
+        $avg_suhu_cerobong_p = avgFromJson($suhu_cerobong_p);
+        $avg_nox_p = avgFromJson($nox_p);
+        $avg_no_p = avgFromJson($no_p);
+        $avg_co_p = avgFromJson($co_p);
 
         $satuan = NULL;
 
@@ -60,25 +96,19 @@ class EmisiCerobongDirect {
             if (!empty($angka)) {
                 // Hitung rata-rata
                 $c10 = array_sum($angka) / count($angka);
+                $c10 = $c10 < 0.1 ? '<0.1' : round($c10, 1);
                 $satuan = 'm/s';
             } else {
                 $c10 = null; // atau 0 tergantung kebutuhan
                 $satuan = null;
             }
-        } 
-        else if (in_array($id_parameter, $paramNO2)) {
+        } else if (in_array($id_parameter, $paramNO2)) {
             $c5 = round($data->NO2, 1);
-            if($id_parameter != "NO"){
-                $c4 = round(($c5 / 46) * 24.45, 1);
-                $c3 = round($c4 * 1000, 1);
-            }
+            $c4 = round(($c5 / 46) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
             $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
-
             $c5 = $c5 < 1 ? '<1' : $c5;
-            if($id_parameter == "NO"){
-                $c5 = $c5 < 0.1 ? '<0.1' : $c5;
-            }
             $satuan = 'ppm';
         } else if (in_array($id_parameter, $paramSO2)) {
             $pa = $data->tekanan_udara;
@@ -95,6 +125,37 @@ class EmisiCerobongDirect {
             $co2 = $data->CO2;
             $nCO2 = round(($co2 * 10000 * 44 * 1000) / 21500, 1);
             $c6 = ($nCO2 / ($nCO2 + $data->CO)) * 100/100;
+            $satuan = '%';
+        } else if(in_array($id_parameter, $paramNO)){
+            $c5 = round($data->NO, 1);
+            $c2 = round((($c5 / 30) * 24.45) * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $c5 = $c5 < 0.1 ? '<0.1' : $c5;
+            $satuan = 'ppm';
+        } else if(in_array($id_parameter, $paramCO)){
+            $c5 = round($data->CO, 1);
+            $c4 = round(($c5 / 28.01) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $c5 = $c5 < 0.02 ? '<0.02' : $c5;
+            $satuan = 'ppm';
+        } else if(in_array($id_parameter, $paramSO2P)){
+            $c5 = round($avg_so2p, 1);
+            $c4 = round(($c5 / 64.066) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $satuan = 'ppm';
+        } else if (in_array($id_parameter, $paramCOP)) {
+            $c5 = round($avg_cop, 1);
+            $c4 = round(($c5 / 28.01) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $satuan = 'ppm';
+        } else if(in_array($id_parameter, $paramO2P)){
+            $c6 = round($avg_no2p, 1);
             $satuan = '%';
         }
         
