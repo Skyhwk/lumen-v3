@@ -4,7 +4,6 @@ namespace App\HelpersFormula;
 
 class EmisiCerobongDirect {
     public function index($data, $id_parameter, $mdl){
-
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
 
@@ -14,6 +13,13 @@ class EmisiCerobongDirect {
         $paramOpasitas = ["Opasitas", "Opasitas (ESTB)"];
         $paramSuhu = ["Suhu"];
         $paramVelocity = ["Velocity"];
+        $paramNO2 = ["NO2","NOx","NO"];
+        $paramSO2 = ["SO2"];
+        $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
+
+        $pa = $data->tekanan_udara;
+        $ta = $data->suhu;
+
 
         $satuan = NULL;
 
@@ -59,6 +65,37 @@ class EmisiCerobongDirect {
                 $c10 = null; // atau 0 tergantung kebutuhan
                 $satuan = null;
             }
+        } 
+        else if (in_array($id_parameter, $paramNO2)) {
+            $c5 = round($data->NO2, 1);
+            if($id_parameter != "NO"){
+                $c4 = round(($c5 / 46) * 24.45, 1);
+                $c3 = round($c4 * 1000, 1);
+            }
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+
+            $c5 = $c5 < 1 ? '<1' : $c5;
+            if($id_parameter == "NO"){
+                $c5 = $c5 < 0.1 ? '<0.1' : $c5;
+            }
+            $satuan = 'ppm';
+        } else if (in_array($id_parameter, $paramSO2)) {
+            $pa = $data->tekanan_udara;
+            $ta = $data->suhu;
+            $c5 = round($data->SO2, 1);
+            $c4 = round(($c5 / 64.066) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+
+            $c5 = $c5 < 1 ? '<1' : $c5;
+            $satuan = 'ppm';
+        } else if(in_array($id_parameter, $paramEffisiensiPembakaran)){
+            $co2 = $data->CO2;
+            $nCO2 = round(($co2 * 10000 * 44 * 1000) / 21500, 1);
+            $c6 = ($nCO2 / ($nCO2 + $data->CO)) * 100/100;
+            $satuan = '%';
         }
         
         return [

@@ -159,7 +159,7 @@ class FdlEmisiCerobongController extends Controller
                     }
                 }
             }
-            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 'O2 (ESTB)', 'Opasitas (ESTB)'];
+            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx'];
                         // ambil nama parameter dari order
             $orderedParameters = array_column($parameterList, 'nama');
 
@@ -179,6 +179,10 @@ class FdlEmisiCerobongController extends Controller
                     return response()->json(['message' => 'Formula is Coming Soon'], 404);
                 } else{
                     $function = $functionObj->function;
+                }
+
+                if($value == 'NO2' || $value == 'NOx' || $value == 'NO' || $value == 'SO2'){
+                    $function = 'EmisiCerobongDirect';
                 }
 
                 $data_kalkulasi = AnalystFormula::where('function', $function)
