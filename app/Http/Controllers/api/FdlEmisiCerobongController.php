@@ -168,6 +168,7 @@ class FdlEmisiCerobongController extends Controller
 
             // filter, hanya parameter yang ada di whitelist
             $parameters = array_values(array_intersect($orderedParameters, $paramList));
+            
 
             foreach ($parameters as $key => $value) {
                 $parameter = Parameter::where('nama_lab', $value)
@@ -187,12 +188,12 @@ class FdlEmisiCerobongController extends Controller
                 if($value == 'NO2' || $value == 'NOx' || $value == 'NO' || $value == 'SO2'){
                     $function = 'EmisiCerobongDirect';
                 }
-
+                
                 $data_kalkulasi = AnalystFormula::where('function', $function)
-                    ->where('data', $data)
-                    ->where('id_parameter', $parameter->nama_lab)
-                    ->process();
-
+                ->where('data', $data)
+                ->where('id_parameter', $parameter->nama_lab)
+                ->process();
+                
                 $header = EmisiCerobongHeader::firstOrNew([
                     'no_sampel' => $data->no_sampel,
                     'id_parameter' => $parameter->id,
