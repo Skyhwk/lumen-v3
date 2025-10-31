@@ -26,7 +26,7 @@ class MikrobiologiUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request){
         $data = MicrobioHeader::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
+            ->where('is_approved', $request->is_approved)
             ->where('microbio_header.is_active', true)
             ->where('template_stp', $request->template_stp);
 
