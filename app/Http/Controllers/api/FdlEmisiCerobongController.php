@@ -160,12 +160,13 @@ class FdlEmisiCerobongController extends Controller
                 }
             }
             $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 'O2 (ESTB)', 'Opasitas (ESTB)'];
-            $parameters = ['CO2', 'Debu', 'NO2', 'Opasitas', 'SO2', 'Velocity'];
+                        // ambil nama parameter dari order
+            $orderedParameters = array_column($parameterList, 'nama');
 
-            // Filter agar hanya yang ada di $paramList
-            $filteredParameters = array_values(array_intersect($parameters, $paramList));
+            // filter, hanya parameter yang ada di whitelist
+            $parameters = array_values(array_intersect($orderedParameters, $paramList));
 
-            foreach ($filteredParameters as $key => $value) {
+            foreach ($parameters as $key => $value) {
                 $parameter = Parameter::where('nama_lab', $value)
                     ->where('nama_kategori', 'Emisi')
                     ->where('is_active', true)
