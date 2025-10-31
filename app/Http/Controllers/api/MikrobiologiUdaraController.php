@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Models\LingkunganHeader;
 use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -79,7 +79,7 @@ class MikrobiologiUdaraController extends Controller
 
         DB::beginTransaction();
         try {
-            $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
+            $data = MicrobioHeader::where('id', $request->id)->where('is_active', true)->first();
             if($data->is_approved == 1){
                 return response()->json([
                     'status' => false,
@@ -111,13 +111,13 @@ class MikrobiologiUdaraController extends Controller
     public function deleteData(Request $request){
         DB::beginTransaction();
         try {
-            $data = LingkunganHeader::where('id', $request->id)->first();
+            $data = MicrobioHeader::where('id', $request->id)->first();
             $data->is_active = false;
             $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->deleted_by = $this->karyawan;
             $data->save();
 
-            $ws_value = WsValueLingkungan::where('lingkungan_header_id', $request->id)->where('is_active', true)->first();
+            $ws_value = WsValueUdara::where('lingkungan_header_id', $request->id)->where('is_active', true)->first();
             if($ws_value){
                 $ws_value->is_active = false;
                 $ws_value->save();
