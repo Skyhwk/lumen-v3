@@ -1449,10 +1449,6 @@ class InputParameterController extends Controller
 								'status' => $result->status
 							], $result->status);
 						}
-					}else if (!in_array($par->id, $param)) {
-						return response()->json([
-							'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
-							], 401);
 					}
 					else {
 						$result = self::HelperEmisiCerobong($request, $stp, $po, $datlapangan);
@@ -3311,6 +3307,7 @@ class InputParameterController extends Controller
 				$suhu = (float) $data_lapangan->suhu;
 				$nil_pv = self::penentuanPv($suhu);
 				$status_par = $request->parameter;
+
 				if ($request->parameter == 'HF') {
 					$dat = json_decode($data_lapangan->HF);
 				} else if ($request->parameter == 'NH3') {
@@ -3319,14 +3316,16 @@ class InputParameterController extends Controller
 					$dat = json_decode($data_lapangan->HCI);
 				} else if ($request->parameter == 'H2S') {
                     $dat = json_decode($data_lapangan->H2S);
-                } else if($request->parameter == 'Debu' || $request->parameter == 'Partikulat' || $request->parameter == 'Cd' || $request->parameter == 'Cr' || $request->parameter == 'Pb' || $request->parameter == 'Zn') {
-					// dd($data_lapangan);
+                } else if (in_array($request->parameter, [
+					'Debu', 'Partikulat',
+					'As', 'Cd', 'Co', 'Cr', 'Cu', 'Hg', 'Mn', 'Pb',
+					'Sb', 'Se', 'Tl', 'Zn', 'Sn', 'Al', 'Ba', 'Be', 'Bi'
+				])) {
 					$dat = json_decode($data_lapangan->partikulat);
 					$status_par = 'Partikulat';
-				}
+				}  
 
 				if ($data_lapangan->tipe == '1') {
-					// dd($dat);
 					if($dat != null) {
 						if (is_string($dat[0])) {
 						$nil_dry = explode("; ", $dat[0]);
