@@ -108,7 +108,7 @@ class EmisiCerobongDirect {
             $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
             $c5 = $c5 < 1 ? '<1' : $c5;
-            $satuan = 'ppm';
+            $satuan = 'mg/Nm3';
         } else if (in_array($id_parameter, $paramSO2)) {
             $pa = $data->tekanan_udara;
             $ta = $data->suhu;
