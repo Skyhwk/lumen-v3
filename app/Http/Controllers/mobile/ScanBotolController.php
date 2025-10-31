@@ -38,7 +38,7 @@ class ScanBotolController extends Controller
             $dataDisplay = null;
             $parameters = null;
             if (isset($datachek[1])) {
-                $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
+                $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                 $data = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
@@ -76,7 +76,7 @@ class ScanBotolController extends Controller
                     ->where('is_active', true)
                     ->first();
                 // dd($data);
-                $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->first();
+                $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
                 $dataDisplay = json_decode($data->persiapan);
                 $parameters = json_decode($persiapan->parameters);
 

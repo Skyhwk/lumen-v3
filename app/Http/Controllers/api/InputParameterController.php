@@ -3804,7 +3804,7 @@ class InputParameterController extends Controller
 		if ($fdl) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				$luas = $fdl->luas;
+				$luas = $fdl->luas_area_swab;
 
 			} catch (\Exception $e) {
 				return (object)[
