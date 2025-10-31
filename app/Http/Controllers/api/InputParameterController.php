@@ -3745,7 +3745,7 @@ class InputParameterController extends Controller
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
-				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? $data_kalkulasi['data_pershift'] : null;
+				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
 				$header->save();
 
 				// $data_kalkulasi['id_microbio_header'] = $header->id;
