@@ -44,7 +44,8 @@ class LingkunganHidupPM_TSP
 
         $use_vstd = ['TSP','TSP (24 Jam)'];
         $use_V = ['TSP (6 Jam)','TSP (8 Jam)'];
-        if (in_array($data->tipe_data, $use_vstd)) {
+        // dd(in_array($data->tipe_data, $use_vstd));
+        if (in_array($data->parameter, $use_vstd)) {
             $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
             if((int)$Vstd <= 0) {
                 $C = 0;
@@ -71,10 +72,7 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
-            $w1 = $data->w1;
-            $w2 = $data->w2;
-
-        } else if (in_array($data->tipe_data, $use_V)) {
+        } else if (in_array($data->parameter, $use_V)) {
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));
             // dd($dur, $rerataFlow, $V);
@@ -102,12 +100,13 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
-            $w1 = $data->w1;
-            $w2 = $data->w2;
-            $b1 = $data->b1;
-            $b2 = $data->b2;
-            // dd($C);
         }
+
+        $w1 = $data->w1;
+        $w2 = $data->w2;
+        $b1 = $data->b1 ?? null;
+        $b2 = $data->b2 ?? null;
+
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'flow' => $data->average_flow,

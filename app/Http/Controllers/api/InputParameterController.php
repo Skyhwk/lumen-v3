@@ -1441,6 +1441,7 @@ class InputParameterController extends Controller
 				], 403);
 			}else {
 					$param = [365, 368, 364, 360, 377, 354, 358, 378, 385, 362];
+                    $gravimetri_emisi = ['Isokinetik (All)','Iso-Debu'];
 					if($par->id == '355'){
 						$result = self::HelperEmisiCl2($request, $stp, $po, $datlapangan);
 						if($result->status){
@@ -1449,7 +1450,18 @@ class InputParameterController extends Controller
 								'status' => $result->status
 							], $result->status);
 						}
-					}
+					}else if(in_array($request->parameter, $gravimetri_emisi)){
+                        $datlapangan = DataLapanganIsokinetikHasil::where('no_sampel', $request->no_sample)->first();
+                        $result = self::HelperEmisiGravimetri($request, $stp, $po, $datlapangan);
+						if($result->status) {
+							return response()->json([
+								'message'=> $result->message,
+								'status' => $result->status,
+								'line' => $result->line ?? '',
+								'file' => $result->file ?? ''
+							], $result->status);
+						}
+                    }
 					else {
 						$result = self::HelperEmisiCerobong($request, $stp, $po, $datlapangan);
 						if($result->status) {
@@ -3323,7 +3335,7 @@ class InputParameterController extends Controller
 				])) {
 					$dat = json_decode($data_lapangan->partikulat);
 					$status_par = 'Partikulat';
-				}  
+				}
 
 				if ($data_lapangan->tipe == '1') {
 					if($dat != null) {
@@ -3483,6 +3495,82 @@ class InputParameterController extends Controller
 			];
 		}
 	}
+
+    public function HelperEmisiGravimetri($request, $stp, $order_detail, $data_lapangan){
+        DB::beginTransaction();
+		try {
+			if($data_lapangan){
+                $volume_gas = $data_lapangan->v_gas;
+            }else{
+                return (object)[
+                    'message' => 'Data Lapangan Tidak Ditemukan',
+                    'status' => 404
+                ];
+            }
+
+			$parame = $request->parameter;
+			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori', $stp->category_id)->where('is_active', true)->first();
+
+			$functionObj = Formula::where('id_parameter', $data_parameter->id)->where('is_active', true)->first();
+			if (!$functionObj) {
+				return (object)[
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+					'status' => 404
+				];
+			}
+			$function = $functionObj->function;
+			$data_parsing = $request->all();
+			$data_parsing = (object)$data_parsing;
+            $data_parsing->volume_gas = $volume_gas;
+			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
+
+			$data_kalkulasi = AnalystFormula::where('function', $function)
+				->where('data', $data_parsing)
+				->where('id_parameter', $data_parameter->id)
+				->process();
+
+			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
+				return (object)[
+					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+					'status' => 404
+				];
+			}
+			// dd($stp->id);
+
+			$data = new EmisiCerobongHeader;
+			$data->no_sampel = $request->no_sample;
+			$data->parameter = $request->parameter;
+			$data->template_stp = $request->id_stp;
+			$data->id_parameter = $data_parameter->id;
+			$data->note = $request->note;
+			$data->tanggal_terima = $order_detail->tanggal_terima;
+			$data->created_by = $this->karyawan;
+			$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->data_analis = json_encode((object) $formatted_data_analis);
+			$data->save();
+
+			// dd($result);
+			$data_kalkulasi['id_emisi_cerobong_header'] = $data->id;
+			$data_kalkulasi['no_sampel'] = $request->no_sample;
+			$data_kalkulasi['created_by'] = $this->karyawan;
+			WsValueEmisiCerobong::create($data_kalkulasi);
+
+			DB::commit();
+			return (object)[
+				'message' => 'Value Parameter berhasil disimpan.!',
+				'par' => $request->parameter,
+				'status' => 200
+			];
+		} catch (\Exception $e) {
+			DB::rollBack();
+			return (object)[
+				'message' => 'Gagal input data: '.$e->getMessage(),
+				'status' => 500,
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
+			];
+		}
+    }
 
 	public function HelperDustFall($request, $stp, $order_detail, $header){
 		if($header) {

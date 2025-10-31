@@ -34,6 +34,7 @@ class QtOrderedController extends Controller
         try {
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation.*') // tambahkan ini
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
                     ->where('request_quotation.is_approved', true)
@@ -42,6 +43,7 @@ class QtOrderedController extends Controller
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation_kontrak_H.*')
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
                     ->where('request_quotation_kontrak_H.flag_status', 'ordered')
                     ->where('request_quotation_kontrak_H.is_approved', true)
@@ -49,7 +51,7 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc');
             }
-    
+
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -63,7 +65,7 @@ class QtOrderedController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
-    
+
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
