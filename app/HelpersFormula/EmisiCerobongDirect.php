@@ -36,6 +36,21 @@ class EmisiCerobongDirect {
         $no_p = $data->no_populasi;
         $co_p = $data->co_populasi;
 
+        // kalau semua null, keluar fungsi (jangan proses rata-rata)
+        if (
+            is_null($so2_p) &&
+            is_null($no2_p) &&
+            is_null($o2_p) &&
+            is_null($co2_p) &&
+            is_null($velocity_p) &&
+            is_null($suhu_cerobong_p) &&
+            is_null($nox_p) &&
+            is_null($no_p) &&
+            is_null($co_p)
+        ) {
+            return; // atau break; tergantung konteks
+        }
+
         function avgFromJson($json) {
             if (!$json) return null;
 
