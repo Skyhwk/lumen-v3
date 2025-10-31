@@ -2,20 +2,19 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\LingkunganHeader;
 use App\Models\OrderDetail;
-use App\Models\WsValueUdara;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\MicrobioHeader;
+use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class MikrobiologiUdaraController extends Controller
 {
     // public function index(Request $request){
-    //     $data = LingkunganHeader::with('ws_value', 'order_detail')
+    //     $data = MicrobioHeader::with('ws_value', 'order_detail')
     //     ->where('is_approved', $request->approve)
     //     ->where('is_active', true)
     //     ->where('template_stp', $request->template_stp)
