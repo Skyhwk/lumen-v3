@@ -191,7 +191,6 @@ class OrderHeader extends Sector
     {
         return $this->hasOne(CoverLhp::class, 'no_order', 'no_order')->where('is_active', true);
     }
-<<<<<<< HEAD
 
     public function holdHp()
     {
@@ -203,6 +202,4 @@ class OrderHeader extends Sector
         return $this->quotationKontrakH ?? $this->quotationNonKontrak ?? null;
     }
 
-=======
->>>>>>> 48e0dc08b20d9fd5055ccf8897fd7a1f35191714
 }
