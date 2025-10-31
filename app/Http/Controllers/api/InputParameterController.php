@@ -4217,6 +4217,22 @@ class InputParameterController extends Controller
         }
     }
 
+    public function getMicroUdara(Request $request)
+	{
+		try {
+			$data = DetailMicrobiologi::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('is_active', true)->get();
+			return response()->json([
+				'data' => $data
+			], 200);
+		} catch (\Exception $e) {
+			return response()->json([
+				'message' => 'Gagal mengambil data: ' . $e->getMessage(),
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
+			]);
+		}
+	}
+
     public function cekNoSample(Request $request){
         try {
             $data = OrderDetail::where('no_sampel', $request->no_sample)->where('kategori_2', $request->category)->where('is_active', true)->first();
