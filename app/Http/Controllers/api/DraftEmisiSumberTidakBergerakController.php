@@ -166,29 +166,29 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                     
                     // dd($request->custom_parameter);
-                    /*
-                    LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
-                    foreach ($request->custom_parameter as $page => $values) {
-                        foreach ($values as $param => $val) {
-                            $custom = new LhpsEmisiCCustom();
-                            $custom->id_header = $header->id;
-                            $custom->page = $page;
-                            $custom->parameter = $param;
-                            $custom->akr = $request->custom_akr[$page][$param] ?? null;
-                            $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
-                            $custom->C = $request->custom_C[$page][$param] ?? null;
-                            $custom->C1 = $request->custom_C1[$page][$param] ?? null;
-                            $custom->C2 = $request->custom_C2[$page][$param] ?? null;
-                            $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
-                            $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
-                            $custom->attr = $request->custom_attr[$page][$param] ?? null;
-                            $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
-                            $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
-                            $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
+                    
+                    // LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
+                    // foreach ($request->custom_parameter as $page => $values) {
+                    //     foreach ($values as $param => $val) {
+                    //         $custom = new LhpsEmisiCCustom();
+                    //         $custom->id_header = $header->id;
+                    //         $custom->page = $page;
+                    //         $custom->parameter = $param;
+                    //         $custom->akr = $request->custom_akr[$page][$param] ?? null;
+                    //         $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
+                    //         $custom->C = $request->custom_C[$page][$param] ?? null;
+                    //         $custom->C1 = $request->custom_C1[$page][$param] ?? null;
+                    //         $custom->C2 = $request->custom_C2[$page][$param] ?? null;
+                    //         $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
+                    //         $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
+                    //         $custom->attr = $request->custom_attr[$page][$param] ?? null;
+                    //         $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
+                    //         $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
+                    //         $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
 
-                            $custom->save();
-                        }
-                    } */
+                    //         $custom->save();
+                    //     }
+                    // }
 
 
 
@@ -229,7 +229,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         $header->save();
                     }
                 } catch (\Exception $e) {
-                    throw new \Exception("Error in header or detail assignment: " . $e->getMessage());
+                    throw new \Exception("Error in header or detail assignment: " . $e->getMessage() . "line " . $e->getLine() . "file : " .$e->getFile());
                 }
 
                 DB::commit();

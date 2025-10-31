@@ -13,6 +13,7 @@ class DebuPersonal
 
 			$Ta = floatval($data->average_suhu) + 273;
 			$Qs = null;
+			$C = null;
 			$C1 = null;
             $C2 = null;
             $C3 = null;

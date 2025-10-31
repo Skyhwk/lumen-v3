@@ -550,10 +550,10 @@ class DraftEmisiSumberBergerakController extends Controller
             $otherRegulations = [];
 
             // Ambil data dari lapangan (hasil uji kendaraan)
-            $no_sampel = OrderDetail::where('cfr', $request->cfr)
-                ->where('is_active', true)
-                ->pluck('no_sampel')
-                ->toArray();
+            $order_details = OrderDetail::where('cfr', $request->cfr)
+                ->where('is_active', true)->get();
+            // dd($order_details);
+            $no_sampel = $order_details->pluck('no_sampel')->toArray();
 
 
             $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
@@ -566,7 +566,6 @@ class DraftEmisiSumberBergerakController extends Controller
                     $baku = MasterBakumutu::where('id_regulasi', $lapangan->emisiOrder->id_regulasi)
                         ->where('is_active', true)
                         ->get();
-
                     $hc = $co = $op = '-';
                     foreach ($baku as $xx) {
                         if (in_array($xx->parameter, ['HC', 'HC (Bensin)']))
@@ -576,6 +575,8 @@ class DraftEmisiSumberBergerakController extends Controller
                         if (in_array($xx->parameter, ['Opasitas', 'Opasitas (Solar)']))
                             $op = $xx->baku_mutu;
                     }
+
+                    $tanggal_sampling = $order_details->where('no_sampel', $lapangan->no_sampel)->first()->tanggal_terima ?? null;
 
                     $mainData[] = [
                         'no_sampel' => $lapangan->no_sampel,
@@ -588,14 +589,13 @@ class DraftEmisiSumberBergerakController extends Controller
                         'baku_co' => $co,
                         'baku_hc' => $hc,
                         'baku_op' => $op,
-                        'tanggal_sampling' => $lapangan->tanggal_sampling ?? null,
+                        'tanggal_sampling' => $tanggal_sampling,
                         'status' => 'AKREDITASI'
                     ];
 
                 }
                 ;
             }
-
 
             // --- handle other regulasi jika ada
             if (!empty($request->other_regulasi)) {
@@ -698,6 +698,11 @@ class DraftEmisiSumberBergerakController extends Controller
                     $lhps->delete();
                 }
             }
+
+            OrderDetail::where('cfr', $data->cfr)
+                ->update([
+                    'status' => 1
+                ]);
 
             $data->status = 1;
             $data->save();
@@ -889,7 +894,11 @@ class DraftEmisiSumberBergerakController extends Controller
 
                 $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+<<<<<<< HEAD
+                
+=======
 
+>>>>>>> 48e0dc08b20d9fd5055ccf8897fd7a1f35191714
                 if($cekLink){
                         $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order,$this->karyawan, $periode);
                         $this->dispatch($job);

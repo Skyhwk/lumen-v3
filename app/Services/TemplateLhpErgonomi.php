@@ -5,6 +5,7 @@ use \Mpdf\Mpdf as PDF;
 use Illuminate\Support\Facades\View;
 use App\Models\DataLapanganErgonomi;
 use Carbon\Carbon;
+use App\Helpers\Helper;
 
 class TemplateLhpErgonomi
 {
@@ -22,8 +23,9 @@ class TemplateLhpErgonomi
             $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
             ->first();
-            $pengukuran = json_decode($dataRula->pengukuran);
             
+            $pengukuran = json_decode($dataRula->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
             $skor = 7;
             $tingkatResiko = '';
             $kategoriResiko = '';
@@ -53,6 +55,7 @@ class TemplateLhpErgonomi
             }
 
             $pengukuran->result = $result;
+            
             $personal = (object) [
                 "no_sampel" => $dataRula->no_sampel,
                 "nama_pekerja" => $dataRula->nama_pekerja,
@@ -78,45 +81,52 @@ class TemplateLhpErgonomi
     }
     
     public function ergonomiRwl($data = null,$cssGlobal='',$spesifik='',$ttd= null)
-    {
-        $mpdfConfig = [
-            'mode' => 'utf-8',
-            'format' => 'A4-L',
-            'margin_left' => 10,
-            'margin_right' => 10,
-            'margin_top' => 5,
-            'margin_bottom' => 15,
-        ];
-        $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
-            ->where('method', 5)
-            ->first();
-        $pengukuran = json_decode($dataRula->pengukuran);
-        
-        $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
-        $pengukuran->frekuensi = $avrageFrequesi;
-        $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
-        $pengukuran->jarak_vertikal = $dataRula->jarak_vertikal;
-        $pengukuran->kopling_tangan = $dataRula->kopling_tangan;
-        $pengukuran->durasi_jam_kerja = $dataRula->durasi_jam_kerja;
-        $pengukuran->berat_beban = $dataRula->berat_beban;
-        $personal = (object) [
-                "no_sampel" => $dataRula->no_sampel,
-                "nama_pekerja" => $dataRula->nama_pekerja,
-                "usia" => $dataRula->usia,
-                "lama_kerja" => $dataRula->lama_kerja,
-                "divisi" => $dataRula->divisi,
-                "jenis_kelamin" => $dataRula->jenis_kelamin,
-                "aktivitas_ukur" => $dataRula->aktivitas_ukur,
-                "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
-                "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
-                "periode_analisis" => null,
+    {   
+        try {
+            //code...
+            $mpdfConfig = [
+                'mode' => 'utf-8',
+                'format' => 'A4-L',
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'margin_top' => 5,
+                'margin_bottom' => 15,
             ];
-       
-        $pdf = new PDF($mpdfConfig);
-        $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
-        return $html;
+            $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+                ->where('method', 5)
+                ->first();
+            // $pengukuran = json_decode($dataRula->pengukuran);
+            $pengukuran = json_decode($dataRula->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
+            
+            $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
+            $pengukuran->frekuensi = $avrageFrequesi;
+            $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
+            $pengukuran->jarak_vertikal = $dataRula->jarak_vertikal;
+            $pengukuran->kopling_tangan = $dataRula->kopling_tangan;
+            $pengukuran->durasi_jam_kerja = $dataRula->durasi_jam_kerja;
+            $pengukuran->berat_beban = $dataRula->berat_beban;
+            $personal = (object) [
+                    "no_sampel" => $dataRula->no_sampel,
+                    "nama_pekerja" => $dataRula->nama_pekerja,
+                    "usia" => $dataRula->usia,
+                    "lama_kerja" => $dataRula->lama_kerja,
+                    "divisi" => $dataRula->divisi,
+                    "jenis_kelamin" => $dataRula->jenis_kelamin,
+                    "aktivitas_ukur" => $dataRula->aktivitas_ukur,
+                    "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
+                    "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
+                    "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
+                    "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
+                    "periode_analisis" => null,
+                ];
+        //    dd($pengukuran);
+            $pdf = new PDF($mpdfConfig);
+            $html = View::make('ergonomirwl',compact('pengukuran','personal','ttd'))->render();
+            return $html;
+        } catch (\Exception $th) {
+            throw $th;
+        }
     }
 
     public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$ttd= null)
@@ -137,7 +147,10 @@ class TemplateLhpErgonomi
                 ->where('method', 1)
                 ->first();
     
-            $pengukuran = json_decode($dataRwl->pengukuran);
+            // $pengukuran = json_decode($dataRwl->pengukuran);
+            $pengukuran = json_decode($dataRwl->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
+            
             $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
             $personal = (object) [
@@ -174,7 +187,7 @@ class TemplateLhpErgonomi
             $pengukuran->sebelum->skor_kanan_sebelum = $kananSebelumOnly;
             $pengukuran->setelah->skor_kiri_setelah = $kiriSetelahOnly;
             $pengukuran->setelah->skor_kanan_setelah = $kananSetelahOnly;
-    
+            
             // dd($pengukuran); //kategori_risiko, tindakan_perbaikan
             foreach (['sebelum', 'setelah'] as $waktu) {
                 # code...
@@ -204,7 +217,7 @@ class TemplateLhpErgonomi
             return $html;  
         }catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
-        } catch (\Throwable $th) {
+        } catch (\Exception $th) {
             throw $th;
         }
     }
@@ -229,7 +242,9 @@ class TemplateLhpErgonomi
                 ->where('method', 2)
                 ->first();
     
-            $pengukuran = json_decode($dataReba->pengukuran);
+            //$pengukuran = json_decode($dataReba->pengukuran);
+            $pengukuran = json_decode($dataReba->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
             $skor = $pengukuran->final_skor_reba;
             $tingkatResiko = '';
             $kategoriResiko = '';
@@ -313,7 +328,9 @@ class TemplateLhpErgonomi
                 ->where('method', 4)
                 ->first();
     
-            $pengukuran = json_decode($dataRosa->pengukuran);
+            // $pengukuran = json_decode($dataRosa->pengukuran);
+            $pengukuran = json_decode($dataRosa->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
             $skor = $pengukuran->final_skor_rosa;
             $skor = 5;
             $tingkatResiko = '';
@@ -420,11 +437,14 @@ class TemplateLhpErgonomi
             ];
              
     
-            $pengukuran = json_decode($dataRwl->pengukuran,true);
+            // $pengukuran = json_decode($dataRwl->pengukuran,true);
+            $pengukuran = json_decode($dataRwl->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
+
             
-            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran['Tubuh_Bagian_Atas']);
+            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran->tubuh_bagian_atas);
             
-            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran['Tubuh_Bagian_Bawah']);
+            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran->tubuh_bagian_bawah);
             
             $groupedAtas  = $this->groupByKategori($dataAtas);
             $groupedBawah  = $this->groupByKategori($dataBawah);
@@ -457,7 +477,9 @@ class TemplateLhpErgonomi
                 ->where('method', 7)
                 ->first();
     
-            $pengukuran = json_decode($dataRwl->pengukuran);
+            // $pengukuran = json_decode($dataRwl->pengukuran);
+            $pengukuran = json_decode($dataRwl->pengukuran, true);
+            $pengukuran = Helper::normalize_format_key($pengukuran,true);
             $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
             $personal = (object) [
@@ -476,9 +498,9 @@ class TemplateLhpErgonomi
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
             
-            $masa_kerja = $pengukuran->Identitas_Umum->{'Masa Kerja'};
-            $fisik = $pengukuran->Identitas_Umum->{'Lelah Fisik'};
-            $mental = $pengukuran->Identitas_Umum->{'Lelah Mental'};
+            $masa_kerja = $pengukuran->identitas_umum->masa_kerja;
+            $fisik = $pengukuran->identitas_umum->lelah_fisik;
+            $mental = $pengukuran->identitas_umum->lelah_mental;
             $masa_kerja_map = [
                 '0' => 'Kurang dari 3 Bulan',
                 '1' => '3 Bulan - 1 Tahun',
@@ -494,9 +516,9 @@ class TemplateLhpErgonomi
                 "4" => "Unknown"
             ];
     
-            $pengukuran->Identitas_Umum->{'Masa Kerja'} =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
-            $pengukuran->Identitas_Umum->{'Lelah Mental'} =$fisikMentalMap[$mental] ?? 'Unknow';
-            $pengukuran->Identitas_Umum->{'Lelah Fisik'} =$fisikMentalMap[$fisik] ?? 'Unknow';
+            $pengukuran->identitas_umum->masa_kerja =$masa_kerja_map[$masa_kerja] ?? 'Unknow';
+            $pengukuran->identitas_umum->lelah_mental =$fisikMentalMap[$mental] ?? 'Unknow';
+            $pengukuran->identitas_umum->lelah_fisik =$fisikMentalMap[$fisik] ?? 'Unknow';
             
             $html = View::make('ergonomgontrak',compact('pengukuran','personal','cssGlobal','spesifik','ttd'))->render();
             return $html;

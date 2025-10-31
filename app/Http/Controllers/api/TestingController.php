@@ -2651,17 +2651,18 @@ class TestingController extends Controller
 
     public function fixDetailStructure(Request $request)
     {
+       
         try {
             // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
-
+            
             $fixedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
-
+             
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
