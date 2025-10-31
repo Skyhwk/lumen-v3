@@ -60,7 +60,7 @@ class HoldHpController extends Controller
         if(!$data) {
             return response()->json(['message' => 'Tidak ada data order Tersebut', 'status' => '404'], 404);
         }
-        HoldHp::firstOrCreate(
+        HoldHp::updateOrCreate(
             ['no_order' => $request->order], 
             [
                 'keterangan' => $request->keterangan,
