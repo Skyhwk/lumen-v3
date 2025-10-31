@@ -565,7 +565,7 @@ class ImportLhp extends BaseController
                 }
                 $results[] = $row_content;
             }
-
+            dd($results);
             // Cari posisi header-header yang diperlukan
             $headerPositions = $this->findHeaderPositions($results, 'udara');
 
