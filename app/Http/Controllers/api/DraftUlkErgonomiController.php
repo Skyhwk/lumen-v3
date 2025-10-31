@@ -1597,7 +1597,7 @@ class DraftUlkErgonomiController extends Controller
                 ], 500);
             }
         }
-    }
+    } 
 
     // Amang
     public function handleReject(Request $request)
