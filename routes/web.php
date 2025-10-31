@@ -53,7 +53,9 @@ $router->group(['middleware' => ['cors']], function () use ($router) {
     $router->post('/api/soundMeterData', 'external\SoundMeterController@sensorData');
 });
 
-
+$router->post('/api/import-lhp-air', 'external\ImportLhp@indexAir');
+$router->post('/api/import-lhp-udara', 'external\ImportLhp@indexUdara');
+$router->post('/api/import-lhp-kebisingan', 'external\ImportLhp@indexKebisingan');
 
 
 $router->group(['prefix' => 'director'], function () use ($router) {

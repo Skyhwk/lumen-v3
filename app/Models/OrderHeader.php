@@ -10,6 +10,11 @@ class OrderHeader extends Sector
     public $timestamps = false;
     protected $guarded = [];
 
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
+    }
+
     public function all_quote()
     {
         return $this->hasMany(AllQuote::class, 'no_document', 'no_document');
@@ -186,6 +191,7 @@ class OrderHeader extends Sector
     {
         return $this->hasOne(CoverLhp::class, 'no_order', 'no_order')->where('is_active', true);
     }
+<<<<<<< HEAD
 
     public function holdHp()
     {
@@ -197,4 +203,6 @@ class OrderHeader extends Sector
         return $this->quotationKontrakH ?? $this->quotationNonKontrak ?? null;
     }
 
+=======
+>>>>>>> 48e0dc08b20d9fd5055ccf8897fd7a1f35191714
 }

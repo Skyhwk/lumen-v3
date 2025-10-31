@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Models\QuotationNonKontrak;
-use App\Models\{QuotationKontrakH, QuotationKontrakD};
+use App\Models\{AlasanVoidQt, QuotationKontrakH, QuotationKontrakD};
 use App\Models\MasterCabang;
 use App\Models\OrderHeader;
 use App\Models\SamplingPlan;
@@ -456,6 +456,13 @@ class QtOrderedController extends Controller
                 $data->deleted_by = $this->karyawan;
                 $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                $alasanVoidQt = new AlasanVoidQt();
+                $alasanVoidQt->no_quotation = $data->no_document;
+                $alasanVoidQt->alasan = $request->reason;
+                $alasanVoidQt->voided_by = $this->karyawan;
+                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+                $alasanVoidQt->save();
 
                 DB::commit();
                 return response()->json([
