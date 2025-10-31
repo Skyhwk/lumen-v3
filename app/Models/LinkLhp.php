@@ -14,4 +14,8 @@ class LinkLhp extends Sector
     public function token() {
         return $this->belongsTo(GenerateLink::class, 'id_token', 'id');
     }
+
+    public function order() {
+        return $this->belongsTo(OrderHeader::class, 'no_order', 'no_order');
+    }
 }

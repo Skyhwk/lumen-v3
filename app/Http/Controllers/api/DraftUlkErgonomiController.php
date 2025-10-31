@@ -7,10 +7,11 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile,PengesahanLhp};
+use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile,PengesahanLhp,LinkLhp};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 
 class DraftUlkErgonomiController extends Controller
 {
@@ -1572,12 +1573,20 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+
+                    if($cekLink){
+                        $job = new CombineLHPJob($data_order->cfr, $data->nama_file, $data_order->no_order, $this->karyawan, $data_order->periode);
+                        $this->dispatch($job);
+                    }
+                    
                 }
                 DB::commit();
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil diapprove'
+                    'message' => 'Data draft Ergonomi  no sampel ' . $data->no_sampel . ' berhasil diapprove'
                 ], 200);
             } catch (\Exception $th) {
                 DB::rollback();
@@ -2837,10 +2846,10 @@ class DraftUlkErgonomiController extends Controller
             };
 
             // Buat 3 versi PDF
-            $pdfDraft = $createPDF('draft')[0];
+            //$pdfDraft = $createPDF('draft')[0];
             $pdfLhp = $createPDF('lhp')[0]; 
-            $pdfLhpDigital = $createPDF('lhp_digital')[0];
-            $pdfFile->name_file = $createPDF('draft')[1];
+            //$pdfLhpDigital = $createPDF('lhp_digital')[0];
+            $pdfFile->name_file = $createPDF('lhp')[1];
             $pdfFile->save();
 
             return response()->json('data berhasil di render',200);
