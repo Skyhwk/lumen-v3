@@ -9,7 +9,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use Illuminate\Http\Request;
-use App\Services\getBawahan;
+use App\Services\GetBawahan;
 use App\Services\SalesKpiMonthly;
 
 use App\Models\TargetSales;
