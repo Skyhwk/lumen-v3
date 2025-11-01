@@ -1797,7 +1797,7 @@ class TestingController extends Controller
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
-                    Log::error('Error processing document: ' . $data->no_document, [
+                    FacadesLog::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine()
                     ]);
@@ -1812,7 +1812,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
+            FacadesLog::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
             ]);
@@ -2649,46 +2649,148 @@ class TestingController extends Controller
         ];
     }
 
+    // public function fixDetailStructure(Request $request)
+    // {
+    //     try {
+    //         // Ambil data yang mungkin struktur detailnya berubah
+    //         $dataList = QuotationKontrakH::with('quotationKontrakD')
+    //             ->whereIn('no_document', $request->no_document)
+    //             ->where('is_active', true)
+    //             ->get();
+
+    //         $fixedCount = 0;
+    //         $errorCount = 0;
+    //         $errorDetails = [];
+
+    //         foreach ($dataList as $data) {
+    //             DB::beginTransaction();
+    //             try {
+    //                 $dataDetail = $data->quotationKontrakD;
+
+    //                 $index = 1;
+    //                 foreach ($dataDetail as $detail) {
+    //                     $dsDetail = json_decode($detail->data_pendukung_sampling, true);
+    //                     // $dsDetail = reset($dsDetail);
+    //                     // dd($dsDetail);
+    //                     // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
+    //                     $originalStructure = (object) [
+    //                         $index => (object) [
+    //                             "periode_kontrak" => $detail->periode_kontrak,
+    //                             "data_sampling" => $dsDetail
+    //                         ]
+    //                     ];
+    //                     // dd($dsDetail, $originalStructure);
+
+    //                     $detail->data_pendukung_sampling = json_encode($originalStructure);
+    //                     $detail->save();
+    //                     $index++;
+    //                     $fixedCount++;
+    //                 }
+
+    //                 // dd($dataDetail);
+
+    //                 DB::commit();
+    //                 return response()->json([
+    //                     'message' => 'Fix detail structure completed',
+    //                     "data" => $originalStructure
+    //                 ]);
+
+    //             } catch (Throwable $th) {
+    //                 DB::rollback();
+    //                 $errorCount++;
+    //                 $errorDetails[] = [
+    //                     'document' => $data->no_document,
+    //                     'error' => $th->getMessage()
+    //                 ];
+    //                 Log::error('Error fixing detail structure: ' . $data->no_document, [
+    //                     'error' => $th->getMessage(),
+    //                     'trace' => $th->getTraceAsString()
+    //                 ]);
+    //             }
+    //         }
+
+    //         return response()->json([
+    //             'message' => 'Fix detail structure completed',
+    //             'fixed' => $fixedCount,
+    //             'errors' => $errorCount,
+    //             'total_documents' => count($dataList),
+    //             'error_details' => $errorDetails
+    //         ], 200);
+
+    //     } catch (Throwable $th) {
+    //         DB::rollback();
+    //         Log::error('System error in fixDetailStructure', [
+    //             'error' => $th->getMessage(),
+    //             'trace' => $th->getTraceAsString()
+    //         ]);
+
+    //         return response()->json([
+    //             'message' => 'Terjadi kesalahan sistem',
+    //             'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
+    //         ], 500);
+    //     }
+    // }
+
     public function fixDetailStructure(Request $request)
     {
        
         try {
-            // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
             
             $fixedCount = 0;
+            $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
              
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
-                    $dataDetail = $data->quotationKontrakD;
-
-                    $index = 1;
-                    foreach ($dataDetail as $detail) {
+                    foreach ($data->quotationKontrakD as $detail) {
                         $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-                        // $dsDetail = reset($dsDetail);
-                        // dd($dsDetail);
-                        // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
+
+                        // ⚙️ 1. Cek apakah sudah sesuai struktur (sudah punya "periode_kontrak")
+                        $isValidStructure = false;
+
+                        if (is_array($dsDetail)) {
+                            foreach ($dsDetail as $key => $item) {
+
+                                // 🔹 Case 1: Struktur lama tapi sudah dikonversi (pakai key angka dan ada periode_kontrak)
+                                if (is_array($item) && array_key_exists('periode_kontrak', $item)) {
+                                    $isValidStructure = true;
+                                    break;
+                                }
+
+                                // 🔹 Case 2: Format array langsung [{ "periode_kontrak": ..., "data_sampling": ... }]
+                                if (array_key_exists('periode_kontrak', $dsDetail)) {
+                                    $isValidStructure = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if ($isValidStructure) {
+                            // ✅ Sudah sesuai struktur → skip
+                            $skippedCount++;
+                            continue;
+                        }
+
+                        // ⚙️ 2. Kalau belum sesuai, bentuk ulang struktur
+                        $index = 1;
                         $originalStructure = (object) [
                             $index => (object) [
                                 "periode_kontrak" => $detail->periode_kontrak,
                                 "data_sampling" => $dsDetail
                             ]
                         ];
-                        // dd($dsDetail, $originalStructure);
 
                         $detail->data_pendukung_sampling = json_encode($originalStructure);
                         $detail->save();
-                        $index++;
+
                         $fixedCount++;
                     }
-
-                    // dd($dataDetail);
 
                     DB::commit();
                 } catch (Throwable $th) {
@@ -2708,12 +2810,12 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'Fix detail structure completed',
                 'fixed' => $fixedCount,
+                'skipped' => $skippedCount,
                 'errors' => $errorCount,
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
         } catch (Throwable $th) {
-            DB::rollback();
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
