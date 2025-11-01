@@ -352,7 +352,7 @@ class DraftUdaraGetaranController extends Controller
             if (in_array("Getaran (LK) TL", $request->param) || in_array("Getaran (LK) ST", $request->param)) {
                 $fileName = LhpTemplate::setDataDetail($renderDetail)
                             ->setDataHeader($header)
-                            ->useLampiran(true)
+                            // ->useLampiran(true)
                             ->setDataCustom($groupedByPage)
                             ->whereView('DraftGetaranPersonal')
                             ->render('downloadLHPFinal');
@@ -448,7 +448,7 @@ class DraftUdaraGetaranController extends Controller
             if($dataHeader->sub_kategori == "Getaran (Lengan & Tangan)" || $dataHeader->sub_kategori == "Getaran (Seluruh Tubuh)"){
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
-                    ->useLampiran(true)
+                    // ->useLampiran(true)
                     ->setDataCustom($groupedByPage)
                     ->whereView('DraftGetaranPersonal')
                     ->render('downloadLHPFinal');
