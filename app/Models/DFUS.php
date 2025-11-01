@@ -30,6 +30,10 @@ class DFUS extends Sector
         return $logs->get();
     }
 
+    public function keterangan(){
+        return $this->hasOne(DFUSKeterangan::class, 'id', 'dfus_id');
+    }
+
     // public function getLogWebphoneAttribute()
     // {
     //     $masterKaryawan = MasterKaryawan::where('nama_lengkap', $this->sales_penanggung_jawab)->first();

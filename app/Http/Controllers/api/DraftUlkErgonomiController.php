@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile,PengesahanLhp,LinkLhp};
+use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
@@ -1619,15 +1619,22 @@ class DraftUlkErgonomiController extends Controller
                 // Lingkungan Kerja
                 $data = DraftErgonomiFile::where('no_sampel',$data_order->no_sampel)
                     ->first();
+
                 if ($data != null) {
                     $data_order->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data_order->rejected_by = $this->karyawan;
+                    $data_order->status = 0;
                     $data_order->save();
 
                     
                     $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->rejected_by = $this->karyawan;
-                    $data->save();
+                    // $data->save();
+
+                    $data_history = $data->replicate();
+                    $data_history->setTable((new DraftErgonomiFileHistory())->getTable());
+
+                    $data->delete();
                     
                     HistoryAppReject::insert([
                         'no_lhp' => $data_order->cfr,
@@ -1644,7 +1651,7 @@ class DraftUlkErgonomiController extends Controller
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil diapprove'
+                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil di reject'
                 ], 200);
             } catch (\Exception $th) {
                 DB::rollback();

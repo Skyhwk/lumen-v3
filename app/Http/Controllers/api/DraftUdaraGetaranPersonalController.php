@@ -336,7 +336,7 @@ class DraftUdaraGetaranPersonalController extends Controller
                 ->toArray();
             $fileName = LhpTemplate::setDataDetail(LhpsGetaranDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
-                ->useLampiran(true)
+                // ->useLampiran(true)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftGetaranPersonal')
                 ->render('downloadLHPFinal');
@@ -417,6 +417,7 @@ class DraftUdaraGetaranPersonalController extends Controller
             } else {
                 $fileName = LhpTemplate::setDataDetail($detail)
                     ->setDataHeader($dataHeader)
+                    ->useLampiran(true)
                     ->whereView('DraftGetaran')
                     ->render('downloadLHPFinal');
             }

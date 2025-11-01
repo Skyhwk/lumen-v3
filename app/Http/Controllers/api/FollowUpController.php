@@ -12,6 +12,7 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use App\Models\DFUS;
+use App\Models\DFUSKeterangan;
 use App\Models\KontakPelangganBlacklist;
 use App\Models\OrderHeader;
 use App\Models\MasterPelanggan;
@@ -587,5 +588,10 @@ class FollowUpController extends Controller
         $writer->save($path . $fileName);
 
         return response()->json(['data' => $fileName], 200);
+    }
+
+    public function getDetailKeterangan(Request $request) {
+        $keterangan = DFUSKeterangan::where('dfus_id', $request->id)->first();
+        return response()->json(['data' => $keterangan], 200);
     }
 }

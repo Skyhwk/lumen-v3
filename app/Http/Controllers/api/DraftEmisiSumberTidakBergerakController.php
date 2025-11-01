@@ -150,8 +150,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         $detail->akr = $request->akr[$key] ?? null;
                         $detail->parameter_lab = $request->parameter_lab[$key] ?? null;
                         $detail->C = $request->C[$key] ?? null;
-                        $detail->C1 = $request->C1[$key] ?? null;
-                        $detail->C2 = $request->C2[$key] ?? null;
+                        // $detail->C1 = $request->C1[$key] ?? null;
+                        // $detail->C2 = $request->C2[$key] ?? null;
                         $detail->terukur = $request->terukur[$key] ?? null;
                         $detail->terkoreksi = $request->terkoreksi[$key] ?? null;
                         $detail->attr = $request->attr[$key] ?? null;
@@ -167,28 +167,30 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     
                     // dd($request->custom_parameter);
                     
-                    // LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
-                    // foreach ($request->custom_parameter as $page => $values) {
-                    //     foreach ($values as $param => $val) {
-                    //         $custom = new LhpsEmisiCCustom();
-                    //         $custom->id_header = $header->id;
-                    //         $custom->page = $page;
-                    //         $custom->parameter = $param;
-                    //         $custom->akr = $request->custom_akr[$page][$param] ?? null;
-                    //         $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
-                    //         $custom->C = $request->custom_C[$page][$param] ?? null;
-                    //         $custom->C1 = $request->custom_C1[$page][$param] ?? null;
-                    //         $custom->C2 = $request->custom_C2[$page][$param] ?? null;
-                    //         $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
-                    //         $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
-                    //         $custom->attr = $request->custom_attr[$page][$param] ?? null;
-                    //         $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
-                    //         $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
-                    //         $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
-
-                    //         $custom->save();
-                    //     }
-                    // }
+                    LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
+                    if(isset($request->custom_parameter)){
+                        foreach ($request->custom_parameter as $page => $values) {
+                            foreach ($values as $param => $val) {
+                                $custom = new LhpsEmisiCCustom();
+                                $custom->id_header = $header->id;
+                                $custom->page = $page;
+                                $custom->parameter = $param;
+                                $custom->akr = $request->custom_akr[$page][$param] ?? null;
+                                $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
+                                $custom->C = $request->custom_C[$page][$param] ?? null;
+                                // $custom->C1 = $request->custom_C1[$page][$param] ?? null;
+                                // $custom->C2 = $request->custom_C2[$page][$param] ?? null;
+                                $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
+                                $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
+                                $custom->attr = $request->custom_attr[$page][$param] ?? null;
+                                $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
+                                $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
+                                $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
+    
+                                $custom->save();
+                            }
+                        }
+                    }
 
 
 
@@ -218,14 +220,14 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                         $header->file_lhp = $fileName;
 
-                        if ($header->is_revisi == 1) {
-                            $header->is_revisi = 0;
-                            $header->is_generated = 0;
-                            $header->count_revisi++;
-                            if ($header->count_revisi > 2) {
-                                $this->handleApprove($request, false);
-                            }
-                        }
+                        // if ($header->is_revisi == 1) {
+                        //     $header->is_revisi = 0;
+                        //     $header->is_generated = 0;
+                        //     $header->count_revisi++;
+                        //     if ($header->count_revisi > 2) {
+                        //         $this->handleApprove($request, false);
+                        //     }
+                        // }
                         $header->save();
                     }
                 } catch (\Exception $e) {
@@ -359,6 +361,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $data_entry = array();
                 $data_custom = array();
                 $cek_regulasi = array();
+                $methodUsed = [];
 
                 foreach ($cek_lhp->lhpsEmisiCDetail->toArray() as $key => $val) {
                     $data_entry[$key] = [
@@ -367,12 +370,14 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         'parameter' => $val['parameter'],
                         'parameter_lab' => $val['parameter_lab'],
                         'C' => $val['C'],
-                        'C1' => $val['C1'],
-                        'C2' => $val['C2'],
+                        // 'C1' => $val['C1'],
+                        // 'C2' => $val['C2'],
                         'satuan' => $val['satuan'],
                         'methode' => $val['spesifikasi_metode'],
                         'baku_mutu' => $val['baku_mutu'],
                     ];
+
+                    $methodUsed[] = $val['spesifikasi_metode'];
                 }
 
                 if (isset($request->other_regulasi) && !empty($request->other_regulasi)) {
@@ -430,8 +435,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                                     'parameter' => $val['parameter'],
                                     'parameter_lab' => $val['parameter_lab'],
                                     'C' => $val['C'],
-                                    'C1' => $val['C1'],
-                                    'C2' => $val['C2'],
+                                    // 'C1' => $val['C1'],
+                                    // 'C2' => $val['C2'],
                                     'satuan' => $val['satuan'],
                                     'methode' => $val['spesifikasi_metode'],
                                     'baku_mutu' => $val['baku_mutu'],
@@ -450,11 +455,14 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     ->values()
                     ->toArray();
 
+                $methodUsed = array_unique($methodUsed);
+                $returnMethods = array_merge($defaultMethods, $methodUsed);
+
                 return response()->json([
                     'status' => true,
                     'data' => $data_entry,
                     'next_page' => $data_custom,
-                    'spesifikasi_method' => $defaultMethods,
+                    'spesifikasi_method' => $returnMethods,
 
                 ], 201);
             } else {
@@ -524,32 +532,78 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     {
         $param = $val->parameter_emisi;
 
+        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
+            ->where('id_parameter', $param->id)
+            ->first();
+        $satuan = $bakumutu ? $bakumutu->satuan : null;
         $entry = [
             'id' => $val->id,
             'no_sampel' => $val->no_sampel,
             'parameter' => $param->nama_regulasi,
             'parameter_lab' => $val->parameter,
-            'C' => $val->ws_value_cerobong->C,
-            'C1' => $val->ws_value_cerobong->C1,
-            'C2' => $val->ws_value_cerobong->C2,
+            'C' => self::getHasilUji($val, $satuan),
+            // 'C1' => $val->ws_value_cerobong->C1,
+            // 'C2' => $val->ws_value_cerobong->C2,
             'satuan' => $param->satuan,
             'methode' => $param->method,
             'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
         ];
 
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-            ->where('id_parameter', $param->id)
-            ->first();
-
+        
+        
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
             $entry['methode'] = $bakumutu->method;
-            $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
+            $entry['baku_mutu'] = $bakumutu->baku_mutu;
             $methodsUsed[] = $bakumutu->method;
         }
 
         return $entry;
     }
+
+    private function getHasilUji($val, $satuan)
+    {
+        $cerobong = $val->ws_value_cerobong;
+
+        switch ($satuan) {
+            case 'ug/m3':
+                return $cerobong->C2;
+
+            case 'mg/Nm3':
+                return $cerobong->C1 ?? $cerobong->C;
+
+            case 'ug/Nm3':
+                return $cerobong->C;
+
+            case 'mg/m3':
+                return $cerobong->C3;
+
+            case 'ppm':
+                return $cerobong->C4 ?? $cerobong->C;
+
+            case '%':
+                return $cerobong->C5 ?? $cerobong->C3_persen;
+
+            case '°C':
+                return $cerobong->C6;
+
+            case 'g/gmol':
+                return $cerobong->C7;
+
+            case 'm3/s':
+                return $cerobong->C8;
+
+            case 'm/s':
+                return $cerobong->C9;
+
+            case 'kg/tahun':
+                return $cerobong->C10;
+
+            default:
+                return $cerobong->C1 ?? $cerobong->C;
+        }
+    }
+
 
     
 
