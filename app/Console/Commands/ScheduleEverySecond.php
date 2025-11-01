@@ -8,7 +8,9 @@ use App\Helpers\WorkerReassign;
 use App\Helpers\WorkerSummaryParameter;
 use App\Helpers\WorkerSummaryQSD;
 use App\Helpers\WorkerApproveAnalyst;
+use App\Helpers\WorkerUpdateKpiSales;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class ScheduleEverySecond extends Command
 {
@@ -25,9 +27,11 @@ class ScheduleEverySecond extends Command
 
                 WorkerSummaryQSD::run();
 
-                WorkerApproveAnalyst::run();
+                // WorkerApproveAnalyst::run();
 
                 WorkerSummaryParameter::run();
+
+                WorkerUpdateKpiSales::run();
 
                 // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {

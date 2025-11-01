@@ -74,6 +74,13 @@ return [
             'level' => 'critical',
         ],
 
+        'update_kpi_sales' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/update_kpi_sales/log.log'),
+            'level' => 'info',
+            'days' => 7,
+        ],
+
         'release_apps_fdl' => [
             'driver' => 'daily',
             'path' => storage_path('logs/release_apps_fdl/log.log'),
