@@ -512,7 +512,11 @@ class DraftUlkController extends Controller
 
             foreach ($models as $model) {
                 $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                $data = $model::with('ws_value_linkungan', 'parameter_udara')
+                $with = ['ws_value_linkungan', 'parameter_udara'];
+                if ($model === LingkunganHeader::class) {
+                    $with[] = 'ws_udara';
+                }
+                $data = $model::with($with)
                     ->where('no_sampel', $request->no_sampel)
                     ->where($approveField, 1)
                     ->where('is_active', true)
@@ -572,15 +576,44 @@ class DraftUlkController extends Controller
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
+            'akr' => $bakumutu ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '') : '',
             'parameter' => $param->nama_regulasi,
             'satuan' => $param->satuan,
-            'hasil_uji' => $val->ws_value_linkungan->C ?? null,
+            // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
             'durasi' => $val->ws_value_linkungan->durasi ?? null,
             'methode' => $param->method,
             'status' => $param->status
         ];
 
+        $satuanIndexMap = [
+            "µg/m³" => 17,
+            "mg/m³" => 16,
+            "BDS" => 15,
+            "CFU/M²" => 14,
+            "CFU/25cm²" => 13,
+            "°C" => 12,
+            "CFU/100 cm²" => 11,
+            "CFU/m²" => 10,
+            "CFU/m³" => 9,
+            "m/s" => 8,
+            "f/cc" => 7,
+            "Ton/km²/Bulan" => 6,
+            "%" => 5,
+            "ppb" => 4,
+            "ppm" => 3,
+            "mg/m³" => 2,
+            "μg/Nm³" => 1
+        ];
+
+        $index = $satuanIndexMap[$param->satuan] ?? 1;
+        
+        $fKoreksiKey = "f_koreksi_$index";
+        $hasilKey = "hasil$index";
+
+        $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
+            ?? $val->ws_udara->$hasilKey
+            ?? $val->ws_value_linkungan->f_koreksi_c
+            ?? $val->ws_value_linkungan->C ?? '-';
 
 
         if ($bakumutu && $bakumutu->method) {
