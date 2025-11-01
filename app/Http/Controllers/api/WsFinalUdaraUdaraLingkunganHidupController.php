@@ -555,7 +555,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					], 201);
 				}
 			} else {
-				$data = [];
+                return response()->json([
+                    'message' => 'Gagal Approve : Data tidak termasuk kategori lingkungan hidup',
+                ], 404);
 			}
 		} else {
 			return response()->json([
@@ -823,7 +825,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->where('lingkungan_header_id', $lingkungan->id)
 				->where('is_active', 1)
 				->first();
-			
+
 			$wsUdara = WsValueUdara::where('no_sampel', $no_sampel)
 				->where('id_lingkungan_header', $lingkungan->id)
 				->where('is_active', 1)
