@@ -9,7 +9,8 @@ use Carbon\Carbon;
 Carbon::setLocale('id');
 
 use Illuminate\Http\Request;
-use App\Services\getBawahan;
+
+use App\Services\GetBawahan;
 use App\Services\SalesKpiMonthly;
 
 use App\Models\TargetSales;
@@ -104,33 +105,38 @@ class DashboardSalesController extends Controller
 
     public function getSales(Request $request)
     {
-        $user_id = 890;
-        $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
-
-        // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
-        $managers = MasterKaryawan::where('is_active', true)
-            ->where('jabatan', 'like', '%Manager%')
-            ->where('id', '!=', $user_id)
-            ->whereIn('id', $bawahanIds)
-            ->orderBy('jabatan', 'asc')
-            ->select('id', 'nama_lengkap', 'jabatan')
-            ->get();
-
-        foreach ($managers as $mgr) {
-            $mgr->bawahan = MasterKaryawan::where('is_active', true)
-                ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
-                ->where('id', '!=', $mgr->id)
-                ->whereIn('id_jabatan', [21, 24, 148])
-                ->select('id', 'nama_lengkap', 'jabatan')
+        try {
+            //code...
+            $user_id = 890;
+            $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
+    
+            // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
+            $managers = MasterKaryawan::where('is_active', true)
+                ->where('jabatan', 'like', '%Manager%')
+                ->where('id', '!=', $user_id)
+                ->whereIn('id', $bawahanIds)
                 ->orderBy('jabatan', 'asc')
-                ->get()
-                ->values();
+                ->select('id', 'nama_lengkap', 'jabatan')
+                ->get();
+    
+            foreach ($managers as $mgr) {
+                $mgr->bawahan = MasterKaryawan::where('is_active', true)
+                    ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
+                    ->where('id', '!=', $mgr->id)
+                    ->whereIn('id_jabatan', [21, 24, 148])
+                    ->select('id', 'nama_lengkap', 'jabatan')
+                    ->orderBy('jabatan', 'asc')
+                    ->get()
+                    ->values();
+            }
+    
+            return response()->json([
+                'sales' => $managers,
+                'message' => 'Sales data retrieved successfully',
+            ], 200);
+        } catch (\Throwable $th) {
+        dd($th);
         }
-
-        return response()->json([
-            'sales' => $managers,
-            'message' => 'Sales data retrieved successfully',
-        ], 200);
     }
 
     public function fetchAll(Request $request){
