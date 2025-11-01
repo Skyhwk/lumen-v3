@@ -48,4 +48,9 @@ class EmisiCerobongHeader extends Sector
     {
         return $this->belongsTo('App\Models\DataLapanganEmisiCerobong', 'no_sampel', 'no_sampel');
     }
+
+      public function parameter_emisi()
+    {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 5);
+    }
 }

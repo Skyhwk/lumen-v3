@@ -175,20 +175,41 @@
                                 </tr>
                             </table>
                         </div>
-                        @if($ttd != null)
-                            <div class="signature-sectionP">
-                                <div class="signature-date">Tangerang Selatan, {{ $ttd->tanggal }}</div>
-                                    @if($ttd->qr_path != null)
-                                    <img src="{{ $ttd->qr_path }}" width="40" height="40" alt="qr-code" style="margin: 5px auto;">
-                                    @else
-                                    <div style="height: 20px;"></div>
-                                    @endif
-                                <div class="signature-text">
-                                    <strong>{{$ttd->nama_karyawan}}</strong><br>
-                                    <span style="font-size:8px;">{{$ttd->jabatan_karyawan}}</span>
-                                </div>
-                            </div>
-                        @endif
+                        
+                        <div class="signature-section">
+                            @if($ttd != null)
+                                @if($ttd->qr_path != null)
+                                    <table class="signature-table">
+                                        <tr>
+                                            <td class="signature-left"></td>
+                                            <td class="signature-right">
+                                                <div class="signature-date">
+                                                    {{ $ttd->tanggal }}
+                                                </div><br>
+                                                <div class="signature-text">
+                                                        <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                @else
+                                    <table class="signature-table">
+                                        <tr>
+                                            <td class="signature-left"></td>
+                                            <td class="signature-right" style="text-align: center;">
+                                                <div class="signature-date">
+                                                    Tangerang, 13 Agustus 2025
+                                                </div><br><br><br>
+                                                <div class="signature-text">
+                                                    <strong>(Abidah Walfathiyyah)</strong><br>
+                                                    <span>Technical Control Supervisor</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                @endif
+                            @endif
+                        </div>
         </div>
         <div class="konten-kiri">
             <div class="sectionP">

@@ -8,6 +8,7 @@ use App\Models\{
     SamplingPlan,
     QuotationNonKontrak,
     Jadwal,
+    AnalystFormula,
     OrderHeader,
     OrderDetail,
     Invoice,
@@ -21,6 +22,7 @@ use App\Models\{
     KelengkapanKonfirmasiQs,
     Parameter,
     DataLapanganAir,
+    LhpUdaraPsikologiHeader,
     SampelTidakSelesai,
     MasterKaryawan
 };
@@ -53,7 +55,7 @@ class TestingController extends Controller
     {
         try {
             //code...
-            
+
             switch ($request->menu) {
                 case 'this':
                     dd($this);
@@ -1004,7 +1006,6 @@ class TestingController extends Controller
 
                                     $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                                     $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-
                                 } else {
                                     $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
                                     $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
@@ -1039,7 +1040,6 @@ class TestingController extends Controller
                                 }
                                 $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                             }
-
                         }
                         return response()->json($filteredResult, 200);
                         return DataTables::of($filteredResult)->make(true);
@@ -1054,18 +1054,18 @@ class TestingController extends Controller
                     $decrypt = $this->makeDecrypt($request->decrypt);
                     return response()->json($decrypt);
                 case 'chekregen':
-                    $db =OrderDetail::where('no_sampel',$request->no_sampel)
-                    ->where('is_active',1)->first();
-                    if($db != null){
-                        
-                        $raw = json_decode($db->parameter,true);
-                        
-                        $parameter =array_map(function($item){
-                            $parts =explode(';',$item);
+                    $db = OrderDetail::where('no_sampel', $request->no_sampel)
+                        ->where('is_active', 1)->first();
+                    if ($db != null) {
+
+                        $raw = json_decode($db->parameter, true);
+
+                        $parameter = array_map(function ($item) {
+                            $parts = explode(';', $item);
                             return $parts[1] ?? null;
-                        },$raw);
-                        $chekRegen =HargaParameter::whereIn('nama_parameter',$parameter)->get(['nama_parameter','regen','nama_kategori']);
-                        return response()->json(["data"=>$chekRegen],200);
+                        }, $raw);
+                        $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
+                        return response()->json(["data" => $chekRegen], 200);
                     }
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
@@ -1074,7 +1074,6 @@ class TestingController extends Controller
             //throw $th;
             dd($th);
         }
-
     }
 
     public function bulkRenderInvoice(Request $request)
@@ -1594,11 +1593,11 @@ class TestingController extends Controller
                             foreach ($dataSampling as &$detailSampling) {
                                 if (
                                     !isset(
-                                    $detailSampling['kategori_1'],
-                                    $detailSampling['kategori_2'],
-                                    $detailSampling['parameter'],
-                                    $detailSampling['jumlah_titik']
-                                )
+                                        $detailSampling['kategori_1'],
+                                        $detailSampling['kategori_2'],
+                                        $detailSampling['parameter'],
+                                        $detailSampling['jumlah_titik']
+                                    )
                                 ) {
                                     continue;
                                 }
@@ -2451,7 +2450,6 @@ class TestingController extends Controller
                     // dd('stop');
                     DB::commit();
                     $processedCount++;
-
                 } catch (Throwable $th) {
                     DB::rollback();
                     $errorCount++;
@@ -2473,7 +2471,6 @@ class TestingController extends Controller
                 'total' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
-
         } catch (Throwable $th) {
             DB::rollback();
             \Log::error('System error in changeParameter', [
@@ -2654,17 +2651,18 @@ class TestingController extends Controller
 
     public function fixDetailStructure(Request $request)
     {
+       
         try {
             // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
-
+            
             $fixedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
-
+             
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
@@ -2693,7 +2691,6 @@ class TestingController extends Controller
                     // dd($dataDetail);
 
                     DB::commit();
-
                 } catch (Throwable $th) {
                     DB::rollback();
                     $errorCount++;
@@ -2715,7 +2712,6 @@ class TestingController extends Controller
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
-
         } catch (Throwable $th) {
             DB::rollback();
             Log::error('System error in fixDetailStructure', [
@@ -2867,7 +2863,6 @@ class TestingController extends Controller
             dd($e);
             return response()->json(['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 400);
         }
-
     }
 
     private function generateQR($no_sampel, $directory)
@@ -2953,7 +2948,6 @@ class TestingController extends Controller
                 'processed' => $processedCount,
                 'errors' => $errorCount
             ], 200);
-
         } catch (Throwable $e) {
             Log::error('Error in updateQTKelengkapan', [
                 'error' => $e->getMessage(),
@@ -2968,7 +2962,8 @@ class TestingController extends Controller
     }
 
 
-    public function numberingLhpOrder(Request $request){
+    public function numberingLhpOrder(Request $request)
+    {
         DB::beginTransaction();
         try {
             $order_detail = OrderDetail::where('no_order', $request->no_order)->get();
@@ -2991,7 +2986,7 @@ class TestingController extends Controller
             foreach ($order_detail as $od) {
                 $needIncrement = false;
 
-                if ($od->kategori_2 == '1-Air' || in_array($od->kategori_3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja','34-Emisi Sumber Tidak Bergerak'])) {
+                if ($od->kategori_2 == '1-Air' || in_array($od->kategori_3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja', '34-Emisi Sumber Tidak Bergerak'])) {
                     // ✅ Aturan 1: Air -> selalu increment
                     $needIncrement = true;
                 } else {
@@ -3032,9 +3027,9 @@ class TestingController extends Controller
                     $od->cfr = $newCfr;
                     $od->save();
 
-                    if($od->status > 1){
+                    if ($od->status > 1) {
                         $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
-                        if($lhpsH){
+                        if ($lhpsH) {
                             $lhpsH->no_lhp = $newCfr;
                             $lhpsH->save();
                         }
@@ -3045,16 +3040,16 @@ class TestingController extends Controller
                         'old_cfr'   => $oldCfr,
                         'new_cfr'   => $newCfr,
                     ];
-                }else{
+                } else {
                     $oldCfr = $od->cfr;
                     $newCfr = $request->no_order . "/" . $num;
 
                     $od->cfr = $newCfr;
                     $od->save();
 
-                    if($od->status > 1){
+                    if ($od->status > 1) {
                         $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
-                        if($lhpsH){
+                        if ($lhpsH) {
                             $lhpsH->no_lhp = $newCfr;
                             $lhpsH->save();
                         }
@@ -3275,5 +3270,91 @@ class TestingController extends Controller
     private function makeDecrypt(string $data)
     {
         return $this->decryptSlice($data);
+    }
+
+    public function checkFormulas(Request $request)
+    {
+        $invalid = [];
+
+        try {
+            foreach ($request->data as $value) {
+                $is_exist = AnalystFormula::where('parameter', trim($value))
+                    ->whereHas('param', function ($q) {
+                        $q->where('id_kategori', 4);
+                    })
+                    ->with('param:id,id_kategori')
+                    ->first();
+
+                // kalau gak ada, atau id_kategori-nya bukan 4
+                if (!$is_exist) {
+                    $invalid[] = $value;
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'invalid_data' => $invalid,
+            ]);
+        } catch (\Exception $th) {
+            dd($th);
+        }
+    }
+
+    public function rollbackLhp()
+    {
+        try {
+            DB::beginTransaction();
+            DB::statement("SET SESSION sql_mode = ''");
+            $data = OrderDetail::with([
+                'dataPsikologi',
+                'lhp_psikologi',
+                ])
+                ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+                ->where('is_active', true)
+                ->whereJsonContains('parameter', [
+                    "318;Psikologi"
+                ])
+                ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
+                ->whereNotNull('tanggal_terima')
+                ->where('kategori_2', '4-Udara')
+                ->whereIn('kategori_3', ["118-Psikologi", "27-Udara Lingkungan Kerja"])
+                ->groupBy('cfr')
+                ->where('status', 3)
+                ->get();
+
+            foreach ($data as $item) {
+                $lhp = LhpUdaraPsikologiHeader::where('no_cfr', $item->cfr)->where('is_active', true)->first();
+                
+                if ($lhp) {
+                    $lhp->is_approve = 0;
+                    $lhp->save();
+                    
+                }
+                $no_sampel = explode(',', $item->no_sampel);
+                foreach ($no_sampel as $no) {
+                    $orderDetail = OrderDetail::where('no_sampel', $no)->first();
+                    if($orderDetail){
+                        $orderDetail->status = 2;
+                        $orderDetail->is_approve = 0;
+                        $orderDetail->save();
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Data berhasil di rollback'
+            ]);
+        } catch (\Exception $th) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $th->getMessage(),
+                'detail' => $th->getLine()
+            ], 500);
+        }
     }
 }

@@ -253,10 +253,10 @@
                         <td>1</td>
                         <td class="text-left">Lengan Atas</td>
                         <td> {{$pengukuran->lengan_atas}} </td>
-                        <td rowspan="4">{{$pengukuran->total_skor_A}}</td>
-                        <td rowspan="4">{{$pengukuran->beban_A}}</td>
-                        <td rowspan="4">{{$pengukuran->aktivitas_otot_A}}</td>
-                        <td rowspan="4">{{$pengukuran->nilai_tabel_A}}</td>
+                        <td rowspan="4">{{$pengukuran->total_skor_a}}</td>
+                        <td rowspan="4">{{$pengukuran->beban_a}}</td>
+                        <td rowspan="4">{{$pengukuran->aktivitas_otot_a}}</td>
+                        <td rowspan="4">{{$pengukuran->nilai_tabel_a}}</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -293,10 +293,10 @@
                         <td>1</td>
                         <td class="text-left">Leher</td>
                         <td>{{$pengukuran->leher}}</td>
-                        <td rowspan="3">{{$pengukuran->total_skor_B}}</td>
-                        <td rowspan="3">{{$pengukuran->beban_B}}</td>
-                        <td rowspan="3">{{$pengukuran->aktivitas_otot_B}}</td>
-                        <td rowspan="3">{{$pengukuran->nilai_tabel_B}}</td>
+                        <td rowspan="3">{{$pengukuran->total_skor_b}}</td>
+                        <td rowspan="3">{{$pengukuran->beban_b}}</td>
+                        <td rowspan="3">{{$pengukuran->aktivitas_otot_b}}</td>
+                        <td rowspan="3">{{$pengukuran->nilai_tabel_b}}</td>
                     </tr>
                     <tr>
                         <td>2</td>

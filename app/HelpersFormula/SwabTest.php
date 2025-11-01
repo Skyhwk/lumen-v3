@@ -35,9 +35,6 @@ class SwabTest
             $satuan = 'CFU/cm2';
 
 			$data = [
-				'id_swab_header' => $data->id_header,
-				'tanggal_terima' => $data->tgl_terima,
-                'no_sampel' => $data->no_sampel,
 				// 'luas' => $data->luas,
 				// 'jumlah_mikroba' => $data->jumlah_mikroba,
 				// 'cairan_pengencer' => $data->jumlah_pengencer,

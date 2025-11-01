@@ -419,9 +419,9 @@ class TemplateLhpp
                 <td style="width: 50%; text-align: center;">
                     <table>
                         <tr><td>' . $tanggal_qr . '</td></tr>
+                        <tr><td style="height: 70px;"><img src=" ' . $qr_img . '" width="50px" height="50px"></td></tr>
                         <tr><td style="height: 70px;"></td></tr>
-                        <tr><td><strong>( <u>'. $pengesahanLhp->nama_karyawan  .'</u> )</strong></td></tr>
-                        <tr><td>'. $pengesahanLhp->jabatan_karyawan  .'</td></tr>
+                        <tr><td style="height: 10px;"></td></tr>
                     </table>
                 </td>
             </tr>
@@ -629,9 +629,6 @@ class TemplateLhpp
                     <table 
                         style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
                     >
-                        <tr>
-                            <td>' . $qr_img . '</td>
-                        </tr>
                         <tr><td> ' . $qr . '</td></tr>
                     </table>
                 </td>
@@ -669,9 +666,6 @@ class TemplateLhpp
                                     style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
                                 >
                                     <tr>
-                                        <td>' . $qr_img . '</td>
-                                    </tr>
-                                    <tr>
                                         <td> ' . $qr . '</td>
                                     </tr>
                                 </table>
@@ -680,7 +674,7 @@ class TemplateLhpp
                     </table>
                 ');
         if ($mode_download == 'downloadLHP') {
-            $dir = public_path('dokumen/LHP/');
+            $dir = public_path('dokumen/LHP_DOWNLOAD/');
             if (!file_exists($dir)) {
                 mkdir($dir, 0777, true);
             }
