@@ -3770,7 +3770,15 @@ class InputParameterController extends Controller
 				$data_udara = array();
 				$data_udara['id_microbiologi_header'] = $header->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				if(in_array($request->parameter, $swab_parameter)){
+                    $data_udara['hasil10'] = $data_kalkulasi['hasil'];
+                    $data_udara['hasil11'] = $data_kalkulasi['hasil2'];
+                    $data_udara['hasil13'] = $data_kalkulasi['hasil3'];
+                    $data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+                }else{
+                    $data_udara['hasil9'] = $data_kalkulasi['hasil'];
+                }
+				$data_udara['satuan'] = $data_kalkulasi['satuan'];
 				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
