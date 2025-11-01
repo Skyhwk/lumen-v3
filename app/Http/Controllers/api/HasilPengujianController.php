@@ -16,34 +16,144 @@ Carbon::setLocale('id');
 use App\Services\BundledTemplateLhps;
 
 use App\Models\{OrderDetail, OrderHeader, PersiapanSampelHeader};
+use Illuminate\Support\Facades\DB;
 
 class HasilPengujianController extends Controller
 {
-    public function index()
+    // public function index()
+    // {
+    //     $orders = OrderHeader::with('orderDetail')->select('id', 'no_document', 'tanggal_penawaran', 'no_order', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'alamat_sampling')
+    //         ->where('is_active', true)
+    //         ->latest()
+    //         ->get()
+    //         ->map(function ($item) {
+    //             if ($item->orderDetail) {
+    //                 $details = $item->orderDetail;
+
+    //                 // timpa isi relasi orderDetail dengan hasil pluck
+    //                 $item->order_detail = [
+    //                     'periode'          => $details->pluck('periode')->filter()->unique()->values(),
+    //                     'tanggal_sampling' => $details->pluck('tanggal_sampling')->filter()->unique()->values(),
+    //                     'tanggal_terima'   => $details->pluck('tanggal_terima')->filter()->unique()->values(),
+    //                 ];
+
+    //                 unset($item->orderDetail);
+    //             }
+
+    //             return $item;
+    //         });
+
+    //     return DataTables::of($orders)->make(true);
+    // }
+
+
+    public function index(Request $request)
     {
-        $orders = OrderHeader::with('orderDetail')->select('id', 'no_document', 'tanggal_penawaran', 'no_order', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'alamat_sampling')
-            ->where('is_active', true)
-            ->latest()
-            ->get()
-            ->map(function ($item) {
-                if ($item->orderDetail) {
-                    $details = $item->orderDetail;
+        // Gunakan Eloquent atau Query Builder yang lebih efisien
+        $query = DB::table('order_header as oh')
+            ->join('order_detail as od', 'od.id_order_header', '=', 'oh.id')
+            ->where('oh.is_active', true)
+            ->select(
+                'oh.id',
+                'oh.no_document',
+                'oh.tanggal_penawaran',
+                'oh.no_order',
+                'oh.tanggal_order',
+                'oh.nama_perusahaan',
+                'oh.konsultan',
+                'oh.alamat_sampling',
+                'od.periode',
+                // Gunakan SEPARATOR untuk konsistensi
+                DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_sampling ORDER BY od.tanggal_sampling ASC SEPARATOR ",") as tanggal_sampling'),
+                DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_terima ORDER BY od.tanggal_terima ASC SEPARATOR ",") as tanggal_terima')
+            )
+            ->groupBy(
+                'oh.id',
+                'oh.no_document',
+                'oh.tanggal_penawaran',
+                'oh.no_order',
+                'oh.tanggal_order',
+                'oh.nama_perusahaan',
+                'oh.konsultan',
+                'oh.alamat_sampling',
+                'od.periode'
+            )
+            ->orderByDesc('oh.created_at');
 
-                    // timpa isi relasi orderDetail dengan hasil pluck
-                    $item->order_detail = [
-                        'periode'          => $details->pluck('periode')->filter()->unique()->values(),
-                        'tanggal_sampling' => $details->pluck('tanggal_sampling')->filter()->unique()->values(),
-                        'tanggal_terima'   => $details->pluck('tanggal_terima')->filter()->unique()->values(),
-                    ];
+        // Cache bulan mapping
+        $bulanMap = [
+            'januari' => '01',
+            'februari' => '02',
+            'maret' => '03',
+            'april' => '04',
+            'mei' => '05',
+            'juni' => '06',
+            'juli' => '07',
+            'agustus' => '08',
+            'september' => '09',
+            'oktober' => '10',
+            'november' => '11',
+            'desember' => '12'
+        ];
 
-                    unset($item->orderDetail);
-                }
-
-                return $item;
-            });
-
-        return DataTables::of($orders)->make(true);
+        return DataTables::of($query)
+            ->filterColumn('no_document', function ($query, $keyword) {
+                $query->where('oh.no_document', 'LIKE', '%' . $keyword . '%');
+            })
+            ->filterColumn('no_order', function ($query, $keyword) {
+                $query->where('oh.no_order', 'LIKE', '%' . $keyword . '%');
+            })
+            ->filterColumn('tanggal_terima', function ($query, $keyword) use ($bulanMap) {
+                $this->filterTanggal($query, 'od.tanggal_terima', $keyword, $bulanMap);
+            })
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) use ($bulanMap) {
+                $this->filterTanggal($query, 'od.tanggal_sampling', $keyword, $bulanMap);
+            })
+            ->filterColumn('periode', function ($query, $keyword) use ($bulanMap) {
+                $converted = $this->convertBulan($keyword, $bulanMap);
+                $query->where('od.periode', 'LIKE', '%' . $converted . '%');
+            })
+            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+                $query->where('oh.nama_perusahaan', 'LIKE', '%' . $keyword . '%');
+            })
+            ->filterColumn('konsultan', function ($query, $keyword) {
+                $query->where('oh.konsultan', 'LIKE', '%' . $keyword . '%');
+            })
+            ->editColumn('tanggal_sampling', function ($row) {
+                return $row->tanggal_sampling ? explode(',', $row->tanggal_sampling) : [];
+            })
+            ->editColumn('tanggal_terima', function ($row) {
+                return $row->tanggal_terima ? explode(',', $row->tanggal_terima) : [];
+            })
+            ->make(true);
     }
+
+    // Helper methods
+    private function convertBulan($keyword, $bulanMap)
+    {
+        $keywordLower = strtolower($keyword);
+        foreach ($bulanMap as $namaBulan => $angkaBulan) {
+            if (strpos($keywordLower, $namaBulan) !== false) {
+                return str_replace($namaBulan, $angkaBulan, $keywordLower);
+            }
+        }
+        return $keywordLower;
+    }
+
+    private function filterTanggal($query, $column, $keyword, $bulanMap)
+    {
+        $query->where(function ($q) use ($column, $keyword, $bulanMap) {
+            if (is_numeric($keyword)) {
+                // Untuk angka, search langsung di kolom tanggal
+                $q->whereRaw("$column LIKE ?", ['%' . $keyword . '%']);
+            } else {
+                $converted = $this->convertBulan($keyword, $bulanMap);
+                // Gunakan indexed column jika memungkinkan
+                $q->whereRaw("DATE_FORMAT($column, '%d-%m-%Y') LIKE ?", ['%' . $converted . '%']);
+            }
+        });
+    }
+
 
     private function initializeSteps($orderDate)
     {
@@ -72,7 +182,7 @@ class HasilPengujianController extends Controller
         return $search === false ? 5 : $search;
     }
 
-    private function getGroupedCFRs($orderHeader)
+    private function getGroupedCFRs($orderHeader, $periode)
     {
         try {
             $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
@@ -92,8 +202,11 @@ class HasilPengujianController extends Controller
                 ])
                 ->where([
                     'id_order_header' => $orderHeader->id,
-                    'is_active' => true
-                ])->get();
+                    'is_active' => true,
+                ])
+                ->when(!empty($periode), function ($query) use ($periode) {
+                    $query->where('periode', $periode);
+                })->get();
 
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
             $periodGroups->map(function ($itemGroup) use ($orderHeader) {
@@ -189,7 +302,7 @@ class HasilPengujianController extends Controller
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
 
-        $groupedData = $this->getGroupedCFRs($orderHeader);
+        $groupedData = $this->getGroupedCFRs($orderHeader, $request->periode);
 
         return response()->json(['groupedCFRs' => $groupedData], 200);
     }

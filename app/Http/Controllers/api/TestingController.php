@@ -53,7 +53,7 @@ class TestingController extends Controller
     {
         try {
             //code...
-            
+
             switch ($request->menu) {
                 case 'this':
                     dd($this);
@@ -1004,7 +1004,6 @@ class TestingController extends Controller
 
                                     $dataSampelBelumSelesai = SampelTidakSelesai::where('no_sampel', $item->no_sample)->first();
                                     $detail_sampling_sampel[$key]['status_sampel'] = (bool) $dataSampelBelumSelesai;
-
                                 } else {
                                     $detail_sampling_sampel[$key]['status'] = $this->getStatusSampling($item);
                                     $detail_sampling_sampel[$key]['no_sampel'] = $item->no_sample;
@@ -1039,7 +1038,6 @@ class TestingController extends Controller
                                 }
                                 $filteredResult[$key]['detail_sampling_sampel'] = $matchedDetails;
                             }
-
                         }
                         return response()->json($filteredResult, 200);
                         return DataTables::of($filteredResult)->make(true);
@@ -1054,18 +1052,18 @@ class TestingController extends Controller
                     $decrypt = $this->makeDecrypt($request->decrypt);
                     return response()->json($decrypt);
                 case 'chekregen':
-                    $db =OrderDetail::where('no_sampel',$request->no_sampel)
-                    ->where('is_active',1)->first();
-                    if($db != null){
-                        
-                        $raw = json_decode($db->parameter,true);
-                        
-                        $parameter =array_map(function($item){
-                            $parts =explode(';',$item);
+                    $db = OrderDetail::where('no_sampel', $request->no_sampel)
+                        ->where('is_active', 1)->first();
+                    if ($db != null) {
+
+                        $raw = json_decode($db->parameter, true);
+
+                        $parameter = array_map(function ($item) {
+                            $parts = explode(';', $item);
                             return $parts[1] ?? null;
-                        },$raw);
-                        $chekRegen =HargaParameter::whereIn('nama_parameter',$parameter)->get(['nama_parameter','regen','nama_kategori']);
-                        return response()->json(["data"=>$chekRegen],200);
+                        }, $raw);
+                        $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
+                        return response()->json(["data" => $chekRegen], 200);
                     }
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
@@ -1074,7 +1072,6 @@ class TestingController extends Controller
             //throw $th;
             dd($th);
         }
-
     }
 
     public function bulkRenderInvoice(Request $request)
@@ -1594,11 +1591,11 @@ class TestingController extends Controller
                             foreach ($dataSampling as &$detailSampling) {
                                 if (
                                     !isset(
-                                    $detailSampling['kategori_1'],
-                                    $detailSampling['kategori_2'],
-                                    $detailSampling['parameter'],
-                                    $detailSampling['jumlah_titik']
-                                )
+                                        $detailSampling['kategori_1'],
+                                        $detailSampling['kategori_2'],
+                                        $detailSampling['parameter'],
+                                        $detailSampling['jumlah_titik']
+                                    )
                                 ) {
                                     continue;
                                 }
@@ -1798,7 +1795,7 @@ class TestingController extends Controller
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
-                    Log::error('Error processing document: ' . $data->no_document, [
+                    FacadesLog::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine()
                     ]);
@@ -1813,7 +1810,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
+            FacadesLog::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
             ]);
@@ -2451,7 +2448,6 @@ class TestingController extends Controller
                     // dd('stop');
                     DB::commit();
                     $processedCount++;
-
                 } catch (Throwable $th) {
                     DB::rollback();
                     $errorCount++;
@@ -2473,7 +2469,6 @@ class TestingController extends Controller
                 'total' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
-
         } catch (Throwable $th) {
             DB::rollback();
             \Log::error('System error in changeParameter', [
@@ -2652,48 +2647,149 @@ class TestingController extends Controller
         ];
     }
 
+    // public function fixDetailStructure(Request $request)
+    // {
+    //     try {
+    //         // Ambil data yang mungkin struktur detailnya berubah
+    //         $dataList = QuotationKontrakH::with('quotationKontrakD')
+    //             ->whereIn('no_document', $request->no_document)
+    //             ->where('is_active', true)
+    //             ->get();
+
+    //         $fixedCount = 0;
+    //         $errorCount = 0;
+    //         $errorDetails = [];
+
+    //         foreach ($dataList as $data) {
+    //             DB::beginTransaction();
+    //             try {
+    //                 $dataDetail = $data->quotationKontrakD;
+
+    //                 $index = 1;
+    //                 foreach ($dataDetail as $detail) {
+    //                     $dsDetail = json_decode($detail->data_pendukung_sampling, true);
+    //                     // $dsDetail = reset($dsDetail);
+    //                     // dd($dsDetail);
+    //                     // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
+    //                     $originalStructure = (object) [
+    //                         $index => (object) [
+    //                             "periode_kontrak" => $detail->periode_kontrak,
+    //                             "data_sampling" => $dsDetail
+    //                         ]
+    //                     ];
+    //                     // dd($dsDetail, $originalStructure);
+
+    //                     $detail->data_pendukung_sampling = json_encode($originalStructure);
+    //                     $detail->save();
+    //                     $index++;
+    //                     $fixedCount++;
+    //                 }
+
+    //                 // dd($dataDetail);
+
+    //                 DB::commit();
+    //                 return response()->json([
+    //                     'message' => 'Fix detail structure completed',
+    //                     "data" => $originalStructure
+    //                 ]);
+
+    //             } catch (Throwable $th) {
+    //                 DB::rollback();
+    //                 $errorCount++;
+    //                 $errorDetails[] = [
+    //                     'document' => $data->no_document,
+    //                     'error' => $th->getMessage()
+    //                 ];
+    //                 Log::error('Error fixing detail structure: ' . $data->no_document, [
+    //                     'error' => $th->getMessage(),
+    //                     'trace' => $th->getTraceAsString()
+    //                 ]);
+    //             }
+    //         }
+
+    //         return response()->json([
+    //             'message' => 'Fix detail structure completed',
+    //             'fixed' => $fixedCount,
+    //             'errors' => $errorCount,
+    //             'total_documents' => count($dataList),
+    //             'error_details' => $errorDetails
+    //         ], 200);
+
+    //     } catch (Throwable $th) {
+    //         DB::rollback();
+    //         Log::error('System error in fixDetailStructure', [
+    //             'error' => $th->getMessage(),
+    //             'trace' => $th->getTraceAsString()
+    //         ]);
+
+    //         return response()->json([
+    //             'message' => 'Terjadi kesalahan sistem',
+    //             'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
+    //         ], 500);
+    //     }
+    // }
+
     public function fixDetailStructure(Request $request)
     {
         try {
-            // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
 
             $fixedCount = 0;
+            $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
 
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
-                    $dataDetail = $data->quotationKontrakD;
-
-                    $index = 1;
-                    foreach ($dataDetail as $detail) {
+                    foreach ($data->quotationKontrakD as $detail) {
                         $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-                        // $dsDetail = reset($dsDetail);
-                        // dd($dsDetail);
-                        // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
+
+                        // ⚙️ 1. Cek apakah sudah sesuai struktur (sudah punya "periode_kontrak")
+                        $isValidStructure = false;
+
+                        if (is_array($dsDetail)) {
+                            foreach ($dsDetail as $key => $item) {
+
+                                // 🔹 Case 1: Struktur lama tapi sudah dikonversi (pakai key angka dan ada periode_kontrak)
+                                if (is_array($item) && array_key_exists('periode_kontrak', $item)) {
+                                    $isValidStructure = true;
+                                    break;
+                                }
+
+                                // 🔹 Case 2: Format array langsung [{ "periode_kontrak": ..., "data_sampling": ... }]
+                                if (array_key_exists('periode_kontrak', $dsDetail)) {
+                                    $isValidStructure = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if ($isValidStructure) {
+                            // ✅ Sudah sesuai struktur → skip
+                            $skippedCount++;
+                            continue;
+                        }
+
+                        // ⚙️ 2. Kalau belum sesuai, bentuk ulang struktur
+                        $index = 1;
                         $originalStructure = (object) [
                             $index => (object) [
                                 "periode_kontrak" => $detail->periode_kontrak,
                                 "data_sampling" => $dsDetail
                             ]
                         ];
-                        // dd($dsDetail, $originalStructure);
 
                         $detail->data_pendukung_sampling = json_encode($originalStructure);
                         $detail->save();
-                        $index++;
+
                         $fixedCount++;
                     }
 
-                    // dd($dataDetail);
-
                     DB::commit();
-
                 } catch (Throwable $th) {
                     DB::rollback();
                     $errorCount++;
@@ -2711,13 +2807,12 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'Fix detail structure completed',
                 'fixed' => $fixedCount,
+                'skipped' => $skippedCount,
                 'errors' => $errorCount,
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
-
         } catch (Throwable $th) {
-            DB::rollback();
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
@@ -2867,7 +2962,6 @@ class TestingController extends Controller
             dd($e);
             return response()->json(['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 400);
         }
-
     }
 
     private function generateQR($no_sampel, $directory)
@@ -2953,7 +3047,6 @@ class TestingController extends Controller
                 'processed' => $processedCount,
                 'errors' => $errorCount
             ], 200);
-
         } catch (Throwable $e) {
             Log::error('Error in updateQTKelengkapan', [
                 'error' => $e->getMessage(),
@@ -2968,7 +3061,8 @@ class TestingController extends Controller
     }
 
 
-    public function numberingLhpOrder(Request $request){
+    public function numberingLhpOrder(Request $request)
+    {
         DB::beginTransaction();
         try {
             $order_detail = OrderDetail::where('no_order', $request->no_order)->get();
@@ -2991,7 +3085,7 @@ class TestingController extends Controller
             foreach ($order_detail as $od) {
                 $needIncrement = false;
 
-                if ($od->kategori_2 == '1-Air' || in_array($od->kategori_3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja','34-Emisi Sumber Tidak Bergerak'])) {
+                if ($od->kategori_2 == '1-Air' || in_array($od->kategori_3, ['11-Udara Ambient', '27-Udara Lingkungan Kerja', '34-Emisi Sumber Tidak Bergerak'])) {
                     // ✅ Aturan 1: Air -> selalu increment
                     $needIncrement = true;
                 } else {
@@ -3032,9 +3126,9 @@ class TestingController extends Controller
                     $od->cfr = $newCfr;
                     $od->save();
 
-                    if($od->status > 1){
+                    if ($od->status > 1) {
                         $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
-                        if($lhpsH){
+                        if ($lhpsH) {
                             $lhpsH->no_lhp = $newCfr;
                             $lhpsH->save();
                         }
@@ -3045,16 +3139,16 @@ class TestingController extends Controller
                         'old_cfr'   => $oldCfr,
                         'new_cfr'   => $newCfr,
                     ];
-                }else{
+                } else {
                     $oldCfr = $od->cfr;
                     $newCfr = $request->no_order . "/" . $num;
 
                     $od->cfr = $newCfr;
                     $od->save();
 
-                    if($od->status > 1){
+                    if ($od->status > 1) {
                         $lhpsH = LhpsAirHeader::where('no_sampel', $od->no_sampel)->first();
-                        if($lhpsH){
+                        if ($lhpsH) {
                             $lhpsH->no_lhp = $newCfr;
                             $lhpsH->save();
                         }
