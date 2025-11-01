@@ -341,7 +341,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
 
 			$id = $request->id;
-			$no_sampel = $request->no_sampel;
+			$no_sampel = $request->no_sample;
 			$parameter = $request->parameter;
 
 			$faktor_koreksi = (float) $request->faktor_koreksi;
@@ -420,9 +420,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
 		foreach ($cases as $case) {
 			if ($case == $parameter) {
-				$hasil['hasilc'] = (empty($hasilujic)) ? null : applyFormula($hasilujic, $faktor_koreksi, $parameter);
-				$hasil['hasilc1'] = (empty($hasilujic1)) ? null : applyFormula($hasilujic1, $faktor_koreksi, $parameter);
-				$hasil['hasilc2'] = (empty($hasilujic2)) ? null : applyFormula($hasilujic2, $faktor_koreksi, $parameter);
+				$hasil['hasilc'] = (empty($hasilujic)) ? '-' : applyFormula($hasilujic, $faktor_koreksi, $parameter);
+				$hasil['hasilc1'] = (empty($hasilujic1)) ? '-' : applyFormula($hasilujic1, $faktor_koreksi, $parameter);
+				$hasil['hasilc2'] = (empty($hasilujic2)) ? '-' : applyFormula($hasilujic2, $faktor_koreksi, $parameter);
 				break;
 			}
 		}
