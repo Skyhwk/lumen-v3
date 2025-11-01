@@ -148,7 +148,44 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			// dd($processedData);
 
 
-			return Datatables::of($processedData)->make(true);
+			return Datatables::of($processedData)
+                ->addColumn('nilai_uji', function ($item) {
+                    $satuanIndexMap = [
+                        "µg/m³" => 17,
+                        "mg/m³" => 16,
+                        "BDS" => 15,
+                        "CFU/M²" => 14,
+                        "CFU/25cm²" => 13,
+                        "°C" => 12,
+                        "CFU/100 cm²" => 11,
+                        "CFU/m²" => 10,
+                        "CFU/m³" => 9,
+                        "m/s" => 8,
+                        "f/cc" => 7,
+                        "Ton/km²/Bulan" => 6,
+                        "%" => 5,
+                        "ppb" => 4,
+                        "ppm" => 3,
+                        "mg/m³" => 2,
+                        "μg/Nm³" => 1
+                    ];
+
+                    $index = $satuanIndexMap[$item->satuan] ?? 1;
+
+                    if (!$item->ws_udara) {
+                        return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+                    }
+
+                    // Coba f_koreksi_{index}, lalu hasil{index}, lalu fallback ke lingkungan
+                    $fKoreksiKey = "f_koreksi_$index";
+                    $hasilKey = "hasil$index";
+
+                    return $item->ws_udara->$fKoreksiKey
+                        ?? $item->ws_udara->$hasilKey
+                        ?? $item->ws_value_lingkungan->f_koreksi_c
+                        ?? '-';
+                })
+				->make(true);
 
 		} catch (\Throwable $th) {
 			return response()->json([
