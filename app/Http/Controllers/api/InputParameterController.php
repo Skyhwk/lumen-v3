@@ -3664,6 +3664,11 @@ class InputParameterController extends Controller
 			->where('parameter', $request->parameter)
 			->first();
 
+        $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
+        if(in_array($request->parameter, $swab_parameter)){
+            $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
+        }
+
         $data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 
 		$header = MicrobioHeader::where('no_sampel', $request->no_sample)
@@ -3678,22 +3683,26 @@ class InputParameterController extends Controller
 			];
 		}
 
-		if ($fdl) { // Periksa apakah $fdl tidak null
+		if ($fdl || $swab) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				$suhu = $fdl->suhu;
-				$tekanan = $fdl->tekanan_udara;
-				$kelembaban = $fdl->kelembapan;
+				$suhu = $fdl->suhu ?? $swab->suhu;
+				$tekanan = $fdl->tekanan_udara ?? $swab->tekanan_udara;
+				$kelembaban = $fdl->kelembapan ?? $swab->kelembapan;
 
 				// Decode JSON di dalam pengukuran
-				$pengukuran = json_decode($fdl->pengukuran);
+                if(isset($fdl->pengukuran)){
+                    $pengukuran = json_decode($fdl->pengukuran);
 
-				// Ambil nilai Flow Rate dan Durasi
-				$flowRate = (float) ($pengukuran->{"Flow Rate"} ?? null);
-				$durasi = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+                    // Ambil nilai Flow Rate dan Durasi
+                    $flowRate = (float) ($pengukuran->{"Flow Rate"} ?? null);
+                    $durasi = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
 
-				$volume = ($flowRate * $durasi) / 1000;
+                    $volume = ($flowRate * $durasi) / 1000;
 
+                }else{
+                    $luas = $swab->luas_area_swab ?? 0;
+                }
 			} catch (\Exception $e) {
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
@@ -3715,12 +3724,16 @@ class InputParameterController extends Controller
 				$data_parsing = $request->all();
 				$data_parsing = (object) $data_parsing;
 
-				$data_parsing->suhu = $suhu;
-				$data_parsing->tekanan = $tekanan;
-				$data_parsing->kelembaban = $kelembaban;
-				$data_parsing->flow_rate = $flowRate;
-				$data_parsing->durasi = $durasi;
-				$data_parsing->volume = $volume;
+                $data_parsing->suhu = $suhu;
+                $data_parsing->tekanan = $tekanan;
+                $data_parsing->kelembaban = $kelembaban;
+				if($fdl){
+                    $data_parsing->flow_rate = $flowRate;
+                    $data_parsing->durasi = $durasi;
+                    $data_parsing->volume = $volume;
+                }else{
+                    $data_parsing->luas = $luas;
+                }
 				$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 				$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3745,6 +3758,7 @@ class InputParameterController extends Controller
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
+				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
 				$header->save();
 
 				// $data_kalkulasi['id_microbio_header'] = $header->id;
@@ -3756,7 +3770,15 @@ class InputParameterController extends Controller
 				$data_udara = array();
 				$data_udara['id_microbiologi_header'] = $header->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				if(in_array($request->parameter, $swab_parameter)){
+                    $data_udara['hasil10'] = $data_kalkulasi['hasil'];
+                    $data_udara['hasil11'] = $data_kalkulasi['hasil2'];
+                    $data_udara['hasil13'] = $data_kalkulasi['hasil3'];
+                    $data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+                }else{
+                    $data_udara['hasil9'] = $data_kalkulasi['hasil'];
+                }
+				$data_udara['satuan'] = $data_kalkulasi['satuan'];
 				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
@@ -3803,7 +3825,7 @@ class InputParameterController extends Controller
 		if ($fdl) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				$luas = $fdl->luas;
+				$luas = $fdl->luas_area_swab;
 
 			} catch (\Exception $e) {
 				return (object)[
@@ -4216,6 +4238,22 @@ class InputParameterController extends Controller
             ],500);
         }
     }
+
+    public function getMicroUdara(Request $request)
+	{
+		try {
+			$data = DetailMicrobiologi::where('no_sampel', $request->no_sample)->where('parameter', $request->parameter)->where('is_active', true)->get();
+			return response()->json([
+				'data' => $data
+			], 200);
+		} catch (\Exception $e) {
+			return response()->json([
+				'message' => 'Gagal mengambil data: ' . $e->getMessage(),
+				'line' => $e->getLine(),
+				'file' => $e->getFile()
+			]);
+		}
+	}
 
     public function cekNoSample(Request $request){
         try {
