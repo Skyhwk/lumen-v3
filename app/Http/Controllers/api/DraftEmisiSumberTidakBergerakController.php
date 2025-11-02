@@ -91,7 +91,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     $header->alamat_sampling = $request->alamat_sampling ?: NULL;
                     $header->sub_kategori = $request->sub_kategori ?: NULL;
                     $header->metode_sampling = $request->metode_sampling ? json_encode($request->metode_sampling) : NULL;
-                    $header->tgl_lhp = $request->tanggal_terima;
+                    $header->tgl_lhp = $request->tanggal_lhp;
                     $header->konsultan = $request->konsultan ?: NULL;
                     $header->nama_pic = $request->nama_pic ?: NULL;
                     $header->jabatan_pic = $request->jabatan_pic ?: NULL;
