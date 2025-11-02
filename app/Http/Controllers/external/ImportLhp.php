@@ -570,7 +570,6 @@ class ImportLhp extends BaseController
                 }
                 $results[] = $row_content;
             }
-            dd($results);
             // Cari posisi header-header yang diperlukan
             $headerPositions = $this->findHeaderPositions($results, 'udara');
 
@@ -1534,7 +1533,7 @@ class ImportLhp extends BaseController
                         'no_sampel' => $noSample,
                         'parameter_uji' => json_encode($param),
                         'sub_kategori' => $jenisSample,
-                        'header_table' => $headTable,
+                        // 'header_table' => $headTable,
                     ];
                 } else {
                     $insert = [
