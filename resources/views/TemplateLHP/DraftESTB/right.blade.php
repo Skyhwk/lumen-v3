@@ -89,7 +89,7 @@
                     <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tangga_tugas) }}</td>
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($header->tanggal_tugas) }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Periode Analisa</td>
