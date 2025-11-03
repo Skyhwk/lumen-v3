@@ -687,7 +687,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 				$isokinetik = Subkontrak::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
