@@ -106,8 +106,6 @@ class DashboardSalesController extends Controller
     {
         $user_id = 890;
         $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
-
-        // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
         $managers = MasterKaryawan::where('is_active', true)
             
             ->where(function($query) {
