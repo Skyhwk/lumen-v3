@@ -7,22 +7,23 @@ use Carbon\Carbon;
 class DirectpartikulatPM {
     public function index($data, $id_parameter, $mdl) {
         $measurements = [];
-
+        
         foreach ($data as $record) {
             
             if ($record->pengukuran) {
-                $data = json_decode($record->pengukuran, true);
-                if (is_array($data) && !empty($data)) {
-                    $total = array_sum($data);
-                    $count = count($data);
+                $nilai = json_decode($record->pengukuran, true);
+                if (is_array($nilai) && !empty($nilai)) {
+                    $total = array_sum($nilai);
+                    $count = count($nilai);
                     $measurements[] = $total / $count;
                 }
             }
         }
+        
 
         $ta = $data->pluck('suhu')->toArray();
         $pa = $data->pluck('tekanan_udara')->toArray();
-
+        
         $tekanan_udara = !empty($pa) ? round(array_sum($pa) / count($pa), 1) : 0;
         $suhu = !empty($ta) ? round(array_sum($ta) / count($ta), 1) : 0;
 
