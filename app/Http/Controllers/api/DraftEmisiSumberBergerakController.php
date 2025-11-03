@@ -894,11 +894,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                 $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
-<<<<<<< HEAD
                 
-=======
-
->>>>>>> 48e0dc08b20d9fd5055ccf8897fd7a1f35191714
                 if($cekLink){
                         $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order,$this->karyawan, $periode);
                         $this->dispatch($job);
