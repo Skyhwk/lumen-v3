@@ -251,7 +251,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                         $data->created_at                    = Carbon::now()->format('Y-m-d H:i:s');
                         $data->save();
                     }
-                } else if ($request->selected_parameter == 'Power Density') {
+                } else {
                     if ($request->magnet3 != '' && $request->listrik3 != '') {
                         $magnet3 = array();
                         $o = 1;
@@ -342,11 +342,6 @@ class FdlMedanListrikDanMagnetController extends Controller
                 $nama = $this->karyawan;
                 $this->resultx = "Data Sampling LISTRIK MAGNET Dengan No Sample $request->no_sample berhasil disimpan oleh $nama";
 
-                // if ($this->pin != null) {
-
-                //     $telegram = new Telegram();
-                //     $telegram->send($this->pin, $this->resultx);
-                // }
                 DB::commit();
                 return response()->json([
                     'message' => $this->resultx
