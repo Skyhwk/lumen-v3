@@ -60,7 +60,9 @@ class LingkunganHidupCl2
             $C1 = \str_replace(",", "", number_format(($ks/$Vu) / 1000 , 3));
 
             // C (PPM)= (C2 / 24.45)*71)
-            $C2 = \str_replace(",", "", number_format(($C1 / 24.45) * 71, 4));
+            // revisi menjadi
+            // C (PPM)= (C2 / 71)*24.45)
+            $C2 = \str_replace(",", "", number_format(($C1 / 71) * 24.45, 4));
 
             $C14 = $C2;
             // C (ug/m3) = (A/(Laju alir*durasi))*1000
