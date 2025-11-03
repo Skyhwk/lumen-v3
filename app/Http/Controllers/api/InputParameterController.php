@@ -620,7 +620,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'MIKROBIOLOGI' || $stp->sample->nama_kategori == 'Udara'){
+            }else if($stp->name == 'MIKROBIOLOGI' && $stp->sample->nama_kategori == 'Udara'){
                 $microbioData = MicrobioHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -710,7 +710,7 @@ class InputParameterController extends Controller
 					})->toArray());
 
                     // Handle approved samples
-                    $approvedSamples = $parameterData->where('is_approved', 1)
+                    $approvedSamples = $parameterData->where('is_approve', 1)
                         ->pluck('no_sampel')
                         ->sort()
                         ->toArray();
