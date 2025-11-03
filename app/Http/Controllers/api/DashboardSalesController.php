@@ -107,28 +107,20 @@ class DashboardSalesController extends Controller
         $user_id = 890;
         $bawahanIds = GetBawahan::where('id', $user_id)->select('id', 'jabatan')->get();
 
-        // Ambil semua manager aktif (tanpa id 14 dulu)
+        // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
         $managers = MasterKaryawan::where('is_active', true)
-            ->where('jabatan', 'like', '%Manager%')
+            
+            ->where(function($query) {
+                $query->where('id', '14')
+                ->orWhere('jabatan', 'like', '%Manager%');
+            })
+            // ->where('jabatan', 'like', '%Manager%')
             ->where('id', '!=', $user_id)
-            ->whereIn('id', $bawahanIds->pluck('id'))
+            ->whereIn('id', $bawahanIds)
             ->orderBy('jabatan', 'asc')
             ->select('id', 'nama_lengkap', 'jabatan')
             ->get();
 
-        // Jika hanya 1 manager ditemukan, tambahkan karyawan id 14
-        if ($managers->count() === 1) {
-            $karyawan14 = MasterKaryawan::where('is_active', true)
-                ->where('id', 14)
-                ->select('id', 'nama_lengkap', 'jabatan')
-                ->first();
-
-            if ($karyawan14) {
-                $managers->push($karyawan14);
-            }
-        }
-
-        // Ambil bawahan masing-masing manager
         foreach ($managers as $mgr) {
             $mgr->bawahan = MasterKaryawan::where('is_active', true)
                 ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
@@ -140,12 +132,11 @@ class DashboardSalesController extends Controller
                 ->values();
         }
 
-    return response()->json([
-        'sales' => $managers,
-        'message' => 'Sales data retrieved successfully',
-    ], 200);
-}
-
+        return response()->json([
+            'sales' => $managers,
+            'message' => 'Sales data retrieved successfully',
+        ], 200);
+    }
 
     public function fetchAll(Request $request){
         try {
