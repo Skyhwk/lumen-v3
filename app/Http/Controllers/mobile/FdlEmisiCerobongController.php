@@ -532,7 +532,6 @@ class FdlEmisiCerobongController extends Controller
                     ], 200);
                 }catch (\Exception $e) {
                     DB::rollBack();
-                    dd($e);
                     return response()->json([
                         'message' => $e->getMessage(),
                         'line'    => $e->getLine(),
