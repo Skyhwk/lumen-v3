@@ -1858,7 +1858,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		} else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+		} else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
