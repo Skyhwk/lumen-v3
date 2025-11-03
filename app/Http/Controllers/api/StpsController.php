@@ -1120,7 +1120,7 @@ class StpsController extends Controller
 
             $i = 1;
             $pe = 0;
-            dd($dataOrderDetailPerPeriode);
+            
             foreach ($dataOrderDetailPerPeriode as $key => $value) {
                 $value = (object) $value;
                 
