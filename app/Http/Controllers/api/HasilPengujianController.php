@@ -47,11 +47,103 @@ class HasilPengujianController extends Controller
     // }
 
 
+    // public function index(Request $request)
+    // {
+    //     // Gunakan Eloquent atau Query Builder yang lebih efisien
+    //     $query = DB::table('order_header as oh')
+    //         ->join('order_detail as od', 'od.id_order_header', '=', 'oh.id')
+    //         ->where('oh.is_active', true)
+    //         ->select(
+    //             'oh.id',
+    //             'oh.no_document',
+    //             'oh.tanggal_penawaran',
+    //             'oh.no_order',
+    //             'oh.tanggal_order',
+    //             'oh.nama_perusahaan',
+    //             'oh.konsultan',
+    //             'oh.alamat_sampling',
+    //             'od.periode',
+    //             // Gunakan SEPARATOR untuk konsistensi
+    //             DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_sampling ORDER BY od.tanggal_sampling ASC SEPARATOR ",") as tanggal_sampling'),
+    //             DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_terima ORDER BY od.tanggal_terima ASC SEPARATOR ",") as tanggal_terima')
+    //         )
+    //         ->groupBy(
+    //             'oh.id',
+    //             'oh.no_document',
+    //             'oh.tanggal_penawaran',
+    //             'oh.no_order',
+    //             'oh.tanggal_order',
+    //             'oh.nama_perusahaan',
+    //             'oh.konsultan',
+    //             'oh.alamat_sampling',
+    //             'od.periode'
+    //         )
+    //         ->orderByDesc('oh.created_at');
+
+    //     // Cache bulan mapping
+    //     $bulanMap = [
+    //         'januari' => '01',
+    //         'februari' => '02',
+    //         'maret' => '03',
+    //         'april' => '04',
+    //         'mei' => '05',
+    //         'juni' => '06',
+    //         'juli' => '07',
+    //         'agustus' => '08',
+    //         'september' => '09',
+    //         'oktober' => '10',
+    //         'november' => '11',
+    //         'desember' => '12'
+    //     ];
+
+    //     return DataTables::of($query)
+    //         ->filterColumn('no_document', function ($query, $keyword) {
+    //             $query->where('oh.no_document', 'LIKE', '%' . $keyword . '%');
+    //         })
+    //         ->filterColumn('no_order', function ($query, $keyword) {
+    //             $query->where('oh.no_order', 'LIKE', '%' . $keyword . '%');
+    //         })
+    //         ->filterColumn('tanggal_terima', function ($query, $keyword) use ($bulanMap) {
+    //             $this->filterTanggal($query, 'od.tanggal_terima', $keyword, $bulanMap);
+    //         })
+    //         ->filterColumn('tanggal_sampling', function ($query, $keyword) use ($bulanMap) {
+    //             $this->filterTanggal($query, 'od.tanggal_sampling', $keyword, $bulanMap);
+    //         })
+    //         ->filterColumn('periode', function ($query, $keyword) use ($bulanMap) {
+    //             $converted = $this->convertBulan($keyword, $bulanMap);
+    //             $query->where('od.periode', 'LIKE', '%' . $converted . '%');
+    //         })
+    //         ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+    //             $query->where('oh.nama_perusahaan', 'LIKE', '%' . $keyword . '%');
+    //         })
+    //         ->filterColumn('konsultan', function ($query, $keyword) {
+    //             $query->where('oh.konsultan', 'LIKE', '%' . $keyword . '%');
+    //         })
+    //         ->editColumn('tanggal_sampling', function ($row) {
+    //             return $row->tanggal_sampling ? explode(',', $row->tanggal_sampling) : [];
+    //         })
+    //         ->editColumn('tanggal_terima', function ($row) {
+    //             return $row->tanggal_terima ? explode(',', $row->tanggal_terima) : [];
+    //         })
+    //         ->make(true);
+    // }
+
     public function index(Request $request)
     {
-        // Gunakan Eloquent atau Query Builder yang lebih efisien
+        $subQuery = DB::table('order_detail')
+            ->select(
+                'id_order_header',
+                'periode',
+                DB::raw('GROUP_CONCAT(tanggal_sampling SEPARATOR ",") as tanggal_sampling'),
+                DB::raw('GROUP_CONCAT(tanggal_terima SEPARATOR ",") as tanggal_terima'),
+                DB::raw('GROUP_CONCAT(cfr SEPARATOR ",") as cfr')
+            )
+            ->groupBy('id_order_header', 'periode');
+
         $query = DB::table('order_header as oh')
-            ->join('order_detail as od', 'od.id_order_header', '=', 'oh.id')
+            ->joinSub($subQuery, 'od', function ($join) {
+                $join->on('oh.id', '=', 'od.id_order_header');
+            })
             ->where('oh.is_active', true)
             ->select(
                 'oh.id',
@@ -63,38 +155,11 @@ class HasilPengujianController extends Controller
                 'oh.konsultan',
                 'oh.alamat_sampling',
                 'od.periode',
-                // Gunakan SEPARATOR untuk konsistensi
-                DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_sampling ORDER BY od.tanggal_sampling ASC SEPARATOR ",") as tanggal_sampling'),
-                DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_terima ORDER BY od.tanggal_terima ASC SEPARATOR ",") as tanggal_terima')
-            )
-            ->groupBy(
-                'oh.id',
-                'oh.no_document',
-                'oh.tanggal_penawaran',
-                'oh.no_order',
-                'oh.tanggal_order',
-                'oh.nama_perusahaan',
-                'oh.konsultan',
-                'oh.alamat_sampling',
-                'od.periode'
+                'od.tanggal_sampling',
+                'od.tanggal_terima',
+                'od.cfr'
             )
             ->orderByDesc('oh.created_at');
-
-        // Cache bulan mapping
-        $bulanMap = [
-            'januari' => '01',
-            'februari' => '02',
-            'maret' => '03',
-            'april' => '04',
-            'mei' => '05',
-            'juni' => '06',
-            'juli' => '07',
-            'agustus' => '08',
-            'september' => '09',
-            'oktober' => '10',
-            'november' => '11',
-            'desember' => '12'
-        ];
 
         return DataTables::of($query)
             ->filterColumn('no_document', function ($query, $keyword) {
@@ -103,15 +168,8 @@ class HasilPengujianController extends Controller
             ->filterColumn('no_order', function ($query, $keyword) {
                 $query->where('oh.no_order', 'LIKE', '%' . $keyword . '%');
             })
-            ->filterColumn('tanggal_terima', function ($query, $keyword) use ($bulanMap) {
-                $this->filterTanggal($query, 'od.tanggal_terima', $keyword, $bulanMap);
-            })
-            ->filterColumn('tanggal_sampling', function ($query, $keyword) use ($bulanMap) {
-                $this->filterTanggal($query, 'od.tanggal_sampling', $keyword, $bulanMap);
-            })
-            ->filterColumn('periode', function ($query, $keyword) use ($bulanMap) {
-                $converted = $this->convertBulan($keyword, $bulanMap);
-                $query->where('od.periode', 'LIKE', '%' . $converted . '%');
+            ->filterColumn('periode', function ($query, $keyword) {
+                $query->where('od.periode', 'LIKE', '%' . $keyword . '%');
             })
             ->filterColumn('nama_perusahaan', function ($query, $keyword) {
                 $query->where('oh.nama_perusahaan', 'LIKE', '%' . $keyword . '%');
@@ -119,12 +177,15 @@ class HasilPengujianController extends Controller
             ->filterColumn('konsultan', function ($query, $keyword) {
                 $query->where('oh.konsultan', 'LIKE', '%' . $keyword . '%');
             })
-            ->editColumn('tanggal_sampling', function ($row) {
-                return $row->tanggal_sampling ? explode(',', $row->tanggal_sampling) : [];
+            ->filterColumn('tanggal_sampling', function ($query, $keyword) {
+                $query->where('od.tanggal_sampling', 'LIKE', '%' . $keyword . '%');
             })
-            ->editColumn('tanggal_terima', function ($row) {
-                return $row->tanggal_terima ? explode(',', $row->tanggal_terima) : [];
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->where('od.tanggal_terima', 'LIKE', '%' . $keyword . '%');
             })
+            ->editColumn('cfr', fn($row) => $row->cfr ? array_values(array_unique(explode(',', $row->cfr))) : null)
+            ->editColumn('tanggal_sampling', fn($row) => $row->tanggal_sampling ? array_values(array_unique(explode(',', $row->tanggal_sampling))) : null)
+            ->editColumn('tanggal_terima', fn($row) => $row->tanggal_terima ? array_values(array_unique(explode(',', $row->tanggal_terima))) : null)
             ->make(true);
     }
 
