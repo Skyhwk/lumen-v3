@@ -26,11 +26,11 @@ class SwabTest
 				} else {
 					// Format hasil perhitungan ke 2 desimal
 					$rumus = number_format($rumus, 2);
-                    $hasil2 = number_format($hasil2, 2);
-                    $hasil3 = number_format($hasil3, 2);
-                    $hasil4 = number_format($hasil4, 2);
 				}
 			}
+            $hasil2 = number_format($hasil2, 2);
+            $hasil3 = number_format($hasil3, 2);
+            $hasil4 = number_format($hasil4, 2);
 
             $satuan = 'CFU/cm2';
 
