@@ -378,7 +378,7 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
         // } catch (Exception $e) {
         //     DB::rollBack();
         //     return response()->json([
-        //         'message' => $e.getMessage(),
+        //         'message' => $e->getMessage(),
         //         'line' => $e.getLine(),
         //         'code' => $e.getCode()
         //     ], 401);
@@ -728,7 +728,7 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
             } catch (Exception $e) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => $e.getMessage(),
+                    'message' => $e->getMessage(),
                     'line' => $e.getLine(),
                     'code' => $e.getCode()
                 ], 401);

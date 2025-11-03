@@ -173,7 +173,7 @@ class FdlDebuPersonalController extends Controller
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e->getLine(),
                 'code' => $e->getCode()
             ]);
