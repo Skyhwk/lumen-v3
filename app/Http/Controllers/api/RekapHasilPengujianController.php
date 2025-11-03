@@ -19,7 +19,7 @@ class RekapHasilPengujianController extends Controller
 {
     public function index()
     {
-        $linkLhp = LinkLhp::with('token')->where('is_emailed', true)->latest();
+        $linkLhp = LinkLhp::with('token')->where('is_emailed', true)->orderBy('emailed_at', 'desc');
 
         return Datatables::of($linkLhp)
         ->filterColumn('is_completed', function ($query, $keyword) {
