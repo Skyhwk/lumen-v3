@@ -23,9 +23,15 @@ class GenerateHasilPengujianController extends Controller
 {
     public function index()
     {
-        $linkLhp = LinkLhp::with('token')->where('is_emailed', false)->latest()->get();
+        $linkLhp = LinkLhp::with('token')->where('is_emailed', false)->latest();
 
-        return Datatables::of($linkLhp)->make(true);
+        return Datatables::of($linkLhp)
+        ->filterColumn('is_completed', function ($query, $keyword) {
+            if($keyword != '') {
+                $query->where('is_completed', $keyword);
+            } 
+        })
+        ->make(true);
     }
 
     public function searchOrders(Request $request)
