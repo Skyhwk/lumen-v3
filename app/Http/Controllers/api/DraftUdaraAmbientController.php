@@ -225,6 +225,7 @@ class DraftUdaraAmbientController extends Controller
                     'parameter_lab' => str_replace("'", '', $key),
                     'parameter' => $val,
                     'hasil_uji' => $request->hasil_uji[$key] ?? '',
+                    'baku_mutu' => $request->baku_mutu[$key] ?? '',
                     'attr' => $request->attr[$key] ?? '',
                     'satuan' => $request->satuan[$key] ?? '',
                     'durasi' => $request->durasi[$key] ?? '',
@@ -245,6 +246,7 @@ class DraftUdaraAmbientController extends Controller
                             'akr' => $request->custom_akr[$page][$param] ?? '',
                             'parameter' => $request->custom_parameter_lab[$page][$param],
                             'hasil_uji' => $hasil,
+                            'baku_mutu' => $request->custom_baku_mutu[$page][$param] ?? '',
                             'attr' => $request->custom_attr[$page][$param] ?? '',
                             'satuan' => $request->custom_satuan[$page][$param] ?? '',
                             'durasi' => $request->custom_durasi[$page][$param] ?? '',
@@ -546,6 +548,7 @@ class DraftUdaraAmbientController extends Controller
             ], 500);
         }
     }
+
     public function handleDatadetail(Request $request)
     {
         try {
@@ -573,6 +576,7 @@ class DraftUdaraAmbientController extends Controller
                         'no_sampel' => $request->no_sampel,
                         'akr' => $val->akr,
                         'parameter' => $val->parameter,
+                        'baku_mutu' => $val->baku_mutu,
                         'satuan' => $val->satuan,
                         'hasil_uji' => $val->hasil_uji,
                         'methode' => $val->methode,
@@ -637,6 +641,7 @@ class DraftUdaraAmbientController extends Controller
                                     'no_sampel' => $request->no_sampel,
                                     'akr' => $val->akr,
                                     'parameter' => $val->parameter,
+                                    'baku_mutu' => $val->baku_mutu,
                                     'satuan' => $val->satuan,
                                     'hasil_uji' => $val->hasil_uji,
                                     'methode' => $val->methode,
@@ -806,6 +811,7 @@ class DraftUdaraAmbientController extends Controller
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
+        
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
             ->where('parameter', $val->parameter)
             ->first();
@@ -815,34 +821,45 @@ class DraftUdaraAmbientController extends Controller
             'no_sampel' => $val->no_sampel,
             'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
             'parameter' => $param->nama_regulasi,
-            'satuan' => $param->satuan,
-            // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
+            'satuan' => (!empty($bakumutu->satuan)) 
+                ? $bakumutu->satuan 
+                : (!empty($param->satuan) ? $param->satuan : '-'),
             'durasi' => $val->ws_value_linkungan->durasi ?? null,
-            'methode' => $param->method,
+            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
             'status' => $param->status
         ];
 
         $satuanIndexMap = [
             "µg/m³" => 17,
+            "µg/m3" => 17,
             "mg/m³" => 16,
+            "mg/m3" => 16,
             "BDS" => 15,
             "CFU/M²" => 14,
+            "CFU/M2" => 14,
             "CFU/25cm²" => 13,
+            "CFU/25cm2" => 13,
             "°C" => 12,
             "CFU/100 cm²" => 11,
+            "CFU/100 cm2" => 11,
             "CFU/m²" => 10,
+            "CFU/m2" => 10,
             "CFU/m³" => 9,
+            "CFU/m3" => 9,
             "m/s" => 8,
             "f/cc" => 7,
             "Ton/km²/Bulan" => 6,
+            "Ton/km2/Bulan" => 6,
             "%" => 5,
             "ppb" => 4,
             "ppm" => 3,
-            "mg/m³" => 2,
-            "μg/Nm³" => 1
+            "mg/nm³" => 2,
+            "mg/nm3" => 2,
+            "μg/Nm³" => 1,
+            "μg/Nm3" => 1
         ];
-
-        $index = $satuanIndexMap[$param->satuan] ?? 1;
+        
+        $index = $satuanIndexMap[$bakumutu->satuan] ?? 1;
 
         $fKoreksiKey = "f_koreksi_$index";
         $hasilKey = "hasil$index";
@@ -850,12 +867,19 @@ class DraftUdaraAmbientController extends Controller
         $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
             ?? $val->ws_udara->$hasilKey
             ?? $val->ws_value_linkungan->f_koreksi_c
-            ?? $val->ws_value_linkungan->C ?? '-';
+            ?? $val->ws_value_linkungan->C 
+            ?? '-';
+
+        if (in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
+            $hasil2 = $val->ws_udara->hasil2 ?? null;
+            $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        }
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
             $entry['methode'] = $bakumutu->method;
-            $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
+            $entry['baku_mutu'] = $bakumutu->baku_mutu;
             $methodsUsed[] = $bakumutu->method;
         }
 
