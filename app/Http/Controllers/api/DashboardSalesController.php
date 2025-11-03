@@ -105,7 +105,7 @@ class DashboardSalesController extends Controller
     public function getSales(Request $request)
     {
         $user_id = 890;
-        $bawahanIds = GetBawahan::where('id', $user_id)->select('id', 'jabatan')->get();
+        $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
 
         // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
         $managers = MasterKaryawan::where('is_active', true)
