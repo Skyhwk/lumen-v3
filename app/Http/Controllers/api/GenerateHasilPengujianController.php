@@ -38,37 +38,6 @@ class GenerateHasilPengujianController extends Controller
     {
         $search = $request->input('q');
 
-        // $kontrak = QuotationKontrakH::with(['detail:id_request_quotation_kontrak_h,periode_kontrak', 'order:id,no_document,no_order', 'order.orderDetail:id_order_header,periode,tanggal_sampling,cfr'])
-        //     ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
-        //     ->where('no_document', 'LIKE', "%{$search}%")
-        //     ->whereNotIn('flag_status', ['rejected', 'void'])
-        //     ->where('is_active', true)
-        //     ->whereHas('order')
-        //     ->limit(5)
-        //     ->get()
-        //     ->map(function ($item) {
-        //         $generatedLink = LinkLhp::where('no_quotation', $item->no_document)->pluck('periode')->toArray();
-        //         $filteredDetail = $item->detail->filter(fn($detail) => !in_array($detail->periode_kontrak, $generatedLink))->values();
-        //         $item->setRelation('detail', $filteredDetail);
-        //         return $item;
-        //     })
-        //     ->filter(fn($item) => $item->detail->isNotEmpty())
-        //     ->values();
-
-        // $nonKontrak = QuotationNonKontrak::with(['order:id,no_document,no_order', 'order.orderDetail:id_order_header,tanggal_sampling,cfr'])
-        //     ->select('id', 'no_document', 'nama_perusahaan', 'alamat_sampling')
-        //     ->where('no_document', 'LIKE', "%{$search}%")
-        //     ->whereNotIn('flag_status', ['rejected', 'void'])
-        //     ->where('is_active', true)
-        //     ->whereHas('order')
-        //     ->limit(5)
-        //     ->get()
-        //     ->map(fn($item) => LinkLhp::where('no_quotation', $item->no_document)->exists() ? null : $item)
-        //     ->filter()
-        //     ->values();
-
-        // $results = $kontrak->merge($nonKontrak);
-
         $results = OrderHeader::with('orderDetail')
             ->where('no_order', 'like', "%{$search}%")
             ->where('is_active', true)
@@ -386,9 +355,9 @@ class GenerateHasilPengujianController extends Controller
     public function getEmailInfo(Request $request)
     {
         if (str_contains($request->no_quotation, 'QTC')) {
-            $emailInfo = QuotationKontrakH::where('no_document', $request->no_quotation)->where('is_active', true)->latest()->first();
+            $emailInfo = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
         } else {
-            $emailInfo = QuotationNonKontrak::where('no_document', $request->no_quotation)->where('is_active', true)->latest()->first();
+            $emailInfo = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
         }
 
         return response()->json([
@@ -421,6 +390,7 @@ class GenerateHasilPengujianController extends Controller
                 $emails[] = $item;
         }
         $users = GetAtasan::where('id', $request->sales_id ?: $this->user_id)->get()->pluck('email');
+
         foreach ($users as $item) {
             if ($item === 'novva@intilab.com') {
                 $emails[] = 'sales02@intilab.com';
