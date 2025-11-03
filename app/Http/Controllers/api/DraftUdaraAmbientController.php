@@ -1006,9 +1006,8 @@ class DraftUdaraAmbientController extends Controller
     {
         DB::beginTransaction();
         try {
-            $noSampel = array_map('trim', explode(',', $request->noSampel));
             $data = OrderDetail::where('cfr', $request->no_lhp)
-                ->whereIn('no_sampel', $request->no_sampel)
+                ->where('no_sampel', $request->no_sampel)
                 ->first();
 
             if ($data) {
@@ -1021,6 +1020,7 @@ class DraftUdaraAmbientController extends Controller
                 }
                 $id_kategori = explode('-', $data->kategori_3);
                 $lhps = LhpsLingHeader::where('no_lhp', $data->cfr)
+                    ->where('no_sampel', $data->no_sampel)
                     ->where('no_order', $data->no_order)
                     ->where('id_kategori_3', $id_kategori[0])
                     ->where('is_active', true)
