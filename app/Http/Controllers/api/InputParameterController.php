@@ -4173,7 +4173,61 @@ class InputParameterController extends Controller
 
 				$data_kalkulasi['id_subkontrak'] = $data->id;
 				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$kalkulasi1 = WsValueAir::create($data_kalkulasi);
+				if($stp->sample->nama_kategori = 'Air'){
+                    $kalkulasi1 = WsValueAir::create($data_kalkulasi);
+                }else if($stp->sample->nama_kategori = 'Udara'){
+                    $existLingkungan = LingkunganHeader::where('no_sampel', $request->no_sample)
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
+                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
+                        $data_udara->id_subkontrak  = $data->id;
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara->{$key})) {
+                                $data_udara->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_udara = [];
+                        $data_udara['id_subkontrak'] = $data->id;
+                        $data_udara['no_sampel'] = $request->no_sample;
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara[$key])) {
+                                $data_udara[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_udara);
+                    }
+                }else if($stp->sample->nama_kategori = 'Emisi'){
+                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', $request->no_sample)
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+                        $data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+                        $data_emisi->id_subkontrak  = $data->id;
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi->{$key})) {
+                                $data_emisi->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_emisi = [];
+                        $data_emisi['id_subkontrak'] = $data->id;
+                        $data_emisi['no_sampel'] = $request->no_sample;
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi[$key])) {
+                                $data_emisi[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_emisi);
+                    }
+                }
 
 				DB::commit();
 				return (object)[
