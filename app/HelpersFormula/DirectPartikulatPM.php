@@ -8,8 +8,6 @@ class DirectpartikulatPM {
     public function index($data, $id_parameter, $mdl) {
         $measurements = [];
 
-        dd($data);
-
         foreach ($data as $record) {
             
             if ($record->pengukuran) {
