@@ -114,13 +114,13 @@
                                 $table = '';
                             }
                         @endphp
-                        @if($table)
+                        {{-- @if($table)
                         <table style="padding-top: 5px;" width="100%">
                                 <tr>
                                     <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
                                 </tr>
                         </table>
-                        @endif
+                        @endif --}}
                     
                 @endif
           
