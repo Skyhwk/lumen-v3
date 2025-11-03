@@ -140,7 +140,7 @@ class FdlSinarUvController extends Controller
         }catch(Exception $e){
             DB::rollBack();
             return response()->json([
-                'message'   => $e.getMessage(),
+                'message'   => $e->getMessage(),
                 'line'      => $e.getLine(),
                 'code'      => $e.getCode()
             ]);

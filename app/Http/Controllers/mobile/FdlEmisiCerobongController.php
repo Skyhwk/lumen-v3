@@ -290,7 +290,7 @@ class FdlEmisiCerobongController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -420,7 +420,7 @@ class FdlEmisiCerobongController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -434,6 +434,7 @@ class FdlEmisiCerobongController extends Controller
                         $data = new DataLapanganEmisiCerobong;
                     }
 
+                    
                     $data->no_sampel                                    = strtoupper(trim($request->no_sample));
                     if ($request->id_kat != '') $data->kategori_3       = $request->id_kat;
 
@@ -531,8 +532,9 @@ class FdlEmisiCerobongController extends Controller
                     ], 200);
                 }catch (\Exception $e) {
                     DB::rollBack();
+                    dd($e);
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line'    => $e->getLine(),
                         'code'    => $e->getCode()
                     ]);
