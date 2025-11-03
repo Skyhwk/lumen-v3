@@ -225,6 +225,7 @@ class DraftUdaraAmbientController extends Controller
                     'parameter_lab' => str_replace("'", '', $key),
                     'parameter' => $val,
                     'hasil_uji' => $request->hasil_uji[$key] ?? '',
+                    'baku_mutu' => $request->baku_mutu[$key] ?? '',
                     'attr' => $request->attr[$key] ?? '',
                     'satuan' => $request->satuan[$key] ?? '',
                     'durasi' => $request->durasi[$key] ?? '',
@@ -245,6 +246,7 @@ class DraftUdaraAmbientController extends Controller
                             'akr' => $request->custom_akr[$page][$param] ?? '',
                             'parameter' => $request->custom_parameter_lab[$page][$param],
                             'hasil_uji' => $hasil,
+                            'baku_mutu' => $request->custom_baku_mutu[$page][$param] ?? '',
                             'attr' => $request->custom_attr[$page][$param] ?? '',
                             'satuan' => $request->custom_satuan[$page][$param] ?? '',
                             'durasi' => $request->custom_durasi[$page][$param] ?? '',
@@ -855,7 +857,7 @@ class DraftUdaraAmbientController extends Controller
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
             $entry['methode'] = $bakumutu->method;
-            $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
+            $entry['baku_mutu'] = $bakumutu->baku_mutu;
             $methodsUsed[] = $bakumutu->method;
         }
 
