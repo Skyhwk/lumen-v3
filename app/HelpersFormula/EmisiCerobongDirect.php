@@ -17,6 +17,7 @@ class EmisiCerobongDirect {
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
 
+
         // Daftar parameter
         $paramCO2 = ["CO2", "CO2 (ESTB)"];
         $paramO2 = ["O2", "O2 (ESTB)"];
@@ -26,7 +27,7 @@ class EmisiCerobongDirect {
         $paramNO2 = ["NO2","NOx"];
         $paramNO = ["NO"];
         $paramSO2 = ["SO2"];
-        $paramCO = ["CO"];
+        $paramCO = ["CO", "C O"];
         $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
