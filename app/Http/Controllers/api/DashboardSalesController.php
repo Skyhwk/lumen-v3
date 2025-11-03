@@ -105,17 +105,30 @@ class DashboardSalesController extends Controller
     public function getSales(Request $request)
     {
         $user_id = 890;
-        $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
+        $bawahanIds = GetBawahan::where('id', $user_id)->select('id', 'jabatan')->get();
 
-        // Ambil manager, lalu ambil bawahannya (SPV, sales, executive)
+        // Ambil semua manager aktif (tanpa id 14 dulu)
         $managers = MasterKaryawan::where('is_active', true)
             ->where('jabatan', 'like', '%Manager%')
             ->where('id', '!=', $user_id)
-            ->whereIn('id', $bawahanIds)
+            ->whereIn('id', $bawahanIds->pluck('id'))
             ->orderBy('jabatan', 'asc')
             ->select('id', 'nama_lengkap', 'jabatan')
             ->get();
 
+        // Jika hanya 1 manager ditemukan, tambahkan karyawan id 14
+        if ($managers->count() === 1) {
+            $karyawan14 = MasterKaryawan::where('is_active', true)
+                ->where('id', 14)
+                ->select('id', 'nama_lengkap', 'jabatan')
+                ->first();
+
+            if ($karyawan14) {
+                $managers->push($karyawan14);
+            }
+        }
+
+        // Ambil bawahan masing-masing manager
         foreach ($managers as $mgr) {
             $mgr->bawahan = MasterKaryawan::where('is_active', true)
                 ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
@@ -127,11 +140,12 @@ class DashboardSalesController extends Controller
                 ->values();
         }
 
-        return response()->json([
-            'sales' => $managers,
-            'message' => 'Sales data retrieved successfully',
-        ], 200);
-    }
+    return response()->json([
+        'sales' => $managers,
+        'message' => 'Sales data retrieved successfully',
+    ], 200);
+}
+
 
     public function fetchAll(Request $request){
         try {
@@ -160,9 +174,6 @@ class DashboardSalesController extends Controller
             $periode = (count($arr) == 2 && isset($bulan[$arr[0]])) ? $arr[1] . '-' . $bulan[$arr[0]] : null;
             
             if($request->mode == "all"){
-                // $coba = new SalesKpiMonthly();
-                // $coba->run();
-
                 $tahun = explode('-', $periode)[0];
 
                 $cek = \DB::table('sales_kpi_monthly')
@@ -255,15 +266,201 @@ class DashboardSalesController extends Controller
                     'exist' => $sumall->revenue_bysampling_order_nonkontrak_exist + $sumall->revenue_bysampling_order_kontrak_exist,
                 ];
 
+                $table = SalesKpi::leftJoin('master_karyawan', 'sales_kpi_monthly.karyawan_id', '=', 'master_karyawan.id')
+                    ->where('periode', $periode)
+                    ->where(function($query) {
+                        $query->where('qty_qt_order_kontrak_exist', '!=', 0)
+                              ->orWhere('qty_qt_order_kontrak_new', '!=', 0)
+                              ->orWhere('qty_qt_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('qty_qt_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('amount_bysampling_order_kontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_kontrak_exist', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_kontrak_new', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_kontrak_exist', '!=', 0);
+                    })
+                    ->select(
+                        'sales_kpi_monthly.*',
+                        'master_karyawan.nama_lengkap',
+                        'master_karyawan.is_active as karyawan_active',
+                        // Revenue non-SP total (nonkontrak, new + exist)
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_exist,0)
+                            ) as amount_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.amount_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_exist,0)
+                            ) as amount_non_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_exist,0)
+                            ) as revenue_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_exist,0)
+                            ) as revenue_non_sp
+                        ')
+                    )
+                    ->orderBy('revenue_sp', 'desc')
+                    ->get();
+
                 return response()->json([
                     'heading' => $return,
-                    'table' => null,
+                    'table' => $table,
                     'chart' => $chart,
                     'piechart' => $piechart
                 ], 200);
 
             } else if (strpos($request->mode, "team") !== false){
+                $bawahanIds = GetBawahan::where('id', str_replace('team_', '', $request->karyawan_id))->get()->pluck('id')->unique()->values()->toArray();
                 
+                $tahun = explode('-', $periode)[0];
+
+                $cek = \DB::table('sales_kpi_monthly')
+                    ->selectRaw("
+                        SUM(dfus_call) as dfus_call,
+                        SUM(duration) as duration,
+                        SUM(qty_qt_nonkontrak_new) as qty_qt_nonkontrak_new,
+                        SUM(qty_qt_nonkontrak_exist) as qty_qt_nonkontrak_exist,
+                        SUM(qty_qt_kontrak_new) as qty_qt_kontrak_new,
+                        SUM(qty_qt_kontrak_exist) as qty_qt_kontrak_exist,
+                        SUM(qty_qt_order_nonkontrak_new) as qty_qt_order_nonkontrak_new,
+                        SUM(qty_qt_order_nonkontrak_exist) as qty_qt_order_nonkontrak_exist,
+                        SUM(qty_qt_order_kontrak_new) as qty_qt_order_kontrak_new,
+                        SUM(qty_qt_order_kontrak_exist) as qty_qt_order_kontrak_exist,
+                        SUM(amount_order_nonkontrak_new) as amount_order_nonkontrak_new,
+                        SUM(amount_order_nonkontrak_exist) as amount_order_nonkontrak_exist,
+                        SUM(amount_order_kontrak_new) as amount_order_kontrak_new,
+                        SUM(amount_order_kontrak_exist) as amount_order_kontrak_exist,
+                        SUM(amount_bysampling_order_nonkontrak_new) as amount_bysampling_order_nonkontrak_new,
+                        SUM(amount_bysampling_order_nonkontrak_exist) as amount_bysampling_order_nonkontrak_exist,
+                        SUM(amount_bysampling_order_kontrak_new) as amount_bysampling_order_kontrak_new,
+                        SUM(amount_bysampling_order_kontrak_exist) as amount_bysampling_order_kontrak_exist,
+                        SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+                        SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+                        SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+                        SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist,
+                        SUM(revenue_bysampling_order_nonkontrak_new) as revenue_bysampling_order_nonkontrak_new,
+                        SUM(revenue_bysampling_order_nonkontrak_exist) as revenue_bysampling_order_nonkontrak_exist,
+                        SUM(revenue_bysampling_order_kontrak_new) as revenue_bysampling_order_kontrak_new,
+                        SUM(revenue_bysampling_order_kontrak_exist) as revenue_bysampling_order_kontrak_exist
+                    ")
+                    ->where('periode', $periode)
+                    ->whereIn('karyawan_id', $bawahanIds)
+                    ->first();
+
+                // Gunakan logika tampilan yang sama
+                $return = [
+                    [ "title" => "DFUS Contacted", "value" => (($cek->dfus_call ?? 0) . " Calls"), "color" => "primary", "info" => (function($d){$d=(int)($d??0);if($d>=3600){$h=floor($d/3600);$m=floor(($d%3600)/60);return"{$h} Hours\n{$m} Minutes";}else{$m=floor($d/60);$s=$d%60;return"{$m} Minutes\n{$s} Seconds";}})($cek->duration ?? 0)],
+                    [ "title" => "Total Quote", "value" => (($cek->qty_qt_nonkontrak_new ?? 0)+($cek->qty_qt_nonkontrak_exist ?? 0)+($cek->qty_qt_kontrak_new ?? 0)+($cek->qty_qt_kontrak_exist ?? 0)) . " Quotes", "color" => "info", "info" => "Exist : " . (($cek->qty_qt_nonkontrak_exist ?? 0)+($cek->qty_qt_kontrak_exist ?? 0)) . " \nNew : " . (($cek->qty_qt_nonkontrak_new ?? 0)+($cek->qty_qt_kontrak_new ?? 0)) ],
+                    [ "title" => "Quote Ordered", "value" => (($cek->qty_qt_order_nonkontrak_new ?? 0)+($cek->qty_qt_order_nonkontrak_exist ?? 0)+($cek->qty_qt_order_kontrak_new ?? 0)+($cek->qty_qt_order_kontrak_exist ?? 0)) . " QS", "color" => "success", "info" => "Exist : " . (($cek->qty_qt_order_nonkontrak_exist ?? 0)+($cek->qty_qt_order_kontrak_exist ?? 0)) . " \nNew : " . (($cek->qty_qt_order_nonkontrak_new ?? 0)+($cek->qty_qt_order_kontrak_new ?? 0)) ],
+                    [ "title" => "Ordered (Amount)", "value" => "Rp " . number_format(($cek->amount_order_nonkontrak_new ?? 0)+($cek->amount_order_nonkontrak_exist ?? 0)+($cek->amount_order_kontrak_new ?? 0)+($cek->amount_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "danger", "info" => "Exist : Rp " . number_format(($cek->amount_order_nonkontrak_exist ?? 0)+($cek->amount_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->amount_order_nonkontrak_new ?? 0)+($cek->amount_order_kontrak_new ?? 0), 0, ',', '.') ],
+                    [ "title" => "Revenue", "value" => "Rp " . number_format(($cek->revenue_order_nonkontrak_new ?? 0)+($cek->revenue_order_nonkontrak_exist ?? 0)+($cek->revenue_order_kontrak_new ?? 0)+($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "dark", "info" => "Exist : Rp " . number_format(($cek->revenue_order_nonkontrak_exist ?? 0)+($cek->revenue_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_order_nonkontrak_new ?? 0)+($cek->revenue_order_kontrak_new ?? 0), 0, ',', '.') ],
+                    [ "title" => "Ordered (By Sampling)", "value" => "Rp " . number_format(($cek->amount_bysampling_order_nonkontrak_new ?? 0)+($cek->amount_bysampling_order_nonkontrak_exist ?? 0)+($cek->amount_bysampling_order_kontrak_new ?? 0)+($cek->amount_bysampling_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "warning", "info" => "Exist : Rp " . number_format(($cek->amount_bysampling_order_nonkontrak_exist ?? 0)+($cek->amount_bysampling_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->amount_bysampling_order_nonkontrak_new ?? 0)+($cek->amount_bysampling_order_kontrak_new ?? 0), 0, ',', '.') ],
+                    [ "title" => "Revenue (By Sampling)", "value" => "Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_new ?? 0)+($cek->revenue_bysampling_order_nonkontrak_exist ?? 0)+($cek->revenue_bysampling_order_kontrak_new ?? 0)+($cek->revenue_bysampling_order_kontrak_exist ?? 0), 0, ',', '.'), "color" => "secondary", "info" => "Exist : Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_exist ?? 0)+($cek->revenue_bysampling_order_kontrak_exist ?? 0), 0, ',', '.') . " \nNew : Rp " . number_format(($cek->revenue_bysampling_order_nonkontrak_new ?? 0)+($cek->revenue_bysampling_order_kontrak_new ?? 0), 0, ',', '.') ]
+                ];
+
+                $tahun = explode('-', $periode)[0];
+                $allKpi = SalesKpi::where('periode', 'like', $tahun . '-%')
+                    ->selectRaw('periode,
+                        SUM(revenue_bysampling_order_nonkontrak_new) as revenue_bysampling_order_nonkontrak_new,
+                        SUM(revenue_bysampling_order_nonkontrak_exist) as revenue_bysampling_order_nonkontrak_exist,
+                        SUM(revenue_bysampling_order_kontrak_new) as revenue_bysampling_order_kontrak_new,
+                        SUM(revenue_bysampling_order_kontrak_exist) as revenue_bysampling_order_kontrak_exist
+                    ')
+                    ->whereIn('karyawan_id', $bawahanIds)
+                    ->groupBy('periode')
+                    ->get()
+                    ->keyBy(function($item) {
+                        return $item->periode;
+                    });
+                
+                $chart = [];
+                foreach ($months as $mnthName => $mnthNum) {
+                    $periodeKey = $tahun . '-' . $mnthNum;
+                    if (isset($allKpi[$periodeKey])) {
+                        $item = $allKpi[$periodeKey];
+                        $value = 
+                            ($item->revenue_bysampling_order_nonkontrak_new ?? 0) +
+                            ($item->revenue_bysampling_order_nonkontrak_exist ?? 0) +
+                            ($item->revenue_bysampling_order_kontrak_new ?? 0) +
+                            ($item->revenue_bysampling_order_kontrak_exist ?? 0);
+                    } else {
+                        $value = null;
+                    }
+                    $chart[] = [
+                        'month' => $mnthName,
+                        'value' => $value,
+                    ];
+                }
+
+                $sumall = SalesKpi::where('periode', $periode)
+                    ->selectRaw('SUM(revenue_bysampling_order_nonkontrak_new) as revenue_bysampling_order_nonkontrak_new,
+                        SUM(revenue_bysampling_order_nonkontrak_exist) as revenue_bysampling_order_nonkontrak_exist,
+                        SUM(revenue_bysampling_order_kontrak_new) as revenue_bysampling_order_kontrak_new,
+                        SUM(revenue_bysampling_order_kontrak_exist) as revenue_bysampling_order_kontrak_exist
+                    ')
+                    ->whereIn('karyawan_id', $bawahanIds)
+                    ->first();
+
+                $piechart = [
+                    'value' => $sumall->revenue_bysampling_order_nonkontrak_new + $sumall->revenue_bysampling_order_nonkontrak_exist + $sumall->revenue_bysampling_order_kontrak_new + $sumall->revenue_bysampling_order_kontrak_exist,
+                    'new' => $sumall->revenue_bysampling_order_nonkontrak_new + $sumall->revenue_bysampling_order_kontrak_new,
+                    'exist' => $sumall->revenue_bysampling_order_nonkontrak_exist + $sumall->revenue_bysampling_order_kontrak_exist,
+                ];
+
+                $table = SalesKpi::leftJoin('master_karyawan', 'sales_kpi_monthly.karyawan_id', '=', 'master_karyawan.id')
+                    ->where('periode', $periode)
+                    ->where(function($query) {
+                        $query->where('qty_qt_order_kontrak_exist', '!=', 0)
+                              ->orWhere('qty_qt_order_kontrak_new', '!=', 0)
+                              ->orWhere('qty_qt_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('qty_qt_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('amount_bysampling_order_kontrak_new', '!=', 0)
+                              ->orWhere('amount_bysampling_order_kontrak_exist', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_nonkontrak_new', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_nonkontrak_exist', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_kontrak_new', '!=', 0)
+                              ->orWhere('revenue_bysampling_order_kontrak_exist', '!=', 0);
+                    })
+                    ->whereIn('karyawan_id', $bawahanIds)
+                    ->select(
+                        'sales_kpi_monthly.*',
+                        'master_karyawan.nama_lengkap',
+                        'master_karyawan.is_active as karyawan_active',
+                        // Revenue non-SP total (nonkontrak, new + exist)
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_bysampling_order_kontrak_exist,0)
+                            ) as amount_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.amount_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.amount_order_kontrak_exist,0)
+                            ) as amount_non_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_bysampling_order_kontrak_exist,0)
+                            ) as revenue_sp
+                        '),
+                        \DB::raw('
+                            (IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_nonkontrak_exist,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_new,0) + IFNULL(sales_kpi_monthly.revenue_order_kontrak_exist,0)
+                            ) as revenue_non_sp
+                        ')
+                    )
+                    ->orderBy('revenue_sp', 'desc')
+                    ->get();
+
+                return response()->json([
+                    'heading' => $return,
+                    'table' => $table,
+                    'chart' => $chart,
+                    'piechart' => $piechart
+                ], 200);
+
             } else {
                 $cek = SalesKpi::where('karyawan_id', $request->karyawan_id)->where('periode', $periode)->first();
 
