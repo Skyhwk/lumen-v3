@@ -30,11 +30,11 @@ class DirectHCHO8JpmLK {
             
         $c2 = round($average * ($suhu / $tekanan_udara) * (298 / 760), 4); // mg/m³
         $c1 = round($c2 * 1000, 4); // ug/Nm³ 
-        $c3 = round(($c2 / 24.45) * 30.03, 4); // mg/m³
+        $c3 = round(($c2 / 30.03) * 24.45, 4); // mg/m³
         $c15 = $c3; // BDS
         $c17 = round($average, 4); // mg/m³
         $c16 = round($c17 * 1000, 4); // ug/m³ 
-        $satuan = $id_parameter == 255 ? "mg/m3" : "mg/Nm3";
+        $satuan = 'ppm';
 
         return [
             'c1'     => $c1,
