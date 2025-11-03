@@ -121,7 +121,7 @@ class SoundMeterController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'code' => $e->getCode(),
                 'line' => $e->getLine()
             ]);

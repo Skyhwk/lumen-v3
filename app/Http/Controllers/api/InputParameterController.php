@@ -687,7 +687,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 				$isokinetik = Subkontrak::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -1583,7 +1583,7 @@ class InputParameterController extends Controller
 					'message'=> 'Pilih jenis pengujian'
 				], 401);
 			}
-		}else if($stp->name == 'MIKROBIOLOGI' || $stp->sample->nama_kategori == 'Udara'){
+		}else if($stp->name == 'MIKROBIOLOGI' && $stp->sample->nama_kategori == 'Udara'){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -1858,7 +1858,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		} else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+		} else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -3664,6 +3664,7 @@ class InputParameterController extends Controller
 			->where('parameter', $request->parameter)
 			->first();
 
+        $swab = null;
         $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
         if(in_array($request->parameter, $swab_parameter)){
             $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
@@ -4160,7 +4161,7 @@ class InputParameterController extends Controller
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
 				$data->hp 					= $request->hp;
-				$data->fp 					= $request->fp ?? null; //faktor pengenceran
+				$data->fp 					= isset($request->fp) ? $request->fp : null; //faktor pengenceran
 				// $data->note 				= $request->note;
 				$data->is_approve 			= true;
 				$data->approved_by 			= $this->karyawan;
