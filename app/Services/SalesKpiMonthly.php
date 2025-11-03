@@ -217,11 +217,14 @@ class SalesKpiMonthly
                     ->join('request_quotation_kontrak_D as d', 'h.id', '=', 'd.id_request_quotation_kontrak_h')
                     ->join(DB::raw('
                         (
-                            SELECT id_order_header, MIN(tanggal_terima) as tanggal_terkecil 
+                            SELECT id_order_header, MIN(tanggal_terima) as tanggal_terkecil, periode 
                             FROM order_detail 
-                            GROUP BY id_order_header
+                            GROUP BY id_order_header, periode
                         ) as od
-                    '), 'order_header.id', '=', 'od.id_order_header')
+                    '), function($join) use ($yearMonth) {
+                        $join->on('order_header.id', '=', 'od.id_order_header')
+                                ->where('od.periode', '=', $yearMonth);
+                    })
                     ->leftJoin(DB::raw("
                         (
                             SELECT id_pelanggan, COUNT(*) as total_order
