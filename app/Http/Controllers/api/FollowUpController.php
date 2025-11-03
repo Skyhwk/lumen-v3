@@ -185,7 +185,7 @@ class FollowUpController extends Controller
 
     public function dfus(Request $request)
     {
-        $dfus = DFUS::select('dfus.*')
+        $dfus = DFUS::with('keteranganTambahan')->select('dfus.*')
             ->addSelect('p.id_pelanggan as idPelanggan', 'p.nama_pelanggan as namaPelanggan')
             ->join('master_pelanggan as p', function ($join) {
                 $join->on('p.id_pelanggan', '=', 'dfus.id_pelanggan')->where('p.is_active', true);
@@ -590,8 +590,49 @@ class FollowUpController extends Controller
         return response()->json(['data' => $fileName], 200);
     }
 
-    public function getDetailKeterangan(Request $request) {
+    public function getDetailKeterangan(Request $request)
+    {
         $keterangan = DFUSKeterangan::where('dfus_id', $request->id)->first();
         return response()->json(['data' => $keterangan], 200);
+    }
+
+    public function createOrUpdate(Request $request)
+    {
+        try {
+            $keterangan = null;
+            if ($request->id) {
+                $keterangan = DFUSKeterangan::where('id', $request->id)->first();
+                $keterangan->updated_by = $this->karyawan;
+                $keterangan->updated_at = Carbon::now();
+            } else {
+                $keterangan = new DFUSKeterangan();
+                $keterangan->dfus_id = $request->dfus_id;
+                $keterangan->created_by = $this->karyawan;
+                $keterangan->created_at = Carbon::now();
+            }
+
+            $keterangan->step_active = $request->step_active;
+
+            if ($request->step_active == 1) {
+                $keterangan->tanggal_perkenalan = $request->tanggal_perkenalan;
+                $keterangan->keterangan_perkenalan = $request->keterangan_perkenalan;
+            } else if ($request->step_active == 2) {
+                $keterangan->proposal = $request->proposal;
+                $keterangan->keterangan_proposal = $request->keterangan_proposal;
+            } else if ($request->step_active == 3) {
+                $keterangan->tanggal_review_manager = $request->tanggal_review_manager;
+                $keterangan->keterangan_review_manager = $request->keterangan_review_manager;
+            } else if ($request->step_active == 4) {
+                $keterangan->keterangan_negosiasi_harga = $request->keterangan_negosiasi_harga;
+            } else if ($request->step_active == 5) {
+                $keterangan->maintain_call = $request->maintain_call;
+                $keterangan->keterangan_maintain_call = $request->keterangan_maintain_call;
+            }
+
+            $keterangan->save();
+            return response()->json(['message' => 'Data berhasil disimpan', 'success' => true, 'data'=> $keterangan], 200);
+        } catch (\Exception $th) {
+            return  response()->json(['error' => $th], 400);
+        }
     }
 }

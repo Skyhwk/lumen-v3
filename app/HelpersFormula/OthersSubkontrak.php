@@ -34,7 +34,7 @@ class OthersSubkontrak
 		// 	$decimal = 1;
 		// }
 		// dd($data->hp);
-		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false || strpos($data->parameter, 'Rasa') !== false || !is_numeric($data->hp)) {
+		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false || strpos($data->parameter, 'Rasa') !== false || !is_numeric($data->hp) || !isset($data->fp)) {
 			// dd('masuk');
 			$rumus = $data->hp;
 		}else{
