@@ -386,9 +386,9 @@ class GenerateHasilPengujianController extends Controller
     public function getEmailInfo(Request $request)
     {
         if (str_contains($request->no_quotation, 'QTC')) {
-            $emailInfo = QuotationKontrakH::where('no_document', $request->no_quotation)->where('is_active', true)->latest()->first();
+            $emailInfo = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
         } else {
-            $emailInfo = QuotationNonKontrak::where('no_document', $request->no_quotation)->where('is_active', true)->latest()->first();
+            $emailInfo = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
         }
 
         return response()->json([
@@ -421,6 +421,7 @@ class GenerateHasilPengujianController extends Controller
                 $emails[] = $item;
         }
         $users = GetAtasan::where('id', $request->sales_id ?: $this->user_id)->get()->pluck('email');
+
         foreach ($users as $item) {
             if ($item === 'novva@intilab.com') {
                 $emails[] = 'sales02@intilab.com';
