@@ -59,16 +59,18 @@ class LingkunganHidupCl
         $C = is_numeric($C) ? (float) $C : 0;
 
         // Hindari division by zero (24.45 tidak boleh nol)
-        $divider = 24.45;
-        if ($divider == 0) {
-            $divider = 1; // fallback agar tidak error
-        }
+        // $divider = 24.45;
+        // if ($divider == 0) {
+        //     $divider = 1; // fallback agar tidak error
+        // }
 
         // C1 = C / 1000
         $C1 = round($C / 1000, 4);
 
         // C2 = (C1 / 24.45) * 35.45
-        $C2 = round(($C1 / $divider) * 35.45, 4);
+        // revisi menjadi
+        // C (PPM)= (C2 / 112,414)*24.45
+        $C2 = round(($C1 / 24.45) * 35.45, 4);
 
         // C3 = C2 * 1000
         $C3 = round($C2 * 1000, 4);
