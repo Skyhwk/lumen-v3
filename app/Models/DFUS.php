@@ -30,8 +30,8 @@ class DFUS extends Sector
         return $logs->get();
     }
 
-    public function keterangan(){
-        return $this->hasOne(DFUSKeterangan::class, 'id', 'dfus_id');
+    public function keteranganTambahan(){
+        return $this->hasOne(DFUSKeterangan::class, 'dfus_id', 'id');
     }
 
     // public function getLogWebphoneAttribute()
