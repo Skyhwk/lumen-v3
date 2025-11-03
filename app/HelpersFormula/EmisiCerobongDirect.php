@@ -17,20 +17,22 @@ class EmisiCerobongDirect {
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
 
+
         // Daftar parameter
         $paramCO2 = ["CO2", "CO2 (ESTB)"];
         $paramO2 = ["O2", "O2 (ESTB)"];
         $paramOpasitas = ["Opasitas", "Opasitas (ESTB)"];
         $paramSuhu = ["Suhu"];
         $paramVelocity = ["Velocity"];
-        $paramNO2 = ["NO2","NOx"];
+        $paramNO2 = ["NO2","NOx", "NO-NO2", "NOx-NO2"];
         $paramNO = ["NO"];
         $paramSO2 = ["SO2"];
-        $paramCO = ["CO"];
+        $paramCO = ["CO", "C O"];
         $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
         $paramO2P = ["O2 (P)"];
+        $paramNO2_NOxP = ["NO2-NOx (P)"];
 
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
@@ -108,7 +110,7 @@ class EmisiCerobongDirect {
             $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
             $c5 = $c5 < 1 ? '<1' : $c5;
-            $satuan = 'mg/Nm3';
+            $satuan = 'mg/Nm³';
         } else if (in_array($id_parameter, $paramSO2)) {
             $pa = $data->tekanan_udara;
             $ta = $data->suhu;
@@ -176,6 +178,14 @@ class EmisiCerobongDirect {
                 $c6 = null;
                 $satuan = null;
             }
+        } else if(in_array($id_parameter, $paramNO2_NOxP)){
+            $c5 = round($avg_nox_p, 1);
+            $c4 = round(($c5 / 46) * 24.45, 1);
+            $c3 = round($c4 * 1000, 1);
+            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $c5 = $c5 < 1 ? '<1' : $c5;
+            $satuan = 'mg/Nm³';
         }
 
         

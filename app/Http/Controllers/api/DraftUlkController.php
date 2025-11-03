@@ -578,43 +578,60 @@ class DraftUlkController extends Controller
             'no_sampel' => $val->no_sampel,
             'akr' => $bakumutu ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '') : '',
             'parameter' => $param->nama_regulasi,
-            'satuan' => $param->satuan,
-            // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
+            'satuan' => (!empty($bakumutu->satuan)) 
+                ? $bakumutu->satuan 
+                : (!empty($param->satuan) ? $param->satuan : '-'),
             'durasi' => $val->ws_value_linkungan->durasi ?? null,
-            'methode' => $param->method,
+            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
             'status' => $param->status
         ];
 
         $satuanIndexMap = [
             "µg/m³" => 17,
+            "µg/m3" => 17,
             "mg/m³" => 16,
+            "mg/m3" => 16,
             "BDS" => 15,
             "CFU/M²" => 14,
+            "CFU/M2" => 14,
             "CFU/25cm²" => 13,
+            "CFU/25cm2" => 13,
             "°C" => 12,
             "CFU/100 cm²" => 11,
+            "CFU/100 cm2" => 11,
             "CFU/m²" => 10,
+            "CFU/m2" => 10,
             "CFU/m³" => 9,
+            "CFU/m3" => 9,
             "m/s" => 8,
             "f/cc" => 7,
             "Ton/km²/Bulan" => 6,
+            "Ton/km2/Bulan" => 6,
             "%" => 5,
             "ppb" => 4,
             "ppm" => 3,
-            "mg/m³" => 2,
-            "μg/Nm³" => 1
+            "mg/nm³" => 2,
+            "mg/nm3" => 2,
+            "μg/Nm³" => 1,
+            "μg/Nm3" => 1
         ];
 
-        $index = $satuanIndexMap[$param->satuan] ?? 1;
+        $index = $satuanIndexMap[$bakumutu->satuan] ?? 1;
         
         $fKoreksiKey = "f_koreksi_$index";
         $hasilKey = "hasil$index";
 
         $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
             ?? $val->ws_udara->$hasilKey
-            ?? $val->ws_value_linkungan->f_koreksi_c
-            ?? $val->ws_value_linkungan->C ?? '-';
+            ?? $val->ws_value_lingkungan->f_koreksi_c
+            ?? $val->ws_value_lingkungan->C
+            ?? '-';
 
+        if (in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
+            $hasil2 = $val->ws_udara->hasil2 ?? null;
+            $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        }
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
