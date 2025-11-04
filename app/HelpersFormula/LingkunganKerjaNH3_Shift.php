@@ -21,7 +21,6 @@ class LingkunganKerjaNH3_Shift
             $kb = $data->kb;
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -42,7 +41,8 @@ class LingkunganKerjaNH3_Shift
 
         // dd($data->durasi);
         foreach($data->ks as $key_ks => $item_ks) {
-            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+            $Ta = floatval($data->suhu_array[$key_ks]) + 273;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key_ks]) / $Ta) * (298 / 760), 4));
             if($Vu != 0.0) {
                 $C = \str_replace(",", "", number_format(($item_ks / floatval($Vu)) * 1000, 4));
             }else {
