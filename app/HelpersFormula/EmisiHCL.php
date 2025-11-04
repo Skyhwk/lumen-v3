@@ -19,7 +19,7 @@ class EmisiHCL
 		$C2 = null;
 
 
-		
+
 		if (is_array($data->ks)) {
 			$ks = array_sum($data->ks) / count($data->ks);
 		}else {
@@ -31,13 +31,15 @@ class EmisiHCL
 			$kb = floatval($data->kb);
 		}
 
-        $tekanan_dry = LookUpRdm::getRdm();
+        // $tekanan_dry = LookUpRdm::getRdm();
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
         // dd($data->volume_dry, $data->suhu, $data->tekanan, $data->tekanan_dry, $data->nil_pv);
         try {
             // $nilbag = \str_replace(",", "", );
             // $nilbag = number_format(36.5 / 35.5, 4);
             $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 50 * (36.5 / 35.5)) / floatval($Vs)) * 1000, 4));
+            // (ug/Nm3) = C2 x 1000
+            $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
             // dd((($ks - $kb) * 50 * (36.5 / 35.5)) / floatval($Vs));
             $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 36.5), 4));
             if (floatval($C1) < 0.0031)
