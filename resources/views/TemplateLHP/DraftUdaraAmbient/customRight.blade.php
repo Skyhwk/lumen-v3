@@ -196,23 +196,21 @@
                             </tr>
                         </table>
                     @endforeach
-                    @php
-                        // pastikan $header ada nilainya
-                        $regulasi = MasterRegulasi::where('id', explode('-', $y)[0])->first();
-                        $table = TabelRegulasi::whereJsonContains('id_regulasi', explode('-', $y)[0])->first();
-                        if (!empty($table)) {
-                            $table = $table->konten;
-                        } else {
-                            $table = '';
-                        }
-                    @endphp
-                    @if ($table)
-                        <table style="padding-top: 5px;" width="100%">
-                            <tr>
-                                <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
-                            </tr>
-                        </table>
-                    @endif
+                @endif
+
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
+                            @endforeach
+                        @endforeach
+                    </table>
                 @endif
             </td>
         </tr>

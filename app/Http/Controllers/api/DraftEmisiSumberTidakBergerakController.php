@@ -463,7 +463,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'data' => $data_entry,
                     'next_page' => $data_custom,
                     'spesifikasi_method' => $returnMethods,
-
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
                 ], 201);
             } else {
 
@@ -517,6 +521,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'data' => $mainData,
                     'next_page' => $otherRegulations,
                     'spesifikasi_method' => $resultMethods,
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
                 ], 201);
             }
         } catch (\Throwable $e) {
