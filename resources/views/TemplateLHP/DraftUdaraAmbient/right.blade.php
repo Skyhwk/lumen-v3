@@ -161,7 +161,7 @@
                                 <tr>
                                     <td class="custom5">Kecepatan Angin</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->kecepatan_angin }} Km/Jam</td>
+                                    <td class="custom5">{{ $detailLapangan->kecepatan_angin * 3.6 }} Km/Jam</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Arah Angin Dominan</td>
