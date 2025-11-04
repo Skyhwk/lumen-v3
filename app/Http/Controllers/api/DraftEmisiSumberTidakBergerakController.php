@@ -46,7 +46,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
-        if ($request->category2 == 34) {
+        // if ($request->category2 == 34) {
             try {
                 $header = LhpsEmisiCHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
 
@@ -73,7 +73,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 //             array_push($keterangan, $value);
                 //     }
                 // }
-
                 try {
                     $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                         return ['page' => (int) $page, 'regulasi' => $item];
@@ -248,7 +247,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'status' => false
                 ], 500);
             }
-        }
+        // }
     }
     public function updateTanggalLhp(Request $request)
     {
@@ -558,7 +557,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'satuan' => $param->satuan,
             'methode' => $param->method,
             'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
+            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
         ];
 
         
