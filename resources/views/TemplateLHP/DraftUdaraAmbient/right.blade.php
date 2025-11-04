@@ -2,8 +2,40 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
+    use \Carbon\Carbon;
 
     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
+    $tanggal_sampling = '';
+    if($header->status_sampling == 'S24'){
+        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+
+        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
+
+        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
+
+        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+        $tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
+
+        if ($tanggalAwal || $tanggalAkhir) {
+            if ($tanggalAwal == $tanggalAkhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    } else {
+        if ($header->tanggal_sampling || $header->tanggal_terima) {
+            if ($header->tanggal_sampling == $header->tanggal_terima) {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    }   
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -59,30 +91,20 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
                             @php
-                                if ($header->tanggal_sampling || $header->tanggal_terima) {
-                                    if ($header->tanggal_sampling == $header->tanggal_terima) {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-                                    } else {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-                                    }
-                                } else {
-                                    echo '-';
-                                }
+                                echo $tanggal_sampling;
                             @endphp
                         </td>
                     </tr>
                     <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">
-                            @php
-                                if ($header->tanggal_terima) {
-                                    echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima) . ' - ' . \App\Helpers\Helper::tanggal_indonesia(date('Y-m-d'));
-                                } else {
-                                    echo '-';
-                                }
-                            @endphp
-                        </td>
+                        <td class="custom5" width="120">Periode Analisa</td>
+                        <td class="custom5" width="12">:</td>
+                        @php
+                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
+                            $periode = explode(' - ', $periode_analisa);
+                            $periode1 = $periode[0] ?? '';
+                            $periode2 = $periode[1] ?? '';
+                        @endphp
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>

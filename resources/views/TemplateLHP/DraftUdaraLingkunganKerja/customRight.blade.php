@@ -1,40 +1,9 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
-    use App\Models\DetailLingkunganHidup;
+    use App\Models\DetailLingkunganKerja;
 
-    $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
-    $tanggal_sampling = '';
-    if($header->status_sampling == 'S24'){
-        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
-
-        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
-
-        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
-
-        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
-        $tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
-
-        if ($tanggalAwal || $tanggalAkhir) {
-            if ($tanggalAwal == $tanggalAkhir) {
-            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
-            }
-        } else {
-            $tanggal_sampling = '-';
-        }
-    } else {
-        if ($header->tanggal_sampling || $header->tanggal_terima) {
-            if ($header->tanggal_sampling == $header->tanggal_terima) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-            }
-        } else {
-            $tanggal_sampling = '-';
-        }
-    }
+    $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -49,7 +18,7 @@
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
                         <td class="custom">{{ $header->no_sampel }}</td>
-                        <td class="custom">Udara Ambient</td>
+                        <td class="custom">Lingkungan Kerja</td>
                     </tr>
                 </table>
             </td>
@@ -100,20 +69,30 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
                             @php
-                                echo $tanggal_sampling;
+                                if ($header->tanggal_sampling || $header->tanggal_terima) {
+                                    if ($header->tanggal_sampling == $header->tanggal_terima) {
+                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+                                    } else {
+                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+                                    }
+                                } else {
+                                    echo '-';
+                                }
                             @endphp
                         </td>
                     </tr>
                     <tr>
-                        <td class="custom5" width="120">Periode Analisa</td>
-                        <td class="custom5" width="12">:</td>
-                        @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
-                        @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">Periode Analisa</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">
+                            @php
+                                if ($header->tanggal_terima) {
+                                    echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima) . ' - ' . \App\Helpers\Helper::tanggal_indonesia(date('Y-m-d'));
+                                } else {
+                                    echo '-';
+                                }
+                            @endphp
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -144,16 +123,6 @@
                         <td width="50%">
                             <table>
                                 <tr>
-                                    <td class="custom5" width="120">Jam Pengambilan</td>
-                                    <td class="custom5" width="12">:</td>
-                                    <td class="custom5">{{ $detailLapangan->waktu_pengukuran }} WIB</td>
-                                </tr>
-                                <tr>
-                                    <td class="custom5">Cuaca</td>
-                                    <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->cuaca }}</td>
-                                </tr>
-                                <tr>
                                     <td class="custom5">Suhu Lingkungan</td>
                                     <td class="custom5">:</td>
                                     <td class="custom5">{{ $detailLapangan->suhu }} °C</td>
@@ -162,20 +131,6 @@
                                     <td class="custom5">Kelembapan</td>
                                     <td class="custom5">:</td>
                                     <td class="custom5">{{ $detailLapangan->kelembapan }} %</td>
-                                </tr>
-                            </table>
-                        </td>
-                        <td width="50%">
-                            <table>
-                                <tr>
-                                    <td class="custom5">Kecepatan Angin</td>
-                                    <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->kecepatan_angin }} Km/Jam</td>
-                                </tr>
-                                <tr>
-                                    <td class="custom5">Arah Angin Dominan</td>
-                                    <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->arah_angin }}</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Tekanan Udara</td>

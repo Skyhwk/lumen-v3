@@ -3096,6 +3096,8 @@ class InputParameterController extends Controller
 			}
 			$data_parsing->tekanan = $tekananFin;
 			$data_parsing->suhu = $suhuFin;
+            $data_parsing->suhu_array = $suhu;
+            $data_parsing->tekanan_array = $tekanan_u;
 			$data_parsing->tanggal_terima = $tgl_terima;
 			// dd($data_parsing);
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3135,15 +3137,23 @@ class InputParameterController extends Controller
 				$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->data_shift = null;
 				if (in_array($data_parameter->id, $saveShift) || $request->id_stp == 13) {
-					$ks = array_chunk(array_map('floatval', $request->ks), 2);
-					$kb = array_chunk(array_map('floatval', $request->kb), 2);
-					$data_shift = array_map(function ($sample, $blanko) {
-						return (object) [
-							"sample" => number_format(array_sum($sample) / count($sample),4),
-							"blanko" => number_format(array_sum($blanko) / count($blanko),4)
-						];
-					}, $ks, $kb);
-					// dd($data_shift, $request->ks, $request->kb);
+					if($isO3){
+                        $ks = array_chunk(array_map('floatval', $request->ks), 2);
+                        $kb = array_chunk(array_map('floatval', $request->kb), 2);
+                        $data_shift = array_map(function ($sample, $blanko) {
+                            return (object) [
+                                "sample" => number_format(array_sum($sample) / count($sample),4),
+                                "blanko" => number_format(array_sum($blanko) / count($blanko),4)
+                            ];
+                        }, $ks, $kb);
+                    }else{
+                        $data_shift = array_map(function ($sample, $blanko) {
+                            return (object) [
+                                "sample" => number_format($sample,4),
+                                "blanko" => number_format($blanko,4)
+                            ];
+                        }, $request->ks, $request->kb);
+                    }
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
                 // dd(isset($data_kalkulasi['data_pershift']));
