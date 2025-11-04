@@ -189,6 +189,7 @@ class DraftUdaraAmbientController extends Controller
                 'nama_pelanggan' => $request->nama_perusahaan ?: null,
                 'alamat_sampling' => $request->alamat_sampling ?: null,
                 'sub_kategori' => $request->jenis_sampel ?: null,
+                'periode_analisa' => $request->periode_analisa ?: null,
                 'id_kategori_2' => 4,
                 'id_kategori_3' => 11,
                 'deskripsi_titik' => $request->penamaan_titik ?: null,
