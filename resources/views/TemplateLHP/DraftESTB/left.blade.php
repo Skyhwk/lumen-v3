@@ -22,8 +22,8 @@
                     @endphp
                     <tr>
                         <td class="pd-5-{{ $rowClass }}-center">{{ $p }}</td>
-                        <td class="pd-5-{{ $rowClass }}-left">{!! $akr !!}&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['C'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-left"><sup>{!! $akr !!}</sup>&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-center">{!! $yy['C'] ?? '' !!}</td>
                         <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
                         <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
                         <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>

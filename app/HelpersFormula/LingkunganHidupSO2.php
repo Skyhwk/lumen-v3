@@ -22,7 +22,6 @@ class LingkunganHidupSO2
             $kb = $data->kb;
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -41,8 +40,9 @@ class LingkunganHidupSO2
 
         $C_value = $C1_value = $C2_value = $C14_value = $C15_value = $C16_value = [];
 
-        $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         foreach ($data->ks as $key => $value) {
+            $Ta = floatval($data->suhu_array[$key]) + 273;
+            $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4));
             if ($Vu != 0.0) {
                 $C = \str_replace(",", "", number_format((floatval($value) / floatval($Vu)) * 1000, 4));
             } else {
