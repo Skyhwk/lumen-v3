@@ -5,20 +5,21 @@
 
     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
     $tanggal_sampling = '';
-    if($header->status_sampling == '24'){
+    if($header->status_sampling == 'S24'){
         $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)
-            ->min('tanggal_sampling');
+        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
 
-        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)
-            ->max('tanggal_sampling');
+        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
 
-        if ($header->tanggalAwal || $header->tanggalAkhir) {
-            if ($header->tanggalAwal == $header->tanggalAkhir) {
-            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggalAwal);
+        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+        $tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
+
+        if ($tanggalAwal || $tanggalAkhir) {
+            if ($tanggalAwal == $tanggalAkhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
             } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggalAkhir);
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
             }
         } else {
             $tanggal_sampling = '-';
@@ -99,7 +100,7 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
                             @php
-                                $tanggal_sampling;
+                                echo $tanggal_sampling;
                             @endphp
                         </td>
                     </tr>
@@ -108,7 +109,6 @@
                         <td class="custom5" width="12">:</td>
                         @php
                             $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            dd( $periode_analisa );
                             $periode = explode(' - ', $periode_analisa);
                             $periode1 = $periode[0] ?? '';
                             $periode2 = $periode[1] ?? '';
