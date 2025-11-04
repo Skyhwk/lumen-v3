@@ -141,6 +141,8 @@ class FdlPartikulatMeterController extends Controller
                     ->where('shift_pengambilan', 'LIKE', $shift . '%')
                     ->get();
 
+                $dataParameter = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
+                    ->where('parameter', $parameterData)->count();
                     
                 $TotalApprove = DataLapanganPartikulatMeter::where('no_sampel', $no_sample)
                     ->where('parameter', $parameterData)
@@ -156,11 +158,11 @@ class FdlPartikulatMeterController extends Controller
 
                 // Minimal Approve Data
                 if($shift == "24 Jam"){
-                    $approveCountNeeded = 4;
+                    $approveCountNeeded = $dataParameter;
                 }else if($shift == "8 Jam"){
-                    $approveCountNeeded = 3;
+                    $approveCountNeeded = $dataParameter;
                 }else{
-                    $approveCountNeeded = 1;
+                    $approveCountNeeded = $dataParameter;
                 }
 
                 // Cek jumlah data aktual
@@ -182,7 +184,7 @@ class FdlPartikulatMeterController extends Controller
                         $function = $functionObj->function;
                         if(in_array($parameterData, [
                             'PM 10', 'PM 2.5', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 
-                            // 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
+                            'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
                         ])){
                             $function = 'DirectPartikulatPM';
                         }
