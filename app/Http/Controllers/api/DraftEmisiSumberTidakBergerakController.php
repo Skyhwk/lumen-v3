@@ -472,8 +472,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $otherRegulations = [];
 
                 $models = [
-                    Subkontrak::class,
                     EmisiCerobongHeader::class,
+                    Subkontrak::class,
                 ];
 
                 foreach ($models as $model) {
@@ -564,6 +564,9 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     private function getHasilUji($val, $satuan)
     {
         $cerobong = $val->ws_value_cerobong;
+        if($cerobong == null){
+            return null;
+        }
 
         switch ($satuan) {
             case 'ug/m3':
