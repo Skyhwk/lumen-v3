@@ -217,6 +217,16 @@ class FollowUpController extends Controller
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
+            ->filterColumn('keterangan_tambahan', function ($query, $keyword) {
+                $query->whereHas('keteranganTambahan', fn($q) => 
+                $q->where('keterangan_perkenalan', 'like', "%{$keyword}%")
+                ->orWhere('keterangan_proposal', 'like', "%{$keyword}%")
+                ->orWhere('keterangan_review_manager', 'like', "%{$keyword}%")
+                ->orWhere('keterangan_negosiasi_harga', 'like', "%{$keyword}%")
+                ->orWhere('keterangan_maintain_call', 'like', "%{$keyword}%")
+                ->orWhere('proposal', 'like', "%{$keyword}%")
+            );
+            })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn() => "Coming Soon")
             ->addColumn('log_webphone', fn($row) => $row->getLogWebphoneAttribute()->toArray())
