@@ -56,11 +56,11 @@ class EmisiH2S
         $C = number_format(floatval($C1) * 1000, 4);
 
 
-        $C3 = number_format((floatval($ks) * (floatval($data->vtp) / floatval($data->vs))) / floatval($data->volume_dry), 4, '.', '');
+        $C4 = number_format((floatval($ks) * (floatval($data->vtp) / floatval($data->vs))) / floatval($data->volume_dry), 4, '.', '');
 
-        $C2 = number_format(floatval($C3) * 1000, 4);
+        $C3 = number_format(floatval($C3) * 1000, 4);
 
-        $C4 = $c_ppm;
+        $C2 = $c_ppm; // ppm
 
 
         $satuan = 'mg/Nm3';
