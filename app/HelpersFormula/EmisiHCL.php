@@ -42,6 +42,8 @@ class EmisiHCL
             $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
             // C3 (PPM) = 24.45 x (C(mg/m3)/36.5)
             $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 36.5), 4));
+            $C3 = $C;
+            $C4 = $C1;
             if (floatval($C1) < 0.0031)
                 $C1 = '<0.0031';
             if (floatval($C2) < 0.0020)
@@ -50,6 +52,7 @@ class EmisiHCL
             dd($e);
         }
 
+        $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -71,6 +74,9 @@ class EmisiHCL
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

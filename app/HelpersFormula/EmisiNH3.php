@@ -48,6 +48,7 @@ class EmisiNH3
         if (floatval($C2) < 0.0369)
             $C2 = '<0.0369';
 
+        $satuan = "ppm";
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -71,6 +72,7 @@ class EmisiNH3
             'C2' => $C2,
             'C3' => $C3,
             'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

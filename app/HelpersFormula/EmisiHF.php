@@ -19,7 +19,7 @@ class EmisiHF
 		$C2 = null;
 
 
-		
+
 		if (is_array($data->ks)) {
 			$ks = array_sum($data->ks) / count($data->ks);
 		}else {
@@ -31,16 +31,23 @@ class EmisiHF
 			$kb = floatval($data->kb);
 		}
 
-        $tekanan_dry = LookUpRdm::getRdm();
+        // $tekanan_dry = LookUpRdm::getRdm();
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
 
+        // C2 (mg/Nm3) = ((20/19) x (A-B) x (250/20)) / Vs
         $C1 = \str_replace(",", "", number_format(((20 / 19) * (floatval($ks) - floatval($kb)) * (250 / 20)) / floatval($Vs), 4));
+        // "C1 (ug/Nm3) = C2 x 1000"
+        $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
+        // C3 (PPM) = 24.45 x (C(mg/m3)/20,01)
         $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 20.01), 5));
+        $C3 = $C;
+        $C4 = $C1;
         if (floatval($C1) < 0.0003)
             $C1 = '<0.0003';
         if (floatval($C2) < 0.00036)
             $C2 = '<0.00036';
 
+        $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -62,6 +69,9 @@ class EmisiHF
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;
