@@ -23,7 +23,8 @@ class SpektroUvVisUdaraController extends Controller
     // }
 
     // 20-03-2025
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $data = LingkunganHeader::with('ws_value', 'order_detail')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
@@ -40,7 +41,7 @@ class SpektroUvVisUdaraController extends Controller
                 $query->orderBy('no_sampel', $order);
             })
             ->editColumn('data_pershift', function ($data) {
-                return $data->data_pershift ? json_decode($data->data_pershift) : null;
+                return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
@@ -66,7 +67,9 @@ class SpektroUvVisUdaraController extends Controller
                             }
                             // Standard text fields
                             elseif (in_array($columnName, [
-                                'no_sampel', 'parameter', 'jenis_pengujian'
+                                'no_sampel',
+                                'parameter',
+                                'jenis_pengujian'
                             ])) {
                                 $query->where($columnName, 'like', "%{$searchValue}%");
                             }
@@ -74,19 +77,20 @@ class SpektroUvVisUdaraController extends Controller
                     }
                 }
             })
-        ->make(true);
+            ->make(true);
     }
 
-    public function approveData(Request $request){
+    public function approveData(Request $request)
+    {
 
         DB::beginTransaction();
         try {
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
-            if($data->is_approved == 1){
+            if ($data->is_approved == 1) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' sudah di approve'
-                ],401);
+                ], 401);
             }
             $data->is_approved = 1;
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -98,19 +102,19 @@ class SpektroUvVisUdaraController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' berhasil di approve'
-            ],200);
-
+            ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             dd($th);
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan! ' . $th->getMessage()
-            ],401);
+            ], 401);
         }
     }
 
-    public function deleteData(Request $request){
+    public function deleteData(Request $request)
+    {
         DB::beginTransaction();
         try {
             $data = LingkunganHeader::where('id', $request->id)->first();
@@ -120,7 +124,7 @@ class SpektroUvVisUdaraController extends Controller
             $data->save();
 
             $ws_value = WsValueLingkungan::where('lingkungan_header_id', $request->id)->where('is_active', true)->first();
-            if($ws_value){
+            if ($ws_value) {
                 $ws_value->is_active = false;
                 $ws_value->save();
             }
@@ -130,14 +134,13 @@ class SpektroUvVisUdaraController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Data Lingkungan no sample ' . $data->no_sampel . ' berhasil dihapus .!'
-            ],200);
-
+            ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan! ' . $th->getMessage()
-            ],401);
+            ], 401);
         }
     }
 }

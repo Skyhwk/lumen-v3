@@ -40,7 +40,7 @@ class GravimetriUdaraController extends Controller
         $data = $dataLingkungan->concat($dataDebu)->values();
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
-                return $data->data_pershift ? json_decode($data->data_pershift) : null;
+                return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
             // ->orderColumn('tanggal_terima', function ($query, $order) {
             //     $query->orderBy('tanggal_terima', $order);

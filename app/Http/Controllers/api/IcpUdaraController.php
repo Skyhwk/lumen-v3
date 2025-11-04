@@ -40,7 +40,7 @@ class IcpUdaraController extends Controller
                 $query->orderBy('no_sampel', $order);
             })
             ->editColumn('data_pershift', function ($data) {
-                return $data->data_pershift ? json_decode($data->data_pershift) : null;
+                return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
