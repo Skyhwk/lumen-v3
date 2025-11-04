@@ -4,6 +4,36 @@
     use App\Models\DetailLingkunganHidup;
 
     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
+    $tanggal_sampling = '';
+    if($header->status_sampling == '24'){
+        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+
+        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)
+            ->min('tanggal_sampling');
+
+        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)
+            ->max('tanggal_sampling');
+
+        if ($header->tanggalAwal || $header->tanggalAkhir) {
+            if ($header->tanggalAwal == $header->tanggalAkhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggalAwal);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggalAkhir);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    } else {
+        if ($header->tanggal_sampling || $header->tanggal_terima) {
+            if ($header->tanggal_sampling == $header->tanggal_terima) {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    }   
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -59,15 +89,7 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
                             @php
-                                if ($header->tanggal_sampling || $header->tanggal_terima) {
-                                    if ($header->tanggal_sampling == $header->tanggal_terima) {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-                                    } else {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-                                    }
-                                } else {
-                                    echo '-';
-                                }
+                                $tanggal_sampling;
                             @endphp
                         </td>
                     </tr>
