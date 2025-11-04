@@ -172,6 +172,8 @@ class FdlLingkunganKerjaController extends Controller
                         'Suhu' => 'suhu',
                         'Kelembaban' => 'kelembapan',
                         'Laju Ventilasi' => 'auto_laju',
+                        // 'Kecepatan Angin' => 'auto_laju',
+                        // 'Kecepatan Angin (UA)' => 'auto_laju',
                         'Tekanan Udara' => 'tekanan_udara',
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
@@ -303,6 +305,9 @@ class FdlLingkunganKerjaController extends Controller
                             } elseif (Str::contains($lowerParam, 'laju ventilasi')) {
                                 $satuan = 'm/s';
                                 $c8 = $rataRata; //m/s
+                            // } elseif (Str::contains($lowerParam, 'kecepatan angin') || Str::contains($lowerParam, 'kecepatan angin (ua)')) {
+                            //     $satuan = 'm/s';
+                            //     $c8 = $rataRata; //m/s
                             } elseif (Str::contains($lowerParam, 'tekanan udara')) {
                                 $satuan = 'mmHg';
                             }
