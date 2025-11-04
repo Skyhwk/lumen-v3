@@ -19,6 +19,7 @@ use App\Models\{
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
 use App\Services\Crypto;
 use App\Helpers\Helper;
@@ -117,7 +118,7 @@ class RecruitmentController extends Controller{
             ], 200);
         }
     } */
-   public function registrasi(Request $request) 
+   public function registrasiv0(Request $request) 
    {
 
         try {
@@ -199,6 +200,90 @@ class RecruitmentController extends Controller{
             ], 200);
         }
    }
+
+    public function registrasi(Request $request) 
+    {
+        DB::beginTransaction();
+        try {
+            // Check duplicate registration
+            $traceId = $request->header('X-Trace-Id');
+            $month = Carbon::now()->subMonths(6);
+            $existingRegistration = Recruitment::where('nik_ktp', $request->nik_ktp)
+                ->where('created_at', '>', $month)
+                ->latest('created_at')
+                ->first();
+
+            if ($existingRegistration) {
+                return response()->json([
+                    'status' => false,
+                    'data' => [
+                        'message' => 'Anda telah mendaftar sebelumnya. Anda dapat mengajukan pendaftaran kembali setelah 6 bulan sejak pendaftaran terakhir.'
+                    ]
+                ], 401);
+            }
+
+            // Generate unique code
+            $code = Helper::generateUniqueCode('recruitment', 'kode_uniq', 5);
+            
+            // Get registration count
+            $p = Recruitment::where('nik_ktp', $request->nik_ktp)->count() + 1;
+
+            // Create recruitment record
+            $data = new Recruitment;
+            $fields =[
+                'id_cabang', 'nama_lengkap', 'nama_panggilan', 'email',
+                'tempat_lahir', 'umur', 'gender', 'agama', 'no_hp',
+                'status_nikah', 'nik_ktp', 'alamat_ktp', 'alamat_domisili',
+                'posisi_di_lamar', 'salary_user', 'bpjs_kesehatan',
+                'bpjs_ketenagakerjaan', 'referensi', 'tanggal_lahir',
+                'pendidikan', 'pengalaman_kerja', 'skill', 'minat',
+                'skill_bahasa', 'organisasi', 'sertifikat', 'kursus',
+                'shio', 'elemen', 'orang_dalam', 'bagian_di_lamar'
+            ];
+            $data->setFillableFields($fields,$traceId);
+            $data->fill($request->only($fields));
+            
+            if ($request->filled('foto_selfie')) {
+                $data->foto_selfie = self::convertFile($request->foto_selfie, $p, $request->nik_ktp);
+            }
+            
+            $data->status = 'KANDIDAT';
+            $data->kode_uniq = $code;
+            $data->save();
+
+            // Create unique code record
+            $kodeUniqRecruitment = new KodeUniqRecruitment;
+            $kodeUniqRecruitment->id_recruitment =$data->id;
+            $kodeUniqRecruitment->kode_uniq =$code;
+            $kodeUniqRecruitment->is_active =true;
+
+            db::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Berhasil mendaftar',
+                'data' => [
+                    'id' => $data->id,
+                    'kode_uniq' => $code
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('Registration Failed', [
+                'trace_id' => $traceId,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'payload' =>$request->all()
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan saat mendaftar. Silakan coba lagi.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
 
     public function getKandidat(Request $request) {
 
