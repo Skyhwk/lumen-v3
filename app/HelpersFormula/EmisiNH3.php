@@ -35,7 +35,10 @@ class EmisiNH3
         // $tekanan_dry = LookUpRdm::getRdm();
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
 
+
         $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 25) / floatval($Vs)) * (17 / 24.45), 4));
+        // (ug/Nm3) = C2 x 1000
+        $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
         $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 17), 4));
         // dump($C1, $C2);
         if (floatval($C1) < 0.0257)
