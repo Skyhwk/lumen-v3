@@ -21,7 +21,6 @@ class LingkunganHidupNO2_24J
             $kb = $data->kb;
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -38,11 +37,12 @@ class LingkunganHidupNO2_24J
         $st = null;
         $satuan = null;
 
-        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         // dd($Vu);
         $hasil1_array = $hasil2_array = $hasil3_array = $hasil14_array = $hasil15_array = $hasil16_array = [];
 
         foreach ($data->ks as $key => $value) {
+            $Ta = floatval($data->suhu_array[$key]) + 273;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4));
             if($Vu != 0.0) {
                 $C_value = \str_replace(",", "", number_format(($value / floatval($Vu)) * (10 / 25) * 1000, 4));
             }else {
@@ -108,6 +108,9 @@ class LingkunganHidupNO2_24J
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C14' => $C14,
+            'C15' => $C15,
+            'C16' => $C16,
             'data_pershift' => [
                 'Shift 1' => $hasil1_array[0],
                 'Shift 2' => $hasil1_array[1] ?? null,
