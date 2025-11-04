@@ -64,7 +64,9 @@ class LingkunganKerjaHCL
             $C = round($C1 / 1000, 4);
 
             // (C2 / 24.45)*36,46)
-            $C2 = round(($C1 / 24.45) * 36.46, 4);
+            // revisi menjadi
+            // (C2 / 36,46)*24.45)
+            $C2 = round(($C1 / 36.46) * 24.45, 4);
 
             $C14 = $C2;
             // Vs = (Durasi Pengambilan Data)

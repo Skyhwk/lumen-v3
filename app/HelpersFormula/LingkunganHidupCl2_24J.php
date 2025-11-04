@@ -65,7 +65,9 @@ class LingkunganHidupCl2_24J
 
             }
             // C (PPM)= (C2 / 24.45)*71)
-            $C2 = \str_replace(",", "", number_format(($C1 / 24.45) * 71, 4));
+            // revisi menjadi
+            // C (PPM)= (C2 / 70,9)*24.45)
+            $C2 = \str_replace(",", "", number_format(($C1 / 70.9) * 24.45, 4));
 
             $C14 = $C2;
             // C (ug/m3) = (A/(Laju alir*durasi))*1000
