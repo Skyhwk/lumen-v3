@@ -538,13 +538,15 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
                 // DGM AWAL
                 $dgmAwal = (float) $request->dgmAwal; // atau sesuai dengan indeks yang diinginkan
 
-                // RATA-RATA SELISIH DGM
-                $selisihrataDGM = $request->rataRataSelisihDGM;
+                // RATA-RATA SELISIH DGM + HITUNG VM
+                $rataSelisih = 0;
 
                 if (!empty($request->dgm) && is_array($request->dgm)) {
                     $pengukuranDGMVM = [];
-                    $totalSelisihKeseluruhan = 0; // Total selisih untuk seluruh data
+                    $totalSelisihKeseluruhan = 0; 
                     $count = 0;
+
+                    $selisihList = []; // simpan semua selisih untuk dipakai lagi
 
                     $allDGMData = [];
                     foreach ($request->dgm as $subArray) {
@@ -553,32 +555,42 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
                         }
                     }
 
-                    // Lakukan perhitungan selisih setelah menggabungkan
+                    // --- LOOP 1: hitung selisih
                     foreach ($allDGMData as $index => $value) {
-                        $value = (float) $value; // Pastikan nilai adalah float
+                        $value = (float) $value;
+
                         if ($index === 0) {
-                            // Untuk data pertama, kurangkan dengan DGM Awal
-                            $selisih = $value - $dgmAwal; // Menggunakan dgmAwal yang terpisah
+                            $selisih = $value - $dgmAwal;
                         } else {
-                            // Untuk data selanjutnya, kurangkan dengan data sebelumnya
                             $previousValue = (float) $allDGMData[$index - 1];
                             $selisih = $value - $previousValue;
                         }
-                        
 
-                        if ($value) { // hanya hitung jika ada nilai
-                            $totalSelisihKeseluruhan += $selisih; // Tambahkan ke total keseluruhan
+                        if ($value) {
+                            $totalSelisihKeseluruhan += $selisih;
                             $count++;
                         }
 
-                        // Menghitung persentase selisih
-                        $persentaseSelisih = abs(($selisih - $selisihrataDGM) / $selisihrataDGM * 100);
-                        // Simpan data ke dalam array
-                        $selisihKey = "selisihDGM" . ($index + 1); // Menentukan kunci berdasarkan indeks
-                        array_push($pengukuranDGMVM, (object) [
+                        $selisihList[$index] = $selisih; // simpan
+                    }
+
+                    // Hitung rata-rata selisih
+                    $rataSelisih = $count > 0 ? ($totalSelisihKeseluruhan / $count) : 0;
+
+                    // --- LOOP 2: hitung VM (absolute)
+                    foreach ($selisihList as $index => $selisih) {
+                        $value = (float) $allDGMData[$index];
+
+                        // ✅ pakai abs untuk absolute
+                        $vm = $rataSelisih != 0 
+                            ? abs(($selisih - $rataSelisih) / $rataSelisih * 100)
+                            : 0;
+
+                        $pengukuranDGMVM[] = (object)[
                             'nilaiDGM' . ($index + 1) => $value,
-                            $selisihKey => number_format($persentaseSelisih, 1), // Menyimpan selisih per data
-                        ]);
+                            'selisihDGM' . ($index + 1) => number_format($selisih, 2),
+                            'vmDGM' . ($index + 1) => number_format($vm, 2)
+                        ];
                     }
                 }
 
@@ -606,8 +618,6 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
 
                 $metode2 = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
                 $metode4 = DataLapanganIsokinetikKadarAir::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
-                // Loop untuk menggabungkan data dan menerapkan rumus
-                // dd($pengukurandP);
                 $i = 1;
                 foreach ($pengukurandP as $item) {
                     // dd($item);
@@ -671,8 +681,8 @@ class FdlPartikulatIsokinetikMethod5Controller extends Controller
                         $data->impinger4 = $request->impinger4;
                     if ($request->Vs != '')
                         $data->Vs = $request->Vs;
-                    if ($request->rataRataSelisihDGM != '')
-                        $data->rataselisihdgm = $request->rataRataSelisihDGM;
+                    if ($rataSelisih)
+                        $data->rataselisihdgm = $rataSelisih;
                     $data->temperatur_stack = $TemperaturStackFormatted;
                     $data->data_total_vs = $arraydP1;
                     $data->delta_vm = $pengukuranDGMVM;
