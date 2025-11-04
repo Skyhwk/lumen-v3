@@ -26,6 +26,7 @@ class StatusOrderController extends Controller
                     'orderHeader.invoices'
                 ])
                     ->where('id_cabang', $request->cabang)
+                    ->whereHas('orderHeader')
                     // ->where('flag_status', '!=', 'ordered')
                     // ->where('is_active', true)
                     ->where('is_approved', true)
@@ -42,6 +43,7 @@ class StatusOrderController extends Controller
                     'orderHeader.invoices'
                 ])
                     ->where('id_cabang', $request->cabang)
+                    ->whereHas('orderHeader')
                     // ->where('flag_status', '!=', 'ordered')
                     // ->where('is_active', true)
                     ->where('is_approved', true)
