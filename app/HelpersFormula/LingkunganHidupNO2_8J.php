@@ -21,7 +21,6 @@ class LingkunganHidupNO2_8J
             $kb = $data->kb;
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -38,11 +37,12 @@ class LingkunganHidupNO2_8J
         $st = null;
         $satuan = null;
 
-        $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         // dd($Vu);
         $hasil1_array = $hasil2_array = $hasil3_array = $hasil14_array = $hasil15_array = $hasil16_array = [];
 
         foreach ($data->ks as $key => $value) {
+            $Ta = floatval($data->suhu_array[$key]) + 273;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4));
             if($Vu != 0.0) {
                 // C (ug/Nm3) = (a/Vu)*(10/25)*1000
                 $C_value = \str_replace(",", "", number_format(($value / floatval($Vu)) * (10 / 25) * 1000, 4));
