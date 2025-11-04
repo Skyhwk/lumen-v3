@@ -192,6 +192,7 @@ class DraftUdaraAmbientController extends Controller
                 'periode_analisa' => $request->periode_analisa ?: null,
                 'id_kategori_2' => 4,
                 'id_kategori_3' => 11,
+                'keterangan' => json_encode($request->keterangan) ?: null,
                 'deskripsi_titik' => $request->penamaan_titik ?: null,
                 'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
                 'titik_koordinat' => $request->titik_koordinat ?: null,
