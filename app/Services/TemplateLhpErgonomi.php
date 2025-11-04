@@ -4,6 +4,7 @@ namespace App\Services;
 use \Mpdf\Mpdf as PDF;
 use Illuminate\Support\Facades\View;
 use App\Models\DataLapanganErgonomi;
+use App\Models\WsValueErgonomi;
 use Carbon\Carbon;
 use App\Helpers\Helper;
 
@@ -146,6 +147,13 @@ class TemplateLhpErgonomi
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
                 ->first();
+
+            $ws_ergo = WsValueErgonomi::where('id_data_lapangan', $data->id)->first();
+            if($ws_ergo){
+                $dataRwl->pengukuran = $ws_ergo->pengukuran;
+                $dataRwl->sebelum_kerja = $ws_ergo->sebelum_kerja;
+                $dataRwl->setelah_kerja = $ws_ergo->setelah_kerja;
+            }
     
             // $pengukuran = json_decode($dataRwl->pengukuran);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
