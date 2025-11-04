@@ -36,12 +36,14 @@ class EmisiHCL
         // dd($data->volume_dry, $data->suhu, $data->tekanan, $data->tekanan_dry, $data->nil_pv);
         try {
             // $nilbag = \str_replace(",", "", );
-            // $nilbag = number_format(36.5 / 35.5, 4);
-            $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 50 * (36.5 / 35.5)) / floatval($Vs)) * 1000, 4));
-            // (ug/Nm3) = C2 x 1000
+            // C2 (mg/Nm3) = (((A-B) x FP)/Vs) x (17/24.45)
+            $C1 = \str_replace(",", "", number_format(((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)) * (17 / 24.45)), 4));
+            // C1 (ug/Nm3) = C2 x 1000
             $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
-            // dd((($ks - $kb) * 50 * (36.5 / 35.5)) / floatval($Vs));
-            $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 36.5), 4));
+            // C3 (PPM) = (((A-B) x FP)/Vs)
+            $C2 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)), 4));
+            $C3 = $C;
+            $C4 = $C1;
             if (floatval($C1) < 0.0031)
                 $C1 = '<0.0031';
             if (floatval($C2) < 0.0020)
