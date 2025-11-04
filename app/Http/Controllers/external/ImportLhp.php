@@ -782,11 +782,11 @@ class ImportLhp extends BaseController
                 ];
             }
             // dd($insert);
-            if (DB::table('lhps_ling_header')->where('no_lhp', $noLhp)->exists()) {
-                return response()->json([
-                    'message' => 'No LHP sudah ada',
-                ], 400);
-            }
+            // if (DB::table('lhps_ling_header')->where('no_lhp', $noLhp)->exists()) {
+            //     return response()->json([
+            //         'message' => 'No LHP sudah ada',
+            //     ], 400);
+            // }
 
             $header = DB::table('lhps_ling_header')->insertGetId($insert);
 
