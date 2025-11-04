@@ -76,7 +76,6 @@
                         <td class="custom5" width="12">:</td>
                         @php
                             $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            dd( $periode_analisa );
                             $periode = explode(' - ', $periode_analisa);
                             $periode1 = $periode[0] ?? '';
                             $periode2 = $periode[1] ?? '';
