@@ -39,6 +39,9 @@ class IcpUdaraController extends Controller
             ->orderColumn('no_sampel', function ($query, $order) {
                 $query->orderBy('no_sampel', $order);
             })
+            ->editColumn('data_pershift', function ($data) {
+                return $data->data_pershift ? json_decode($data->data_pershift) : null;
+            })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
@@ -46,17 +49,17 @@ class IcpUdaraController extends Controller
                         if (isset($column['search']) && !empty($column['search']['value'])) {
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
-                            
+
                             // Skip columns that aren't searchable
                             if (isset($column['searchable']) && $column['searchable'] === 'false') {
                                 continue;
                             }
-                            
+
                             // Special handling for date fields
                             if ($columnName === 'tanggal_terima') {
                                 // Assuming the search value is a date or part of a date
                                 $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            } 
+                            }
                             // Handle created_at separately if needed
                             elseif ($columnName === 'created_at') {
                                 $query->whereDate('created_at', 'like', "%{$searchValue}%");
@@ -75,7 +78,7 @@ class IcpUdaraController extends Controller
     }
 
     public function approveData(Request $request){
-        
+
         DB::beginTransaction();
         try {
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
