@@ -44,22 +44,25 @@ class LingkunganHidupNO2_8J
 
         foreach ($data->ks as $key => $value) {
             if($Vu != 0.0) {
+                // C (ug/Nm3) = (a/Vu)*(10/25)*1000
                 $C_value = \str_replace(",", "", number_format(($value / floatval($Vu)) * (10 / 25) * 1000, 4));
             }else {
                 $C_value = 0;
             }
+            // C2 = C1/1000
             $C1_value = \str_replace(",", "", number_format(floatval($C_value) / 1000, 5));
-            $C2_value = \str_replace(",", "", number_format(24.45 * floatval($C1_value) / 46, 5));
+            // C (PPM) = 24.45*(C(mg/m3)/46)
+            $C2_value = \str_replace(",", "", number_format(24.45 * (floatval($C1_value) / 46), 5));
 
             $C14_value = $C2_value;
 
-            // Vu = Rerata laju alir*durasi sampling/1000
-            $Vu_alt = round(floatval($data->average_flow) * floatval($data->durasi) / 1000, 4);
+            // Vu = Rerata laju alir*durasi sampling
+            $Vu_alt = round(floatval($data->average_flow) * floatval($data->durasi), 4);
             // C (ug/Nm3) = (a/Vu)*(10/25)*1000
             $C15_value = round((floatval($value) / floatval($Vu_alt)) * (10 / 25) * 1000, 4);
 
             // C17 = C16/1000
-            $C16_value = round(floatval($C14_value) / 1000, 4);
+            $C16_value = round(floatval($C15_value) / 1000, 4);
 
             array_push($hasil1_array, $C_value);
             array_push($hasil2_array, $C1_value);
