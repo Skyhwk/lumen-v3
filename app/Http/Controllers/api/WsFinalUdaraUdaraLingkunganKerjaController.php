@@ -504,8 +504,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
+		dd($request->all());
 		if ($request->id) {
-
 			if (in_array($request->kategori, $this->categoryLingkunganKerja)) {
 				if ($request->data_type == 'lingkungan') {
 					$data = LingkunganHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
@@ -611,6 +611,28 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						], 201);
 					} else {
 						$dat = DebuPersonalHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
+				} else if ($request->data_type == 'partikulat') {
+					$data = PartikulatHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+					// dd($data);
+					if ($data) {
+						$cek = PartikulatHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = PartikulatHeader::where('id', $request->id)->first();
 						$dat->lhps = 1;
 						$dat->save();
 						return response()->json([
