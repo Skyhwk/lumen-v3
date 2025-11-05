@@ -15,7 +15,11 @@ use Yajra\Datatables\Datatables;
 class HoldHpController extends Controller
 {
     public function index(Request $request){
-        $data = HoldHp::with('orderHeader', 'orderHeader.quotationKontrakH', 'orderHeader.quotationNonKontrak')->where('is_hold', 1)->orderBy('hold_at', 'desc')->get();
+        if($request->type == 'Hold'){
+            $data = HoldHp::with('orderHeader', 'orderHeader.quotationKontrakH', 'orderHeader.quotationNonKontrak')->where('is_hold', 1)->orderBy('hold_at', 'desc')->get();
+        }else {
+            $data = HoldHp::with('orderHeader', 'orderHeader.quotationKontrakH', 'orderHeader.quotationNonKontrak')->where('is_hold', 0)->orderBy('hold_at', 'desc')->get();
+        }
         
         return Datatables::of($data)->make(true);
     }
@@ -76,6 +80,7 @@ class HoldHpController extends Controller
     public function hold(Request $request) {
         $data = HoldHp::find($request->id);
         $data->is_hold = 1;
+        $data->keterangan = $request->keterangan ?? null;
         $data->hold_by = $this->karyawan;
         $data->hold_at = Carbon::now()->format('Y-m-d H:i:s');
         $data->save();
@@ -85,6 +90,7 @@ class HoldHpController extends Controller
     public function unhold(Request $request) {
         $data = HoldHp::find($request->id);
         $data->is_hold = 0;
+        $data->keterangan_unhold = $request->keterangan ?? null;
         $data->un_hold_by = $this->karyawan;
         $data->un_hold_at = Carbon::now()->format('Y-m-d H:i:s');
         $data->save();
