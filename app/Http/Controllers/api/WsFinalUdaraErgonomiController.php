@@ -303,7 +303,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new = new WsValueErgonomi();
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
-					$new->nmethod = 1;
+					$new->method = 1;
 					$new->sebelum_kerja = json_encode(json_decode($request->sebelum_kerja));
 					$new->setelah_kerja = json_encode(json_decode($request->setelah_kerja));
 					$new->pengukuran = json_encode(json_decode($request->pengukuran));
