@@ -67,9 +67,7 @@ class DirectLain {
 
                     // cek batas bawah di akhir
                     $c5 = round($c5, 2);
-                }
-
-                else if (in_array($row->parameter, $paramCO2)) {
+                }else if (in_array($row->parameter, $paramCO2)) {
                     $c3 = round($totalNilai / $jumlahElemen, 6);
                     $c2 = (($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
                     $c1 = $c2 * 1000;
