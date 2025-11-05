@@ -44,7 +44,7 @@ class DraftUdaraAmbientController extends Controller
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
             'lhps_ling',
-            'dataLapanganLingkunganHidup',
+            'allDetailLingkunganHidup',
             'orderHeader' => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
@@ -58,9 +58,31 @@ class DraftUdaraAmbientController extends Controller
             ->where('status', 2)
             ->get();
 
-        foreach ($data as $key => $value) {
-            if (isset($value->lhps_ling) && $value->lhps_ling->methode_sampling != null) {
-                $data[$key]->lhps_ling->methode_sampling = json_decode($value->lhps_ling->methode_sampling);
+        // foreach ($data as $key => $value) {
+        //     if (isset($value->lhps_ling) && $value->lhps_ling->methode_sampling != null) {
+        //         $data[$key]->lhps_ling->methode_sampling = json_decode($value->lhps_ling->methode_sampling);
+        //     }
+        // }
+        foreach ($data as $item) {
+
+            // 🔹 Jika kategori_1 = 'S24' → ambil shift L2 dan hanya first
+            if ($item->kategori_1 == 'S24') {
+                $item->data_lapangan_lingkungan_hidup = $item->allDetailLingkunganHidup
+                    ->where('shift_pengambilan', 'L2')
+                    ->take(1)
+                    ->values();
+            } 
+            
+            // 🔹 Jika bukan → ambil 1 data pertama saja
+            else {
+                $item->data_lapangan_lingkungan_hidup = $item->allDetailLingkunganHidup
+                    ->take(1)
+                    ->values();
+            }
+
+            // 🟢 JSON decode methode_sampling jika ada
+            if (!empty($item->lhps_ling->methode_sampling)) {
+                $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
             }
         }
 
@@ -205,6 +227,13 @@ class DraftUdaraAmbientController extends Controller
                 'tanggal_lhp' => $request->tanggal_lhp ?: null,
                 'created_by' => $this->karyawan,
                 'created_at' => Carbon::now(),
+                'waktu_pengukuran' => $request->waktu_pengukuran,
+                'kec_angin' => $request->kecepatan_angin,
+                'cuaca' => $request->cuaca,
+                'arah_angin' => $request->arah_angin,
+                'suhu' => $request->suhu_lingkungan,
+                'tekanan_udara' => $request->tekanan_udara,
+                'kelembapan' => $request->kelembapan
             ]);
             $header->save();
 
@@ -832,7 +861,7 @@ class DraftUdaraAmbientController extends Controller
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
             'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
-            'parameter' => $param->nama_regulasi,
+            'parameter' => $param->nama_lhp ?? $param->nama_regulasi,
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 
                 : (!empty($param->satuan) ? $param->satuan : '-'),
@@ -897,10 +926,6 @@ class DraftUdaraAmbientController extends Controller
 
         return $entry;
     }
-
-
-
-
 
     public function handleApprove(Request $request, $isManual = true)
     {
