@@ -1500,7 +1500,7 @@ class RenderInvoice
                         ' . $spk . '
             ');
 
-            if (count($dataHead->keterangan_tambahan) > 0) {
+            if ($dataHead->keterangan_tambahan && count($dataHead->keterangan_tambahan) > 0) {
 
                 $pdf->writeHTML(
                     $spaceSection . '
@@ -1960,7 +1960,7 @@ class RenderInvoice
                         ' . $spk . '
                 ');
 
-            if (count($dataHead->keterangan_tambahan) > 0) {
+            if ($dataHead->keterangan_tambahan != null && count($dataHead->keterangan_tambahan) > 0) {
 
                 $pdf->writeHTML(
                     $spaceSection . '
