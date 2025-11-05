@@ -402,7 +402,7 @@ class GenerateInvoiceController extends Controller
                     'no_spk' => $request->no_spk,
                     'no_po' => $request->no_po,
                     'tgl_jatuh_tempo' => $request->tgl_jatuh_tempo,
-                    'keterangan_tambahan' => $request->keterangan_tambahan ? json_encode($request->keterangan_tambahan) : [],
+                    'keterangan_tambahan' => $request->keterangan_tambahan ? json_encode($request->keterangan_tambahan) : null,
                     'tgl_faktur' => Carbon::now(),
                     'tgl_invoice' => $request->tgl_invoice,
                     'nilai_tagihan' => $nilaiTagihan,
