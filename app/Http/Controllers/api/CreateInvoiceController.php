@@ -151,7 +151,7 @@ class CreateInvoiceController extends Controller
                         ], 400);
                     }
                 }
-                
+
                 // Buat nomor invoice
                 $shortYear = substr($invoiceYear, -2);
                 
@@ -181,7 +181,6 @@ class CreateInvoiceController extends Controller
                         ->where('no_order', $item)
                         ->where('is_active', true)
                         ->first();
-                        
                         // cek kontrak atau non kontrak
                         $noDoc = \explode("/", $getDetail->no_document);
                         $tertagih = 0;
@@ -255,7 +254,7 @@ class CreateInvoiceController extends Controller
                             } else {
                                 $nilaiTagihan = $bagiHarga + $simpanHarga;
                             }
-                        }                    
+                        }           
                         $insert[] = [
                             'no_quotation' => $getDetail->no_document,
                             'periode' => $periode,
@@ -268,6 +267,7 @@ class CreateInvoiceController extends Controller
                             'no_spk' => $request->no_spk,
                             'no_po' => $request->no_po,
                             'tgl_jatuh_tempo' => $request->tgl_jatuh_tempo,
+                            'keterangan_tambahan' => $request->keterangan_tambahan ? json_encode($request->keterangan_tambahan) : [],
                             'tgl_faktur' => DATE('Y-m-d H:i:s'),
                             'tgl_invoice' => $request->tgl_invoice,
                             'nilai_tagihan' => $nilaiTagihan,
@@ -390,6 +390,7 @@ class CreateInvoiceController extends Controller
                     order_header.konsultan, 
                     quot.alamat_kantor, 
                     quot.alamat_sampling, 
+                    quot.keterangan_tambahan,
                     order_header.no_pic_order, 
                     order_header.nama_pic_order, 
                     order_header.jabatan_pic_order, 
@@ -414,7 +415,8 @@ class CreateInvoiceController extends Controller
                     'order_header.konsultan', 
                     'order_header.biaya_akhir', 
                     'order_header.no_order', 
-                    'quot.alamat_kantor', 
+                    'quot.alamat_kantor',
+                    'quot.keterangan_tambahan', 
                     'quot.alamat_sampling', 
                     'order_header.no_pic_order', 
                     'order_header.nama_pic_order', 
