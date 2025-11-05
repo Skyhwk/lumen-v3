@@ -75,7 +75,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
-
+			
 			$lingkunganData = LingkunganHeader::with('ws_udara')
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approved', 1)
