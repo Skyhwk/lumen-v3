@@ -354,16 +354,16 @@ class LhpTemplate
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
         
-        $orderDetail = OrderDetail::where('cfr', $no_lhp)->get();
-
+        $orderDetail = OrderDetail::where('cfr', $no_lhp)->where('is_active', 1)->get();
         foreach ($orderDetail as  $value) {
             $kategori = explode('-', $value->kategori_2)[0];
             $sub_kategori = explode('-', $value->kategori_3)[0];
             $dataDecode = json_decode($value->parameter);
-            if($kategori == 1) {
+            $sub_kategori = intval(strval($sub_kategori));
+            $kategori = intval(strval($kategori));
+            if ($kategori === 1) {
                 $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-                
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
@@ -371,7 +371,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori == 4 && $sub_kategori == 27 || $sub_kategori == 11) {
+            } else if ($kategori === 4 && $sub_kategori === 27 || $sub_kategori === 11) {
                 $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
                 
@@ -382,7 +382,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori == 5) {
+            } else if ($kategori === 5) {
                 $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
                 

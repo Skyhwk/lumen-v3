@@ -41,7 +41,7 @@ class DirectpartikulatPM {
             'c2'        => $c2,
             'c16'       => $c16,
             'c17'       => $c17,
-            'satuan'    => 'ug/Nm3'
+            'satuan'    => 'ug/m3'
         ];
     }
 }

@@ -913,14 +913,16 @@ class BasOnlineController extends Controller
                 
                 return $dataBas[0]["filename"];
             }
-            $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+            // $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+            $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);
             
+
             // Get No Sample
-            $noSample = [];
-            foreach ($kategori_request as $item) {
-                // $parts = explode(" - ", $item);
-                array_push($noSample, $request->no_order . '/' . $item);
-            }
+            // $noSample = [];
+            // foreach ($kategori_request as $item) {
+            //     // $parts = explode(" - ", $item);
+            //     array_push($noSample, $request->no_order . '/' . $item);
+            // }
           
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
