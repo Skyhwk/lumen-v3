@@ -18,6 +18,7 @@ use App\Models\{GenerateLink, LinkLhp, MasterKaryawan, OrderDetail, OrderHeader,
 use App\Services\{GetAtasan, SendEmail};
 
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Validator;
 
 class GenerateHasilPengujianController extends Controller
 {
@@ -26,12 +27,12 @@ class GenerateHasilPengujianController extends Controller
         $linkLhp = LinkLhp::with('token')->where('is_emailed', false)->latest();
 
         return Datatables::of($linkLhp)
-        ->filterColumn('is_completed', function ($query, $keyword) {
-            if($keyword != '') {
-                $query->where('is_completed', $keyword);
-            } 
-        })
-        ->make(true);
+            ->filterColumn('is_completed', function ($query, $keyword) {
+                if ($keyword != '') {
+                    $query->where('is_completed', $keyword);
+                }
+            })
+            ->make(true);
     }
 
     public function searchOrders(Request $request)
@@ -43,9 +44,24 @@ class GenerateHasilPengujianController extends Controller
             ->where('is_active', true)
             ->limit(5)
             ->get()
-            ->map(fn($item) => LinkLhp::where('no_order', $item->no_order)->exists() ? null : $item->makeHidden(['id']))
+            ->map(function ($item) {
+                $linkLhp = LinkLhp::where('no_order', $item->no_order);
+                if ($linkLhp->exists()) {
+                    $listPeriode = $linkLhp->pluck('periode')->toArray();
+                    if (count($listPeriode) > 0) {
+                        $filteredDetail = $item->orderDetail->filter(fn($detail) => !in_array($detail->periode, $listPeriode))->values();
+                        $item->setRelation('order_detail', $filteredDetail);
+                        return $item->makeHidden(['id']);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return $item->makeHidden(['id']);
+                }
+            })
             ->filter()
             ->values();
+
         return response()->json($results, 200);
     }
 
@@ -450,6 +466,73 @@ class GenerateHasilPengujianController extends Controller
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 500);
+        }
+    }
+
+    public function rerenderPdf(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|integer|exists:link_lhp,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $linkLhp = LinkLhp::find($request->id);
+            if (!$linkLhp) return response()->json(['message' => 'Data Link LHP tidak ditemukan.'], 404);
+
+            $listCfrRilis = json_decode($linkLhp->list_lhp_rilis);
+            $finalFilename = $linkLhp->filename;
+            if (empty($listCfrRilis) || !$finalFilename) return response()->json(['message' => 'Record ini tidak memiliki list LHP rilis atau nama file. Tidak ada yang bisa di-render ulang.'], 400);
+
+            $finalDirectoryPath = public_path('laporan/hasil_pengujian');
+            $finalFilename = $linkLhp->periode ? $linkLhp->no_order . '_' . $linkLhp->periode . '.pdf' : $linkLhp->no_order . '.pdf';
+            $finalFullPath = $finalDirectoryPath . '/' . $finalFilename;
+
+            if (!File::isDirectory($finalDirectoryPath)) {
+                File::makeDirectory($finalDirectoryPath, 0777, true);
+            }
+
+            $httpClient = Http::asMultipart();
+            $fileMetadata = [];
+
+            foreach ($listCfrRilis as $noLhp) {
+                $fileLhp = 'LHP-' . str_replace('/', '-', $noLhp) . '.pdf';
+
+                $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
+
+                if (File::exists($lhpPath)) {
+                    $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
+                    $fileMetadata[] = 'skyhwk12';
+                }
+            }
+
+            $httpClient->attach('metadata', json_encode($fileMetadata));
+            // $httpClient->attach('final_password', $orderHeader->id_pelanggan);
+
+            $pythonServiceUrl = env('PDF_COMBINER_SERVICE', 'http://127.0.0.1:2999') . '/merge';
+            $response = $httpClient->post($pythonServiceUrl);
+
+            if (!$response->successful()) {
+                throw new \Exception('Python PDF Service failed (' . $response->status() . '): ' . $response->body());
+            }
+
+            File::put($finalFullPath, $response->body());
+
+            return response()->json([
+                'message' => 'File PDF berhasil di-render ulang.',
+                'file_ditimpa' => $finalFilename,
+            ], 200);
+        } catch (ConnectionException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal terhubung ke PDF Merger Service. Pastikan service sudah jalan.',
+                'error_detail' => $e->getMessage()
+            ], 503);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Gagal render ulang: ' . $e->getMessage(), 'line' => $e->getLine()], 500);
         }
     }
 }
