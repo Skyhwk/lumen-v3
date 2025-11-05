@@ -174,57 +174,59 @@ class FdlPartikulatMeterController extends Controller
 
                 $isFinalApprove = ($TotalApprove + 1) >= $approveCountNeeded;
 
-                if ($isFinalApprove) {
-                    $functionObj = Formula::where('id_parameter', $parameter->id)
-                        ->where('is_active', true)
-                        ->first();
-                    if(!$functionObj){
-                        return response()->json(['message' => 'Formula is Coming Soon'], 404);
-                    } else{
-                        $function = $functionObj->function;
-                        if(in_array($parameterData, [
-                            'PM 10', 'PM 2.5', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 
-                            'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
-                        ])){
-                            $function = 'DirectPartikulatPM';
+                if (!in_array($parameterData, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                    if ($isFinalApprove) {
+                        $functionObj = Formula::where('id_parameter', $parameter->id)
+                            ->where('is_active', true)
+                            ->first();
+                        if(!$functionObj){
+                            return response()->json(['message' => 'Formula is Coming Soon'], 404);
+                        } else{
+                            $function = $functionObj->function;
+                            if(in_array($parameterData, [
+                                'PM 10', 'PM 2.5', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 
+                                // 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
+                            ])){
+                                $function = 'DirectPartikulatPM';
+                            }
                         }
-                    }
-
-                    $data_kalkulasi = AnalystFormula::where('function', $function)
-                        ->where('data', $dataLapangan)
-                        ->where('id_parameter', $parameter->id)
-                        ->process();
-
-                    $header = PartikulatHeader::firstOrNew([
-                        'no_sampel' => $no_sample,
-                        'parameter' => $parameterData,
-                    ]);
-
-                    $header->fill([
-                        'id_parameter' => $parameter->id,
-                        'is_approve' => 1,
-                        // 'lhps' => 1,
-                        'approved_by' => $this->karyawan,
-                        'approved_at' => Carbon::now(),
-                        'created_by' => $header->exists ? $header->created_by : $this->karyawan,
-                        'created_at' => $header->exists ? $header->created_at : Carbon::now(),
-                        'is_active' => 1,
-                    ]);
-                    $header->save();
-
-                    WsValueUdara::updateOrCreate(
-                        [
+    
+                        $data_kalkulasi = AnalystFormula::where('function', $function)
+                            ->where('data', $dataLapangan)
+                            ->where('id_parameter', $parameter->id)
+                            ->process();
+    
+                        $header = PartikulatHeader::firstOrNew([
                             'no_sampel' => $no_sample,
-                            'id_partikulat_header' => $header->id,
-                        ],
-                        [
-                            'id_po' => $po->id,
+                            'parameter' => $parameterData,
+                        ]);
+    
+                        $header->fill([
+                            'id_parameter' => $parameter->id,
+                            'is_approve' => 1,
+                            // 'lhps' => 1,
+                            'approved_by' => $this->karyawan,
+                            'approved_at' => Carbon::now(),
+                            'created_by' => $header->exists ? $header->created_by : $this->karyawan,
+                            'created_at' => $header->exists ? $header->created_at : Carbon::now(),
                             'is_active' => 1,
-                            'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
-                            'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
-                            'satuan' => $data_kalkulasi['satuan'] ?? null,
-                        ]
-                    );
+                        ]);
+                        $header->save();
+    
+                        WsValueUdara::updateOrCreate(
+                            [
+                                'no_sampel' => $no_sample,
+                                'id_partikulat_header' => $header->id,
+                            ],
+                            [
+                                'id_po' => $po->id,
+                                'is_active' => 1,
+                                'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
+                                'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
+                                'satuan' => $data_kalkulasi['satuan'] ?? null,
+                            ]
+                        );
+                    }
                 }
 
                 app(NotificationFdlService::class)->sendApproveNotification("Partikulat Meter pada Shift($initialRecord->shift_pengambilan)", "$initialRecord->no_sampel($initialRecord->parameter)", $this->karyawan, $initialRecord->created_by);
