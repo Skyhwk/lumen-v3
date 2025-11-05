@@ -165,6 +165,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
+
 			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
@@ -255,7 +256,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					$index = $satuanIndexMap[$item->satuan] ?? 1;
 				
 					if (!$item->ws_udara) {
-						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+						return $item->ws_value_linkungan->f_koreksi_c ?? $item->ws_value_linkungan->C ?? '-';
 					}
 				
 					$fKoreksiKey = "f_koreksi_$index";
@@ -263,7 +264,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				
 					$nilai = $item->ws_udara->$fKoreksiKey
 						?? $item->ws_udara->$hasilKey
-						?? $item->ws_value_lingkungan->f_koreksi_c
+						?? $item->ws_value_linkungan->f_koreksi_c
 						?? null;
 
 					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
