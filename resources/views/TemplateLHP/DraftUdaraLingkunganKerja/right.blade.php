@@ -98,7 +98,6 @@
                     <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">
                         @php
                             $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
                             $periode = explode(' - ', $periode_analisa);
