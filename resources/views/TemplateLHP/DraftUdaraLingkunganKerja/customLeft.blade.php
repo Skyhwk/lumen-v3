@@ -5,9 +5,9 @@
                 <tr>
                     <th width="25" class="pd-5-solid-top-center" >NO</th>
                     <th width="200" class="pd-5-solid-top-center" >PARAMETER</th>
-                    <th width="60" class="pd-5-solid-top-center" >DURASI</th>
                     <th width="60" class="pd-5-solid-top-center" >HASIL UJI</th>
-                    <th width="50" class="pd-5-solid-top-center" >BAKU MUTU</th>
+                    <th width="50" class="pd-5-solid-top-center" >NAB</th>
+                    <th width="50" class="pd-5-solid-top-center" >PSD/KTD</th>
                     <th width="60" class="pd-5-solid-top-center" >SATUAN</th>
                     <th width="220" class="pd-5-solid-top-center" >SPESIFIKASI METODE</th>
                 </tr>
@@ -26,14 +26,21 @@
                         $methode = isset($v['methode']) ? $v['methode'] : '';
                         $durasi = isset($v['durasi']) ? $v['durasi'] : '';
                         $parameter = isset($v['parameter']) ? $v['parameter'] : '';
-                        $bakuMutu = ($v['baku_mutu'] != "null") ? $v['baku_mutu'] : '';
+                        $nab = '-';
+                        $psd_ktd = '-';
+                        if ($v['nama_header'] && $v['nama_header'] == 'NAB' && $v['baku_mutu']) {
+                            $nab = $v['baku_mutu'];
+                        }
+                        if ($v['nama_header'] && $v['nama_header'] == 'PSD/KTD' && $v['baku_mutu']) {
+                            $psd_ktd = $v['baku_mutu'];
+                        }
                     @endphp
                     <tr>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $number }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}"><sup>{!! $akr !!}</sup>&nbsp;{{ $parameter }}</td>
-                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $durasi }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $hasilUji }}&nbsp;{{ $attr }}</td>
-                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $bakuMutu }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $nab }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $psd_ktd }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $satuan }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{{ $methode }}</td>
                     </tr>

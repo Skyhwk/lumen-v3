@@ -148,7 +148,61 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			// dd($processedData);
 
 
-			return Datatables::of($processedData)->make(true);
+			return Datatables::of($processedData)
+				->addColumn('nilai_uji', function ($item) {
+					$satuanIndexMap = [
+						"µg/m³" => 17,
+						"µg/m3" => 17,
+						"mg/m³" => 16,
+						"mg/m3" => 16,
+						"BDS" => 15,
+						"CFU/M²" => 14,
+						"CFU/M2" => 14,
+						"CFU/25cm²" => 13,
+						"CFU/25cm2" => 13,
+						"°C" => 12,
+						"CFU/100 cm²" => 11,
+						"CFU/100 cm2" => 11,
+						"CFU/m²" => 10,
+						"CFU/m2" => 10,
+						"CFU/m³" => 9,
+						"CFU/m3" => 9,
+						"m/s" => 8,
+						"f/cc" => 7,
+						"Ton/km²/Bulan" => 6,
+						"Ton/km2/Bulan" => 6,
+						"%" => 5,
+						"ppb" => 4,
+						"ppm" => 3,
+						"mg/nm³" => 2,
+						"mg/nm3" => 2,
+						"μg/Nm³" => 1,
+						"μg/Nm3" => 1
+					];
+				
+					$index = $satuanIndexMap[$item->satuan] ?? 1;
+				
+					if (!$item->ws_udara) {
+						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+					}
+				
+					$fKoreksiKey = "f_koreksi_$index";
+					$hasilKey = "hasil$index";
+				
+					$nilai = $item->ws_udara->$fKoreksiKey
+						?? $item->ws_udara->$hasilKey
+						?? $item->ws_value_lingkungan->f_koreksi_c
+						?? null;
+
+					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
+						$fKoreksi2 = $item->ws_udara->f_koreksi_2 ?? null;
+						$hasil2 = $item->ws_udara->hasil2 ?? null;
+						$nilai = $fKoreksi2 ?? $hasil2 ?? $nilai;
+					}
+				
+					return $nilai ?? '-';
+				})
+				->make(true);
 
 		} catch (\Throwable $th) {
 			return response()->json([
@@ -518,7 +572,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					], 201);
 				}
 			} else {
-				$data = [];
+                return response()->json([
+                    'message' => 'Gagal Approve : Data tidak termasuk kategori lingkungan hidup',
+                ], 404);
 			}
 		} else {
 			return response()->json([
@@ -786,7 +842,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->where('lingkungan_header_id', $lingkungan->id)
 				->where('is_active', 1)
 				->first();
-			
+
 			$wsUdara = WsValueUdara::where('no_sampel', $no_sampel)
 				->where('id_lingkungan_header', $lingkungan->id)
 				->where('is_active', 1)

@@ -2207,6 +2207,14 @@ class RequestQuotationController extends Controller
                     ->update([
                         'no_quotation' => $data->no_document,
                     ]);
+
+
+                // update link lhp
+                DB::table('link_lhp')
+                    ->where('no_quotation', $dataOld->no_document)
+                    ->update([
+                        'no_quotation' => $data->no_document,
+                    ]);
             }
 
             // UPDATE KONFIRMASI ORDER ===================
@@ -5108,6 +5116,12 @@ class RequestQuotationController extends Controller
                         DB::table('persiapan_sampel_header')
                             ->where('no_quotation', $dataOld->no_document)
                             ->where('is_active', true)
+                            ->update([
+                                'no_quotation' => $dataH->no_document,
+                            ]);
+
+                        DB::table('link_lhp')
+                            ->where('no_quotation', $dataOld->no_document)
                             ->update([
                                 'no_quotation' => $dataH->no_document,
                             ]);

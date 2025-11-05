@@ -4,36 +4,26 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganEmisiCerobong;
+use App\Models\EmisiCerobongHeader;
+use App\Models\MasterBakumutu;
+use App\Models\HistoryAppReject;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Yajra\DataTables\DataTables;
 use App\Models\OrderDetail;
+use Carbon\Carbon;
+
 
 
 class TqcEmisiSumberTidakBergerakController extends Controller
 {
     public function index()
     {
-        $data = OrderDetail::select(
-            'cfr',
-            DB::raw('MAX(id) as max_id'),
-            'nama_perusahaan',
-            'no_quotation',
-            'no_order',
-            DB::raw('GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ", ") as no_sampel'),
-            DB::raw('GROUP_CONCAT(DISTINCT kategori_3 SEPARATOR ", ") as kategori_3'),
-            DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ", ") as tanggal_sampling'),
-            DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
-            'kategori_1',
-            'konsultan',
-            'parameter',
-        )
-            ->where('is_active', true)
+        $data = OrderDetail::where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3',  '34-Emisi Sumber Tidak Bergerak')
-            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', 'parameter')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('id', 'desc');
 
         return DataTables::of($data)
             ->filter(function ($query) {
@@ -57,6 +47,65 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             })
             ->make(true);
     }
+
+
+    public function detail(Request $request)
+	{
+		try {
+			$cerobong = EmisiCerobongHeader::with(['ws_value_cerobong'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approved', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->get();
+
+
+
+			// $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+			$id_regulasi = $request->regulasi;
+			foreach ($cerobong as $item) {
+
+				$dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
+					->select('waktu_pengambilan')
+					->first();
+				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+					->where('id_regulasi', $id_regulasi)
+					->where('is_active', 1)
+					->select('baku_mutu', 'satuan', 'method')
+					->first();
+				$item->durasi = $dataLapangan->waktu_pengambilan ?? null;
+				$item->satuan = $bakuMutu->satuan ?? null;
+				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
+				$item->method = $bakuMutu->method ?? null;
+				$item->nama_header = $bakuMutu->nama_header ?? null;
+			
+			}
+
+
+			return Datatables::of($cerobong)->make(true);
+
+		} catch (\Throwable $th) {
+			return response()->json([
+				'message' => $th->getMessage(),
+			], 401);
+		}
+	}
+
+    public function detailLapangan(Request $request)
+	{
+			try {
+                $data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
+                if ($data) {
+                    return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+                } else {
+                    return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
+                }
+			} catch (\Exception $ex) {
+				dd($ex);
+			}
+		
+	}
+
 
   public function handleApproveSelected(Request $request)
     {
@@ -129,5 +178,62 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             'data' => $data,
             'message' => 'Data retrieved successfully',
         ], 200);
+    }
+
+
+     public function approveData(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = OrderDetail::where('id', $request->id)->first();
+            if ($data) {
+                $data->status = 2;
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp' => $data->cfr,
+                    'no_sampel' => $data->no_sampel,
+                    'kategori_2' => $data->kategori_2,
+                    'kategori_3' => $data->kategori_3,
+                    'menu' => 'TQC Emisi Sumber Tidak Bergerak',
+                    'status' => 'approve',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
+                DB::commit();
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil diapprove'
+                ]);
+            }
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+            ]);
+        }
+    }
+
+    public function rejectData(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = OrderDetail::where('id', $request->id)->first();
+            if ($data) {
+                $data->status = 0;
+                $data->save();
+                DB::commit();
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
+                ]);
+            }
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+            ]);
+        }
     }
 }

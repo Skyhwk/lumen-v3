@@ -1075,7 +1075,7 @@ class AppsFdlController extends Controller
         }catch(\Exception $e){
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e.getLine()
             ]);
         }
@@ -1310,7 +1310,7 @@ class AppsFdlController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'code' => $e->getCode(),
                 'line' => $e->getLine()
             ]);
@@ -1776,7 +1776,7 @@ class AppsFdlController extends Controller
         }catch(\Exception $e){
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e->getLine(),
                 'code' => $e->getCode()
             ]);
@@ -2038,7 +2038,7 @@ class AppsFdlController extends Controller
         }catch(Exception $e){
             DB::rollBack();
             return response()->json([
-               'message' => $e.getMessage(),
+               'message' => $e->getMessage(),
                'code' => $e.getCode(),
                'line' => $e.getLine()
             ]);
@@ -2264,7 +2264,7 @@ class AppsFdlController extends Controller
     //     }catch(\Exception $e){
     //         DB::rollback();
     //         return response()->json([
-    //             'message' => $e.getMessage(),
+    //             'message' => $e->getMessage(),
     //             'code' => $e.getCode(),
     //             'line' => $e.getLine()
     //         ]);
@@ -2643,7 +2643,7 @@ class AppsFdlController extends Controller
         }catch(Exception $e){
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'code' => $e.getCode(),
                 'line' => $e.getLine()
             ]);
@@ -2890,7 +2890,7 @@ class AppsFdlController extends Controller
         }catch (\Exception $e) {
             DB::rollback();
             return response()->json([
-               'message' => $e.getMessage(),
+               'message' => $e->getMessage(),
                'line' => $e->getLine(),
                'code' => $e->getCode()
             ]);
@@ -3114,7 +3114,7 @@ class AppsFdlController extends Controller
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
-               'message' => $e.getMessage(),
+               'message' => $e->getMessage(),
                'line' => $e->getLine(),
                'code' => $e->getCode()
             ]);
@@ -3436,7 +3436,7 @@ class AppsFdlController extends Controller
     //             }catch (Exception $e) {
     //                 DB::rollBack();
     //                 return response()->json([
-    //                    'message' => $e.getMessage(),
+    //                    'message' => $e->getMessage(),
     //                    'line' => $e.getLine(),
     //                    'code' => $e.getCode()
     //                 ]);
@@ -3510,7 +3510,7 @@ class AppsFdlController extends Controller
     //             }catch (Exception $e) {
     //                 DB::rollBack();
     //                 return response()->json([
-    //                    'message' => $e.getMessage(),
+    //                    'message' => $e->getMessage(),
     //                    'line' => $e.getLine(),
     //                    'code' => $e.getCode()
     //                 ]);
@@ -3633,7 +3633,7 @@ class AppsFdlController extends Controller
     //             }catch (\Exception $e) {
     //                 DB::rollBack();
     //                 return response()->json([
-    //                    'message' => $e.getMessage(),
+    //                    'message' => $e->getMessage(),
     //                    'line'    => $e->getLine(),
     //                    'code'    => $e->getCode()
     //                 ]);
@@ -3866,7 +3866,7 @@ class AppsFdlController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -4010,7 +4010,7 @@ class AppsFdlController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -4133,7 +4133,7 @@ class AppsFdlController extends Controller
                 }catch (\Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line'    => $e->getLine(),
                         'code'    => $e->getCode()
                     ]);
@@ -6220,7 +6220,7 @@ class AppsFdlController extends Controller
         }catch(Exception $e){
             DB::rollBack();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e.getLine(),
                 'code' => $e.getCode()
             ]);
@@ -8331,7 +8331,7 @@ class AppsFdlController extends Controller
             }catch (\Exception $e) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => $e.getMessage(),
+                    'message' => $e->getMessage(),
                     'line' => $e.getLine(),
                     'code' => $e.getCode()
                 ], 401);
@@ -9783,7 +9783,7 @@ class AppsFdlController extends Controller
             } catch (Exception $e) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => $e.getMessage(),
+                    'message' => $e->getMessage(),
                     'line' => $e.getLineNumber(),
                     'code' => $e.getCode()
                 ], 401);
@@ -9886,7 +9886,7 @@ class AppsFdlController extends Controller
             // }catch(\Exception $e){
             //     DB::rollBack();
             //     return response()->json([
-            //         'message' => 'Terjadi Kesalahan. '.$e.getMessage(),
+            //         'message' => 'Terjadi Kesalahan. '.$e->getMessage(),
             //         'line' => $e.getLineNumber(),
             //         'code' => $e.getCode()
             //     ], 401);
@@ -10392,7 +10392,7 @@ class AppsFdlController extends Controller
             } catch (Exception $e) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => $e.getMessage(),
+                    'message' => $e->getMessage(),
                     'line' => $e.getLine(),
                     'code' => $e.getCode()
                 ], 401);
@@ -10473,7 +10473,7 @@ class AppsFdlController extends Controller
             } catch (Exception $e) {
                 DB::rollBack();
                 return response()->json([
-                    'message' => $e.getMessage(),
+                    'message' => $e->getMessage(),
                     'line' => $e.getLine(),
                 ], 401);
             }

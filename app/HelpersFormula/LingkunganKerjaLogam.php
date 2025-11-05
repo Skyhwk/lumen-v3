@@ -68,7 +68,7 @@ class LingkunganKerjaLogam
         } else {
             $C2_param = ["Hg", "Mn"];
             $C1_C2_C3_param_new = ["As", "Ba", "Cr", "Cu", "Fe"];
-            $C2_C3_param = ['Ni','Sb','Se','Sn','Zn','Al'];
+            $C2_C3_param = ['Ni','Sb','Se','Sn','Zn','Aluminium (Al)'];
             $C1_C2_C3_param = ['Co'];
             $C1_C2_C3_C4_C5_param = ['Cd'];
             $ICP_aneh = ['Molybdenum (LK)','Vanadium (LK)','Titanium (LK)'];
@@ -82,10 +82,14 @@ class LingkunganKerjaLogam
 
                 if($data->parameter == 'Hg') {
                     // C (PPM)= (C2 / 24.45)*200,59)
-                    $C2 = (($C1 / 24.45) * 200.59);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 200,59)*24.45
+                    $C2 = (($C1 / 200.59) * 24.45);
                 }else{
                     // C (PPM)= (C2 / 24.45)*54,94)
-                    $C2 = (($C1 / 24.45) * 54.94);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 54,94)*24.45
+                    $C2 = (($C1 / 54.94) * 24.45);
                 }
 
                 $C14 = $C2;
@@ -106,7 +110,9 @@ class LingkunganKerjaLogam
 
                 if($data->parameter == 'As') {
                     // C (PPM)= (C2 / 24.45)*74,92)
-                    $C2 = (($C1 / 24.45) * 74.92);
+                    // revisi menjad
+                    // C (PPM)= (C2 / 74,92)*24.45
+                    $C2 = (($C1 / 74.92) * 24.45);
 
                     $C14 = $C2;
 
@@ -115,7 +121,9 @@ class LingkunganKerjaLogam
                     $C15 = $C16 * 1000;
                 }else if($data->parameter == 'Ba') {
                     // C (PPM)= (C2 / 24.45)*137,33)
-                    $C2 = (($C1 / 24.45) * 137.33);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 137,33)*24.45
+                    $C2 = (($C1 / 137.33) * 24.45);
 
                     $C14 = $C2;
                     $C14 = $C2;
@@ -128,7 +136,9 @@ class LingkunganKerjaLogam
                     $C2 = (((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd) * 24.45 / 58.933);
                 }elseif($data->parameter == 'Cr') {
                     // C (PPM)= (C2 / 24.45)*51,996)
-                    $C2 = (($C1 / 24.45) * 51.996);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 51,996)*24.45
+                    $C2 = (($C1 / 51.996) * 24.45);
 
                     $C14 = $C2;
 
@@ -137,7 +147,9 @@ class LingkunganKerjaLogam
                     $C15 = $C16 * 1000;
                 }elseif($data->parameter == 'Cu') {
                     // C (PPM)= (C2 / 24.45)*63,546)
-                    $C2 = (($C1 / 24.45) * 63.546);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 63,546)*24.45
+                    $C2 = (($C1 / 63.546) * 24.45);
 
                     $C14 = $C2;
 
@@ -146,7 +158,9 @@ class LingkunganKerjaLogam
                     $C15 = $C16 * 1000;
                 }else if($data->parameter == 'Fe') {
                     // C (PPM)= (C2 / 24.45)*55,845)
-                    $C2 = (($C1 / 24.45) * 55.845);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 55,845)*24.45
+                    $C2 = (($C1 / 55.845) * 24.45);
 
                     $C14 = $C2;
 
@@ -166,16 +180,24 @@ class LingkunganKerjaLogam
                     $C2 = (($C1 / 24.45) * 58.69);
                 }else if($data->parameter == 'Sb') {
                     // C (PPM)= (C2 / 24.45)*121,76)
-                    $C2 = (($C1 / 24.45) * 121.76);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 121,76)*24.45
+                    $C2 = (($C1 / 121.76) * 24.45);
                 }else if($data->parameter == 'Se') {
                     // C (PPM)= (C2 / 24.45)*78,97)
-                    $C2 = (($C1 / 24.45) * 78.97);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 78,97)*24.45)
+                    $C2 = (($C1 / 78.97) * 24.45);
                 }else if($data->parameter == 'Sn') {
                     // C (PPM)= (C2 / 24.45)*118,71)
-                    $C2 = (($C1 / 24.45) * 118.71);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 118,71)*24.45
+                    $C2 = (($C1 / 118.71) * 24.45);
                 }else if($data->parameter == 'Zn') {
                     // C (PPM)= (C2 / 24.45)*65,38)
-                    $C2 = (($C1 / 24.45) * 65.38);
+                    // revisi menjadi
+                    // C (PPM)= (C2 / 65,38)*24.45)
+                    $C2 = (($C1 / 65.38) * 24.45);
                 }else {
                     // C (PPM)= (C2 / 24.45)*26,98)
                     $C2 = (($C1 / 24.45) * 26.98);
@@ -195,7 +217,9 @@ class LingkunganKerjaLogam
                 $C1 = $C / 1000;
 
                 // C (PPM) = ((((Ct - Cb)*(Vt/1000)*1)/Vstd)*24,45)/58,933
-                $C2 = (((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd) * 24.45 / 58.933);
+                // revisi menjadi
+                // C (PPM)= (C2 / 58,933) * 24.45
+                $C2 = ($C1 * 24.45 / 58.933);
 
                 $C14 = $C2;
 
@@ -212,7 +236,9 @@ class LingkunganKerjaLogam
                 $C = $C1 * 1000;
 
                 // C (PPM)= (C2 / 24.45)*112,414)
-                $C2 = ($C1 / 24.45) * 112.414;
+                // revisi menjadi
+                // C (PPM)= (C2 / 112,414)*24.45
+                $C2 = ($C1 / 112.414) * 24.45;
 
                 // C4 = C3 x 1000
                 $C3 = $C2 * 1000;
@@ -233,7 +259,9 @@ class LingkunganKerjaLogam
                 $C = ($C1 * 1000);
 
                 // C (PPM)= (C2 / 24.45)*74,92)
-                $C2 = ($C1 / 24.45) * 74.92;
+                // revisi menjadi
+                // C (PPM)= (C2 / 74,92)*24.45)
+                $C2 = ($C1 / 74.92) * 24.45;
 
                 $C14 = $C2;
 
@@ -253,7 +281,9 @@ class LingkunganKerjaLogam
                 $C = $C1 * 1000;
 
                 // C (PPM)= (C2 / 24.45)*207,2)
-                $C2 = ($C1 / 24.45) * 207.2;
+                // revisi menjadi
+                // C (PPM)= (C2 / 207,2)*24.45
+                $C2 = ($C1 / 207.2) * 24.45;
 
                 $C14 = $C2;
 

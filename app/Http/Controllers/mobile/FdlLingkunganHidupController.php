@@ -627,6 +627,14 @@ class FdlLingkunganHidupController extends Controller
                 $filteredParameters = array_filter($parameter, function ($p) use ($orderParameters) {
                     return in_array($p, $orderParameters);
                 });
+
+                if (empty($filteredParameters)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Parameter tidak ditemukan dalam order'
+                    ]);
+                }
+                
                 foreach($filteredParameters as $a){
                     $satuan = '';
                     $shift_pengujian = '';

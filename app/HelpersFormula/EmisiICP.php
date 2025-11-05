@@ -56,132 +56,132 @@ class EmisiICP
         $C1 = number_format($C / 1000, 4, ".", "");
 
         // C (ug/m3) = (((Ct - Cb)*Vt*S/St) / (Rerata Laju Alir * t))
-        $C2 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
+        $C3 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
 
-        $C3 = number_format($C2 / 1000, 4, ".", "");
+        $C4 = number_format($C3 / 1000, 4, ".", "");
 
 
         switch ($data->parameter) {
             case 'As':
-                $C4 = number_format(24.45 * ($C / 74.92), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 74.92), 4, ".", ""); // ppm
                 #MDL
-                if ($C3 < 0.01) {
-                    $C3 = "<0.01";
+                if ($C4 < 0.01) {
+                    $C4 = "<0.01";
                 }
-                if ($C4 < 0.0041) {
-                    $C4 = "<0.0041";
+                if ($C2 < 0.0041) {   // ppm
+                    $C2 = "<0.0041";  // ppm
                 }
                 break;
             case 'Cd':
-                $C4 = number_format(24.45 * ($C / 112.41), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 112.41), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.0008) {
-                    $C3 = "<0.0008";
+                if ($C4 < 0.0008) {
+                    $C4 = "<0.0008";
                 }
                 break;
             case 'Co':
-                $C4 = number_format(24.45 * ($C / 28.01), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 28.01), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.0075) {
-                    $C3 = "<0.0075";
+                if ($C4 < 0.0075) {
+                    $C4 = "<0.0075";
                 }
+                if ($C2 < 0.0031) {  // ppm
+                    $C2 = "<0.0031";  // ppm
+                }
+                break;
+            case 'Cr':
+                $C2 = number_format(24.45 * ($C1 / 51.996), 4, ".", "");  // ppm
+                #MDL
+                if ($C4 < 0.0111) {
+                    $C4 = "<0.0111";
+                }
+                break;
+            case 'Cu':
+                $C2 = number_format(24.45 * ($C1 / 63.55), 4, ".", "");  // ppm
+                #MDL
                 if ($C4 < 0.0031) {
                     $C4 = "<0.0031";
                 }
                 break;
-            case 'Cr':
-                $C4 = number_format(24.45 * ($C / 51.996), 4, ".", "");
-                #MDL
-                if ($C3 < 0.0111) {
-                    $C3 = "<0.0111";
-                }
-                break;
-            case 'Cu':
-                $C4 = number_format(24.45 * ($C / 63.55), 4, ".", "");
-                #MDL
-                if ($C3 < 0.0031) {
-                    $C3 = "<0.0031";
-                }
-                break;
             case 'Hg':
-                $C4 = number_format(24.45 * ($C / 200.59), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 200.59), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.01) {
-                    $C3 = "<0.01";
+                if ($C4 < 0.01) {
+                    $C4 = "<0.01";
                 }
-                if ($C4 < 0.0004) {
-                    $C4 = "<0.0004";
+                if ($C2 < 0.0004) {  // ppm
+                    $C2 = "<0.0004";  // ppm
                 }
                 break;
             case 'Mn':
-                $C4 = number_format(24.45 * ($C / 54.938), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 54.938), 4, ".", "");  // ppm
                 break;
             case 'Pb':
-                $C4 = number_format(24.45 * ($C / 207.2), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 207.2), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.0042) {
-                    $C3 = "<0.0042";
+                if ($C4 < 0.0042) {
+                    $C4 = "<0.0042";
                 }
                 break;
             case 'Sb':
-                $C4 = number_format(24.45 * ($C / 121.76), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 121.76), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.01) {
-                    $C3 = "<0.01";
+                if ($C4 < 0.01) {
+                    $C4 = "<0.01";
                 }
-                if ($C4 < 0.0016) {
-                    $C4 = "<0.0016";
+                if ($C2 < 0.0016) {  // ppm
+                    $C2 = "<0.0016";  // ppm
                 }
                 break;
             case 'Se':
-                $C4 = number_format(24.45 * ($C / 78.97), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 78.97), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.01) {
-                    $C3 = "<0.01";
+                if ($C4 < 0.01) {
+                    $C4 = "<0.01";
                 }
-                if ($C4 < 0.0016) {
-                    $C4 = "<0.0016";
+                if ($C2 < 0.0016) {  // ppm
+                    $C2 = "<0.0016";  // ppm
                 }
                 break;
             case 'Tl':
-                $C4 = number_format(24.45 * ($C / 204.38), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 204.38), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.0037) {
-                    $C3 = "<0.0037";
+                if ($C4 < 0.0037) {
+                    $C4 = "<0.0037";
                 }
                 break;
             case 'Zn':
-                $C4 = number_format(24.45 * ($C / 65.38), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 65.38), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.0035) {
-                    $C3 = "<0.0035";
-                }
                 if ($C4 < 0.0035) {
                     $C4 = "<0.0035";
                 }
+                if ($C2 < 0.0035) {  // ppm
+                    $C2 = "<0.0035";  // ppm
+                }
                 break;
             case 'Sn':
-                $C4 = number_format(24.45 * ($C / 118.71), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 118.71), 4, ".", "");  // ppm
                 #MDL
-                if ($C3 < 0.01) {
-                    $C3 = "<0.01";
+                if ($C4 < 0.01) {
+                    $C4 = "<0.01";
                 }
                 break;
             case 'Al':
-                $C4 = number_format(24.45 * ($C / 26.98), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 26.98), 4, ".", "");  // ppm
                 break;
             case 'Ba':
-                $C4 = number_format(24.45 * ($C / 137.33), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 137.33), 4, ".", "");  // ppm
                 break;
             case 'Be':
-                $C4 = number_format(24.45 * ($C / 9.01), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 9.01), 4, ".", "");  // ppm
                 break;
 
             case 'Bi':
-                $C4 = number_format(24.45 * ($C / 208.98), 4, ".", "");
+                $C2 = number_format(24.45 * ($C1 / 208.98), 4, ".", "");  // ppm
                 break;
             default:
-                $C4 = null;
+                $C2 = null;  // ppm
                 break;
         }
 

@@ -191,7 +191,7 @@ class OrderHeader extends Sector
     {
         return $this->hasOne(CoverLhp::class, 'no_order', 'no_order')->where('is_active', true);
     }
-
+    
     public function holdHp()
     {
         return $this->hasOne(HoldHp::class, 'no_order', 'no_order');

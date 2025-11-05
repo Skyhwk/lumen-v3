@@ -330,7 +330,7 @@ class RenderKontrakCopy
                 $kategori2 = explode("-", $a->kategori_2);
 
                 $penamaan_titik = "";
-                
+
                 if ($a->penamaan_titik != null && $a->penamaan_titik != "") {
                     if (is_array($a->penamaan_titik)) {
                         $filtered_array = array_unique(array_filter($a->penamaan_titik, function ($value) {
@@ -1088,29 +1088,60 @@ class RenderKontrakCopy
                             $kategori = explode("-", $a->kategori_1);
                             $kategori2 = explode("-", $a->kategori_2);
                             $penamaan_titik = "";
-                            // if (is_array($a->penamaan_titik)) {
-                            //     $penamaan_titik = "(" . implode(", ", $a->penamaan_titik) . ")";
-                            // } else {
-                            //     $penamaan_titik = "(" . $a->penamaan_titik . ")";
-                            // }
+                            if (is_array($a->penamaan_titik)) {
+                                $penamaan_titik_strings = array_map(function ($item) {
+                                    if (is_object($item)) {
+                                        $props = get_object_vars($item);
+                                        return reset($props);
+                                    }
+                                    return $item;
+                                }, $a->penamaan_titik);
 
-                            // if ($a->penamaan_titik != null && $a->penamaan_titik != "") {
-                            //     if (is_array($a->penamaan_titik)) {
-                            //         $filtered_array = array_filter($a->penamaan_titik, function ($value) {
-                            //             return $value != "" && $value != " " && $value != "-";
-                            //         });
+                                $penamaan_titik = "(" . implode(", ", $penamaan_titik_strings) . ")";
+                            } else {
+                                if (is_object($a->penamaan_titik)) {
+                                    $props = get_object_vars($a->penamaan_titik);
+                                    $penamaan_titik = "(" . reset($props) . ")";
+                                } else {
+                                    $penamaan_titik = "(" . $a->penamaan_titik . ")";
+                                }
+                            }
 
-                            //         if (!empty($filtered_array)) {
-                            //             $penamaan_titik = "(" . implode(", ", $filtered_array) . ")";
-                            //         } else {
-                            //             $penamaan_titik = "";
-                            //         }
-                            //     } else {
-                            //         $penamaan_titik = "(" . $a->penamaan_titik . ")";
-                            //     }
-                            // } else {
-                            //     $penamaan_titik = "";
-                            // }
+                            if (!empty($a->penamaan_titik)) {
+                                if (is_array($a->penamaan_titik)) {
+                                    $filtered_array = array_filter($a->penamaan_titik, function ($value) {
+                                        if (is_object($value)) {
+                                            $props = get_object_vars($value);
+                                            return !empty($props) && trim(reset($props)) !== '' && trim(reset($props)) !== '-';
+                                        }
+                                        return $value != "" && $value != " " && $value != "-";
+                                    });
+
+                                    if (!empty($filtered_array)) {
+                                        $penamaan_titik_strings = array_map(function ($item) {
+                                            if (is_object($item)) {
+                                                $props = get_object_vars($item);
+                                                return reset($props); 
+                                            }
+                                            return $item;
+                                        }, $filtered_array);
+
+                                        $penamaan_titik = "(" . implode(", ", $penamaan_titik_strings) . ")";
+                                    } else {
+                                        $penamaan_titik = "";
+                                    }
+                                } else {
+                                    if (is_object($a->penamaan_titik)) {
+                                        $props = get_object_vars($a->penamaan_titik);
+                                        $penamaan_titik = "(" . reset($props) . ")";
+                                    } else {
+                                        $penamaan_titik = "(" . $a->penamaan_titik . ")";
+                                    }
+                                }
+                            } else {
+                                $penamaan_titik = "";
+                            }
+
                             $filtered = array_filter($a->penamaan_titik, function ($item) {
                                 $props = get_object_vars($item);
                                 $key = key($props);
@@ -1119,7 +1150,6 @@ class RenderKontrakCopy
                                 return !empty($value);
                             });
 
-                            // ubah jadi string "Inlet (001), Outlet (002), ..."
                             $resultParts = array_map(function ($item) {
                                 $props = get_object_vars($item);
                                 $key = key($props);
@@ -1128,24 +1158,24 @@ class RenderKontrakCopy
                                 return $value;
                             }, $filtered);
 
-                            $penamaan_titik = count($resultParts) > 0 ? "(" . implode(', ', array_unique($resultParts)) . ")" : '';
 
-                            // Hidupin untuk tampilkan penamaan titik
-                            // $pdf->WriteHTML(
-                            //     ' <tr>
-                            //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
-                            //         <td style="font-size: 13px; padding: 5px;">
-                            //             <b style="font-size: 13px;">' . $kategori2[1] . " " . $penamaan_titik . "</b>
-                            //             <hr>"
-                            // );
+                            $penamaan_titik = count($resultParts) > 0 ? "(" . implode(', ', array_unique($resultParts)) . ")" : '';
 
                             $pdf->WriteHTML(
                                 ' <tr>
                                     <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
                                     <td style="font-size: 13px; padding: 5px;">
-                                        <b style="font-size: 13px;">' . $kategori2[1] . "</b>
+                                        <b style="font-size: 13px;">' . $kategori2[1] . " " . $penamaan_titik . "</b>
                                         <hr>"
                             );
+
+                            // $pdf->WriteHTML(
+                            //     ' <tr>
+                            //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i++ . '</td>
+                            //         <td style="font-size: 13px; padding: 5px;">
+                            //             <b style="font-size: 13px;">' . $kategori2[1] . "</b>
+                            //             <hr>"
+                            // );
 
                             if ($a->regulasi !== "" && $a->regulasi != null && count($a->regulasi) > 0 && $a->regulasi[0] != "") {
                                 foreach ($a->regulasi as $k => $z) {

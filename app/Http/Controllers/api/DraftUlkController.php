@@ -225,6 +225,15 @@ class DraftUlkController extends Controller
             LhpsLingDetail::where('id_header', $header->id)->delete();
 
             foreach (($request->parameter ?? []) as $key => $val) {
+                $bakumutu = null;
+                if (isset($request->nab[$key]) && $request->nab[$key] != '-') {
+                    $bakumutu = $request->nab[$key];
+                    $namaheader = 'NAB';
+                }
+                if (isset($request->psd_ktd[$key]) && $request->psd_ktd[$key] != '-') {
+                    $bakumutu = $request->psd_ktd[$key];
+                    $namaheader = 'PSD/KTD';
+                }
                 LhpsLingDetail::create([
                     'id_header' => $header->id,
                     'akr' => $request->akr[$key] ?? '',
@@ -232,6 +241,8 @@ class DraftUlkController extends Controller
                     'parameter' => $val,
                     'hasil_uji' => $request->hasil_uji[$key] ?? '',
                     'attr' => $request->attr[$key] ?? '',
+                    'baku_mutu' => $bakumutu,
+                    'nama_header' => $namaheader,
                     'satuan' => $request->satuan[$key] ?? '',
                     'durasi' => $request->durasi[$key] ?? '',
                     'methode' => $request->methode[$key] ?? '',
@@ -244,6 +255,15 @@ class DraftUlkController extends Controller
             if ($request->custom_parameter) {
                 foreach ($request->custom_hasil_uji as $page => $params) {
                     foreach ($params as $param => $hasil) {
+                        $bakumutu = null;
+                        if (isset($request->custom_nab[$key]) && $request->custom_nab[$key] != '-') {
+                            $bakumutu = $request->custom_nab[$key];
+                            $namaheader = 'NAB';
+                        }
+                        if (isset($request->custom_psd_ktd[$key]) && $request->custom_psd_ktd[$key] != '-') {
+                            $bakumutu = $request->custom_psd_ktd[$key];
+                            $namaheader = 'PSD/KTD';
+                        }
                         LhpsLingCustom::create([
                             'id_header' => $header->id,
                             'page' => $page,
@@ -252,6 +272,8 @@ class DraftUlkController extends Controller
                             'parameter' => $request->custom_parameter_lab[$page][$param],
                             'hasil_uji' => $hasil,
                             'attr' => $request->custom_attr[$page][$param] ?? '',
+                            'baku_mutu' => $bakumutu,
+                            'nama_header' => $namaheader,
                             'satuan' => $request->custom_satuan[$page][$param] ?? '',
                             'durasi' => $request->custom_durasi[$page][$param] ?? '',
                             'methode' => $request->custom_methode[$page][$param] ?? '',
@@ -277,7 +299,7 @@ class DraftUlkController extends Controller
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->useLampiran(true)
-                ->whereView('DraftUdaraAmbient')
+                ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
@@ -337,6 +359,8 @@ class DraftUlkController extends Controller
                         'akr' => $val->akr,
                         'parameter' => $val->parameter,
                         'satuan' => $val->satuan,
+                        'nab' => $val->nama_header == 'NAB' ? $val->baku_mutu : '-',
+                        'psd_ktd' => $val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-',
                         'hasil_uji' => $val->hasil_uji,
                         'methode' => $val->methode,
                         'durasi' => $val->durasi,
@@ -400,6 +424,8 @@ class DraftUlkController extends Controller
                                     'no_sampel' => $request->no_sampel,
                                     'akr' => $val->akr,
                                     'parameter' => $val->parameter,
+                                    'nab' => $val->nama_header == 'NAB' ? $val->baku_mutu : '-',
+                                    'psd_ktd' => $val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-',
                                     'satuan' => $val->satuan,
                                     'hasil_uji' => $val->hasil_uji,
                                     'methode' => $val->methode,
@@ -512,7 +538,11 @@ class DraftUlkController extends Controller
 
             foreach ($models as $model) {
                 $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                $data = $model::with('ws_value_linkungan', 'parameter_udara')
+                $with = ['ws_value_linkungan', 'parameter_udara'];
+                if ($model === LingkunganHeader::class) {
+                    $with[] = 'ws_udara';
+                }
+                $data = $model::with($with)
                     ->where('no_sampel', $request->no_sampel)
                     ->where($approveField, 1)
                     ->where('is_active', true)
@@ -572,16 +602,66 @@ class DraftUlkController extends Controller
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
+            'akr' => $bakumutu ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '') : '',
             'parameter' => $param->nama_regulasi,
-            'satuan' => $param->satuan,
-            'hasil_uji' => $val->ws_value_linkungan->C ?? null,
+            // 'satuan' => $param->satuan,
+            'nab' => $bakumutu ? ($bakumutu->nama_header == 'NAB' ? $bakumutu->baku_mutu : '-') : '-',
+            'psd_ktd' => $bakumutu ? ($bakumutu->nama_header == 'PSD' || $bakumutu->nama_header == 'KTD' ? $bakumutu->baku_mutu : '-') : '-',
+            // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
+            'satuan' => (!empty($bakumutu->satuan)) 
+                ? $bakumutu->satuan 
+                : (!empty($param->satuan) ? $param->satuan : '-'),
             'durasi' => $val->ws_value_linkungan->durasi ?? null,
-            'methode' => $param->method,
+            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
             'status' => $param->status
         ];
 
+        $satuanIndexMap = [
+            "µg/m³" => 17,
+            "µg/m3" => 17,
+            "mg/m³" => 16,
+            "mg/m3" => 16,
+            "BDS" => 15,
+            "CFU/M²" => 14,
+            "CFU/M2" => 14,
+            "CFU/25cm²" => 13,
+            "CFU/25cm2" => 13,
+            "°C" => 12,
+            "CFU/100 cm²" => 11,
+            "CFU/100 cm2" => 11,
+            "CFU/m²" => 10,
+            "CFU/m2" => 10,
+            "CFU/m³" => 9,
+            "CFU/m3" => 9,
+            "m/s" => 8,
+            "f/cc" => 7,
+            "Ton/km²/Bulan" => 6,
+            "Ton/km2/Bulan" => 6,
+            "%" => 5,
+            "ppb" => 4,
+            "ppm" => 3,
+            "mg/nm³" => 2,
+            "mg/nm3" => 2,
+            "μg/Nm³" => 1,
+            "μg/Nm3" => 1
+        ];
 
+        $index = $satuanIndexMap[$bakumutu->satuan] ?? 1;
+        
+        $fKoreksiKey = "f_koreksi_$index";
+        $hasilKey = "hasil$index";
+
+        $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
+            ?? $val->ws_udara->$hasilKey
+            ?? $val->ws_value_lingkungan->f_koreksi_c
+            ?? $val->ws_value_lingkungan->C
+            ?? '-';
+
+        if (in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
+            $hasil2 = $val->ws_udara->hasil2 ?? null;
+            $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        }
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;

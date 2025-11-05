@@ -620,7 +620,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'MIKROBIOLOGI' || $stp->sample->nama_kategori == 'Udara'){
+            }else if($stp->name == 'MIKROBIOLOGI' && $stp->sample->nama_kategori == 'Udara'){
                 $microbioData = MicrobioHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -687,7 +687,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            }else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 				$isokinetik = Subkontrak::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -710,7 +710,7 @@ class InputParameterController extends Controller
 					})->toArray());
 
                     // Handle approved samples
-                    $approvedSamples = $parameterData->where('is_approved', 1)
+                    $approvedSamples = $parameterData->where('is_approve', 1)
                         ->pluck('no_sampel')
                         ->sort()
                         ->toArray();
@@ -1583,7 +1583,7 @@ class InputParameterController extends Controller
 					'message'=> 'Pilih jenis pengujian'
 				], 401);
 			}
-		}else if($stp->name == 'MIKROBIOLOGI' || $stp->sample->nama_kategori == 'Udara'){
+		}else if($stp->name == 'MIKROBIOLOGI' && $stp->sample->nama_kategori == 'Udara'){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -1858,7 +1858,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		} else if($stp->name == 'OTHER' && $stp->sample->nama_kategori == 'Air'){
+		} else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -3096,6 +3096,8 @@ class InputParameterController extends Controller
 			}
 			$data_parsing->tekanan = $tekananFin;
 			$data_parsing->suhu = $suhuFin;
+            $data_parsing->suhu_array = $suhu;
+            $data_parsing->tekanan_array = $tekanan_u;
 			$data_parsing->tanggal_terima = $tgl_terima;
 			// dd($data_parsing);
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3135,15 +3137,23 @@ class InputParameterController extends Controller
 				$data->created_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->data_shift = null;
 				if (in_array($data_parameter->id, $saveShift) || $request->id_stp == 13) {
-					$ks = array_chunk(array_map('floatval', $request->ks), 2);
-					$kb = array_chunk(array_map('floatval', $request->kb), 2);
-					$data_shift = array_map(function ($sample, $blanko) {
-						return (object) [
-							"sample" => number_format(array_sum($sample) / count($sample),4),
-							"blanko" => number_format(array_sum($blanko) / count($blanko),4)
-						];
-					}, $ks, $kb);
-					// dd($data_shift, $request->ks, $request->kb);
+					if($isO3){
+                        $ks = array_chunk(array_map('floatval', $request->ks), 2);
+                        $kb = array_chunk(array_map('floatval', $request->kb), 2);
+                        $data_shift = array_map(function ($sample, $blanko) {
+                            return (object) [
+                                "sample" => number_format(array_sum($sample) / count($sample),4),
+                                "blanko" => number_format(array_sum($blanko) / count($blanko),4)
+                            ];
+                        }, $ks, $kb);
+                    }else{
+                        $data_shift = array_map(function ($sample, $blanko) {
+                            return (object) [
+                                "sample" => number_format($sample,4),
+                                "blanko" => number_format($blanko,4)
+                            ];
+                        }, $request->ks, $request->kb);
+                    }
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
                 // dd(isset($data_kalkulasi['data_pershift']));
@@ -3664,6 +3674,7 @@ class InputParameterController extends Controller
 			->where('parameter', $request->parameter)
 			->first();
 
+        $swab = null;
         $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
         if(in_array($request->parameter, $swab_parameter)){
             $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
@@ -3770,7 +3781,15 @@ class InputParameterController extends Controller
 				$data_udara = array();
 				$data_udara['id_microbiologi_header'] = $header->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				if(in_array($request->parameter, $swab_parameter)){
+                    $data_udara['hasil10'] = $data_kalkulasi['hasil'];
+                    $data_udara['hasil11'] = $data_kalkulasi['hasil2'];
+                    $data_udara['hasil13'] = $data_kalkulasi['hasil3'];
+                    $data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+                }else{
+                    $data_udara['hasil9'] = $data_kalkulasi['hasil'];
+                }
+				$data_udara['satuan'] = $data_kalkulasi['satuan'];
 				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
@@ -4152,7 +4171,7 @@ class InputParameterController extends Controller
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
 				$data->hp 					= $request->hp;
-				$data->fp 					= $request->fp ?? null; //faktor pengenceran
+				$data->fp 					= isset($request->fp) ? $request->fp : null; //faktor pengenceran
 				// $data->note 				= $request->note;
 				$data->is_approve 			= true;
 				$data->approved_by 			= $this->karyawan;
@@ -4164,7 +4183,61 @@ class InputParameterController extends Controller
 
 				$data_kalkulasi['id_subkontrak'] = $data->id;
 				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$kalkulasi1 = WsValueAir::create($data_kalkulasi);
+				if($stp->sample->nama_kategori = 'Air'){
+                    $kalkulasi1 = WsValueAir::create($data_kalkulasi);
+                }else if($stp->sample->nama_kategori = 'Udara'){
+                    $existLingkungan = LingkunganHeader::where('no_sampel', $request->no_sample)
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
+                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
+                        $data_udara->id_subkontrak  = $data->id;
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara->{$key})) {
+                                $data_udara->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_udara = [];
+                        $data_udara['id_subkontrak'] = $data->id;
+                        $data_udara['no_sampel'] = $request->no_sample;
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara[$key])) {
+                                $data_udara[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_udara);
+                    }
+                }else if($stp->sample->nama_kategori = 'Emisi'){
+                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', $request->no_sample)
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+                        $data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+                        $data_emisi->id_subkontrak  = $data->id;
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi->{$key})) {
+                                $data_emisi->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_emisi = [];
+                        $data_emisi['id_subkontrak'] = $data->id;
+                        $data_emisi['no_sampel'] = $request->no_sample;
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi[$key])) {
+                                $data_emisi[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_emisi);
+                    }
+                }
 
 				DB::commit();
 				return (object)[

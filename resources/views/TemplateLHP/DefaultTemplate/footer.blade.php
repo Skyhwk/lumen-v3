@@ -23,7 +23,7 @@
 <table width="100%" style="font-size:7px;">
     <tr>
         <td width="18%" style="vertical-align: bottom; font-family: roboto; font-weight: bold;">
-            <div>PT Inti Surya laboratirum</div>
+            <div>PT Inti Surya Laboratorium</div>
             <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
             <div>021-5089-8988/89 contact@intilab.com</div>
         </td>

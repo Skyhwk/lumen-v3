@@ -5,6 +5,10 @@ use App\Models\OrderDetail;
 use App\Models\Parameter;
 use App\Models\LhpsAirHeader;
 use App\Models\LhpsAirDetail;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsLingDetail;
+use App\Models\LhpsEmisiCHeader;
+use App\Models\LhpsEmisiCDetail;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 
@@ -150,7 +154,7 @@ class LhpTemplate
         self::$instance->mode = $value;
         $view = $this->directory . '.' . $this->view;
         
-            self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
+        self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
             
         $modes = [
             'downloadWSDraft',
@@ -354,6 +358,7 @@ class LhpTemplate
 
         foreach ($orderDetail as  $value) {
             $kategori = explode('-', $value->kategori_2)[0];
+            $sub_kategori = explode('-', $value->kategori_3)[0];
             $dataDecode = json_decode($value->parameter);
             if($kategori == 1) {
                 $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
@@ -366,7 +371,30 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else {
+            } else if ($kategori == 4 && $sub_kategori == 27 || $sub_kategori == 11) {
+                $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+                
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
+            } else if ($kategori == 5) {
+                $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
+            }
+            else {
                 foreach ($dataDecode as $val) {
                     $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
                     if ($parameter->status == 'AKREDITASI') {
@@ -383,8 +411,7 @@ class LhpTemplate
         if ($parameterAkreditasi == 0) {
             return false;
         }
-
-        if(($parameterAkreditasi + $parameterNonAkreditasi) / $parameterAkreditasi >= 0.6) {
+        if(($parameterAkreditasi / ($parameterAkreditasi + $parameterNonAkreditasi)) >= 0.6) {
             return true;
         } else {
             return false;

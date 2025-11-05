@@ -17,20 +17,22 @@ class EmisiCerobongDirect {
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
 
+
         // Daftar parameter
         $paramCO2 = ["CO2", "CO2 (ESTB)"];
         $paramO2 = ["O2", "O2 (ESTB)"];
         $paramOpasitas = ["Opasitas", "Opasitas (ESTB)"];
         $paramSuhu = ["Suhu"];
         $paramVelocity = ["Velocity"];
-        $paramNO2 = ["NO2","NOx"];
+        $paramNO2 = ["NO2","NOx", "NO-NO2", "NOx-NO2"];
         $paramNO = ["NO"];
         $paramSO2 = ["SO2"];
-        $paramCO = ["CO"];
+        $paramCO = ["CO", "C O"];
         $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
         $paramO2P = ["O2 (P)"];
+        $paramNO2_NOxP = ["NO2-NOx (P)"];
 
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
@@ -102,23 +104,22 @@ class EmisiCerobongDirect {
                 $satuan = null;
             }
         } else if (in_array($id_parameter, $paramNO2)) {
-            $c5 = round($data->NO2, 1);
-            $c4 = round(($c5 / 46) * 24.45, 1);
-            $c3 = round($c4 * 1000, 1);
-            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+            $c3 = round($data->NO2, 1);
+            $c5 = round(($c3 / 46) * 24.45, 1);
+            $c4 = round($c5 * 1000, 1);
+            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
-            $c5 = $c5 < 1 ? '<1' : $c5;
-            $satuan = 'mg/Nm3';
+            $c3 = $c3 < 1 ? '<1' : $c3;
+            $satuan = 'mg/Nm³';
         } else if (in_array($id_parameter, $paramSO2)) {
-            $pa = $data->tekanan_udara;
-            $ta = $data->suhu;
-            $c5 = round($data->SO2, 1);
-            $c4 = round(($c5 / 64.066) * 24.45, 1);
-            $c3 = round($c4 * 1000, 1);
-            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+
+            $c3 = round($data->SO2, 1);
+            $c5 = round(($c3 / 64.066) * 24.45, 1);
+            $c4 = round($c5 * 1000, 1);
+            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
 
-            $c5 = $c5 < 1 ? '<1' : $c5;
+            $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'ppm';
         } else if(in_array($id_parameter, $paramEffisiensiPembakaran)){
             $co2 = $data->CO2;
@@ -126,44 +127,44 @@ class EmisiCerobongDirect {
             $c6 = ($nCO2 / ($nCO2 + $data->CO)) * 100/100;
             $satuan = '%';
         } else if(in_array($id_parameter, $paramNO)){
-            $c5 = round($data->NO, 1);
-            $c2 = round((($c5 / 30) * 24.45) * ($pa / $ta) * (298/760), 1);
+            $c3 = round($data->NO, 1);
+            $c2 = round((($c3 / 30) * 24.45) * ($pa / $ta) * (298/760), 1);
             $c1 = round($c2 * 1000, 1);
-            $c5 = $c5 < 0.1 ? '<0.1' : $c5;
+            $c3 = $c3 < 0.1 ? '<0.1' : $c3;
             $satuan = 'ppm';
         } else if(in_array($id_parameter, $paramCO)){
-            $c5 = round($data->CO, 1);
-            $c4 = round(($c5 / 28.01) * 24.45, 1);
-            $c3 = round($c4 * 1000, 1);
-            $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
-            $c5 = $c5 < 0.02 ? '<0.02' : $c5;
+            $c3 = round($data->CO, 1); //ppm
+            $c5 = round(($c3 / 28.01) * 24.45, 1); // mg/m3
+            $c4 = round($c5 * 1000, 1); // ug/m3
+            $c2 = round($c5 * ($pa / $ta) * (298/760), 1); // mg/Nm3
+            $c1 = round($c2 * 1000, 1); // ug/Nm3
+            $c1 = $c1 < 0.02 ? '<0.02' : $c1;
             $satuan = 'ppm';
         } else if (in_array($id_parameter, $paramSO2P)) {
             
             if ($avg_so2p !== null) {
-                $c5 = round($avg_so2p, 1);
-                $c4 = round(($c5 / 64.066) * 24.45, 1);
-                $c3 = round($c4 * 1000, 1);
-                $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+                $c3 = round($avg_so2p, 1);
+                $c5 = round(($c3 / 64.066) * 24.45, 1);
+                $c4 = round($c5 * 1000, 1);
+                $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
                 $c1 = round($c2 * 1000, 1);
                 $satuan = 'ppm';
             } else {
-                $c1 = $c2 = $c3 = $c4 = $c5 = null;
+                $c1 = $c2 = $c3 = $c4 = $c3 = null;
                 $satuan = null;
             }
 
         } else if (in_array($id_parameter, $paramCOP)) {
 
             if ($avg_cop !== null) {
-                $c5 = round($avg_cop, 1);
-                $c4 = round(($c5 / 28.01) * 24.45, 1);
-                $c3 = round($c4 * 1000, 1);
-                $c2 = round($c4 * ($pa / $ta) * (298/760), 1);
+                $c3 = round($avg_cop, 1);
+                $c5= round(($c3 / 28.01) * 24.45, 1);
+                $c4 = round($c5* 1000, 1);
+                $c2 = round($c5* ($pa / $ta) * (298/760), 1);
                 $c1 = round($c2 * 1000, 1);
                 $satuan = 'ppm';
             } else {
-                $c1 = $c2 = $c3 = $c4 = $c5 = null;
+                $c1 = $c2 = $c3 = $c4 = $c3 = null;
                 $satuan = null;
             }
 
@@ -176,6 +177,14 @@ class EmisiCerobongDirect {
                 $c6 = null;
                 $satuan = null;
             }
+        } else if(in_array($id_parameter, $paramNO2_NOxP)){
+            $c3 = round($avg_nox_p, 1);
+            $c5 = round(($c3 / 46) * 24.45, 1);
+            $c4 = round($c5 * 1000, 1);
+            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
+            $c1 = round($c2 * 1000, 1);
+            $c3 = $c3 < 1 ? '<1' : $c3;
+            $satuan = 'mg/Nm³';
         }
 
         

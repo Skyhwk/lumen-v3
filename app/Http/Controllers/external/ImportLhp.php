@@ -570,7 +570,6 @@ class ImportLhp extends BaseController
                 }
                 $results[] = $row_content;
             }
-
             // Cari posisi header-header yang diperlukan
             $headerPositions = $this->findHeaderPositions($results, 'udara');
 
@@ -783,11 +782,11 @@ class ImportLhp extends BaseController
                 ];
             }
             // dd($insert);
-            if (DB::table('lhps_ling_header')->where('no_lhp', $noLhp)->exists()) {
-                return response()->json([
-                    'message' => 'No LHP sudah ada',
-                ], 400);
-            }
+            // if (DB::table('lhps_ling_header')->where('no_lhp', $noLhp)->exists()) {
+            //     return response()->json([
+            //         'message' => 'No LHP sudah ada',
+            //     ], 400);
+            // }
 
             $header = DB::table('lhps_ling_header')->insertGetId($insert);
 
@@ -1534,7 +1533,7 @@ class ImportLhp extends BaseController
                         'no_sampel' => $noSample,
                         'parameter_uji' => json_encode($param),
                         'sub_kategori' => $jenisSample,
-                        'header_table' => $headTable,
+                        // 'header_table' => $headTable,
                     ];
                 } else {
                     $insert = [
