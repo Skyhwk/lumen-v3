@@ -165,6 +165,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						"CFU/m2" => 10,
 						"CFU/m³" => 9,
 						"CFU/m3" => 9,
+						"CFU/mᶟ" => 9,
 						"m/s" => 8,
 						"m/detik" => 8,
 						"f/cc" => 7,

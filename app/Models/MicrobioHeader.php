@@ -24,4 +24,9 @@ class MicrobioHeader extends Sector{
     {
         return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
     }
+    
+    public function ws_udara()
+    {
+        return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
+    }
 }
