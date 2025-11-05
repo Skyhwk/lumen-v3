@@ -125,9 +125,9 @@
                         <td class="custom5">:</td>
                         <td class="custom5">
                             @php
-                                if ($detailLapangan) {
-                                    echo $detailLapangan->titik_koordinat;
-                                }
+                                // if ($detailLapangan) {
+                                    echo $header->titik_koordinat;
+                                // }
                             @endphp
                         </td>
                     </tr>
@@ -146,22 +146,22 @@
                                 <tr>
                                     <td class="custom5" width="120">Jam Pengambilan</td>
                                     <td class="custom5" width="12">:</td>
-                                    <td class="custom5">{{ $detailLapangan->waktu_pengukuran }} WIB</td>
+                                    <td class="custom5">{{ $header->waktu_pengukuran }} WIB</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Cuaca</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->cuaca }}</td>
+                                    <td class="custom5">{{ $header->cuaca }}</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Suhu Lingkungan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->suhu }} °C</td>
+                                    <td class="custom5">{{ $header->suhu }} °C</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Kelembapan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->kelembapan }} %</td>
+                                    <td class="custom5">{{ $header->kelembapan }} %</td>
                                 </tr>
                             </table>
                         </td>
@@ -170,17 +170,17 @@
                                 <tr>
                                     <td class="custom5">Kecepatan Angin</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->kecepatan_angin * 3.6 }} Km/Jam</td>
+                                    <td class="custom5">{{ $header->kec_angin}} Km/Jam</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Arah Angin Dominan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->arah_angin }}</td>
+                                    <td class="custom5">{{ $header->arah_angin }}</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Tekanan Udara</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->tekanan_udara }} mmHg</td>
+                                    <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
                                 </tr>
                             </table>
                         </td>
