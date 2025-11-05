@@ -308,9 +308,10 @@ class FdlLingkunganKerjaController extends Controller
                             // } elseif (Str::contains($lowerParam, 'kecepatan angin') || Str::contains($lowerParam, 'kecepatan angin (ua)')) {
                             //     $satuan = 'm/s';
                             //     $c8 = $rataRata; //m/s
-                            } elseif (Str::contains($lowerParam, 'tekanan udara')) {
-                                $satuan = 'mmHg';
                             }
+                            //  elseif (Str::contains($lowerParam, 'tekanan udara')) {
+                            //     $satuan = 'mmHg';
+                            // }
 
                             // Simpan Header
                             $header = LingkunganHeader::updateOrCreate(
