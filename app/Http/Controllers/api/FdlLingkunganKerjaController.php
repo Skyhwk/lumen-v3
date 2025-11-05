@@ -172,8 +172,8 @@ class FdlLingkunganKerjaController extends Controller
                         'Suhu' => 'suhu',
                         'Kelembaban' => 'kelembapan',
                         'Laju Ventilasi' => 'auto_laju',
-                        // 'Kecepatan Angin' => 'auto_laju',
-                        // 'Kecepatan Angin (UA)' => 'auto_laju',
+                        'Kecepatan Angin' => 'auto_laju',
+                        'Kecepatan Angin (UA)' => 'auto_laju',
                         'Tekanan Udara' => 'tekanan_udara',
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
@@ -196,19 +196,6 @@ class FdlLingkunganKerjaController extends Controller
                         ->get();
 
                     $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
-                    
-                    $c1 =NULL;
-                    $c2 =NULL;
-                    $c3 =NULL;
-                    $c4 =NULL;
-                    $c5 =NULL;
-                    $c6 =NULL;
-                    $c7 =NULL;
-                    $c8 =NULL;
-                    $c9 =NULL;
-                    $c10 =NULL;
-                    $c11 =NULL;
-                    $c12 =NULL;
 
                     // Aktifkan kembali ketika sudah di approve rumusnya oleh TA di spreadsheet
                     // if ($filtered->isNotEmpty()) {
@@ -293,6 +280,9 @@ class FdlLingkunganKerjaController extends Controller
                             $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), 4) : null;
                             $satuan = null;
                             $lowerParam = strtolower($param);
+                            if(str_contains($lowerParam, 'kecepatan angin')) {
+                                $rataRata = round($rataRata * 3.6, 4);
+                            }
                             
                             // Simpan Header (tetap seperti punya kamu)
 
@@ -320,6 +310,7 @@ class FdlLingkunganKerjaController extends Controller
                                 'suhu' => ['lingkungan' => 'C11', 'udara' => 'hasil12', 'satuan' => '°C'],
                                 'kelembaban' => ['lingkungan' => 'C4', 'udara' => 'hasil5', 'satuan' => '%'],
                                 'laju ventilasi' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
+                                'kecepatan angin' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'km/jam'],
                             ];
 
                             // Default
