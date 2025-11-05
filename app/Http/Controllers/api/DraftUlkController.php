@@ -44,6 +44,7 @@ class DraftUlkController extends Controller
         DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
             'lhps_ling',
+            'allDetailLingkunganKerja',
             'orderHeader' => function ($query) {
                 $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
             }
@@ -63,12 +64,43 @@ class DraftUlkController extends Controller
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();
+        
+        foreach ($data as $item) {
 
-        foreach ($data as $key => $value) {
-            if (isset($value->lhps_ling) && $value->lhps_ling->metode_sampling != null) {
-                $data[$key]->lhps_ling->metode_sampling = json_decode($value->lhps_ling->metode_sampling);
+            // 🔹 Jika kategori_1 = 'S24' → ambil shift L2 dan hanya first
+            if ($item->kategori_1 == 'S24') {
+                $cek = $item->allDetailLingkunganKerja
+                    ->where('shift_pengambilan', 'L2')
+                    ->take(1)
+                    ->values();
+
+                // Jika data shift L2 kosong → gunakan default
+                if ($cek->isEmpty()) {
+                    $cek = $item->allDetailLingkunganKerja
+                        ->take(1)
+                        ->values();
+                }
+
+                $item->data_lapangan_lingkungan_kerja = $cek;
+            } 
+            
+            // 🔹 Jika bukan → ambil 1 data pertama saja
+            else {
+                $item->data_lapangan_lingkungan_kerja = $item->allDetailLingkunganKerja
+                    ->take(1)
+                    ->values();
+            }
+
+            // 🟢 JSON decode methode_sampling jika ada
+            if (!empty($item->lhps_ling->methode_sampling)) {
+                $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
             }
         }
+        // foreach ($data as $key => $value) {
+        //     if (isset($value->lhps_ling) && $value->lhps_ling->metode_sampling != null) {
+        //         $data[$key]->lhps_ling->metode_sampling = json_decode($value->lhps_ling->metode_sampling);
+        //     }
+        // }
 
         return Datatables::of($data)->make(true);
     }
@@ -191,6 +223,7 @@ class DraftUlkController extends Controller
                 'no_qt' => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
                 'tanggal_terima' => $request->tanggal_terima ?: null,
+                'tanggal_sampling' => $request->tanggal_tugas ?: null,
                 'parameter_uji' => json_encode($parameter_uji),
                 'nama_pelanggan' => $request->nama_perusahaan ?: null,
                 'alamat_sampling' => $request->alamat_sampling ?: null,
@@ -209,6 +242,11 @@ class DraftUlkController extends Controller
                 'tanggal_lhp' => $request->tanggal_lhp ?: null,
                 'created_by' => $this->karyawan,
                 'created_at' => Carbon::now(),
+                'keterangan' => json_encode($request->keterangan) ?: null,
+                'suhu' => $request->suhu_lingkungan,
+                'tekanan_udara' => $request->tekanan_udara,
+                'kelembapan' => $request->kelembapan,
+                'periode_analisa' => $request->periode_analisa ?: null
             ]);
             $header->save();
 
@@ -226,11 +264,11 @@ class DraftUlkController extends Controller
 
             foreach (($request->parameter ?? []) as $key => $val) {
                 $bakumutu = null;
-                if (isset($request->nab[$key]) && $request->nab[$key] != '-') {
+                if (isset($request->nab[$key])) {
                     $bakumutu = $request->nab[$key];
                     $namaheader = 'NAB';
                 }
-                if (isset($request->psd_ktd[$key]) && $request->psd_ktd[$key] != '-') {
+                if (isset($request->psd_ktd[$key])) {
                     $bakumutu = $request->psd_ktd[$key];
                     $namaheader = 'PSD/KTD';
                 }
@@ -445,8 +483,8 @@ class DraftUlkController extends Controller
                 $methodsUsed = [];
 
                 $models = [
-                    Subkontrak::class,
                     LingkunganHeader::class,
+                    Subkontrak::class,
                 ];
 
                 foreach ($models as $model) {
@@ -532,8 +570,8 @@ class DraftUlkController extends Controller
             $methodsUsed = [];
 
             $models = [
-                Subkontrak::class,
                 LingkunganHeader::class,
+                Subkontrak::class,
             ];
 
             foreach ($models as $model) {
@@ -560,10 +598,10 @@ class DraftUlkController extends Controller
                     }
                 }
             }
-
+            
             // Sort mainData
             $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-
+            
             // Sort otherRegulations
             foreach ($otherRegulations as $id => $regulations) {
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
@@ -574,12 +612,17 @@ class DraftUlkController extends Controller
                 ->pluck('method')->toArray();
 
             $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-
+            
             return response()->json([
                 'status' => true,
                 'data' => $mainData,
                 'next_page' => $otherRegulations,
                 'spesifikasi_method' => $resultMethods,
+                'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
             ], 201);
 
         } catch (\Throwable $e) {
@@ -595,15 +638,20 @@ class DraftUlkController extends Controller
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-            ->where('parameter', $val->parameter)
-            ->first();
+        ->where('parameter', $val->parameter)
+        ->first();
+        
         $param = $val->parameter_udara;
         $entry = [
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => $bakumutu ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '') : '',
-            'parameter' => $param->nama_regulasi,
+            'akr' => (
+                !empty($bakumutu)
+                    ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ')
+                    : 'ẍ'
+            ),
+            'parameter' => $param->nama_regulasi ?: $param->nama_lhp,
             // 'satuan' => $param->satuan,
             'nab' => $bakumutu ? ($bakumutu->nama_header == 'NAB' ? $bakumutu->baku_mutu : '-') : '-',
             'psd_ktd' => $bakumutu ? ($bakumutu->nama_header == 'PSD' || $bakumutu->nama_header == 'KTD' ? $bakumutu->baku_mutu : '-') : '-',
@@ -646,7 +694,7 @@ class DraftUlkController extends Controller
             "μg/Nm3" => 1
         ];
 
-        $index = $satuanIndexMap[$bakumutu->satuan] ?? 1;
+        $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
         
         $fKoreksiKey = "f_koreksi_$index";
         $hasilKey = "hasil$index";
@@ -657,7 +705,7 @@ class DraftUlkController extends Controller
             ?? $val->ws_value_lingkungan->C
             ?? '-';
 
-        if (in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+        if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
             $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
             $hasil2 = $val->ws_udara->hasil2 ?? null;
             $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
