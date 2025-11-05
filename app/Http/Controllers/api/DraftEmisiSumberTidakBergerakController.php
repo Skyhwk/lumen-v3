@@ -46,7 +46,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
-        if ($request->category2 == 34) {
+        // if ($request->category2 == 34) {
             try {
                 $header = LhpsEmisiCHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
 
@@ -66,14 +66,13 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                 // dd($request->all());
                 $parameter_uji = explode(', ', $request->parameter_uji);
-                $keterangan = [];
-                if ($request->keterangan) {
-                    foreach ($request->keterangan as $key => $value) {
-                        if ($value != '')
-                            array_push($keterangan, $value);
-                    }
-                }
-
+                // $keterangan = [];
+                // if ($request->keterangan) {
+                //     foreach ($request->keterangan as $key => $value) {
+                //         if ($value != '')
+                //             array_push($keterangan, $value);
+                //     }
+                // }
                 try {
                     $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                         return ['page' => (int) $page, 'regulasi' => $item];
@@ -104,6 +103,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     $header->periode_analisa = $request->periode_analisa ?: NULL;
                     $header->nama_karyawan = 'Abidah Walfathiyyah';
                     $header->jabatan_karyawan = 'Technical Control Supervisor';
+                    $header->keterangan = $request->keterangan ? json_encode($request->keterangan) : NULL;
                     //     $header->nama_karyawan = 'Dwi Meisya Batari';
                     //     $header->jabatan_karyawan = 'Technical Control Manager';
                     $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
@@ -247,7 +247,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'status' => false
                 ], 500);
             }
-        }
+        // }
     }
     public function updateTanggalLhp(Request $request)
     {
@@ -440,6 +440,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                                     'satuan' => $val['satuan'],
                                     'methode' => $val['spesifikasi_metode'],
                                     'baku_mutu' => $val['baku_mutu'],
+                                    'akr' => $val->akr,
                                 ];
                             }
                         }
@@ -463,7 +464,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'data' => $data_entry,
                     'next_page' => $data_custom,
                     'spesifikasi_method' => $returnMethods,
-
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
                 ], 201);
             } else {
 
@@ -472,8 +477,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $otherRegulations = [];
 
                 $models = [
-                    Subkontrak::class,
                     EmisiCerobongHeader::class,
+                    Subkontrak::class,
                 ];
 
                 foreach ($models as $model) {
@@ -517,6 +522,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     'data' => $mainData,
                     'next_page' => $otherRegulations,
                     'spesifikasi_method' => $resultMethods,
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
                 ], 201);
             }
         } catch (\Throwable $e) {
@@ -547,6 +557,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'satuan' => $param->satuan,
             'methode' => $param->method,
             'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
+            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
         ];
 
         
@@ -564,6 +575,9 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     private function getHasilUji($val, $satuan)
     {
         $cerobong = $val->ws_value_cerobong;
+        if($cerobong == null){
+            return null;
+        }
 
         switch ($satuan) {
             case 'ug/m3':

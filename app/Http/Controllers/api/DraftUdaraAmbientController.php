@@ -192,6 +192,7 @@ class DraftUdaraAmbientController extends Controller
                 'periode_analisa' => $request->periode_analisa ?: null,
                 'id_kategori_2' => 4,
                 'id_kategori_3' => 11,
+                'keterangan' => json_encode($request->keterangan) ?: null,
                 'deskripsi_titik' => $request->penamaan_titik ?: null,
                 'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
                 'titik_koordinat' => $request->titik_koordinat ?: null,
@@ -738,6 +739,11 @@ class DraftUdaraAmbientController extends Controller
                     'data' => $data_entry,
                     'next_page' => $data_custom,
                     'spesifikasi_method' => $defaultMethods,
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
                 ], 201);
             }
 
@@ -797,6 +803,11 @@ class DraftUdaraAmbientController extends Controller
                 'data' => $mainData,
                 'next_page' => $otherRegulations,
                 'spesifikasi_method' => $resultMethods,
+                'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.'
+                    ]
             ], 201);
 
         } catch (\Throwable $e) {
@@ -820,7 +831,7 @@ class DraftUdaraAmbientController extends Controller
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? 'ẍ' : '',
+            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
             'parameter' => $param->nama_regulasi,
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 

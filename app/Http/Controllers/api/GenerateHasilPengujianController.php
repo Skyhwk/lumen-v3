@@ -368,7 +368,7 @@ class GenerateHasilPengujianController extends Controller
 
     public function getEmailCC(Request $request)
     {
-        $emails = ['sales@intilab.com'];
+        $emails = ['sales@intilab.com', 'Billing@intilab.com', 'sales.draft@intilab.com', 'adminlhp@intilab.com'];
         $filterEmails = [
             'inafitri@intilab.com',
             'kika@intilab.com',

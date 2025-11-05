@@ -1,3 +1,48 @@
+@php
+    use App\Models\TabelRegulasi;
+    use App\Models\MasterRegulasi;
+    use App\Models\DataLapanganEmisiCerobong;
+    use App\Models\WsValueEmisiCerobong;
+    use \Carbon\Carbon;
+
+    $wsvalue = WsValueEmisiCerobong::where('no_sampel', $header->no_sampel)->get();
+    $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $header->no_sampel)->first();
+    
+    $keterangan_koreksi = [];
+    foreach($wsvalue as $k => $v){
+        if($v->keterangan_koreksi != null && $v->keterangan_koreksi != ''){
+            foreach(json_decode($v->keterangan_koreksi) as $kk => $vv){
+                if(in_array($vv, $keterangan_koreksi) == false){
+                    $keterangan_koreksi[] = $vv;
+                }
+            }
+        }
+    }
+    
+    $laju_velocity = '-';
+    if ($dataLapangan != null) {
+        if (!empty($dataLapangan->velocity)) {
+            $decoded = json_decode($dataLapangan->velocity, true);
+            $str = is_array($decoded) ? $decoded[0] : $decoded;
+
+            // Ambil angka setelah tanda ':' (bisa desimal)
+            preg_match_all('/:\s*([\d.]+)/', $str, $matches);
+
+            $values = array_map('floatval', $matches[1]); // hasil angka setelah ':'
+
+            if (count($values) === 0) {
+                $rata2 = 0;
+                $total = 0;
+            } else {
+                $total = array_sum($values);
+                $rata2 = round($total / count($values), 1);
+            }
+            $laju_velocity = $rata2;
+        }
+    }
+
+@endphp
+
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
         <tr>
@@ -5,10 +50,12 @@
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
                         <td class="custom" width="120">No. LHP</td>
+                        <td class="custom" width="120">No. SAMPEL</td>
                         <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
+                        <td class="custom">{{ $header->no_sampel }}</td>
                         <td class="custom">EMISI SUMBER TIDAK BERGERAK</td>
                     </tr>
                 </table>
@@ -55,17 +102,17 @@
                     <tr>
                         <td class="custom5" width="120"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
-                    <tr>
+                    {{-- <tr>
                         <td class="custom5">Kategori</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $header->sub_kategori }}</td>
-                    </tr>
-                    <tr>
+                    </tr> --}}
+                    {{-- <tr>
                         <td class="custom5">Parameter</td>
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $parame }}</td>
-                    </tr>
-                    @if (count($methode_sampling) > 0)
+                    </tr> --}}
+                    {{-- @if (count($methode_sampling) > 0)
                         @php $i = 1; @endphp
                         @foreach ($methode_sampling as $key => $value)
                             @php
@@ -85,7 +132,7 @@
                             <td class="custom5">:</td>
                             <td class="custom5">-</td>
                         </tr>
-                    @endif
+                    @endif --}}
                     <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>
@@ -96,6 +143,23 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $period1 }} - {{ $period2 }}</td>
                     </tr>
+                    <tr>
+                        <td class="custom5">Keterangan</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">{{ ucwords($dataLapangan->keterangan) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="custom5">Titik Koordinat</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">{{ $dataLapangan->titik_koordinat }}</td>
+                    </tr>
+                    @if($laju_velocity != '-')
+                        <tr>
+                            <td class="custom5">Laju Velocity</td>
+                            <td class="custom5">:</td>
+                            <td class="custom5">{{ $laju_velocity }} m/s</td>
+                        </tr>
+                    @endif
                 </table>
 
                 {{-- Regulasi --}}
@@ -111,6 +175,44 @@
                             @php
                                 $bintang .= '*';
                             @endphp
+                        @endforeach
+                    </table>
+                @endif
+
+                @if (!empty($keterangan_koreksi))
+                    <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        @foreach ($keterangan_koreksi as $kk => $vv)
+                            <tr>
+                                <td class="custom5" colspan="3">- {{ $vv }}</td>
+                            </tr>
+                        @endforeach
+                    </table>
+                @endif
+                {{-- Keterangan --}}
+                @php
+                    $temptArrayPush = [];
+                    if (!empty($detail)) {
+                        foreach ($detail as $v) {
+                            if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['akr'];
+                            }
+                            if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['attr'];
+                            }
+                        }
+                    }
+                @endphp
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
+                            @endforeach
                         @endforeach
                     </table>
                 @endif
