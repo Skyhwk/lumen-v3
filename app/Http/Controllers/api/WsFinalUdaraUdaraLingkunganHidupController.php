@@ -58,8 +58,6 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 		return $minutes;
 	}
 
-
-
 	public function detail(Request $request)
 	{
 		try {
@@ -75,8 +73,8 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
-
-			$lingkunganData = LingkunganHeader::with('ws_udara')
+			
+			$lingkunganData = LingkunganHeader::with(['ws_udara', 'ws_value_linkungan'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approved', 1)
 				->where('status', 0)
@@ -84,7 +82,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
-			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
+			$subkontrak = Subkontrak::with(['ws_udara','ws_value_linkungan'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->where('is_active', 1)
@@ -151,10 +149,10 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			return Datatables::of($processedData)
 				->addColumn('nilai_uji', function ($item) {
 					$satuanIndexMap = [
-						"µg/m³" => 17,
-						"µg/m3" => 17,
-						"mg/m³" => 16,
-						"mg/m3" => 16,
+						"µg/m³" => 16,
+						"µg/m3" => 16,
+						"mg/m³" => 17,
+						"mg/m3" => 17,
 						"BDS" => 15,
 						"CFU/M²" => 14,
 						"CFU/M2" => 14,
@@ -168,6 +166,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						"CFU/m³" => 9,
 						"CFU/m3" => 9,
 						"m/s" => 8,
+						"m/detik" => 8,
 						"f/cc" => 7,
 						"Ton/km²/Bulan" => 6,
 						"Ton/km2/Bulan" => 6,
@@ -183,7 +182,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					$index = $satuanIndexMap[$item->satuan] ?? 1;
 				
 					if (!$item->ws_udara) {
-						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+						return $item->ws_value_linkungan->f_koreksi_c ?? $item->ws_value_linkungan->C ?? '-';
 					}
 				
 					$fKoreksiKey = "f_koreksi_$index";
@@ -191,7 +190,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				
 					$nilai = $item->ws_udara->$fKoreksiKey
 						?? $item->ws_udara->$hasilKey
-						?? $item->ws_value_lingkungan->f_koreksi_c
+						?? $item->ws_value_linkungan->f_koreksi_c
 						?? null;
 
 					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
