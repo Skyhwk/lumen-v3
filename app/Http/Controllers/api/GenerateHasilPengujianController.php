@@ -44,9 +44,24 @@ class GenerateHasilPengujianController extends Controller
             ->where('is_active', true)
             ->limit(5)
             ->get()
-            ->map(fn($item) => LinkLhp::where('no_order', $item->no_order)->exists() ? null : $item->makeHidden(['id']))
+            ->map(function ($item) {
+                $linkLhp = LinkLhp::where('no_order', $item->no_order);
+                if ($linkLhp->exists()) {
+                    $listPeriode = $linkLhp->pluck('periode')->toArray();
+                    if (count($listPeriode) > 0) {
+                        $filteredDetail = $item->orderDetail->filter(fn($detail) => !in_array($detail->periode, $listPeriode))->values();
+                        $item->setRelation('order_detail', $filteredDetail);
+                        return $item->makeHidden(['id']);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return $item->makeHidden(['id']);
+                }
+            })
             ->filter()
             ->values();
+
         return response()->json($results, 200);
     }
 
@@ -485,7 +500,7 @@ class GenerateHasilPengujianController extends Controller
 
             foreach ($listCfrRilis as $noLhp) {
                 $fileLhp = 'LHP-' . str_replace('/', '-', $noLhp) . '.pdf';
-                
+
                 $lhpPath = public_path('dokumen/LHP_DOWNLOAD/' . $fileLhp);
 
                 if (File::exists($lhpPath)) {
