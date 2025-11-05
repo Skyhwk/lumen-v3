@@ -168,61 +168,6 @@ class OrderDetail extends Sector
         return $this->belongsTo(DataSampleDiantar::class, 'no_sample', 'no_sampel');
     }
 
-    // public function samplevalue()
-    // {
-    //     return $this->belongsTo('App\Models\CategoryValue', 'kategori_3', 'id');
-    // }
-
-    // public function category()
-    // {
-    //     return $this->belongsTo('App\Models\CategorySample', 'kategori_2', 'id');
-    // }
-
-    // public function ftcsatu()
-    // {
-    //     return $this->belongsTo('App\Models\Ftc', 'id', 'id_po');
-    // }
-
-    // public function ftcdua()
-    // {
-    //     return $this->belongsTo('App\Models\Ftcp', 'id', 'id_po');
-    // }
-
-    // public function addby()
-    // {
-    //     return $this->belongsTo('App\Models\User', 'create_by', 'id');
-    // }
-
-    // public function delby()
-    // {
-    //     return $this->belongsTo('App\Models\User', 'delete_by', 'id');
-    // }
-
-    // public function appby()
-    // {
-    //     return $this->belongsTo('App\Models\User', 'id_approve', 'id');
-    // }
-
-    // public function lhps()
-    // {
-    //     return $this->belongsTo('App\Models\Lhps', 'id', 'id_order_header');
-    // }
-
-    // public function bakumutu()
-    // {
-    //     return $this->belongsTo('App\Models\FcWs', 'id', 'id_order_header');
-    // }
-
-    // public function orderheader()
-    // {
-    //     return $this->belongsTo('App\Models\OrderH', 'id_order_header', 'id');
-    // }
-
-    // public function codingSampling()
-    // {
-    //     return $this->belongsTo('App\Models\CodingSampling', 'id', 'id_order_detail');
-    // }
-
     public function headerSD()
     {
         return $this->hasOne(OrderHeader::class, 'no_order', 'no_order');

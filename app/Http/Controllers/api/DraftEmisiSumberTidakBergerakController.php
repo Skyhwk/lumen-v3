@@ -549,7 +549,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         $entry = [
             'id' => $val->id,
             'no_sampel' => $val->no_sampel,
-            'parameter' => $param->nama_regulasi,
+            'parameter' => $param->nama_lhp ?? $param->nama_regulasi,
             'parameter_lab' => $val->parameter,
             'C' => self::getHasilUji($val, $satuan),
             // 'C1' => $val->ws_value_cerobong->C1,
