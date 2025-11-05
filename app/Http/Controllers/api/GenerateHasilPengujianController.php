@@ -521,6 +521,9 @@ class GenerateHasilPengujianController extends Controller
 
             File::put($finalFullPath, $response->body());
 
+            $linkLhp->filename = $finalFilename;
+            $linkLhp->save();
+
             return response()->json([
                 'message' => 'File PDF berhasil di-render ulang.',
                 'file_ditimpa' => $finalFilename,

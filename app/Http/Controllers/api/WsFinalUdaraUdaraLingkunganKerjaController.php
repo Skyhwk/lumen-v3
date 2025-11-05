@@ -31,6 +31,7 @@ use App\Models\DirectLainHeader;
 use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
+use App\Models\MicrobioHeader;
 use App\Models\DebuPersonalHeader;
 
 class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
@@ -165,11 +166,19 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
+
 			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
 				->addSelect(DB::raw("'subKontrak' as data_type"))
+				->get();
+			$microbio = MicrobioHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approved', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->addSelect(DB::raw("'microbio' as data_type"))
 				->get();
 
 
@@ -178,7 +187,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->merge($lingkunganData)
 				->merge($subkontrak)
 				->merge($partikulat)
-				->merge($directData);
+				->merge($directData)
+				->merge($microbio);
 
 
 			$processedData = $combinedData->map(function ($item) {
@@ -194,6 +204,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						break;
 					case 'partikulat':
 						$item->source = 'Partikulat';
+						break;
+					case 'microbio':
+						$item->source = 'Mikrobiologi';
 						break;
 				}
 				return $item;
@@ -238,6 +251,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						"CFU/m2" => 10,
 						"CFU/m³" => 9,
 						"CFU/m3" => 9,
+						"CFU/mᶟ" => 9,
 						"m/s" => 8,
 						"m/detik" => 8,
 						"f/cc" => 7,
@@ -255,7 +269,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					$index = $satuanIndexMap[$item->satuan] ?? 1;
 				
 					if (!$item->ws_udara) {
-						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+						return $item->ws_value_linkungan->f_koreksi_c ?? $item->ws_value_linkungan->C ?? '-';
 					}
 				
 					$fKoreksiKey = "f_koreksi_$index";
@@ -263,7 +277,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				
 					$nilai = $item->ws_udara->$fKoreksiKey
 						?? $item->ws_udara->$hasilKey
-						?? $item->ws_value_lingkungan->f_koreksi_c
+						?? $item->ws_value_linkungan->f_koreksi_c
 						?? null;
 
 					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
@@ -503,8 +517,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
+		dd($request->all());
 		if ($request->id) {
-
 			if (in_array($request->kategori, $this->categoryLingkunganKerja)) {
 				if ($request->data_type == 'lingkungan') {
 					$data = LingkunganHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
@@ -610,6 +624,28 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						], 201);
 					} else {
 						$dat = DebuPersonalHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
+				} else if ($request->data_type == 'partikulat') {
+					$data = PartikulatHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+					// dd($data);
+					if ($data) {
+						$cek = PartikulatHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = PartikulatHeader::where('id', $request->id)->first();
 						$dat->lhps = 1;
 						$dat->save();
 						return response()->json([
