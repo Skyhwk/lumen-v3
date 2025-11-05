@@ -31,6 +31,7 @@ use App\Models\DirectLainHeader;
 use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
+use App\Models\MicrobioHeader;
 use App\Models\DebuPersonalHeader;
 
 class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
@@ -171,6 +172,13 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
 				->addSelect(DB::raw("'subKontrak' as data_type"))
 				->get();
+			$microbio = MicrobioHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approved', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->addSelect(DB::raw("'microbio' as data_type"))
+				->get();
 
 
 
@@ -178,7 +186,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->merge($lingkunganData)
 				->merge($subkontrak)
 				->merge($partikulat)
-				->merge($directData);
+				->merge($directData)
+				->merge($microbio);
 
 
 			$processedData = $combinedData->map(function ($item) {
@@ -194,6 +203,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						break;
 					case 'partikulat':
 						$item->source = 'Partikulat';
+						break;
+					case 'microbio':
+						$item->source = 'Mikrobiologi';
 						break;
 				}
 				return $item;
@@ -238,6 +250,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						"CFU/m2" => 10,
 						"CFU/m³" => 9,
 						"CFU/m3" => 9,
+						"CFU/mᶟ" => 9,
 						"m/s" => 8,
 						"m/detik" => 8,
 						"f/cc" => 7,
