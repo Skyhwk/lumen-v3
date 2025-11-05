@@ -450,6 +450,7 @@ class DokumenFdlController extends Controller
 
     public function updateData(Request $request)
     {
+    
         // dd($request->all());
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
@@ -465,7 +466,7 @@ class DokumenFdlController extends Controller
                         ->where('no_order', $item['no_order'])
                         ->where('is_active', 1)
                         ->first();
-
+                    
                     if ($po) {
                         $isContract = str_contains($item['nomor_quotation'], 'QTC');
                         if (!$isContract) {
@@ -524,7 +525,7 @@ class DokumenFdlController extends Controller
                                 }
                             }
 
-
+                            
                             // UPDATE QTCH
                             // dd(array_keys($groupedNamedPoints));
                             if ($qtcHeader) {
@@ -567,6 +568,7 @@ class DokumenFdlController extends Controller
                     }
 
                     $po->keterangan_1 = $item['deskripsi'];
+                    
                     $po->save();
                     $noSampel[] = $item['no_sampel'];
                 }
@@ -893,8 +895,9 @@ class DokumenFdlController extends Controller
                 ');
             }
             $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
-            $sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
-            if($sign_sampler->status === 'error' || $sign_pic->status === 'error'){
+            $sign_pic = null;
+            if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+            if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
                 return response()->json([
                     'message' => $sign_pic->message ?? $sign_sampler->message
                 ],400);

@@ -28,9 +28,9 @@ class DirectLain {
 
         // Daftar parameter
         $paramO2  = ["O2"];
-        $paramCO2 = ["CO2", "CO2 (24 Jam)", "CO2 (8 Jam)"];
+        $paramCO2 = ["CO2", "CO2 (24 Jam)", "CO2 (8 Jam)" , "CO2 8J (LK)", "CO2 (UA)"];
         $paramVoc = ["VOC", "VOC (8 Jam)"];
-        $paramCO  = ["C O", "CO (8 Jam)", "CO (6 Jam)", "CO (24 Jam)"];
+        $paramCO  = ["C O", "CO (8 Jam)", "CO (6 Jam)", "CO (24 Jam)", "CO 6J", "CO (UA)"];
 
         // Hanya proses kalau jumlah data valid
         if ($jumlahElemen > 0) {
@@ -67,9 +67,7 @@ class DirectLain {
 
                     // cek batas bawah di akhir
                     $c5 = round($c5, 2);
-                }
-
-                else if (in_array($row->parameter, $paramCO2)) {
+                }else if (in_array($row->parameter, $paramCO2)) {
                     $c3 = round($totalNilai / $jumlahElemen, 6);
                     $c2 = (($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
                     $c1 = $c2 * 1000;

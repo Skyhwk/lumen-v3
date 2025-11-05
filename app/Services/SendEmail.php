@@ -37,7 +37,7 @@ class SendEmail
         'noreply' => [
             'email' => null,
             'password' => null,
-            'name' => 'No Reply'
+            'name' => 'INTILAB - No Reply'
         ],
         'sales' => [
             'email' => null,
@@ -223,22 +223,17 @@ class SendEmail
 
             if (!empty($this->attachments)) {
                 foreach ($this->attachments as $attachment) {
-                    // $fullPath = public_path($attachment['path']);
+                    if(isset($attachment['path'])) {
+                        $fullPath = public_path($attachment['path']);
+                        if (!file_exists($fullPath)) {
+                            \Log::error("Attachment not found: " . $fullPath);
+                            continue;
+                        }
 
-                    // if (!file_exists($fullPath)) {
-                    //     \Log::error("Attachment not found: " . $fullPath);
-                    //     continue;
-                    // }
-
-                    // $mail->addAttachment($fullPath, $attachment['name']);
-                    // $fullPath = public_path($attachment['path']);
-
-                    // if (!file_exists($fullPath)) {
-                    //     \Log::error("Attachment not found: " . $fullPath);
-                    //     continue;
-                    // }
-
-                    $mail->addAttachment($attachment);
+                        $mail->addAttachment($fullPath, $attachment['name']);
+                    } else {
+                        $mail->addAttachment($attachment);
+                    }
                 }
             }
 

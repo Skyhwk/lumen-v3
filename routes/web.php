@@ -53,8 +53,14 @@ $router->group(['middleware' => ['cors']], function () use ($router) {
     $router->post('/api/soundMeterData', 'external\SoundMeterController@sensorData');
 });
 
+// $router->post('/api/import-lhp-air', 'external\ImportLhp@indexAir');
+// $router->post('/api/import-lhp-udara', 'external\ImportLhp@indexUdara');
+// $router->post('/api/import-lhp-kebisingan', 'external\ImportLhp@indexKebisingan');
+// $router->post('/api/import-lhp-emisi', 'external\ImportLhp@indexEmisi');
 
-
+$router->post('/api/import-lhp-udara-ambient', 'external\ImportHasilPengujian@importLhpUdaraAmbient');
+$router->post('/api/import-lhp-udara-lingkungan-kerja', 'external\ImportHasilPengujian@importLhpUdaraLingkunganKerja');
+$router->post('/api/import-lhp-emisi-tidak-bergerak', 'external\ImportHasilPengujian@importLhpEmisiTidakBergerak');
 
 $router->group(['prefix' => 'director'], function () use ($router) {
     $router->post('/login', 'directorApp\AuthController@login');

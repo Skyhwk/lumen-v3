@@ -32,7 +32,7 @@ class FdlEmisiCerobongController extends Controller
     {
         if (isset($request->no_sample) && $request->no_sample != null) {
             $data = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-            ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
+            ->where('kategori_2', '5-Emisi')
             ->where('is_active', 1)->first();
             
             $partikulat = json_decode(
@@ -290,7 +290,7 @@ class FdlEmisiCerobongController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -420,7 +420,7 @@ class FdlEmisiCerobongController extends Controller
                 }catch (Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line' => $e.getLine(),
                         'code' => $e.getCode()
                     ]);
@@ -434,6 +434,7 @@ class FdlEmisiCerobongController extends Controller
                         $data = new DataLapanganEmisiCerobong;
                     }
 
+                    
                     $data->no_sampel                                    = strtoupper(trim($request->no_sample));
                     if ($request->id_kat != '') $data->kategori_3       = $request->id_kat;
 
@@ -532,7 +533,7 @@ class FdlEmisiCerobongController extends Controller
                 }catch (\Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => $e.getMessage(),
+                        'message' => $e->getMessage(),
                         'line'    => $e->getLine(),
                         'code'    => $e->getCode()
                     ]);

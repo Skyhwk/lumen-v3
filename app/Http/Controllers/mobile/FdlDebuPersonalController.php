@@ -157,7 +157,7 @@ class FdlDebuPersonalController extends Controller
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->first();
 
             if($orderDetail->tanggal_terima == null){
                 $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
@@ -168,12 +168,12 @@ class FdlDebuPersonalController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => "Data Sampling FDL Debu Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"
+                'message' => "Data Sampling FDL Debu Dengan No Sample $request->no_sampel berhasil disimpan oleh $this->karyawan"
             ], 200);
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e->getLine(),
                 'code' => $e->getCode()
             ]);

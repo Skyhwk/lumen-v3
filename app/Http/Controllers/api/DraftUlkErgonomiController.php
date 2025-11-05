@@ -7,10 +7,11 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile,PengesahanLhp};
+use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
+use App\Jobs\CombineLHPJob;
 
 class DraftUlkErgonomiController extends Controller
 {
@@ -1572,12 +1573,23 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
+                    if($data_order->periode != null){
+                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
+                    }else{
+                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
+                    }
+                    
+                    if($cekLink){
+                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $data_order->periode);
+                        $this->dispatch($job);
+                    }
+                    
                 }
                 DB::commit();
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil diapprove'
+                    'message' => 'Data draft Ergonomi  no sampel ' . $data->no_sampel . ' berhasil diapprove'
                 ], 200);
             } catch (\Exception $th) {
                 DB::rollback();
@@ -1588,7 +1600,7 @@ class DraftUlkErgonomiController extends Controller
                 ], 500);
             }
         }
-    }
+    } 
 
     // Amang
     public function handleReject(Request $request)
@@ -1607,15 +1619,22 @@ class DraftUlkErgonomiController extends Controller
                 // Lingkungan Kerja
                 $data = DraftErgonomiFile::where('no_sampel',$data_order->no_sampel)
                     ->first();
+
                 if ($data != null) {
                     $data_order->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data_order->rejected_by = $this->karyawan;
+                    $data_order->status = 0;
                     $data_order->save();
 
                     
                     $data->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                     $data->rejected_by = $this->karyawan;
-                    $data->save();
+                    // $data->save();
+
+                    $data_history = $data->replicate();
+                    $data_history->setTable((new DraftErgonomiFileHistory())->getTable());
+
+                    $data->delete();
                     
                     HistoryAppReject::insert([
                         'no_lhp' => $data_order->cfr,
@@ -1632,7 +1651,7 @@ class DraftUlkErgonomiController extends Controller
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil diapprove'
+                    'message' => 'Data draft LHP air no sampel ' . $data->no_sampel . ' berhasil di reject'
                 ], 200);
             } catch (\Exception $th) {
                 DB::rollback();
@@ -1807,8 +1826,10 @@ class DraftUlkErgonomiController extends Controller
             );
 
             // Siapkan folder untuk menyimpan file
-            $dir = public_path("draft_ergonomi");
-            $folders = ['draft', 'lhp', 'lhp_digital'];
+            /* $dir = public_path("draft_ergonomi");
+            $folders = ['draft', 'lhp', 'lhp_digital']; */
+            $dir = public_path("dokumen");
+            $folders = ['LHP', 'LHP_DOWNLOAD', 'LHPS'];
             
             foreach ($folders as $folder) {
                 if (!file_exists("$dir/$folder")) {
@@ -2699,8 +2720,9 @@ class DraftUlkErgonomiController extends Controller
                         break;
                         
                     case 'lhp':
-                        // LHP: tanpa watermark + footer tanpa QR
-                        $pdf->showWatermarkImage = false;
+                        // LHP: watermark + footer tanpa QR
+                        $pdf->SetWatermarkImage(public_path('logo-watermark.png'), -1, '', [110, 35]);
+                        $pdf->showWatermarkImage = true;
                         $file_qr = public_path('qr_documents/' . $pdfFile->file_qr . '.svg');
                         $footerHtml = '
                             <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
@@ -2830,17 +2852,18 @@ class DraftUlkErgonomiController extends Controller
                 }
                 
                 // Simpan file
-                $namaFile = 'LHP_Ergonomi_'.str_replace('/', '_', $noSampel).'.pdf';
-                $pathFile = $dir.'/'.$type.'/'.$namaFile;
+                $namaFile = 'LHP-'.str_replace('/', '-', $noSampel).'.pdf';
+                // $pathFile = $dir.'/'.$type.'/'.$namaFile;
+                $pathFile = $dir.'/'.'LHP_DOWNLOAD'.'/'.$namaFile;
                 $pdf->Output($pathFile, 'F');
                 return [$pdf,$namaFile];
             };
 
             // Buat 3 versi PDF
-            $pdfDraft = $createPDF('draft')[0];
+            //$pdfDraft = $createPDF('draft')[0];
             $pdfLhp = $createPDF('lhp')[0]; 
-            $pdfLhpDigital = $createPDF('lhp_digital')[0];
-            $pdfFile->name_file = $createPDF('draft')[1];
+            //$pdfLhpDigital = $createPDF('lhp_digital')[0];
+            $pdfFile->name_file = $createPDF('lhp')[1];
             $pdfFile->save();
 
             return response()->json('data berhasil di render',200);

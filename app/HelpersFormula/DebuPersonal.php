@@ -13,6 +13,7 @@ class DebuPersonal
 
 			$Ta = floatval($data->average_suhu) + 273;
 			$Qs = null;
+			$C = null;
 			$C1 = null;
             $C2 = null;
             $C3 = null;
@@ -67,7 +68,9 @@ class DebuPersonal
 			}
 			$vl_formatted = number_format($vl, 1);
 
-			$C15 = number_format($C16 * 1000, 4); // C (ug/m3)
+			$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
+
+            $C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
 
 			$satuan = 'mg/m3';
 			$processed = [

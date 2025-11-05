@@ -113,6 +113,34 @@
                         @endforeach
                     </table>
                 @endif
+                {{-- Keterangan --}}
+                @php
+                    $temptArrayPush = [];
+                    if (!empty($detail)) {
+                        foreach ($detail as $v) {
+                            if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['akr'];
+                            }
+                            if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['attr'];
+                            }
+                        }
+                    }
+                @endphp
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
+                            @endforeach
+                        @endforeach
+                    </table>
+                @endif
             </td>
         </tr>
     </table>

@@ -137,641 +137,132 @@ class FdlEmisiCerobongController extends Controller
         }
     }
 
-    // public function approve(Request $request)
-    // {
-    //     if (isset($request->id) && $request->id != null) {
-    //         DB::beginTransaction();
-    //         try {
-    //             $data = DataLapanganEmisiCerobong::with('detail')
-    //                 ->where('id', $request->id)->first();
-    //             $no_sample = $data->no_sampel;
-    //             if ($data == null) {
-    //                 return response()->json([
-    //                     'status' => 'error',
-    //                     'message' => 'Data Lapangan not found',
-    //                 ], 404);
-    //             }
-    //             $data_param = [
-    //                 'O2' => $data->O2,
-    //                 'CO2' => $data->CO2,
-    //                 'C O' => $data->CO,
-    //                 'NO' => $data->NO,
-    //                 'NO2' => $data->NO2,
-    //                 'SO2' => $data->SO2
-    //             ];
-    //             if (isset($data->NOx) && $data->NOx !== null) {
-    //                 $data_param['NOx'] = $data->NOx;
-    //             }
-
-    //             $Pa = floatval($data->tekanan_udara);
-    //             $Ta = floatval($data->suhu);
-
-    //             // Rumus Setiap Parameter
-    //             $rumusParam = [
-    //                 'C O' => function () use ($Pa, $Ta, $data_param) {
-    //                     $C = floatval($data_param['C O']);
-    //                     return (($C / 28.01)) * 24.45 * ($Pa / $Ta) * (298 / 760);
-    //                 },
-    //                 'NO' => function () use ($Pa, $Ta, $data_param) {
-    //                     $C = floatval($data_param['NO']);
-    //                     return (($C / 30)) * 24.45 * ($Pa / $Ta) * (298 / 760);
-    //                 },
-    //                 'NOx' => function () use ($Pa, $Ta, $data_param) {
-    //                     $C = floatval($data_param['NOx']);
-    //                     return (($C / 46)) * 24.45 * ($Pa / $Ta) * (298 / 760);
-    //                 },
-    //                 'SO2' => function () use ($Pa, $Ta, $data_param) {
-    //                     $C = floatval($data_param['SO2']);
-    //                     return (($C / 64.066)) * 24.45 * ($Pa / $Ta) * (298 / 760);
-    //                 },
-    //                 'NO2' => function () use ($Pa, $Ta, $data_param) {
-    //                     $C = floatval($data_param['NO2']);
-    //                     return (($C / 46)) * 24.45 * ($Pa / $Ta) * (298 / 760);
-    //                 },
-    //             ];
-
-    //             // Get Header If Exist
-    //             $header = EmisiCerobongHeader::select(['id_parameter', 'parameter'])
-    //                 ->where('no_sampel', $data->no_sampel)
-    //                 ->where('is_active', true)
-    //                 ->get()
-    //                 ->map(function ($item) {
-    //                     return [
-    //                         'id_parameter' => $item->id_parameter,
-    //                         'parameter' => $item->parameter
-    //                     ];
-    //                 })
-    //                 ->toArray();
-
-    //             // Get Parameter
-    //             $param = json_decode($data->detail->parameter, true);
-
-    //             $parameter = array_map(function ($item) {
-    //                 return explode(';', $item)[1];
-    //             }, $param);
-
-    //             // Store Result After Calulating
-    //             $hasil = [];
-    //             foreach ($data_param as $key => $value) {
-    //                 if (array_key_exists($key, $rumusParam)) {
-    //                     $hasil[$key] = number_format($rumusParam[$key](), 4, '.', '');
-    //                 }
-    //             }
-
-    //             $order = OrderDetail::where('no_sampel', $no_sample)->first();
-    //             $parameterList = json_decode($order->parameter);  // asumsinya JSON array seperti list kamu di atas
-
-    //             // buat mapping untuk cari nama parameter
-    //             $paramMap = [];
-    //             foreach ($parameterList as $param) {
-    //                 [$code, $name] = explode(';', $param);
-    //                 $paramMap[trim($name)] = trim($name);  // bisa juga simpan $code kalau perlu
-    //             }
-
-
-    //             if ($data->CO2 != null) {
-    //                 $hasil['CO2'] = number_format($data->CO2, 4);
-    //             } 
-
-    //             if ($data->O2 != null) {
-    //                 $hasil['O2'] = number_format($data->O2, 4);
-    //             }
-
-    //             // Khusus velocity rata-rata
-    //             if($data->velocity != null){
-    //                 $string = $data->velocity;
-    //                 preg_match_all('/\d+(\.\d+)?/', $string, $matches);
-    //                 $numbers = $matches[0];
-
-    //                 $average = count($numbers) > 0 ? number_format(array_sum($numbers) / count($numbers), 4) : null;
-
-    //                 if (isset($paramMap['Velocity'])) {
-    //                     $hasil[$paramMap['Velocity']] = $average;
-    //                 }else if(isset($paramMap['Velocity/laju alir-NS1'])){
-    //                     $hasil[$paramMap['Velocity/laju alir-NS1']] = $average;
-    //                 } else {
-    //                     $hasil['Velocity'] = $average;
-    //                 }
-    //             }
-
-    //             if($data->nilai_opasitas != null){
-    //                 $values = json_decode($data->nilai_opasitas, true);  // decode jadi array
-
-    //                 $sum = array_sum($values);
-    //                 $count = count($values);
-
-    //                 if ($count > 0) {
-    //                     if(isset($paramMap['Opasitas'])) {
-    //                         $hasil[$paramMap['Opasitas']] = number_format($sum / $count, 4, '.', '');
-    //                     }else if($paramMap['Opasitas-STD2']){
-    //                         $hasil['Opasitas-STD2'] = number_format($sum / $count, 4, '.', '');
-    //                     }else if($paramMap['Opasitas-STD1']){
-    //                         $hasil['Opasitas-STD1'] = number_format($sum / $count, 4, '.', '');
-    //                     }else{
-    //                         $hasil['Opasitas'] = number_format($sum / $count, 4, '.', '');
-    //                     }
-    //                 } else {
-    //                     if(isset($paramMap['Opasitas'])) {
-    //                         $hasil[$paramMap['Opasitas']] = null;
-    //                     }else if($paramMap['Opasitas-STD2']){
-    //                         $hasil['Opasitas-STD2'] = null;
-    //                     }else if($paramMap['Opasitas-STD1']){
-    //                         $hasil['Opasitas-STD1'] = null;
-    //                     }else{
-    //                         $hasil['Opasitas'] = null;
-    //                     }
-    //                 }
-    //             }
-
-    //             // Store Header and Value
-    //             foreach ($hasil as $key => $value) {
-    //                 $getparam = Parameter::where('nama_lab', $key)
-    //                     ->where('id_kategori', 5)
-    //                     ->where('is_active', true)
-    //                     ->first();
-
-    //                 if ($getparam) {
-
-    //                     // Cek jika header sudah ada berdasarkan no_sample, id_po, dan param
-    //                     $addHeader = EmisiCerobongHeader::where('id_parameter', $getparam->id)
-    //                         ->where('no_sampel', $data->no_sampel)
-    //                         ->first();
-
-    //                     if (!$addHeader) {
-    //                         // Jika header tidak ditemukan, buat baru
-    //                         $addHeader = EmisiCerobongHeader::create([
-    //                             'id_parameter' => $getparam->id,
-    //                             'tanggal_terima' => $data->detail->tanggal_terima,
-    //                             'no_sampel' => $data->no_sampel,
-    //                             'is_approved' => true,
-    //                             'approved_by' => $this->karyawan,
-    //                             'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                             'created_by' => $this->karyawan,
-    //                             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                             'parameter' => $key,
-    //                             'template_stp' => 31,
-    //                         ]);
-    //                     } else {
-    //                         // Jika header ditemukan, update data
-    //                         $addHeader->update([
-    //                             'id_parameter' => $getparam->id,
-    //                             'tanggal_terima' => $data->detail->tanggal_terima,
-    //                             'no_sampel' => $data->no_sampel,
-    //                             'is_approved' => true,
-    //                             'approved_by' => $this->karyawan,
-    //                             'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                             'created_by' => $this->karyawan,
-    //                             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                             'parameter' => $key,
-    //                             'template_stp' => 31,
-    //                         ]);
-    //                     }
-
-    //                     // Cek jika valueEmisi sudah ada berdasarkan id_emisic_header dan id_parameter
-    //                     $valueEmisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $addHeader->id)
-    //                         ->where('id_parameter', $getparam->id)
-    //                         ->where('no_sampel', $data->no_sampel)
-    //                         ->where('is_active', true)
-    //                         ->first();
-
-    //                     if (!$valueEmisi) {
-    //                         // Jika valueEmisi tidak ditemukan, buat baru
-    //                         if ($key == 'O2' || $key == 'CO2' || $key == 'Opasitas' || $key == 'Opasitas-STD2' || $key == 'Opasitas-STD1' || $key == 'Velocity/laju alir-NS1' || $key == 'Velocity') {
-    //                             $valueEmisi = WsValueEmisiCerobong::create([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'C3_persen' => $value,
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         }else if($key == 'Suhu Cerobong-NS1'){
-    //                             $valueEmisi = WsValueEmisiCerobong::create([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         } else {
-    //                             $valueEmisi = WsValueEmisiCerobong::create([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'C' => null,
-    //                                 'C1' => $value,
-    //                                 'C2' => $data_param[$key],  // << Tambahan disini
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         }
-    //                     } else {
-    //                         // Jika valueEmisi ditemukan, update data
-    //                         if ($key == 'O2' || $key == 'CO2' || $key == 'Opasitas' || $key == 'Opasitas-STD2' || $key == 'Opasitas-STD1' || $key == 'Velocity/laju alir-NS1' || $key == 'Velocity') {
-    //                             $valueEmisi->update([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'C3_persen' => $value,
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         }else if($key == 'Suhu Cerobong-NS1'){
-    //                             $valueEmisi->update([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         } else {
-    //                             $valueEmisi->update([
-    //                                 'id_emisi_cerobong_header' => $addHeader->id,
-    //                                 'C' => null,
-    //                                 'C1' => $value,
-    //                                 'C2' => $data_param[$key],  // << Tambahan disini
-    //                                 'suhu_cerobong' => $data->T_Flue,
-    //                                 'no_sampel' => $data->no_sampel,
-    //                                 'tanggal_terima' => $data->detail->tanggal_terima,
-    //                                 'id_parameter' => $getparam->id,
-    //                                 'created_by' => $this->karyawan,
-    //                                 'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-    //                                 'suhu' => $data->suhu,
-    //                                 'Pa' => $data->tekanan_udara
-    //                             ]);
-    //                         }
-    //                     }
-    //                 }
-    //             }
-
-    //             $data->is_approve = 1;
-    //             $data->approved_by = $this->karyawan;
-    //             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             // dd($valueEmisi, $addHeader, $data);
-    //             $data->save();
-
-
-    //             DB::commit();
-    //             return response()->json([
-    //                 'status' => 'success',
-    //                 'message' => "Data FDL EMISI CEROBONG dengan No Sampel $no_sample berhasil diapprove oleh $this->karyawan"
-    //             ], 200);
-    //         } catch (\Exception $th) {
-    //             DB::rollBack();
-    //             dd($th);
-    //             return response()->json([
-    //                 'status' => 'error',
-    //                 'message' => $th->getMessage(),
-    //                 'line' => $th->getLine()
-    //             ], 500);
-    //         }
-    //     } else {
-    //         return response()->json([
-    //             'message' => "Data FDL EMISI CEROBONG dengan No Sampel $no_sample gagal diapprove oleh $this->karyawan"
-    //         ], 401);
-    //     }
-    // }
-
-    // 20/06/2025
     public function approve(Request $request)
     {
-        if (isset($request->id) && $request->id != null) {
-            DB::beginTransaction();
-            try {
-                $data = DataLapanganEmisiCerobong::with('detail')
-                    ->where('id', $request->id)->first();
-                $no_sample = $data->no_sampel;
-                if ($data == null) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Data Lapangan not found',
-                    ], 404);
-                }
+        DB::beginTransaction();
+        try {
+            $data = DataLapanganEmisiCerobong::where('id', $request->id)->first();
+            $detail = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
+            
+            if ($detail && isset($detail->parameter)) {
+                $params = json_decode($detail->parameter, true);
 
-                // Fungsi pembantu
-                function ambilUtama($val) {
-                    if (!is_string($val)) return $val;
-                
-                    // Coba decode dulu
-                    $decoded = json_decode($val, true);
-                
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && isset($decoded['utama'])) {
-                        // Ganti koma dengan titik hanya di 'utama'-nya
-                        return str_replace(',', '.', $decoded['utama']);
-                    }
-                
-                    // Kalau bukan JSON valid, anggap angka biasa, baru ganti koma
-                    return str_replace(',', '.', $val);
-                }
+                $parameterList = [];
 
-                $data_param = [
-                    'O2'  => ambilUtama($data->O2),
-                    'CO2' => ambilUtama($data->CO2),
-                    'C O' => ambilUtama($data->CO),
-                    'NO'  => ambilUtama($data->NO),
-                    'NO2' => ambilUtama($data->NO2),
-                    'SO2' => ambilUtama($data->SO2),
-                    'NOx' => ambilUtama($data->NOx),
-                ];
-                
-                if (isset($data->NOx) && $data->NOx !== null) {
-                    $data_param['NOx'] = str_replace(',','.', $data->NOx);
-                }
-
-                $Pa = floatval($data->tekanan_udara);
-                $Ta = floatval($data->suhu);
-
-                // Get Header If Exist
-                $header = EmisiCerobongHeader::select(['id_parameter', 'parameter'])
-                    ->where('no_sampel', $data->no_sampel)
-                    ->where('is_active', true)
-                    ->get()
-                    ->map(function ($item) {
-                        return [
-                            'id_parameter' => $item->id_parameter,
-                            'parameter' => $item->parameter
+                if (is_array($params)) {
+                    foreach ($params as $param) {
+                        [$id, $nama] = array_map('trim', explode(';', $param, 2));
+                        $parameterList[] = [
+                            'id' => $id,
+                            'nama' => $nama
                         ];
-                    })
-                    ->toArray();
-
-                // Get Parameter
-                $param = json_decode($data->detail->parameter, true);
-
-                $parameter = array_map(function ($item) {
-                    return explode(';', $item)[1];
-                }, $param);
-
-                // Store Result After Calulating
-                $hasil = [];
-                foreach ($data_param as $key => $value) {
-                    if ($data_param[$key] != null) {
-                        $data_parameter = Parameter::where('nama_lab', $key)->where('nama_kategori', 'Emisi')->where('is_active', true)->first();
-                        
-                        $function = Formula::where('id_parameter', $data_parameter->id)->where('is_active', true)->first()->function;
-                        $data_parsing = $request->all();
-                        $data_parsing = (object) $data_parsing;
-                        $data_parsing->C = floatval($data_param[$key]);
-                        $data_parsing->Pa = $Pa;
-                        $data_parsing->Ta = $Ta;
-
-                        $data_kalkulasi = AnalystFormula::where('function', $function)
-                            ->where('data', $data_parsing)
-                            ->where('id_parameter', $data_parameter->id)
-                            ->process();
-
-                        if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
-                            return (object)[
-                                'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
-                                'status' => 404
-                            ];
-                        }
-                        $hasil[$key] = number_format($data_kalkulasi['hasil']);
                     }
                 }
-
-                $order = OrderDetail::where('no_sampel', $no_sample)->first();
-                $parameterList = json_decode($order->parameter);  // asumsinya JSON array seperti list kamu di atas
-
-                // buat mapping untuk cari nama parameter
-                $paramMap = [];
-                foreach ($parameterList as $param) {
-                    [$code, $name] = explode(';', $param);
-                    $paramMap[trim($name)] = trim($name);  // bisa juga simpan $code kalau perlu
-                }
-
-                // Khusus velocity rata-rata
-                if($data->velocity != null){
-                    $string = $data->velocity;
-                    preg_match_all('/\d+(\.\d+)?/', $string, $matches);
-                    $numbers = $matches[0];
-
-                    $average = count($numbers) > 0 ? number_format(array_sum($numbers) / count($numbers), 4) : null;
-
-                    if (isset($paramMap['Velocity'])) {
-                        $hasil[$paramMap['Velocity']] = $average;
-                    }else if(isset($paramMap['Velocity/laju alir-NS1'])){
-                        $hasil[$paramMap['Velocity/laju alir-NS1']] = $average;
-                    } else {
-                        $hasil['Velocity'] = $average;
-                    }
-                }
-
-                if($data->nilai_opasitas != null){
-                    $values = json_decode($data->nilai_opasitas, true);  // decode jadi array
-
-                    $sum = array_sum($values);
-                    $count = count($values);
-
-                    if ($count > 0) {
-                        if(isset($paramMap['Opasitas'])) {
-                            $hasil[$paramMap['Opasitas']] = number_format($sum / $count, 4, '.', '');
-                        }else if(isset($paramMap['Opasitas-STD2'])){
-                            $hasil['Opasitas-STD2'] = number_format($sum / $count, 4, '.', '');
-                        }else if(isset($paramMap['Opasitas-STD1'])){
-                            $hasil['Opasitas-STD1'] = number_format($sum / $count, 4, '.', '');
-                        }else{
-                            $hasil['Opasitas'] = number_format($sum / $count, 4, '.', '');
-                        }
-                    } else {
-                        if(isset($paramMap['Opasitas'])) {
-                            $hasil[$paramMap['Opasitas']] = null;
-                        }else if(isset($paramMap['Opasitas-STD2'])){
-                            $hasil['Opasitas-STD2'] = null;
-                        }else if(isset($paramMap['Opasitas-STD1'])){
-                            $hasil['Opasitas-STD1'] = null;
-                        }else{
-                            $hasil['Opasitas'] = null;
-                        }
-                    }
-                }
-
-                // Store Header and Value
-                foreach ($hasil as $key => $value) {
-                    $getparam = Parameter::where('nama_lab', $key)
-                        ->where('id_kategori', 5)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($getparam) {
-
-                        // Cek jika header sudah ada berdasarkan no_sample, id_po, dan param
-                        $addHeader = EmisiCerobongHeader::where('id_parameter', $getparam->id)
-                            ->where('no_sampel', $data->no_sampel)
-                            ->first();
-
-                        if (!$addHeader) {
-                            // Jika header tidak ditemukan, buat baru
-                            $addHeader = EmisiCerobongHeader::create([
-                                'id_parameter' => $getparam->id,
-                                'tanggal_terima' => $data->detail->tanggal_terima,
-                                'no_sampel' => $data->no_sampel,
-                                'is_approved' => true,
-                                'approved_by' => $this->karyawan,
-                                'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                                'created_by' => $this->karyawan,
-                                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                                'parameter' => $key,
-                                'template_stp' => 31,
-                            ]);
-                        } else {
-                            // Jika header ditemukan, update data
-                            $addHeader->update([
-                                'id_parameter' => $getparam->id,
-                                'tanggal_terima' => $data->detail->tanggal_terima,
-                                'no_sampel' => $data->no_sampel,
-                                'is_approved' => true,
-                                'approved_by' => $this->karyawan,
-                                'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                                'created_by' => $this->karyawan,
-                                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                                'parameter' => $key,
-                                'template_stp' => 31,
-                            ]);
-                        }
-
-                        // Cek jika valueEmisi sudah ada berdasarkan id_emisic_header dan id_parameter
-                        $valueEmisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $addHeader->id)
-                            ->where('id_parameter', $getparam->id)
-                            ->where('no_sampel', $data->no_sampel)
-                            ->first();
-
-                        if (!$valueEmisi) {
-                            // Jika valueEmisi tidak ditemukan, buat baru
-                            if ($key == 'O2 (ESTB)' || $key == 'CO2 (ESTB)' || $key == 'Opasitas' || $key == 'Opasitas-STD2' || $key == 'Opasitas-STD1' || $key == 'Velocity/laju alir-NS1' || $key == 'Velocity') {
-                                $valueEmisi = WsValueEmisiCerobong::create([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'C3_persen' => $value,
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara
-                                ]);
-                            }else if($key == 'Suhu Cerobong-NS1'){
-                                $valueEmisi = WsValueEmisiCerobong::create([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara
-                                ]);
-                            } else {
-                                $valueEmisi = WsValueEmisiCerobong::create([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'C' => null,
-                                    'C1' => $value,
-                                    'C2' => $data_param[$key],  // << Tambahan disini
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara
-                                ]);
-                            }
-                        } else {
-                            // Jika valueEmisi ditemukan, update data
-                            if ($key == 'O2 (ESTB)' || $key == 'CO2 (ESTB)' || $key == 'Opasitas' || $key == 'Opasitas-STD2' || $key == 'Opasitas-STD1' || $key == 'Velocity/laju alir-NS1' || $key == 'Velocity') {
-                                $valueEmisi->update([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'C3_persen' => $value,
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara,
-                                    'is_active' => true
-                                ]);
-                            }else if($key == 'Suhu Cerobong-NS1'){
-                                $valueEmisi->update([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara,
-                                    'is_active' => true
-                                ]);
-                            } else {
-                                $valueEmisi->update([
-                                    'id_emisi_cerobong_header' => $addHeader->id,
-                                    'C' => null,
-                                    'C1' => $value,
-                                    'C2' => $data_param[$key],  // << Tambahan disini
-                                    'suhu_cerobong' => $data->T_Flue,
-                                    'no_sampel' => $data->no_sampel,
-                                    'tanggal_terima' => $data->detail->tanggal_terima,
-                                    'id_parameter' => $getparam->id,
-                                    'created_by' => $this->karyawan,
-                                    'created_at' => carbon::now()->format('Y-m-d H:i:s'),
-                                    'suhu' => $data->suhu,
-                                    'Pa' => $data->tekanan_udara,
-                                    'is_active' => true
-                                ]);
-                            }
-                        }
-                    }
-                }
-
-                $data->is_approve = 1;
-                $data->approved_by = $this->karyawan;
-                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data->save();
-
-                app(NotificationFdlService::class)->sendApproveNotification('Emisi Cerobong', $data->no_sampel, $this->karyawan, $data->created_by);
-
-                DB::commit();
-                return response()->json([
-                    'status' => 'success',
-                    'message' => "Data FDL EMISI CEROBONG dengan No Sampel $no_sample berhasil diapprove oleh $this->karyawan"
-                ], 200);
-            } catch (\Exception $th) {
-                DB::rollBack();
-                dd($th);
-                return response()->json([
-                    'status' => 'error',
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine()
-                ], 500);
             }
-        } else {
+            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 
+                'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx', 'Effisiensi Pembakaran', 'Eff. Pembakaran', 
+                'CO', 'C O', 'SO2 (P)', 'CO (P)', 'O2 (P)'
+            ];
+                        // ambil nama parameter dari order
+            $orderedParameters = array_column($parameterList, 'nama');
+
+            // filter, hanya parameter yang ada di whitelist
+            $parameters = array_values(array_intersect($orderedParameters, $paramList));
+            
+
+            foreach ($parameters as $key => $value) {
+                $parameter = Parameter::where('nama_lab', $value)
+                    ->where('nama_kategori', 'Emisi')
+                    ->where('is_active', true)
+                    ->first();
+
+                $functionObj = Formula::where('id_parameter', $parameter->id)
+                    ->where('is_active', true)
+                    ->first();
+                if(!$functionObj){
+                    return response()->json(['message' => 'Formula is Coming Soon'], 404);
+                } else{
+                    $function = $functionObj->function;
+                }
+
+                if($value == 'NO2' || $value == 'NOx' || $value == 'NO' || $value == 'SO2'){
+                    $function = 'EmisiCerobongDirect';
+                }
+                
+                $data_kalkulasi = AnalystFormula::where('function', $function)
+                ->where('data', $data)
+                ->where('id_parameter', $parameter->nama_lab)
+                ->process();
+                
+                $header = EmisiCerobongHeader::firstOrNew([
+                    'no_sampel' => $data->no_sampel,
+                    'id_parameter' => $parameter->id,
+                ]);
+
+                $header->fill([
+                    'no_sampel' => $data->no_sampel,
+                    'id_parameter' => $parameter->id,
+                    'parameter' => $value,
+                    'tanggal_terima' => $detail->tanggal_terima,
+                    'template_stp' => 30,
+                    'is_approved' => true,
+                    'approved_by' => $this->karyawan,
+                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'created_by' => $this->karyawan,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+
+                $header->save();
+
+                $valueEmisi = WsValueEmisiCerobong::firstOrNew([
+                    'id_emisi_cerobong_header' => $header->id,
+                    'no_sampel' => $data->no_sampel
+                ]);
+
+                $valueEmisi->fill([
+                    'id_emisi_cerobong_header' => $header->id,
+                    'no_sampel' => $data->no_sampel,
+                    'id_parameter' => $parameter->id,
+                    'C' => $data_kalkulasi['C1'] ?? null,
+                    'C1' => $data_kalkulasi['C2'] ?? null,
+                    'C2' => $data_kalkulasi['C3'] ?? null,
+                    'C3' => $data_kalkulasi['C4'] ?? null,
+                    'C4' => $data_kalkulasi['C5'] ?? null,
+                    'C5' => $data_kalkulasi['C6'] ?? null,
+                    'C6' => $data_kalkulasi['C7'] ?? null,
+                    'C7' => $data_kalkulasi['C8'] ?? null,
+                    'C8' => $data_kalkulasi['C9'] ?? null,
+                    'C9' => $data_kalkulasi['C10'] ?? null,
+                    'C10' => $data_kalkulasi['C11'] ?? null,
+                    'created_by' => $this->karyawan,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'suhu' => $data->suhu,
+                    'Pa' => $data->tekanan_udara,
+                    'suhu_cerobong' => $data->T_Flue,
+                    'satuan' => $data_kalkulasi['satuan'] ?? null,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'created_by' => $this->karyawan,
+                    'is_active' => true,
+                ]);
+                $valueEmisi->save();
+
+            }
+
+
+            $data->is_approve = 1;
+            $data->approved_by = $this->karyawan;
+            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->save();
+
+            DB::commit();
             return response()->json([
-                'message' => "Data FDL EMISI CEROBONG dengan No Sampel $no_sample gagal diapprove oleh $this->karyawan"
+                'message' => 'Berhasil approve data'
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal approve data',
+                'error' => $e->getMessage()
             ], 401);
         }
     }
@@ -783,7 +274,6 @@ class FdlEmisiCerobongController extends Controller
             $no_sample = $data->no_sampel;
             $ws_value = WsValueEmisiCerobong::Where('no_sampel', $no_sample)->get();
             foreach ($ws_value as $key => $value) {
-                $value->is_active = false;
                 $value->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $value->deleted_by = $this->karyawan;
                 $value->save();

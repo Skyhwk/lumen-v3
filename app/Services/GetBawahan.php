@@ -97,7 +97,7 @@ class GetBawahan
         }
 
         // Ambil semua bawahan langsung
-        $dataBawahanlevel1 = MasterKaryawan::whereNotIn('grade', ['MANAGER'])->whereJsonContains('atasan_langsung', (string) $this->karyawan->id)->get();
+        $dataBawahanlevel1 = MasterKaryawan::whereNotIn('grade', ['MANAGER'])->whereJsonContains('atasan_langsung', (string) $this->karyawan->id)->where('is_active', 1)->get();
 
         $dataBawahanlevel2 = collect([]);
         $dataBawahanlevel3 = collect([]);
@@ -106,7 +106,7 @@ class GetBawahan
             foreach ($dataBawahanlevel1 as $bawahan) {
                 if ($bawahan->grade === 'SUPERVISOR' || $this->hirarki === 3) {
                     // Ambil semua staff di bawah supervisor
-                    $bawahanLevel2 = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $bawahan->id)->get();
+                    $bawahanLevel2 = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $bawahan->id)->where('is_active', 1)->get();
 
                     $dataBawahanlevel2 = $dataBawahanlevel2->merge($bawahanLevel2);
                     // $bawahan->bawahan_level2 = $bawahanLevel2;
@@ -114,7 +114,7 @@ class GetBawahan
                     // Jika hirarki 3, ambil staff di bawah supervisor yang ada di level 2
                     if ($this->hirarki === 3) {
                         foreach ($bawahanLevel2 as $staff) {
-                            $bawahanLevel3 = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $staff->id)->get();
+                            $bawahanLevel3 = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $staff->id)->where('is_active', 1)->get();
 
                             $dataBawahanlevel3 = $dataBawahanlevel3->merge($bawahanLevel3);
                             // $staff->bawahan_level3 = $bawahanLevel3;

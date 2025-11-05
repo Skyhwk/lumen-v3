@@ -84,6 +84,12 @@ class FdlKebisinganController extends Controller
                 }
             }
 
+            if(!isset($request->foto_lok)){
+                return response()->json([
+                    'message' => 'Tolong tambahkan Dokumentasi Lokasi !'
+                ], 401);
+            }
+
             if(!isset($request->jenis_durasi)){
                 return response()->json([
                     'message' => 'Pilih Jenis Durasi !'
@@ -180,7 +186,7 @@ class FdlKebisinganController extends Controller
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 

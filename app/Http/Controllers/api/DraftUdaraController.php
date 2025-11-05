@@ -48,6 +48,8 @@ use App\Jobs\RenderLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
+use App\Models\LinkLhp;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -1466,13 +1468,22 @@ class DraftUdaraController extends Controller
                         $qr->save();
                     }
 
+                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+
+                    if($cekLink) {
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                        $this->dispatch($job);
+                    }
+
                 }
 
                 DB::commit();
                 return response()->json([
                     'data' => $data,
                     'status' => true,
-                    'message' => 'Data draft LHP air no sampel ' . $request->no_lhp . ' berhasil diapprove'
+                    'message' => 'Data draft LHP Udara no sampel ' . $request->no_lhp . ' berhasil diapprove'
                 ], 201);
             } catch (\Exception $th) {
                 DB::rollBack();

@@ -11,7 +11,10 @@ class Invoice extends Sector
 
 
     public $timestamps = false;
-
+    protected $casts = [
+        'keterangan_tambahan' => 'array'
+    ];
+    
     public function link()
     {
         return $this->hasOne(GenerateLink::class, 'id_quotation', 'id')

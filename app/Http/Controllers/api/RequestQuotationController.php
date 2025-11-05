@@ -2207,6 +2207,14 @@ class RequestQuotationController extends Controller
                     ->update([
                         'no_quotation' => $data->no_document,
                     ]);
+
+
+                // update link lhp
+                DB::table('link_lhp')
+                    ->where('no_quotation', $dataOld->no_document)
+                    ->update([
+                        'no_quotation' => $data->no_document,
+                    ]);
             }
 
             // UPDATE KONFIRMASI ORDER ===================
@@ -5112,6 +5120,12 @@ class RequestQuotationController extends Controller
                                 'no_quotation' => $dataH->no_document,
                             ]);
 
+                        DB::table('link_lhp')
+                            ->where('no_quotation', $dataOld->no_document)
+                            ->update([
+                                'no_quotation' => $dataH->no_document,
+                            ]);
+
                         $konfirmasi = KelengkapanKonfirmasiQs::where('no_quotation', $dataOld->no_document)
                             ->where('is_active', true)->get();
                         // UPDATE KONFIRMASI ORDER ===================
@@ -5828,7 +5842,7 @@ class RequestQuotationController extends Controller
         }
         $data_lama = json_decode($data_lama);
 
-        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->where('is_active', 1)->orderBy('no_sampel', 'desc')->first()->no_sampel;
+        $data = OrderDetail::where('id_order_header', $data_lama->id_order)->orderBy('no_sampel', 'desc')->first()->no_sampel;
 
         if (!$data) {
             return response()->json([

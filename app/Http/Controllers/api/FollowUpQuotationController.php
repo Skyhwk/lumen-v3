@@ -23,6 +23,7 @@ use App\Services\{Notification, GetAtasan};
 use App\Helpers\WorkerOperation;
 use Picqer\Barcode\BarcodeGeneratorPNG as Barcode;
 use App\Jobs\RenderSamplingPlan;
+use App\Models\AlasanVoidQt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -113,7 +114,6 @@ class FollowUpQuotationController extends Controller
                     }
                 })
                 ->make(true);
-
         } catch (Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
@@ -361,6 +361,34 @@ class FollowUpQuotationController extends Controller
                 $data->deleted_by = $this->karyawan;
                 $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                $keterangan = [];
+                if ($request->tanggal_next_fu) {
+                    $keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
+                }
+                if ($request->nama_lab_lain) {
+                    $keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
+                }
+                if ($request->budget_customer) {
+                    $keterangan[] = ['budget_customer' => $request->budget_customer];
+                }
+                if ($request->penawaran_yg_akan_dikirim) {
+                    $keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
+                }
+                if ($request->blacklist) {
+                    $keterangan[] = ['blacklist' => $request->blacklist];
+                }
+                if ($request->keterangan) {
+                    $keterangan[] = ['keterangan' => $request->keterangan];
+                }
+
+                $alasanVoidQt = new AlasanVoidQt();
+                $alasanVoidQt->no_quotation = $data->no_document;
+                $alasanVoidQt->alasan = $request->alasan;
+                $alasanVoidQt->keterangan = json_encode($keterangan);
+                $alasanVoidQt->voided_by = $this->karyawan;
+                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+                $alasanVoidQt->save();
 
                 DB::commit();
                 return response()->json([

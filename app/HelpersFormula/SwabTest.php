@@ -26,18 +26,15 @@ class SwabTest
 				} else {
 					// Format hasil perhitungan ke 2 desimal
 					$rumus = number_format($rumus, 2);
-                    $hasil2 = number_format($hasil2, 2);
-                    $hasil3 = number_format($hasil3, 2);
-                    $hasil4 = number_format($hasil4, 2);
 				}
 			}
+            $hasil2 = number_format($hasil2, 2);
+            $hasil3 = number_format($hasil3, 2);
+            $hasil4 = number_format($hasil4, 2);
 
             $satuan = 'CFU/cm2';
 
 			$data = [
-				'id_swab_header' => $data->id_header,
-				'tanggal_terima' => $data->tgl_terima,
-                'no_sampel' => $data->no_sampel,
 				// 'luas' => $data->luas,
 				// 'jumlah_mikroba' => $data->jumlah_mikroba,
 				// 'cairan_pengencer' => $data->jumlah_pengencer,

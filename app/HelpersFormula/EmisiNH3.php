@@ -35,14 +35,20 @@ class EmisiNH3
         // $tekanan_dry = LookUpRdm::getRdm();
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
 
-        $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 25) / floatval($Vs)) * (17 / 24.45), 4));
-        $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 17), 4));
-        // dump($C1, $C2);
+        // C2 (mg/Nm3) = (((A-B) x FP)/Vs) x (17/24.45)
+        $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)) * (17 / 24.45), 4));
+        // (ug/Nm3) = C2 x 1000
+        $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
+        // C3 (PPM) = (((A-B) x FP)/Vs)
+        $C2 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)) * (floatval($C1) / floatval($Vs)), 4));
+        $C3 = $C;
+        $C4 = $C1;
         if (floatval($C1) < 0.0257)
             $C1 = '<0.0257';
         if (floatval($C2) < 0.0369)
             $C2 = '<0.0369';
 
+        $satuan = "ppm";
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -64,6 +70,9 @@ class EmisiNH3
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

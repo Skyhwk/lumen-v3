@@ -28,6 +28,7 @@ use App\Models\Ftc;
 use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
 use App\Jobs\RenderSamplingPlan;
+use App\Models\AlasanVoidQt;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
 
@@ -296,6 +297,34 @@ class ReadyOrderController extends Controller
                 $data->deleted_by = $this->karyawan;
                 $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                $keterangan = [];
+                if ($request->tanggal_next_fu) {
+                    $keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
+                }
+                if ($request->nama_lab_lain) {
+                    $keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
+                }
+                if ($request->budget_customer) {
+                    $keterangan[] = ['budget_customer' => $request->budget_customer];
+                }
+                if ($request->penawaran_yg_akan_dikirim) {
+                    $keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
+                }
+                if ($request->blacklist) {
+                    $keterangan[] = ['blacklist' => $request->blacklist];
+                }
+                if ($request->keterangan) {
+                    $keterangan[] = ['keterangan' => $request->keterangan];
+                }
+
+                $alasanVoidQt = new AlasanVoidQt();
+                $alasanVoidQt->no_quotation = $data->no_document;
+                $alasanVoidQt->alasan = $request->alasan;
+                $alasanVoidQt->keterangan = json_encode($keterangan);
+                $alasanVoidQt->voided_by = $this->karyawan;
+                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+                $alasanVoidQt->save();
 
                 DB::commit();
                 return response()->json([

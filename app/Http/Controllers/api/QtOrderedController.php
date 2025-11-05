@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
 use App\Models\QuotationNonKontrak;
-use App\Models\{QuotationKontrakH, QuotationKontrakD};
+use App\Models\{AlasanVoidQt, QuotationKontrakH, QuotationKontrakD};
 use App\Models\MasterCabang;
 use App\Models\OrderHeader;
 use App\Models\SamplingPlan;
@@ -34,6 +34,7 @@ class QtOrderedController extends Controller
         try {
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with(['sales', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation.*') // tambahkan ini
                     ->where('request_quotation.id_cabang', $request->cabang)
                     ->where('request_quotation.flag_status', 'ordered')
                     ->where('request_quotation.is_approved', true)
@@ -42,6 +43,7 @@ class QtOrderedController extends Controller
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
                 $data = QuotationKontrakH::with(['sales', 'detail', 'sampling', 'konfirmasi', 'order:no_order,no_document'])
+                    ->select('request_quotation_kontrak_H.*')
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
                     ->where('request_quotation_kontrak_H.flag_status', 'ordered')
                     ->where('request_quotation_kontrak_H.is_approved', true)
@@ -49,7 +51,7 @@ class QtOrderedController extends Controller
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc');
             }
-    
+
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
@@ -63,7 +65,7 @@ class QtOrderedController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                     break;
             }
-    
+
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
@@ -456,6 +458,34 @@ class QtOrderedController extends Controller
                 $data->deleted_by = $this->karyawan;
                 $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                $keterangan = [];
+                if ($request->tanggal_next_fu) {
+                    $keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
+                }
+                if ($request->nama_lab_lain) {
+                    $keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
+                }
+                if ($request->budget_customer) {
+                    $keterangan[] = ['budget_customer' => $request->budget_customer];
+                }
+                if ($request->penawaran_yg_akan_dikirim) {
+                    $keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
+                }
+                if ($request->blacklist) {
+                    $keterangan[] = ['blacklist' => $request->blacklist];
+                }
+                if ($request->keterangan) {
+                    $keterangan[] = ['keterangan' => $request->keterangan];
+                }
+
+                $alasanVoidQt = new AlasanVoidQt();
+                $alasanVoidQt->no_quotation = $data->no_document;
+                $alasanVoidQt->alasan = $request->alasan;
+                $alasanVoidQt->keterangan = json_encode($keterangan);
+                $alasanVoidQt->voided_by = $this->karyawan;
+                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+                $alasanVoidQt->save();
 
                 DB::commit();
                 return response()->json([

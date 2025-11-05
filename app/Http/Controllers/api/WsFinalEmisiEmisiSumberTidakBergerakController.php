@@ -127,7 +127,78 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 			}
 		}
 
-		return Datatables::of($data)->make(true);
+		return Datatables::of($data)
+		->addColumn('nilai_uji', function ($item) {
+			$satuanIndexMap = [
+				"ug/nm3" => 1,
+				"mg/nm3" => 2,
+				"ppm"    => 3,
+				"%"      => 4,
+				"oc"     => 5,
+				"g/gmol" => 6,
+				"m3/s"   => 7,
+				"m/s"    => 8,
+				"kg/tahun" => 9,
+			];
+
+			$satuan = $item['satuan'] ?? '-';
+
+			// lowercase UTF-8
+			$satuan = mb_strtolower($satuan, 'UTF-8');
+
+			// normalisasi karakter pangkat & mikro
+			$satuan = str_replace(
+				['³', 'μg', 'µg', 'µ', 'nm³', 'm³'],
+				['3', 'ug', 'ug', 'ug', 'nm3', 'm3'],
+				$satuan
+			);
+
+			// buang spasi
+			$satuan = str_replace(' ', '', $satuan);
+
+			$index = $satuanIndexMap[$satuan] ?? null;
+
+			$ws = $item['ws_value_cerobong'] ?? null;
+			if (!$ws) return "noWs";
+
+			$ws = (array) $ws; // pastikan array
+			if ($index === null) {
+				// fallback default: pakai C atau C1 atau apa yang kamu mau
+				return $ws['f_koreksi_c'] ?? $ws['C'] ?? "-";
+			}
+
+			if ($index == 1) {
+				$hasilKey    = "C";
+				$fKoreksiKey = "f_koreksi_c";
+			} else {
+				$field       = $index - 1;
+				$hasilKey    = "C$field";
+				$fKoreksiKey = "f_koreksi_c$field";
+			}
+
+			// ambil nilai
+			$nilai = null;
+
+			if (array_key_exists($fKoreksiKey, $ws)) {
+				$nilai = $ws[$fKoreksiKey];
+			} elseif (array_key_exists($hasilKey, $ws)) {
+				$nilai = $ws[$hasilKey];
+			}
+
+			// jika nilai ada (termasuk 0), return nilai
+			if ($nilai !== null) {
+				return $nilai;
+			}
+
+			// fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
+			return $ws[$fKoreksiKey] 
+				?? $ws[$hasilKey] 
+				?? $ws['f_koreksi_c'] 
+				?? $ws['C'] 
+				?? "-";
+		})
+
+		->make(true);
 	}
 
 
@@ -338,18 +409,15 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 	public function KalkulasiKoreksi(Request $request)
 	{
 		try {
-
-
 			$id = $request->id;
-			$no_sampel = $request->no_sampel;
+			$no_sampel = $request->no_sample;
 			$parameter = $request->parameter;
 
 			$faktor_koreksi = (float) $request->faktor_koreksi;
 			$hasilujic = $request->hasil_c;
-			$hasilujic1 = $request->hasil_c1;
-			$hasilujic2 = $request->hasil_c2;
+			$satuan = $request->satuan;
 
-			$hasil = $this->hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2);
+			$hasil = $this->hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan);
 			if (is_numeric($hasil)) {
 				$hasil = number_format((float) $hasil, 4, '.', '');
 			}
@@ -362,11 +430,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		}
 	}
 
-	private function hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
+	private function hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan)
 	{
 		try {
 			$hasil = 0;
-			$hasil = $this->rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2);
+			$hasil = $this->rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan);
 
 			return $hasil;
 		} catch (\Exception $e) {
@@ -376,7 +444,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		}
 	}
 
-	public function rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
+	public function rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan)
 	{
 		function removeSpecialChars($value)
 		{
@@ -401,13 +469,13 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 					return $hasil;
 				} else {
 					$hasil = ($MDL * ($factor / 100));
-					return $hasil;
+					return number_format((float)$hasil, 4, '.', '');
 				}
 			}
 			return '';
 		}
 
-		$hasil = ['hasilc' => '', 'hasilc1' => '', 'hasilc2' => ''];
+		$hasil = ['hasilc' => ''];
 		$cases = [
 			'SO2',
 			'NO2',
@@ -420,69 +488,97 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
 		foreach ($cases as $case) {
 			if ($case == $parameter) {
-				$hasil['hasilc'] = (empty($hasilujic)) ? null : applyFormula($hasilujic, $faktor_koreksi, $parameter);
-				$hasil['hasilc1'] = (empty($hasilujic1)) ? null : applyFormula($hasilujic1, $faktor_koreksi, $parameter);
-				$hasil['hasilc2'] = (empty($hasilujic2)) ? null : applyFormula($hasilujic2, $faktor_koreksi, $parameter);
+				$hasil['hasilc'] = (empty($hasilujic)) ? '-' : applyFormula($hasilujic, $faktor_koreksi, $parameter);
 				break;
 			}
 		}
 
 		return $hasil;
 	}
-	private function handleEmisic($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
+
+	private function mapSatuanKeField($satuan)
+	{
+		$map = [
+			"ug/nm3"   => "f_koreksi_c",
+			"mg/nm3"   => "f_koreksi_c1",
+			"ppm"      => "f_koreksi_c2",
+			"ug/m3"    => "f_koreksi_c3",
+			"mg/m3"    => "f_koreksi_c4",
+			"%"        => "f_koreksi_c5",
+			"°c"       => "f_koreksi_c6",
+			"g/gmol"   => "f_koreksi_c7",
+			"m3/s"     => "f_koreksi_c8",
+			"m/s"      => "f_koreksi_c9",
+			"kg/tahun" => "f_koreksi_c10",
+		];
+
+		// Normalisasi satuan (lowercase, hilangkan spasi, ubah ³ jadi 3)
+		$key = strtolower(str_replace(['³', ' '], ['3', ''], $satuan));
+
+		return $map[$key] ?? null;
+	}
+
+	private function handleEmisic($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan)
 	{
 		DB::beginTransaction();
 		try {
-			$po = OrderDetail::where('no_sampel', $no_sampel)
+
+			$targetField = $this->mapSatuanKeField($satuan);
+
+			if (!$targetField) {
+				return response()->json([
+					'message' => "Satuan tidak dikenali untuk koreksi: {$satuan}",
+					'success' => false,
+					'status' => 400
+				], 400);
+			}
+
+			// Ambil seluruh data dari model EmisiC
+			$emisiC = EmisiCerobongHeader::where('no_sampel', $no_sampel)
+				->where('parameter', $parameter)
 				->where('is_active', 1)
-				->where('parameter', 'like', '%' . $parameter . '%')
 				->first();
-			// dd($no_sampel);
-			if ($po) {
-				// Ambil seluruh data dari model EmisiC
-				$emisiC = EmisiCerobongHeader::where('no_sampel', $no_sampel)
-					->where('parameter', $request->parameter)
+
+			if ($emisiC != null) {
+				$valuews = WsValueEmisiCerobong::where('no_sampel', $no_sampel)
+					->where('id_emisi_cerobong_header', $emisiC->id)
 					->where('is_active', 1)
 					->first();
 
-				if ($emisiC != null) {
-					$valuews = WsValueEmisiCerobong::where('no_sampel', $no_sampel)
-						->where('id_emisi_cerobong_header', $emisiC->id)
-						->where('is_active', 1)
-						->first();
-
-					if ($emisiC->tipe_koreksi == null) {
-						$nomor = 1;
-					} else {
-						if ($emisiC->tipe_koreksi < 3) {
-							$nomor = $emisiC->tipe_koreksi + 1;
-						} else {
-							return response()->json(['message' => 'Koreksi tidak bisa dilakukan lagi.', 'success' => false, 'status' => 400], 400);
-						}
-					}
-
-					$emisiC->tipe_koreksi = $nomor;
-					$emisiC->save();
-
-					$hasilc = $request->hasil_c;
-					$hasilc1 = $request->hasil_c1;
-					$hasilc2 = $request->hasil_c2;
-					if ($valuews) {
-						$valuews->f_koreksi_c = (strpos($hasilc, '<') !== false) ? $hasilc : (($hasilc == '') ? null : number_format((float) $hasilc, 4, '.', '')); // Tidak diformat jika mengandung '<'
-						$valuews->f_koreksi_c1 = (strpos($hasilc1, '<') !== false) ? $hasilc1 : (($hasilc1 == '') ? null : number_format((float) $hasilc1, 4, '.', '')); // Tidak diformat jika mengandung '<'
-						$valuews->f_koreksi_c2 = (strpos($hasilc2, '<') !== false) ? $hasilc2 : (($hasilc2 == '') ? null : number_format((float) $hasilc2, 4, '.', '')); // Tidak diformat jika mengandung '<'
-						$valuews->save();
-					} else {
-						return response()->json(['message' => 'Data Valuews tidak ditemukan.', 'success' => false, 'status' => 404], 404);
-					}
-
-					DB::commit(); // Commit transaksi jika semua berhasil
-					return response()->json(['message' => 'Data berhasil diupdate.', 'vlue' => $valuews, 'success' => true, 'status' => 200], 200);
+				if ($emisiC->tipe_koreksi == null) {
+					$nomor = 1;
 				} else {
-					return response()->json(['message' => 'Data Subkontrak tidak ditemukan.', 'success' => false, 'status' => 404], 404);
+					if ($emisiC->tipe_koreksi < 3) {
+						$nomor = $emisiC->tipe_koreksi + 1;
+					} else {
+						return response()->json(['message' => 'Koreksi tidak bisa dilakukan lagi.', 'success' => false, 'status' => 400], 400);
+					}
 				}
-			} else {
-				return response()->json(['message' => 'Data tidak ditemukan di kategori EMISI.', 'success' => false, 'status' => 404], 404);
+
+				$emisiC->tipe_koreksi = $nomor;
+				$emisiC->save();
+
+				$raw = trim($hasilujic);
+				if ($raw === '' || $raw === null) {
+					$nilai = null;
+				} elseif (str_contains($raw, '<')) {
+					// MDL case, simpan apa adanya, bersih kan spasi
+					$nilai = str_replace(' ', '', $raw);
+				} else {
+					$nilai = number_format((float) $raw, 4, '.', '');
+				}
+
+				if ($valuews) {
+					$valuews->input_koreksi = $faktor_koreksi;
+					$valuews->satuan = $satuan;
+					$valuews->$targetField = $nilai;
+					$valuews->save();
+				} else {
+					return response()->json(['message' => 'Data Valuews tidak ditemukan.', 'success' => false, 'status' => 404], 404);
+				}
+
+				DB::commit(); // Commit transaksi jika semua berhasil
+				return response()->json(['message' => 'Data berhasil diupdate.', 'vlue' => $valuews, 'success' => true, 'status' => 200], 200);
 			}
 		} catch (\Exception $e) {
 			DB::rollback(); // Rollback transaksi jika ada kesalahan
@@ -498,16 +594,18 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		$id = $request->id;
 		$no_sampel = $request->no_sampel;
 		$parameter = $request->parameter;
+		$satuan = $request->satuan;
 		$hasilujic = $request->hasil_c;
-		$hasilujic1 = $request->hasil_c1;
-		$hasilujic2 = $request->hasil_c2;
+		if($hasilujic == null || $hasilujic == '-'){
+			return response()->json(['message' => 'Hasil Uji tidak boleh kosong atau - .'], 400);
+		}
 		$faktor_koreksi = (float) $request->faktor_koreksi;
 
 		if ($type_koreksi) {
 			switch ($type_koreksi) {
 				case 'emisic':
 					// Proses untuk emisic
-					return $this->handleEmisic($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2);
+					return $this->handleEmisic($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan);
 
 				default:
 					return response()->json(['message' => 'Type koreksi tidak valid.'], 400);

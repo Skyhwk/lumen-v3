@@ -40,7 +40,8 @@ class RekapQuotationController extends Controller
                     'sales',
                     'sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
-                    }
+                    },
+                    'alasanVoidQt'
                 ])
                     ->where('id_cabang', $request->cabang)
                     // ->where('flag_status', '!=', 'ordered')
@@ -55,7 +56,8 @@ class RekapQuotationController extends Controller
                     'detail',
                     'sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
-                    }
+                    },
+                    'alasanVoidQt'
                 ])
                     ->where('id_cabang', $request->cabang)
                     // ->where('flag_status', '!=', 'ordered')
@@ -337,6 +339,13 @@ class RekapQuotationController extends Controller
                 $data->deleted_by = $this->karyawan;
                 $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
+
+                $alasanVoidQt = new AlasanVoidQt();
+                $alasanVoidQt->no_quotation = $data->no_document;
+                $alasanVoidQt->alasan = $request->reason;
+                $alasanVoidQt->voided_by = $this->karyawan;
+                $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
+                $alasanVoidQt->save();
 
                 DB::commit();
                 return response()->json([

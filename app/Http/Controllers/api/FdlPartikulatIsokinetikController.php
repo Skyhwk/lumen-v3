@@ -970,28 +970,28 @@ class FdlPartikulatIsokinetikController extends Controller
                 DB::beginTransaction();
                 try {
                     $data = DataLapanganIsokinetikPenentuanKecepatanLinier::where('id', $request->id)->first();
-                    $method1 = DataLapanganIsokinetikSurveiLapangan::where('id', $data->id_lapangan)->where('is_approve', true)->first();
-                    $header = IsokinetikHeader::where('no_sampel', $data->no_sampel)->first();
+                    // $method1 = DataLapanganIsokinetikSurveiLapangan::where('id', $data->id_lapangan)->where('is_approve', true)->first();
+                    // $header = IsokinetikHeader::where('no_sampel', $data->no_sampel)->first();
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
 
-                    if ($method1) {
-                        if (!$header) {
-                            $header = new IsokinetikHeader(); // <- penting!
-                        }
+                    // if ($method1) {
+                    //     if (!$header) {
+                    //         $header = new IsokinetikHeader(); // <- penting!
+                    //     }
 
-                        $header->no_sampel = $data->no_sampel;
-                        $header->id_lapangan = $data->id_lapangan;
-                        $header->id_parameter = 396;
-                        $header->parameter = "Iso-Traverse";
-                        $header->tanggal_terima = $order->tanggal_terima;
-                        $header->template_stp = 55;
-                        $header->is_approve = true;
-                        $header->approved_by = $this->karyawan;
-                        $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                        $header->created_by = $this->karyawan;
-                        $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                        $header->save();
-                    }
+                    //     $header->no_sampel = $data->no_sampel;
+                    //     $header->id_lapangan = $data->id_lapangan;
+                    //     $header->id_parameter = 396;
+                    //     $header->parameter = "Iso-Traverse";
+                    //     $header->tanggal_terima = $order->tanggal_terima;
+                    //     $header->template_stp = 55;
+                    //     $header->is_approve = true;
+                    //     $header->approved_by = $this->karyawan;
+                    //     $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                    //     $header->created_by = $this->karyawan;
+                    //     $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    //     $header->save();
+                    // }
 
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
@@ -1129,6 +1129,68 @@ class FdlPartikulatIsokinetikController extends Controller
                     $method4 = DataLapanganIsokinetikKadarAir::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method5 = DataLapanganIsokinetikPenentuanPartikulat::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
 
+                    // Fungsi Rata-rata
+                    function getAverageFromData($data) {
+                        if (!is_array($data) || empty($data)) {
+                            return null;
+                        }
+
+                        try {
+                            $allValues = [];
+
+                            foreach ($data as $obj) {
+                                // Cari key yang diawali dengan 'lubang'
+                                foreach ($obj as $key => $value) {
+                                    if (strpos($key, 'lubang') === 0 && is_array($value)) {
+                                        // Gabungkan semua nilai ke array utama
+                                        foreach ($value as $v) {
+                                            $allValues[] = floatval($v);
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (empty($allValues)) {
+                                return null;
+                            }
+
+                            $total = array_sum($allValues);
+                            return $total / count($allValues);
+                        } catch (Exception $e) {
+                            error_log("Error processing data: " . $e->getMessage());
+                            return null;
+                        }
+                    }
+
+                    $konstanta4 = getAverageFromData($method5->dP);
+                    $averagePaPs = getAverageFromData($method5->PaPs);
+                    $tekananUdara = floatval($method2->tekanan_udara);
+                    $selisih = NULL;
+
+                    if (is_numeric($averagePaPs) && $tekananUdara != 0) {
+                        $selisih = abs($averagePaPs - $tekananUdara);
+                    }
+
+                    $konstanta1 = $selisih;
+
+                    $ukuranLubang = $method1->ukuran_lubang * 10; // Convert cm to mm
+                    $diameterCerobong = NULL;
+
+                    if($method1->bentuk_cerobong == "Persegi"){
+                        $diameterCm = $method1->diameter_cerobong ?? NULL;
+
+                        if(isset($diameterCm)){
+                            $radiusMeter = ($diameterCm / 100) / 2;
+                            $diameterCerobong = M_PI * $radiusMeter * $radiusMeter;
+                        }
+                    } else {
+                        $panjang = $method1->lfw ?? 0;
+                        $lebar   = $method1->lnw ?? 0;
+
+                        // Konversi dari cm ke meter, lalu hitung luas persegi panjang
+                        $diameterCerobong = ($panjang / 100) * ($lebar / 100);
+                    }
+
                     $notApproved = [];
                     if (!$method1)
                         $notApproved[] = 'Survei Lapangan';
@@ -1146,14 +1208,6 @@ class FdlPartikulatIsokinetikController extends Controller
                             'message' => 'Data berikut belum disetujui: ' . implode(', ', $notApproved)
                         ], 400);
                     }
-
-                    $data->is_approve = true;
-                    $data->approved_by = $this->karyawan;
-                    $data->approved_at = Carbon::now();
-                    $data->rejected_by = null;
-                    $data->rejected_at = null;
-                    $data->save();
-
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
 
                     if (!$order) {
@@ -1177,6 +1231,8 @@ class FdlPartikulatIsokinetikController extends Controller
                         [$id_param, $nama_param] = explode(';', $item);
 
                         if (stripos($parameterOrder, $nama_param) !== false) {
+
+                            
                             $header = IsokinetikHeader::where('no_sampel', $data->no_sampel)
                                 ->where('id_parameter', $id_param)->where('is_active', 1)
                                 ->first();
@@ -1194,6 +1250,18 @@ class FdlPartikulatIsokinetikController extends Controller
                                 $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                                 $header->created_by = $this->karyawan;
                                 $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                                if($nama_param == "Iso-Velo"){
+                                    $header->rata_rata_tekanan_pitot = $konstanta4;
+                                    $header->selisih_tekanan_barometer = $selisih;
+                                }
+                                if($nama_param == "Iso-Debu"){
+                                    $header->konstanta_4 = $konstanta4;
+                                    $header->Konstanta_1 = $selisih;
+                                }
+                                if($nama_param == "Iso-Traverse"){
+                                    $header->ukuran_lubang = $ukuranLubang;
+                                    $header->diameter_cerobong = $diameterCerobong;
+                                }
                             } else {
                                 $header->id_lapangan = $data->id_lapangan;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
@@ -1202,11 +1270,30 @@ class FdlPartikulatIsokinetikController extends Controller
                                 $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                                 $header->created_by = $this->karyawan;
                                 $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                                if($nama_param == "Iso-Velo"){
+                                    $header->rata_rata_tekanan_pitot = $konstanta4;
+                                    $header->selisih_tekanan_barometer = $selisih;
+                                }
+                                if($nama_param == "Iso-Debu"){
+                                    $header->konstanta_4 = $konstanta4;
+                                    $header->Konstanta_1 = $selisih;
+                                }
+                                if($nama_param == "Iso-Traverse"){
+                                    $header->ukuran_lubang = $ukuranLubang;
+                                    $header->diameter_cerobong = $diameterCerobong;
+                                }
                             }
 
                             $header->save();
                         }
                     }
+
+                    $data->is_approve = true;
+                    $data->approved_by = $this->karyawan;
+                    $data->approved_at = Carbon::now();
+                    $data->rejected_by = null;
+                    $data->rejected_at = null;
+                    $data->save();
 
                     DB::commit();
 
