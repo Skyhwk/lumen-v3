@@ -4145,4 +4145,13 @@ class TestingController extends Controller
 
         return response()->json(['message' => 'Success'], 200);
     }
+
+    public function recoverInvoice(Request $request) {
+        $invoices = Invoice::where(function ($query) {
+            $query->where('updated_at', '>=', Carbon::now()->startOfDay());
+        })->get()->pluck('no_invoice')->toArray();
+
+        return response()->json($invoices);
+    
+    }
 }
