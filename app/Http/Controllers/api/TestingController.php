@@ -4517,4 +4517,82 @@ class TestingController extends Controller
 
         return 1;
     }
+
+    private function getRequiredCount($parameter)
+    {
+        $map = [
+            'Debu (P8J)' => 2,
+            'Dustfall' => 2,
+            'Dustfall (S)' => 2,
+            'Kebisingan (P8J)' => 2,
+            'PM 10 (Personil)' => 2,
+            'PM 2.5 (Personil)' => 2,
+
+            'CO (6 Jam)' => 3,
+            'CO (8 Jam)' => 3,
+            'CO2 (8 Jam)' => 3,
+            'H2S (3 Jam)' => 3,
+            'H2S (8 Jam)' => 3,
+            'HC (3 Jam)' => 3,
+            'HC (6 Jam)' => 3,
+            'HC (8 Jam)' => 3,
+            'HCHO (8 Jam)' => 3,
+            'HCNM (3 Jam)' => 3,
+            'HCNM (6 Jam)' => 3,
+            'HCNM (8 Jam)' => 3,
+            'ISBB (8 Jam)' => 3,
+            'Metil Merkaptan (8 Jam)' => 3,
+            'Metil Sulfida (8 Jam)' => 3,
+            'NH3 (8 Jam)' => 3,
+            'NO2 (6 Jam)' => 3,
+            'NO2 (8 Jam)' => 3,
+            'O3 (8 Jam)' => 3,
+            'Pb (6 Jam)' => 3,
+            'Pb (8 Jam)' => 3,
+            'PM 10 (8 Jam)' => 3,
+            'PM 2.5 (8 Jam)' => 3,
+            'SO2 (6 Jam)' => 3,
+            'SO2 (8 Jam)' => 3,
+            'Stirena (8 Jam)' => 3,
+            'Toluene (8 Jam)' => 3,
+            'TSP (6 Jam)' => 3,
+            'TSP (8 Jam)' => 3,
+            'VOC (8 Jam)' => 3,
+            'Xylene (8 Jam)' => 3,
+            'HCl (8 Jam)' => 3,
+            'Fe (8 Jam)' => 3,
+            'T.Bakteri (8 Jam)' => 3,
+            'T. Jamur (8 Jam)' => 3,
+            'Laju Ventilasi (8 Jam)' => 3,
+            'Iklim Kerja Dingin (Cold Stress) - 8 Jam' => 3,
+            'Al. Hidrokarbon (8 Jam)' => 3,
+            'T. Bakteri (KUDR - 8 Jam)' => 3,
+            'T. Jamur (KUDR - 8 Jam)' => 3,
+            'Karbon Hitam (8 jam)' => 3,
+            'N-Hexane Personil (8 Jam)' => 3,
+            'Siklohexane - 8 Jam' => 3,
+            'Silica Crystaline 8 Jam' => 3,
+
+            'CH4 (24 Jam)' => 4,
+            'CO (24 Jam)' => 4,
+            'CO2 (24 Jam)' => 4,
+            'Get. Bangunan (24J)' => 4,
+            'H2S (24 Jam)' => 4,
+            'NH3 (24 Jam)' => 4,
+            'NO2 (24 Jam)' => 4,
+            'SO2 (24 Jam)' => 4,
+            'Cl2 (24 Jam)' => 4,
+
+            'Pb (24 Jam)' => 5,
+            'PM 10 (24 Jam)' => 5,
+            'PM 2.5 (24 Jam)' => 5,
+            'TSP (24 Jam)' => 5,
+
+            'Kebisingan (24 Jam)' => 7,
+
+            'Kebisingan (8 Jam)' => 8,
+        ];
+
+        return $map[$parameter] ?? 1;
+    }
 }
