@@ -111,7 +111,7 @@ $tanggal_sampling = '-';
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $header->deskripsi_titik }}</td>
                     </tr>
-                    <tr>
+                    {{-- <tr>
                         <td class="custom5">Titik Koordinat</td>
                         <td class="custom5">:</td>
                         <td class="custom5">
@@ -119,7 +119,7 @@ $tanggal_sampling = '-';
                                 echo $header->titik_koordinat;
                             @endphp
                         </td>
-                    </tr>
+                    </tr> --}}
                 </table>
 
                 {{-- Kondisi Lingkungan --}}
