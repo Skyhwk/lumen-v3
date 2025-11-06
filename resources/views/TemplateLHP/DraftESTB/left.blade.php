@@ -13,7 +13,7 @@
             </tr>
         </thead>
         <tbody>
-            @php $total = count((array) $detail); @endphp
+            @php $total = count($detail->toArray()); @endphp
                 @foreach ($detail->toArray() as $kk => $yy)
                     @continue(!$yy)
 
