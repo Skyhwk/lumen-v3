@@ -517,7 +517,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
-		dd($request->all());
 		if ($request->id) {
 			if (in_array($request->kategori, $this->categoryLingkunganKerja)) {
 				if ($request->data_type == 'lingkungan') {
