@@ -32,7 +32,7 @@ class FollowUpController extends Controller
     {
         $pelanggan = MasterPelanggan::with('kontak_pelanggan')->where('is_active', true);
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-
+        
         switch ($jabatan) {
             case 24: // Sales Staff
                 $pelanggan->where('sales_id', $this->user_id);
@@ -45,9 +45,10 @@ class FollowUpController extends Controller
                 $pelanggan->whereIn('sales_id', $bawahan);
                 break;
         }
+        
         $pelanggan = $pelanggan->orderBy('master_pelanggan.id', 'desc');
-
-        return Datatables::eloquent($pelanggan)
+        
+        return Datatables::of($pelanggan)
             ->filterColumn('kontak_pelanggan', function ($query, $keyword) {
                 $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
                     $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
@@ -418,7 +419,6 @@ class FollowUpController extends Controller
                             ->select('master_karyawan.nama_lengkap', 'log_webphone.created_at', 'log_webphone.number')
                             ->orderBy('log_webphone.created_at', 'desc')
                             ->first();
-                        // dd($cekLog, $request->sales_penanggung_jawab, 'stop');
 
                         $karyawan_now = $request->attributes->get('user');
 
@@ -435,7 +435,7 @@ class FollowUpController extends Controller
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
                         $dfus->kontak = $request->kontak;
-                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ?  $request->sales_penanggung_jawab : $karyawan_now->karyawan->id;
+                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ?  $request->sales_penanggung_jawab : $this->karyawan;
                         $dfus->tanggal = $request->tanggal;
                         $dfus->jam = $request->jam;
                         $dfus->created_by = $this->karyawan;
