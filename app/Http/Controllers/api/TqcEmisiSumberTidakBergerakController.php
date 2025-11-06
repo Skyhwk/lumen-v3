@@ -50,64 +50,142 @@ class TqcEmisiSumberTidakBergerakController extends Controller
 
 
     public function detail(Request $request)
-	{
-		try {
-			$cerobong = EmisiCerobongHeader::with(['ws_value_cerobong'])
-				->where('no_sampel', $request->no_sampel)
-				->where('is_approved', 1)
-				->where('status', 0)
-				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-				->get();
+    {
+        try {
+            $cerobong = EmisiCerobongHeader::with(['ws_value_cerobong'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->get();
 
 
 
-			// $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
-			$id_regulasi = $request->regulasi;
-			foreach ($cerobong as $item) {
+            // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+            $id_regulasi = $request->regulasi;
+            foreach ($cerobong as $item) {
 
-				$dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
-					->select('waktu_pengambilan')
-					->first();
-				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
-					->where('id_regulasi', $id_regulasi)
-					->where('is_active', 1)
-					->select('baku_mutu', 'satuan', 'method')
-					->first();
-				$item->durasi = $dataLapangan->waktu_pengambilan ?? null;
-				$item->satuan = $bakuMutu->satuan ?? null;
-				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
-				$item->method = $bakuMutu->method ?? null;
-				$item->nama_header = $bakuMutu->nama_header ?? null;
-			
-			}
+                $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
+                    ->select('waktu_pengambilan')
+                    ->first();
+                $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+                    ->where('id_regulasi', $id_regulasi)
+                    ->where('is_active', 1)
+                    ->select('baku_mutu', 'satuan', 'method')
+                    ->first();
+                $item->durasi = $dataLapangan->waktu_pengambilan ?? null;
+                $item->satuan = $bakuMutu->satuan ?? null;
+                $item->baku_mutu = $bakuMutu->baku_mutu ?? null;
+                $item->method = $bakuMutu->method ?? null;
+                $item->nama_header = $bakuMutu->nama_header ?? null;
+
+                $index = $this->kumpulanSatuan($item->satuan);
+                $ws = $item->ws_value_cerobong ?? null;
+                if (!$ws) return "noWs";
+
+                $ws =  $ws->toArray();
+                $nilai = null;
+
+                if ($index === null) {
+                    // Cari dari f_koreksi_c...f_koreksi_c10
+                    for ($i = 0; $i <= 10; $i++) {
+                        $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
+                        if (!empty($ws[$key])) {
+                            $nilai = $ws[$key];
+                            break;
+                        }
+                    }
+
+                    // Kalau belum ketemu, cari dari C...C10
+                    if (empty($nilai)) {
+                        for ($i = 0; $i <= 10; $i++) {
+                            $key = $i === 0 ? 'C' : "C$i";
+
+                            // Khusus C3, kalau kosong ambil dari C3_persen
+                            if ($i === 3) {
+                                $nilai = !empty($ws[$key]) ? $ws[$key] : ($ws['C3_persen'] ?? null);
+                            } elseif (!empty($ws[$key])) {
+                                $nilai = $ws[$key];
+                            }
+
+                            if (!empty($nilai)) break;
+                        }
+                    }
+
+                    $nilai = $nilai ?? '-';
+                } else {
+                    $fKoreksiKey = "f_koreksi_c$index";
+                    $hasilKey    = "C$index";
+
+                    $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
+                }
 
 
-			return Datatables::of($cerobong)->make(true);
 
-		} catch (\Throwable $th) {
-			return response()->json([
-				'message' => $th->getMessage(),
-			], 401);
-		}
-	}
+
+                $item->nilai_uji = $nilai;
+            }
+
+            return Datatables::of($cerobong)
+                ->make(true);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 401);
+        }
+    }
+
+    private function kumpulanSatuan($satuan)
+    {
+        $satuanIndexMap = [
+            "μg/Nm³" => "",
+            "μg/Nm3" => "",
+
+            "mg/nm³" => 1,
+            "mg/nm3" => 1,
+            "mg/Mm³" => 1,
+            "mg/Nm3" => 1,
+            "mg/Nm³" => 1,
+            "mg/Nm³" => 1,
+
+            "ppm"    => 2,
+            "PPM" => 2,
+
+            "ug/m3" => 3,
+            "ug/m³" => 3,
+
+            "mg/m3"  => 4,
+            "mg/m³"  => 4,
+            "mg/m³"  => 4,
+
+            "%"      => 5,
+            "°C"     => 6,
+            "g/gmol" => 7,
+            "m3/s"   => 8,
+            "m/s"    => 9,
+            "kg/tahun" => 10,
+        ];
+
+
+        return $satuanIndexMap[$satuan] ?? null;
+    }
 
     public function detailLapangan(Request $request)
-	{
-			try {
-                $data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
-                if ($data) {
-                    return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-                } else {
-                    return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
-                }
-			} catch (\Exception $ex) {
-				dd($ex);
-			}
-		
-	}
+    {
+        try {
+            $data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)->first();
+            if ($data) {
+                return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+            } else {
+                return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
+            }
+        } catch (\Exception $ex) {
+            dd($ex);
+        }
+    }
 
 
-  public function handleApproveSelected(Request $request)
+    public function handleApproveSelected(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -132,16 +210,16 @@ class TqcEmisiSumberTidakBergerakController extends Controller
         }
     }
     public function getTrend(Request $request)
-    { 
+    {
         $orderDetails = OrderDetail::where('cfr', $request->cfr)
             ->where('status', 1)
             ->where('is_active', 1)
             ->get();
 
-            
-            $data = [];
-            foreach ($orderDetails as $orderDetail) {
-                $dataLapanganEmisiCerobong = DataLapanganEmisiCerobong::where('no_sampel', $orderDetail->no_sampel)->get();
+
+        $data = [];
+        foreach ($orderDetails as $orderDetail) {
+            $dataLapanganEmisiCerobong = DataLapanganEmisiCerobong::where('no_sampel', $orderDetail->no_sampel)->get();
             $mapHasil = fn($col) => $col->values()
                 ->map(fn($hasil_uji) => json_encode([
                     'co2' => $hasil_uji->co2,
@@ -181,7 +259,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
     }
 
 
-     public function approveData(Request $request)
+    public function approveData(Request $request)
     {
         DB::beginTransaction();
         try {
