@@ -2089,17 +2089,17 @@ class RenderInvoice
         } elseif ($angka < 20) {
             $hasil = $satuan[$angka - 10] . " Belas";
         } elseif ($angka < 100) {
-            $hasil = $satuan[ceil($angka / 10)] . " Puluh " . $satuan[$angka % 10];
+            $hasil = $satuan[floor($angka / 10)] . " Puluh " . $satuan[$angka % 10];
         } elseif ($angka < 200) {
             $hasil = "Seratus " . self::terbilang($angka - 100); // Ganti $this dengan self
         } elseif ($angka < 1000) {
-            $hasil = $satuan[ceil($angka / 100)] . " Ratus " . self::terbilang($angka % 100); // Ganti $this dengan self
+            $hasil = $satuan[floor($angka / 100)] . " Ratus " . self::terbilang($angka % 100); // Ganti $this dengan self
         } elseif ($angka < 2000) {
             $hasil = "Seribu " . self::terbilang($angka - 1000); // Ganti $this dengan self
         } elseif ($angka < 1000000) {
-            $hasil = self::terbilang(ceil($angka / 1000)) . " Ribu " . self::terbilang($angka % 1000); // Ganti $this dengan self
+            $hasil = self::terbilang(floor($angka / 1000)) . " Ribu " . self::terbilang($angka % 1000); // Ganti $this dengan self
         } elseif ($angka < 1000000000) {
-            $hasil = self::terbilang(ceil($angka / 1000000)) . " Juta " . self::terbilang($angka % 1000000); // Ganti $this dengan self
+            $hasil = self::terbilang(floor($angka / 1000000)) . " Juta " . self::terbilang($angka % 1000000); // Ganti $this dengan self
         }
 
         return trim($hasil);
