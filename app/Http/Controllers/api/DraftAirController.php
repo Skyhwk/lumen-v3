@@ -937,9 +937,9 @@ class DraftAirController extends Controller
                 }
                 $periode = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $header->no_order)->where('periode', $periode)->first();
-
+                
                 if($cekLink) {
-                    $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $periode);
+                    $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $periode);
                     $this->dispatch($job);
                 }
                 // $job = new JobPrintLhp($request->no_sampel);

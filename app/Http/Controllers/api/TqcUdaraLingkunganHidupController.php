@@ -7,6 +7,7 @@ use App\Models\DirectLainHeader;
 use App\Models\HistoryAppReject;
 
 use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 
@@ -113,13 +114,20 @@ class TqcUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
 				->addSelect(DB::raw("'subKontrak' as data_type"))
 				->get();
-
+            $partikulat = PartikulatHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approve', 1)
+				->where('is_active', 1)
+				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+				->addSelect(DB::raw("'partikulat' as data_type"))
+				->get();
 
 
 			$combinedData = collect()
 				->merge($lingkunganData)
 				->merge($subkontrak)
-				->merge($directData);
+				->merge($directData)
+				->merge($partikulat);
 
 
 			$processedData = $combinedData->map(function ($item) {
@@ -133,6 +141,9 @@ class TqcUdaraLingkunganHidupController extends Controller
 					case 'direct':
 						$item->source = 'Direct Lain';
 						break;
+                    case 'partikulat':
+						$item->source = 'Partikulat';
+						break;
 				}
 				return $item;
 			});
@@ -144,7 +155,7 @@ class TqcUdaraLingkunganHidupController extends Controller
 					->select('durasi_pengambilan')
 					->where('parameter', $item->parameter)
 					->first();
-				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+				$bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
 					->where('id_regulasi', $id_regulasi)
 					->where('is_active', 1)
 					->select('baku_mutu', 'satuan', 'method')
