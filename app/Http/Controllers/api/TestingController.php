@@ -24,7 +24,30 @@ use App\Models\{
     DataLapanganAir,
     LhpUdaraPsikologiHeader,
     SampelTidakSelesai,
-    MasterKaryawan
+    MasterKaryawan,
+    QrDocument,
+    DataLapanganPartikulatMeter,
+    DetailSenyawaVolatile,
+    DetailLingkunganHidup,
+    DataLapanganDirectLain,
+    DetailLingkunganKerja,
+    DetailMicrobiologi,
+    DataLapanganKebisinganPersonal,
+    DataLapanganKebisingan,
+    DataLapanganCahaya,
+    DataLapanganGetaran,
+    DataLapanganGetaranPersonal,
+    DataLapanganIklimPanas,
+    DataLapanganIklimDingin,
+    DataLapanganSwab,
+    DataLapanganErgonomi,
+    DataLapanganDebuPersonal,
+    DataLapanganMedanLM,
+    DataLapanganSinarUV,
+    DataLapanganPsikologi,
+    DataLapanganEmisiKendaraan,
+    DataLapanganEmisiCerobong,
+    DataLapanganIsokinetikHasil
 };
 use App\Services\{
     GetAtasan,
@@ -46,6 +69,10 @@ use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
+
+use Mpdf\Mpdf;
+
+Carbon::setLocale('id');
 
 
 
@@ -1067,6 +1094,253 @@ class TestingController extends Controller
                         $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
                         return response()->json(["data" => $chekRegen], 200);
                     }
+                case 'cs_render':
+                    $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
+                        ->where('no_order',$request->no_order)
+                        ->where('is_active',1)
+                        ->select('no_quotation','no_sampel','tanggal_sampling','file_koding_sampel','parameter','kategori_2','kategori_3','konsultan','no_order','keterangan_1')
+                        ->get();
+                    $noSampel = $orderDetail->pluck('no_sampel')->unique();
+                    $pSDetailMap =PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
+                    ->select('id_persiapan_sampel_header','no_sampel', 'parameters') // Hanya ambil kolom yg perlu
+                    ->get()
+                    ->keyBy('no_sampel');
+                    $idPsh=null;
+                    foreach ($orderDetail as $item) {
+                        $jumlahBotol = 0;
+                        $jumlahLabel = 0;
+
+                        // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
+                        if (isset($pSDetailMap[$item->no_sampel])) {
+                            
+                            $psd = $pSDetailMap[$item->no_sampel]; // Langsung ambil data, tanpa loop
+                            $idPsh=$psd->id_persiapan_sampel_header;
+                            $parameters = json_decode($psd->parameters);
+
+                            if (is_array($parameters) || is_object($parameters)) {
+                                foreach ($parameters as $category) {
+                                    foreach ($category as $key => $values) {
+                                        if (is_object($values) && isset($values->disiapkan)) {
+                                            $disiapkan = (int) $values->disiapkan;
+                                            $jumlahBotol += $disiapkan;
+                                            $jumlahLabel += ($disiapkan * 2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        $item->jumlah_botol = $jumlahBotol;
+                        $item->jumlah_label = $jumlahLabel;
+                        $item->status_c1 = $this->checkLengthData($item->kategori_2, $item->kategori_3, json_decode($item->parameter), $item->no_sampel);
+                    }
+                    $psHeader =PersiapanSampelHeader::where('id',$idPsh)->where('is_active',1)->first();
+                    $ttd =json_decode($psHeader->detail_cs_documents,true);
+                    
+                    $noDocument = explode('/', $psHeader->no_document);
+                    $noDocument[1] = 'CS';
+                    $noDocument = implode('/', $noDocument);
+                    
+                    $qr_img = '';
+                    $qr = QrDocument::where('id_document', $psHeader->id)
+                        ->where('type_document', 'coding_sample')
+                        ->whereJsonContains('data->no_document', $noDocument)
+                        ->first();
+                    if ($qr) {
+                        $qr_data = json_decode($qr->data, true);
+                        if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
+                            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
+                        }
+                    }
+
+                    $signatureData = (object) [
+                        'ttd_sampler' => $ttd[0]['ttd_sampler_cs'],
+                        'ttd_pic'     => $ttd[0]['ttd_pic_cs'],
+                        'nama_pic'    => $ttd[0]['nama_pic_cs'],
+                        'nama_sampler'=> $ttd[0]['nama_sampler_cs'],
+                    ];
+                    
+                    try {
+                        $pdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => 'A4',
+                            'margin_header' => 3,
+                            'margin_bottom' => 3,
+                            'margin_footer' => 3,
+                            'setAutoTopMargin' => 'stretch',
+                            'setAutoBottomMargin' => 'stretch',
+                            'orientation' => 'P'
+                        ]);
+
+                        $konsultan = '';
+                        if ($orderDetail->first()->konsultan)
+                            $konsultan = ' (' . $orderDetail->first()->konsultan . ')';
+
+                        $filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order . '.pdf';
+                        
+                        $pdf->setFooter([
+                            'odd' => [
+                                'C' => [
+                                    'content' => 'Hal {PAGENO} dari {nbpg}',
+                                    'font-size' => 6,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#606060'
+                                ],
+                                'R' => [
+                                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                                    'font-size' => 5,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'L' => [
+                                    'content' => '' . $qr_img . '',
+                                    'font-size' => 4,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'line' => -1,
+                            ]
+                        ]);
+
+                        $pdf->WriteHTML('
+                            <!DOCTYPE html>
+                                <html>
+                                    <head>
+                                        <style>
+                                            .custom1 { font-size: 12px; font-weight: bold; }
+                                            .custom2 { font-size: 15px; font-weight: bold; text-align: center; padding: 5px; }
+                                            .custom3 { font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                            .custom4 { font-size: 12px; font-weight: bold; border: 1px solid #000000;padding: 5px;}
+                                            .custom5 { font-size: 10px; border: 1px solid #000000; padding: 5px;}
+                                            .custom6 { font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                        </style>
+                                    </head>
+                                    <body>
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLE</br><p style="text-align: center; font-size: x-small;">' . $noDocument . '</p></td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4" style="text-align: center;">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+
+                        $pdf->defaultheaderline = 0;
+                        $pdf->SetHeader('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLING</td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+                        
+                        $pdf->WriteHTML('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <th class="custom6" width="90">CS</th>
+                                            <th class="custom6" width="70">KATEGORI</th>
+                                            <th class="custom6">DESKRIPSI</th>
+                                            <th class="custom6" width="128">BARCODE</th>
+                                            <th class="custom6" width="28">CS</t>
+                                            <th class="custom6" width="28">C-1</th>
+                                            <th class="custom6" width="28">C-2</t>
+                                            <th class="custom6" width="28">C-3</th>
+                                        </tr>
+                        ');
+
+                        foreach ($orderDetail as $item) {
+                            
+                            $pdf->WriteHTML('
+                                        <tr>
+                                            <td class="custom5" width="90">' . $item->no_sampel . '</td>
+                                            <td class="custom5" width="70">' . explode("-", $item->kategori_3)[1] . '</td>
+                                            <td class="custom5" height="60">' . $item->keterangan_1 . '</td>
+                                            <td class="custom5" width="128"><img src="' . public_path() . '/barcode/sample/' . $item->file_koding_sampel . '" style="height: 30px; width:180px;"></td>
+                                            <td class="custom5" width="28">' . $item->jumlah_botol . '</td>
+                                            <td class="custom5" width="28" style="text-align: center;">' . ($item->status_c1 == 1 ? '✔' : '') . '</td>
+                                            <td class="custom5" width="28"></td>
+                                            <td class="custom5" width="28"></td>
+                                        </tr>
+                            ');
+                        }
+                        $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
+            $sign_pic = null;
+            if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+            if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
+                return response()->json([
+                    'message' => $sign_pic->message ?? $sign_sampler->message
+                ],400);
+            }
+            $ttd_sampler = $signatureData->ttd_sampler && $sign_sampler->status !== 'error' ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+            $ttd_pic = $signatureData->ttd_pic && $sign_pic->status !== 'error' ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+
+            $pdf->WriteHTML('</table>
+                            <table class="table" width="100%" style="border: none;margin-top: 20px">
+                                <tr>
+                                    <td style="border: none;width: 30%; text-align: center;height: 80px;">' . $ttd_sampler . '</td>
+                                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
+                                    <td style="border: none;width: 20%; text-align: center;height: 80px;"></td>
+                                    <td style="border: none;width: 30%; text-align: center;height: 80px;">' . $ttd_pic . '</td>
+                                </tr>
+                                <tr>
+                                    <td style="border: none;width: 30%;text-align: center;"><p><strong>' . strtoupper($signatureData->nama_sampler) . '</strong></p></td>
+                                    <td style="border: none;width: 20%;text-align: center;"></td>
+                                    <td style="border: none;width: 20%;text-align: center;"></td>
+                                    <td style="border: none;width: 30%;text-align: center;"><p><strong>' . strtoupper($signatureData->nama_pic) . '</strong></p></td>
+                                </tr>
+                                <tr>
+                                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Sampler</strong></p></td>
+                                    <td style="border: none;width: 20%; text-align: center;"></td>
+                                    <td style="border: none;width: 20%; text-align: center;"></td>
+                                    <td style="border: none;width: 30%; text-align: center;"><p><strong>Penanggung Jawab</strong></p></td>
+                                </tr>
+                            </table>');
+                       
+                        $pdf->WriteHTML('</table></body></html>');
+                        $dir = public_path("cs");
+
+                        if (!file_exists($dir)) {
+                            mkdir($dir, 0755, true);
+                        }
+                        $pdf->Output(public_path() . '/cs/' . $filename, 'F');
+                        return response()->json(['status' => false, 'data' => $filename], 200);
+                    } catch (\Exception $ex) {
+                        return response()->json([
+                            'message' => $ex->getMessage(),
+                            'line' => $ex->getLine(),
+                        ], 500);
+                    }
+                    
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -1797,7 +2071,7 @@ class TestingController extends Controller
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
-                    FacadesLog::error('Error processing document: ' . $data->no_document, [
+                    Log::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine()
                     ]);
@@ -1812,7 +2086,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            FacadesLog::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
+            Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
             ]);
@@ -2649,99 +2923,17 @@ class TestingController extends Controller
         ];
     }
 
-    // public function fixDetailStructure(Request $request)
-    // {
-    //     try {
-    //         // Ambil data yang mungkin struktur detailnya berubah
-    //         $dataList = QuotationKontrakH::with('quotationKontrakD')
-    //             ->whereIn('no_document', $request->no_document)
-    //             ->where('is_active', true)
-    //             ->get();
-
-    //         $fixedCount = 0;
-    //         $errorCount = 0;
-    //         $errorDetails = [];
-
-    //         foreach ($dataList as $data) {
-    //             DB::beginTransaction();
-    //             try {
-    //                 $dataDetail = $data->quotationKontrakD;
-
-    //                 $index = 1;
-    //                 foreach ($dataDetail as $detail) {
-    //                     $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-    //                     // $dsDetail = reset($dsDetail);
-    //                     // dd($dsDetail);
-    //                     // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
-    //                     $originalStructure = (object) [
-    //                         $index => (object) [
-    //                             "periode_kontrak" => $detail->periode_kontrak,
-    //                             "data_sampling" => $dsDetail
-    //                         ]
-    //                     ];
-    //                     // dd($dsDetail, $originalStructure);
-
-    //                     $detail->data_pendukung_sampling = json_encode($originalStructure);
-    //                     $detail->save();
-    //                     $index++;
-    //                     $fixedCount++;
-    //                 }
-
-    //                 // dd($dataDetail);
-
-    //                 DB::commit();
-    //                 return response()->json([
-    //                     'message' => 'Fix detail structure completed',
-    //                     "data" => $originalStructure
-    //                 ]);
-
-    //             } catch (Throwable $th) {
-    //                 DB::rollback();
-    //                 $errorCount++;
-    //                 $errorDetails[] = [
-    //                     'document' => $data->no_document,
-    //                     'error' => $th->getMessage()
-    //                 ];
-    //                 Log::error('Error fixing detail structure: ' . $data->no_document, [
-    //                     'error' => $th->getMessage(),
-    //                     'trace' => $th->getTraceAsString()
-    //                 ]);
-    //             }
-    //         }
-
-    //         return response()->json([
-    //             'message' => 'Fix detail structure completed',
-    //             'fixed' => $fixedCount,
-    //             'errors' => $errorCount,
-    //             'total_documents' => count($dataList),
-    //             'error_details' => $errorDetails
-    //         ], 200);
-
-    //     } catch (Throwable $th) {
-    //         DB::rollback();
-    //         Log::error('System error in fixDetailStructure', [
-    //             'error' => $th->getMessage(),
-    //             'trace' => $th->getTraceAsString()
-    //         ]);
-
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan sistem',
-    //             'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
-    //         ], 500);
-    //     }
-    // }
-
     public function fixDetailStructure(Request $request)
     {
 
         try {
+            // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
 
             $fixedCount = 0;
-            $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
 
@@ -2784,12 +2976,15 @@ class TestingController extends Controller
                                 "data_sampling" => $dsDetail
                             ]
                         ];
+                        // dd($dsDetail, $originalStructure);
 
                         $detail->data_pendukung_sampling = json_encode($originalStructure);
                         $detail->save();
-
+                        $index++;
                         $fixedCount++;
                     }
+
+                    // dd($dataDetail);
 
                     DB::commit();
                 } catch (Throwable $th) {
@@ -2809,12 +3004,12 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'Fix detail structure completed',
                 'fixed' => $fixedCount,
-                'skipped' => $skippedCount,
                 'errors' => $errorCount,
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
         } catch (Throwable $th) {
+            DB::rollback();
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
@@ -3193,41 +3388,41 @@ class TestingController extends Controller
         }
     }
 
-    public function decodeImageToBase64($filename)
-    {
-        // Path penyimpanan
-        $path = public_path('dokumen/bas/signatures');
+    // public function decodeImageToBase64($filename)
+    // {
+    //     // Path penyimpanan
+    //     $path = public_path('dokumen/bas/signatures');
 
-        // Path file lengkap
-        $filePath = $path . '/' . $filename;
+    //     // Path file lengkap
+    //     $filePath = $path . '/' . $filename;
 
-        // Periksa apakah file ada
-        if (!file_exists($filePath)) {
-            return (object) [
-                'status' => 'error',
-                'message' => 'File tidak ditemukan'
-            ];
-        }
+    //     // Periksa apakah file ada
+    //     if (!file_exists($filePath)) {
+    //         return (object) [
+    //             'status' => 'error',
+    //             'message' => 'File tidak ditemukan'
+    //         ];
+    //     }
 
-        // Baca konten file
-        $imageContent = file_get_contents($filePath);
+    //     // Baca konten file
+    //     $imageContent = file_get_contents($filePath);
 
-        // Konversi ke base64
-        $base64Image = base64_encode($imageContent);
+    //     // Konversi ke base64
+    //     $base64Image = base64_encode($imageContent);
 
-        // Deteksi tipe file
-        $fileType = $this->detectFileType($imageContent);
+    //     // Deteksi tipe file
+    //     $fileType = $this->detectFileType($imageContent);
 
-        // Tambahkan data URI header sesuai tipe file
-        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
+    //     // Tambahkan data URI header sesuai tipe file
+    //     $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
 
-        // Kembalikan respons
-        return (object) [
-            'status' => 'success',
-            'base64' => $base64WithHeader,
-            'file_type' => $fileType
-        ];
-    }
+    //     // Kembalikan respons
+    //     return (object) [
+    //         'status' => 'success',
+    //         'base64' => $base64WithHeader,
+    //         'file_type' => $fileType
+    //     ];
+    // }
 
     private function detectFileType($fileContent)
     {
