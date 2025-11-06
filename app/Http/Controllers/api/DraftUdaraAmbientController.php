@@ -868,7 +868,11 @@ class DraftUdaraAmbientController extends Controller
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
+            'akr' => (
+                !empty($bakumutu)
+                    ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ')
+                    : 'ẍ'
+            ),
             'parameter' => $param->nama_lhp ?? $param->nama_regulasi,
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 
