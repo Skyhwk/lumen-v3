@@ -1175,8 +1175,10 @@ class TestingController extends Controller
                         $konsultan = '';
                         if ($orderDetail->first()->konsultan)
                             $konsultan = ' (' . $orderDetail->first()->konsultan . ')';
-
-                        $filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order . '.pdf';
+                        $micro_time_float = microtime(true);
+                        $microtime_unique = str_replace('.', '_', (string) $micro_time_float);
+                        $base_filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order;
+                        $filename = $base_filename . '_' . $microtime_unique . '.pdf';
                         
                         $pdf->setFooter([
                             'odd' => [
