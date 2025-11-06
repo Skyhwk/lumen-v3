@@ -24,7 +24,30 @@ use App\Models\{
     DataLapanganAir,
     LhpUdaraPsikologiHeader,
     SampelTidakSelesai,
-    MasterKaryawan
+    MasterKaryawan,
+    QrDocument,
+    DataLapanganPartikulatMeter,
+    DetailSenyawaVolatile,
+    DetailLingkunganHidup,
+    DataLapanganDirectLain,
+    DetailLingkunganKerja,
+    DetailMicrobiologi,
+    DataLapanganKebisinganPersonal,
+    DataLapanganKebisingan,
+    DataLapanganCahaya,
+    DataLapanganGetaran,
+    DataLapanganGetaranPersonal,
+    DataLapanganIklimPanas,
+    DataLapanganIklimDingin,
+    DataLapanganSwab,
+    DataLapanganErgonomi,
+    DataLapanganDebuPersonal,
+    DataLapanganMedanLM,
+    DataLapanganSinarUV,
+    DataLapanganPsikologi,
+    DataLapanganEmisiKendaraan,
+    DataLapanganEmisiCerobong,
+    DataLapanganIsokinetikHasil
 };
 use App\Services\{
     GetAtasan,
@@ -46,6 +69,10 @@ use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
+
+use Mpdf\Mpdf;
+
+Carbon::setLocale('id');
 
 
 
@@ -405,7 +432,7 @@ class TestingController extends Controller
                         return response()->json(['message' => $ex->getMessage(), 'line' => $ex->getLine()], 400);
                     }
                 case 'global label':
-
+                    dd('ss');
                     if ($request->mode == 'byrangetanggal') {
                         DB::beginTransaction();
                         try {
@@ -1067,6 +1094,260 @@ class TestingController extends Controller
                         $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
                         return response()->json(["data" => $chekRegen], 200);
                     }
+                case 'cs_render':
+                    $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
+                        ->where('no_order',$request->no_order)
+                        ->where('is_active',1)
+                        ->select('no_quotation','no_sampel','tanggal_sampling','file_koding_sampel','parameter','kategori_2','kategori_3','konsultan','no_order','keterangan_1','nama_perusahaan')
+                        ->get();
+                    $noSampel = $orderDetail->pluck('no_sampel')->unique();
+                    $pSDetailMap =PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
+                    ->select('id_persiapan_sampel_header','no_sampel', 'parameters') // Hanya ambil kolom yg perlu
+                    ->get()
+                    ->keyBy('no_sampel');
+                    $idPsh=null;
+                    foreach ($orderDetail as $item) {
+                        $jumlahBotol = 0;
+                        $jumlahLabel = 0;
+
+                        // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
+                        if (isset($pSDetailMap[$item->no_sampel])) {
+                            
+                            $psd = $pSDetailMap[$item->no_sampel]; // Langsung ambil data, tanpa loop
+                            $idPsh=$psd->id_persiapan_sampel_header;
+                            $parameters = json_decode($psd->parameters);
+
+                            if (is_array($parameters) || is_object($parameters)) {
+                                foreach ($parameters as $category) {
+                                    foreach ($category as $key => $values) {
+                                        if (is_object($values) && isset($values->disiapkan)) {
+                                            $disiapkan = (int) $values->disiapkan;
+                                            $jumlahBotol += $disiapkan;
+                                            $jumlahLabel += ($disiapkan * 2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        $item->jumlah_botol = $jumlahBotol;
+                        $item->jumlah_label = $jumlahLabel;
+                        $item->status_c1 = $this->checkLengthData($item->kategori_2, $item->kategori_3, json_decode($item->parameter), $item->no_sampel);
+                    }
+                    $psHeader =PersiapanSampelHeader::where('id',$idPsh)->where('is_active',1)->first();
+                    $ttd =json_decode($psHeader->detail_cs_documents,true);
+                    
+                    $noDocument = explode('/', $psHeader->no_document);
+                    $noDocument[1] = 'CS';
+                    $noDocument = implode('/', $noDocument);
+                    
+                    $qr_img = '';
+                    $qr = QrDocument::where('id_document', $psHeader->id)
+                        ->where('type_document', 'coding_sample')
+                        ->whereJsonContains('data->no_document', $noDocument)
+                        ->first();
+                    if ($qr) {
+                        $qr_data = json_decode($qr->data, true);
+                        if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
+                            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
+                        }
+                    }
+
+                    $signatureData = (object) [
+                        'ttd_sampler' => $ttd[0]['ttd_sampler_cs'],
+                        'ttd_pic'     => $ttd[0]['ttd_pic_cs'],
+                        'nama_pic'    => $ttd[0]['nama_pic_cs'],
+                        'nama_sampler'=> $ttd[0]['nama_sampler_cs'],
+                    ];
+                    
+                    try {
+                        $pdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => 'A4',
+                            'margin_header' => 3,
+                            'margin_bottom' => 3,
+                            'margin_footer' => 3,
+                            'setAutoTopMargin' => 'stretch',
+                            'setAutoBottomMargin' => 'stretch',
+                            'orientation' => 'P'
+                        ]);
+
+                        $konsultan = '';
+                        if ($orderDetail->first()->konsultan)
+                            $konsultan = ' (' . $orderDetail->first()->konsultan . ')';
+
+                        $filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order . '.pdf';
+                        
+                        $pdf->setFooter([
+                            'odd' => [
+                                'C' => [
+                                    'content' => 'Hal {PAGENO} dari {nbpg}',
+                                    'font-size' => 6,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#606060'
+                                ],
+                                'R' => [
+                                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                                    'font-size' => 5,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'L' => [
+                                    'content' => '' . $qr_img . '',
+                                    'font-size' => 4,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'line' => -1,
+                            ]
+                        ]);
+
+                        $pdf->WriteHTML('
+                            <!DOCTYPE html>
+                                <html>
+                                    <head>
+                                        <style>
+                                            .custom1 { font-size: 12px; font-weight: bold; }
+                                            .custom2 { font-size: 15px; font-weight: bold; text-align: center; padding: 5px; }
+                                            .custom3 { font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                            .custom4 { font-size: 12px; font-weight: bold; border: 1px solid #000000;padding: 5px;}
+                                            .custom5 { font-size: 10px; border: 1px solid #000000; padding: 5px;}
+                                            .custom6 { font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                        </style>
+                                    </head>
+                                    <body>
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLE</br><p style="text-align: center; font-size: x-small;">' . $noDocument . '</p></td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4" style="text-align: center;">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+
+                        $pdf->defaultheaderline = 0;
+                        $pdf->SetHeader('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLING</td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+                        
+                        $pdf->WriteHTML('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <th class="custom6" width="90">CS</th>
+                                            <th class="custom6" width="70">KATEGORI</th>
+                                            <th class="custom6">DESKRIPSI</th>
+                                            <th class="custom6" width="128">BARCODE</th>
+                                            <th class="custom6" width="28">CS</t>
+                                            <th class="custom6" width="28">C-1</th>
+                                            <th class="custom6" width="28">C-2</t>
+                                            <th class="custom6" width="28">C-3</th>
+                                        </tr>
+                        ');
+
+                        foreach ($orderDetail as $item) {
+                            
+                            $pdf->WriteHTML('
+                                        <tr>
+                                            <td class="custom5" width="90">' . $item->no_sampel . '</td>
+                                            <td class="custom5" width="70">' . explode("-", $item->kategori_3)[1] . '</td>
+                                            <td class="custom5" height="60">' . $item->keterangan_1 . '</td>
+                                            <td class="custom5" width="128"><img src="' . public_path() . '/barcode/sample/' . $item->file_koding_sampel . '" style="height: 30px; width:180px;"></td>
+                                            <td class="custom5" width="28">' . $item->jumlah_botol . '</td>
+                                            <td class="custom5" width="28" style="text-align: center;">' . ($item->status_c1 == 1 ? '✔' : '') . '</td>
+                                            <td class="custom5" width="28"></td>
+                                            <td class="custom5" width="28"></td>
+                                        </tr>
+                            ');
+                        }
+                        $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
+                        $sign_pic = null;
+                        if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+                        if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
+                            return response()->json([
+                                'message' => $sign_pic->message ?? $sign_sampler->message
+                            ],400);
+                        }
+                        $ttd_sampler = $signatureData->ttd_sampler && $sign_sampler->status !== 'error' ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+                        $ttd_pic = $signatureData->ttd_pic && $sign_pic->status !== 'error' ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+
+                        $pdf->WriteHTML('</table>'); // Tutup table sebelumnya
+
+                        // Buat table baru untuk signature
+                        $signatureTable = '
+                        <table class="table" width="100%" style="border: none; margin-top: 20px;">
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center; height: 80px;">' . $ttd_sampler . '</td>
+                                <td style="border: none; width: 20%; text-align: center; height: 80px;"></td>
+                                <td style="border: none; width: 20%; text-align: center; height: 80px;"></td>
+                                <td style="border: none; width: 30%; text-align: center; height: 80px;">' . $ttd_pic . '</td>
+                            </tr>
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>' . strtoupper($signatureData->nama_sampler) . '</strong></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>' . strtoupper($signatureData->nama_pic) . '</strong></td>
+                            </tr>
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>Sampler</strong></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>Penanggung Jawab</strong></td>
+                            </tr>
+                        </table>';
+
+                        $pdf->WriteHTML($signatureTable);
+
+                        // Tutup HTML document
+                        $pdf->WriteHTML('</body></html>');
+                            $dir = public_path("cs");
+
+                            if (!file_exists($dir)) {
+                                mkdir($dir, 0755, true);
+                            }
+                            $pdf->Output(public_path() . '/dokumen/cs/' . $filename, 'F');
+                            return response()->json(['status' => false, 'data' => $filename], 200);
+                        } catch (\Exception $ex) {
+                            return response()->json([
+                                'message' => $ex->getMessage(),
+                                'line' => $ex->getLine(),
+                                'file' => $ex->getFile(),
+                            ], 500);
+                        }
+                    
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -1797,7 +2078,7 @@ class TestingController extends Controller
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
-                    FacadesLog::error('Error processing document: ' . $data->no_document, [
+                    Log::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine()
                     ]);
@@ -1812,7 +2093,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            FacadesLog::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
+            Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
             ]);
@@ -2649,147 +2930,46 @@ class TestingController extends Controller
         ];
     }
 
-    // public function fixDetailStructure(Request $request)
-    // {
-    //     try {
-    //         // Ambil data yang mungkin struktur detailnya berubah
-    //         $dataList = QuotationKontrakH::with('quotationKontrakD')
-    //             ->whereIn('no_document', $request->no_document)
-    //             ->where('is_active', true)
-    //             ->get();
-
-    //         $fixedCount = 0;
-    //         $errorCount = 0;
-    //         $errorDetails = [];
-
-    //         foreach ($dataList as $data) {
-    //             DB::beginTransaction();
-    //             try {
-    //                 $dataDetail = $data->quotationKontrakD;
-
-    //                 $index = 1;
-    //                 foreach ($dataDetail as $detail) {
-    //                     $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-    //                     // $dsDetail = reset($dsDetail);
-    //                     // dd($dsDetail);
-    //                     // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
-    //                     $originalStructure = (object) [
-    //                         $index => (object) [
-    //                             "periode_kontrak" => $detail->periode_kontrak,
-    //                             "data_sampling" => $dsDetail
-    //                         ]
-    //                     ];
-    //                     // dd($dsDetail, $originalStructure);
-
-    //                     $detail->data_pendukung_sampling = json_encode($originalStructure);
-    //                     $detail->save();
-    //                     $index++;
-    //                     $fixedCount++;
-    //                 }
-
-    //                 // dd($dataDetail);
-
-    //                 DB::commit();
-    //                 return response()->json([
-    //                     'message' => 'Fix detail structure completed',
-    //                     "data" => $originalStructure
-    //                 ]);
-
-    //             } catch (Throwable $th) {
-    //                 DB::rollback();
-    //                 $errorCount++;
-    //                 $errorDetails[] = [
-    //                     'document' => $data->no_document,
-    //                     'error' => $th->getMessage()
-    //                 ];
-    //                 Log::error('Error fixing detail structure: ' . $data->no_document, [
-    //                     'error' => $th->getMessage(),
-    //                     'trace' => $th->getTraceAsString()
-    //                 ]);
-    //             }
-    //         }
-
-    //         return response()->json([
-    //             'message' => 'Fix detail structure completed',
-    //             'fixed' => $fixedCount,
-    //             'errors' => $errorCount,
-    //             'total_documents' => count($dataList),
-    //             'error_details' => $errorDetails
-    //         ], 200);
-
-    //     } catch (Throwable $th) {
-    //         DB::rollback();
-    //         Log::error('System error in fixDetailStructure', [
-    //             'error' => $th->getMessage(),
-    //             'trace' => $th->getTraceAsString()
-    //         ]);
-
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan sistem',
-    //             'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
-    //         ], 500);
-    //     }
-    // }
-
     public function fixDetailStructure(Request $request)
     {
-
+       
         try {
+            // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
-
+            
             $fixedCount = 0;
-            $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
-
+             
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
-                    foreach ($data->quotationKontrakD as  $detailIndex => $detail) {
+                    $dataDetail = $data->quotationKontrakD;
+
+                    $index = 1;
+                    foreach ($dataDetail as $detail) {
                         $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-
-                        // ⚙️ 1. Cek apakah sudah sesuai struktur (sudah punya "periode_kontrak")
-                        $isValidStructure = false;
-
-                        if (is_array($dsDetail)) {
-                            foreach ($dsDetail as $key => $item) {
-
-                                // 🔹 Case 1: Struktur lama tapi sudah dikonversi (pakai key angka dan ada periode_kontrak)
-                                if (is_array($item) && array_key_exists('periode_kontrak', $item)) {
-                                    $isValidStructure = true;
-                                    break;
-                                }
-
-                                // 🔹 Case 2: Format array langsung [{ "periode_kontrak": ..., "data_sampling": ... }]
-                                if (array_key_exists('periode_kontrak', $dsDetail)) {
-                                    $isValidStructure = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if ($isValidStructure) {
-                            // ✅ Sudah sesuai struktur → skip
-                            $skippedCount++;
-                            continue;
-                        }
-
-                        // ⚙️ 2. Kalau belum sesuai, bentuk ulang struktur
-                        $originalStructure = [
-                            $detailIndex + 1 => [
+                        // $dsDetail = reset($dsDetail);
+                        // dd($dsDetail);
+                        // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
+                        $originalStructure = (object) [
+                            $index => (object) [
                                 "periode_kontrak" => $detail->periode_kontrak,
                                 "data_sampling" => $dsDetail
                             ]
                         ];
+                        // dd($dsDetail, $originalStructure);
 
                         $detail->data_pendukung_sampling = json_encode($originalStructure);
                         $detail->save();
-
+                        $index++;
                         $fixedCount++;
                     }
+
+                    // dd($dataDetail);
 
                     DB::commit();
                 } catch (Throwable $th) {
@@ -2809,12 +2989,12 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'Fix detail structure completed',
                 'fixed' => $fixedCount,
-                'skipped' => $skippedCount,
                 'errors' => $errorCount,
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
         } catch (Throwable $th) {
+            DB::rollback();
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
@@ -3193,41 +3373,41 @@ class TestingController extends Controller
         }
     }
 
-    public function decodeImageToBase64($filename)
-    {
-        // Path penyimpanan
-        $path = public_path('dokumen/bas/signatures');
+    // public function decodeImageToBase64($filename)
+    // {
+    //     // Path penyimpanan
+    //     $path = public_path('dokumen/bas/signatures');
 
-        // Path file lengkap
-        $filePath = $path . '/' . $filename;
+    //     // Path file lengkap
+    //     $filePath = $path . '/' . $filename;
 
-        // Periksa apakah file ada
-        if (!file_exists($filePath)) {
-            return (object) [
-                'status' => 'error',
-                'message' => 'File tidak ditemukan'
-            ];
-        }
+    //     // Periksa apakah file ada
+    //     if (!file_exists($filePath)) {
+    //         return (object) [
+    //             'status' => 'error',
+    //             'message' => 'File tidak ditemukan'
+    //         ];
+    //     }
 
-        // Baca konten file
-        $imageContent = file_get_contents($filePath);
+    //     // Baca konten file
+    //     $imageContent = file_get_contents($filePath);
 
-        // Konversi ke base64
-        $base64Image = base64_encode($imageContent);
+    //     // Konversi ke base64
+    //     $base64Image = base64_encode($imageContent);
 
-        // Deteksi tipe file
-        $fileType = $this->detectFileType($imageContent);
+    //     // Deteksi tipe file
+    //     $fileType = $this->detectFileType($imageContent);
 
-        // Tambahkan data URI header sesuai tipe file
-        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
+    //     // Tambahkan data URI header sesuai tipe file
+    //     $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
 
-        // Kembalikan respons
-        return (object) [
-            'status' => 'success',
-            'base64' => $base64WithHeader,
-            'file_type' => $fileType
-        ];
-    }
+    //     // Kembalikan respons
+    //     return (object) [
+    //         'status' => 'success',
+    //         'base64' => $base64WithHeader,
+    //         'file_type' => $fileType
+    //     ];
+    // }
 
     private function detectFileType($fileContent)
     {
@@ -3409,7 +3589,7 @@ class TestingController extends Controller
             $data = OrderDetail::with([
                 'dataPsikologi',
                 'lhp_psikologi',
-            ])
+                ])
                 ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
                 ->where('is_active', true)
                 ->whereJsonContains('parameter', [
@@ -3425,15 +3605,16 @@ class TestingController extends Controller
 
             foreach ($data as $item) {
                 $lhp = LhpUdaraPsikologiHeader::where('no_cfr', $item->cfr)->where('is_active', true)->first();
-
+                
                 if ($lhp) {
                     $lhp->is_approve = 0;
                     $lhp->save();
+                    
                 }
                 $no_sampel = explode(',', $item->no_sampel);
                 foreach ($no_sampel as $no) {
                     $orderDetail = OrderDetail::where('no_sampel', $no)->first();
-                    if ($orderDetail) {
+                    if($orderDetail){
                         $orderDetail->status = 2;
                         $orderDetail->is_approve = 0;
                         $orderDetail->save();
@@ -3458,691 +3639,258 @@ class TestingController extends Controller
         }
     }
 
-    public function moveInvoiceFromGenerate(){
-        $invoices = [
-            "ISL/INV/2500136",
-            "ISL/INV/2500538",
-            "ISL/INV/2500771",
-            "ISL/INV/2500772",
-            "ISL/INV/2500926",
-            "ISL/INV/2500948",
-            "ISL/INV/2500958",
-            "ISL/INV/2500959",
-            "ISL/INV/2501017",
-            "ISL/INV/2501018",
-            "ISL/INV/2501025",
-            "ISL/INV/2501068",
-            "ISL/INV/2501081",
-            "ISL/INV/2501188",
-            "ISL/INV/2501191",
-            "ISL/INV/2501220",
-            "ISL/INV/2501236",
-            "ISL/INV/2501238",
-            "ISL/INV/2501291",
-            "ISL/INV/2501300",
-            "ISL/INV/2501307",
-            "ISL/INV/2501309",
-            "ISL/INV/2501314",
-            "ISL/INV/2501341",
-            "ISL/INV/2501355",
-            "ISL/INV/2501365",
-            "ISL/INV/2501366",
-            "ISL/INV/2501395",
-            "ISL/INV/2501430",
-            "ISL/INV/2501466",
-            "ISL/INV/2501474",
-            "ISL/INV/2501499",
-            "ISL/INV/2501501",
-            "ISL/INV/2501530",
-            "ISL/INV/2501581",
-            "ISL/INV/2501661",
-            "ISL/INV/2501723",
-            "ISL/INV/2501745",
-            "ISL/INV/2501768",
-            "ISL/INV/2501777",
-            "ISL/INV/2501781",
-            "ISL/INV/2501786",
-            "ISL/INV/2501787",
-            "ISL/INV/2501788",
-            "ISL/INV/2501806",
-            "ISL/INV/2501814",
-            "ISL/INV/2501839",
-            "ISL/INV/2501843",
-            "ISL/INV/2501849",
-            "ISL/INV/2501855",
-            "ISL/INV/2501862",
-            "ISL/INV/2501865",
-            "ISL/INV/2501870",
-            "ISL/INV/2501878",
-            "ISL/INV/2501894",
-            "ISL/INV/2501911",
-            "ISL/INV/2501929",
-            "ISL/INV/2501935",
-            "ISL/INV/2501957",
-            "ISL/INV/2501969",
-            "ISL/INV/2501974",
-            "ISL/INV/2501984",
-            "ISL/INV/2501986",
-            "ISL/INV/2502003",
-            "ISL/INV/2502012",
-            "ISL/INV/2502043",
-            "ISL/INV/2502055",
-            "ISL/INV/2502072",
-            "ISL/INV/2502073",
-            "ISL/INV/2502079",
-            "ISL/INV/2502081",
-            "ISL/INV/2502084",
-            "ISL/INV/2502093",
-            "ISL/INV/2502107",
-            "ISL/INV/2502113",
-            "ISL/INV/2502173",
-            "ISL/INV/2502182",
-            "ISL/INV/2502214",
-            "ISL/INV/2502278",
-            "ISL/INV/2502290",
-            "ISL/INV/2502322",
-            "ISL/INV/2502330",
-            "ISL/INV/2502368",
-            "ISL/INV/2502425",
-            "ISL/INV/2502433",
-            "ISL/INV/2502450",
-            "ISL/INV/2502453",
-            "ISL/INV/2502475",
-            "ISL/INV/2502477",
-            "ISL/INV/2502482",
-            "ISL/INV/2502521",
-            "ISL/INV/2502523",
-            "ISL/INV/2502527",
-            "ISL/INV/2502535",
-            "ISL/INV/2502550",
-            "ISL/INV/2502552",
-            "ISL/INV/2502555",
-            "ISL/INV/2502581",
-            "ISL/INV/2502605",
-            "ISL/INV/2502606",
-            "ISL/INV/2502615",
-            "ISL/INV/2502620",
-            "ISL/INV/2502621",
-            "ISL/INV/2502637",
-            "ISL/INV/2502641",
-            "ISL/INV/2502645",
-            "ISL/INV/2502646",
-            "ISL/INV/2502649",
-            "ISL/INV/2502661",
-            "ISL/INV/2502669",
-            "ISL/INV/2502670",
-            "ISL/INV/2502678",
-            "ISL/INV/2502688",
-            "ISL/INV/2502692",
-            "ISL/INV/2502696",
-            "ISL/INV/2502697",
-            "ISL/INV/2502700",
-            "ISL/INV/2502705",
-            "ISL/INV/2502707",
-            "ISL/INV/2502715",
-            "ISL/INV/2502725",
-            "ISL/INV/2502728",
-            "ISL/INV/2502736",
-            "ISL/INV/2502737",
-            "ISL/INV/2502738",
-            "ISL/INV/2502761",
-            "ISL/INV/2502763",
-            "ISL/INV/2502781",
-            "ISL/INV/2502787",
-            "ISL/INV/2502790",
-            "ISL/INV/2502795",
-            "ISL/INV/2502799",
-            "ISL/INV/2502812",
-            "ISL/INV/2502813",
-            "ISL/INV/2502814",
-            "ISL/INV/2502818",
-            "ISL/INV/2502841",
-            "ISL/INV/2502858",
-            "ISL/INV/2502867",
-            "ISL/INV/2502883",
-            "ISL/INV/2502888",
-            "ISL/INV/2502924",
-            "ISL/INV/2502985",
-            "ISL/INV/2502988",
-            "ISL/INV/2502990",
-            "ISL/INV/2503038",
-            "ISL/INV/2503088",
-            "ISL/INV/2503091",
-            "ISL/INV/2503118",
-            "ISL/INV/2503142",
-            "ISL/INV/2503155",
-            "ISL/INV/2503167",
-            "ISL/INV/2503173",
-            "ISL/INV/2503189",
-            "ISL/INV/2503297",
-            "ISL/INV/2503304",
-            "ISL/INV/2503314",
-            "ISL/INV/2503315",
-            "ISL/INV/2503322",
-            "ISL/INV/2503347",
-            "ISL/INV/2503362",
-            "ISL/INV/2503369",
-            "ISL/INV/2503378",
-            "ISL/INV/2503385",
-            "ISL/INV/2503393",
-            "ISL/INV/2503406",
-            "ISL/INV/2503407",
-            "ISL/INV/2503408",
-            "ISL/INV/2503410",
-            "ISL/INV/2503413",
-            "ISL/INV/2503416",
-            "ISL/INV/2503417",
-            "ISL/INV/2503418",
-            "ISL/INV/2503421",
-            "ISL/INV/2503426",
-            "ISL/INV/2503453",
-            "ISL/INV/2503456",
-            "ISL/INV/2503457",
-            "ISL/INV/2503467",
-            "ISL/INV/2503484",
-            "ISL/INV/2503487",
-            "ISL/INV/2503492",
-            "ISL/INV/2503495",
-            "ISL/INV/2503497",
-            "ISL/INV/2503512",
-            "ISL/INV/2503514",
-            "ISL/INV/2503517",
-            "ISL/INV/2503519",
-            "ISL/INV/2503528",
-            "ISL/INV/2503534",
-            "ISL/INV/2503548",
-            "ISL/INV/2503561",
-            "ISL/INV/2503568",
-            "ISL/INV/2503586",
-            "ISL/INV/2503590",
-            "ISL/INV/2503591",
-            "ISL/INV/2503594",
-            "ISL/INV/2503599",
-            "ISL/INV/2503607",
-            "ISL/INV/2503612",
-            "ISL/INV/2503616",
-            "ISL/INV/2503637",
-            "ISL/INV/2503656",
-            "ISL/INV/2503661",
-            "ISL/INV/2503665",
-            "ISL/INV/2503708",
-            "ISL/INV/2503713",
-            "ISL/INV/2503733",
-            "ISL/INV/2503769",
-            "ISL/INV/2503780",
-            "ISL/INV/2503785",
-            "ISL/INV/2503801",
-            "ISL/INV/2503806",
-            "ISL/INV/2503816",
-            "ISL/INV/2503821",
-            "ISL/INV/2503822",
-            "ISL/INV/2503824",
-            "ISL/INV/2503843",
-            "ISL/INV/2503844",
-            "ISL/INV/2503845",
-            "ISL/INV/2503923",
-            "ISL/INV/2503978",
-            "ISL/INV/2503980",
-            "ISL/INV/2503981",
-            "ISL/INV/2503985",
-            "ISL/INV/2503986",
-            "ISL/INV/2503990",
-            "ISL/INV/2504019",
-            "ISL/INV/2504041",
-            "ISL/INV/2504047",
-            "ISL/INV/2504079",
-            "ISL/INV/2504080",
-            "ISL/INV/2504124",
-            "ISL/INV/2504132",
-            "ISL/INV/2504136",
-            "ISL/INV/2504139",
-            "ISL/INV/2504142",
-            "ISL/INV/2504165",
-            "ISL/INV/2504191",
-            "ISL/INV/2504197",
-            "ISL/INV/2504219",
-            "ISL/INV/2504238",
-            "ISL/INV/2504254",
-            "ISL/INV/2504255",
-            "ISL/INV/2504257",
-            "ISL/INV/2504287",
-            "ISL/INV/2504293",
-            "ISL/INV/2504298",
-            "ISL/INV/2504316",
-            "ISL/INV/2504320",
-            "ISL/INV/2504336",
-            "ISL/INV/2504338",
-            "ISL/INV/2504358",
-            "ISL/INV/2504369",
-            "ISL/INV/2504374",
-            "ISL/INV/2504383",
-            "ISL/INV/2504388",
-            "ISL/INV/2504392",
-            "ISL/INV/2504397",
-            "ISL/INV/2504400",
-            "ISL/INV/2504401",
-            "ISL/INV/2504402",
-            "ISL/INV/2504403",
-            "ISL/INV/2504405",
-            "ISL/INV/2504411",
-            "ISL/INV/2504414",
-            "ISL/INV/2504416",
-            "ISL/INV/2504418",
-            "ISL/INV/2504424",
-            "ISL/INV/2504425",
-            "ISL/INV/2504426",
-            "ISL/INV/2504427",
-            "ISL/INV/2504428",
-            "ISL/INV/2504430",
-            "ISL/INV/2504431",
-            "ISL/INV/2504432",
-            "ISL/INV/2504441",
-            "ISL/INV/2504473",
-            "ISL/INV/2504483",
-            "ISL/INV/2504486",
-            "ISL/INV/2504492",
-            "ISL/INV/2504500",
-            "ISL/INV/2504502",
-            "ISL/INV/2504522",
-            "ISL/INV/2504523",
-            "ISL/INV/2504526",
-            "ISL/INV/2504534",
-            "ISL/INV/2504535",
-            "ISL/INV/2504544",
-            "ISL/INV/2504546",
-            "ISL/INV/2504565",
-            "ISL/INV/2504566",
-            "ISL/INV/2504569",
-            "ISL/INV/2504571",
-            "ISL/INV/2504593",
-            "ISL/INV/2504609",
-            "ISL/INV/2504618",
-            "ISL/INV/2504651",
-            "ISL/INV/2504658",
-            "ISL/INV/2504670",
-            "ISL/INV/2504718",
-            "ISL/INV/2504732",
-            "ISL/INV/2504735",
-            "ISL/INV/2504757",
-            "ISL/INV/2504766",
-            "ISL/INV/2504772",
-            "ISL/INV/2504809",
-            "ISL/INV/2504810",
-            "ISL/INV/2504811",
-            "ISL/INV/2504892",
-            "ISL/INV/2504934",
-            "ISL/INV/2504937",
-            "ISL/INV/2504944",
-            "ISL/INV/2504988",
-            "ISL/INV/2505038",
-            "ISL/INV/2505049",
-            "ISL/INV/2505062",
-            "ISL/INV/2505094",
-            "ISL/INV/2505104",
-            "ISL/INV/2505135",
-            "ISL/INV/2505199",
-            "ISL/INV/2505204",
-            "ISL/INV/2505214",
-            "ISL/INV/2505262",
-            "ISL/INV/2505271",
-            "ISL/INV/2505285",
-            "ISL/INV/2505287",
-            "ISL/INV/2505294",
-            "ISL/INV/2505312",
-            "ISL/INV/2505313",
-            "ISL/INV/2505323",
-            "ISL/INV/2505333",
-            "ISL/INV/2505337",
-            "ISL/INV/2505345",
-            "ISL/INV/2505347",
-            "ISL/INV/2505348",
-            "ISL/INV/2505349",
-            "ISL/INV/2505352",
-            "ISL/INV/2505353",
-            "ISL/INV/2505354",
-            "ISL/INV/2505355",
-            "ISL/INV/2505356",
-            "ISL/INV/2505357",
-            "ISL/INV/2505358",
-            "ISL/INV/2505363",
-            "ISL/INV/2505367",
-            "ISL/INV/2505373",
-            "ISL/INV/2505377",
-            "ISL/INV/2505380",
-            "ISL/INV/2505387",
-            "ISL/INV/2505393",
-            "ISL/INV/2505396",
-            "ISL/INV/2505400",
-            "ISL/INV/2505418",
-            "ISL/INV/2505426",
-            "ISL/INV/2505430",
-            "ISL/INV/2505431",
-            "ISL/INV/2505440",
-            "ISL/INV/2505441",
-            "ISL/INV/2505449",
-            "ISL/INV/2505450",
-            "ISL/INV/2505460",
-            "ISL/INV/2505473",
-            "ISL/INV/2505477",
-            "ISL/INV/2505488",
-            "ISL/INV/2505493",
-            "ISL/INV/2505496",
-            "ISL/INV/2505511",
-            "ISL/INV/2505540",
-            "ISL/INV/2505557",
-            "ISL/INV/2505569",
-            "ISL/INV/2505577",
-            "ISL/INV/2505592",
-            "ISL/INV/2505611",
-            "ISL/INV/2505616",
-            "ISL/INV/2505618",
-            "ISL/INV/2505620",
-            "ISL/INV/2505641",
-            "ISL/INV/2505647",
-            "ISL/INV/2505662",
-            "ISL/INV/2505678",
-            "ISL/INV/2505685",
-            "ISL/INV/2505689",
-            "ISL/INV/2505718",
-            "ISL/INV/2505719",
-            "ISL/INV/2505742",
-            "ISL/INV/2505777",
-            "ISL/INV/2505778",
-            "ISL/INV/2505795",
-            "ISL/INV/2505798",
-            "ISL/INV/2505801",
-            "ISL/INV/2505879",
-            "ISL/INV/2505894",
-            "ISL/INV/2505905",
-            "ISL/INV/2506023",
-            "ISL/INV/2506027",
-            "ISL/INV/2506060",
-            "ISL/INV/2506061",
-            "ISL/INV/2506062",
-            "ISL/INV/2506066",
-            "ISL/INV/2506079",
-            "ISL/INV/2506089",
-            "ISL/INV/2506108",
-            "ISL/INV/2506109",
-            "ISL/INV/2506116",
-            "ISL/INV/2506125",
-            "ISL/INV/2506134",
-            "ISL/INV/2506135",
-            "ISL/INV/2506136",
-            "ISL/INV/2506138",
-            "ISL/INV/2506159",
-            "ISL/INV/2506164",
-            "ISL/INV/2506165",
-            "ISL/INV/2506168",
-            "ISL/INV/2506171",
-            "ISL/INV/2506217",
-            "ISL/INV/2506223",
-            "ISL/INV/2506224",
-            "ISL/INV/2506236",
-            "ISL/INV/2506237",
-            "ISL/INV/2506238",
-            "ISL/INV/2506246",
-            "ISL/INV/2506252",
-            "ISL/INV/2506257",
-            "ISL/INV/2506271",
-            "ISL/INV/2506274",
-            "ISL/INV/2506309",
-            "ISL/INV/2506315",
-            "ISL/INV/2506324",
-            "ISL/INV/2506330",
-            "ISL/INV/2506333",
-            "ISL/INV/2506341",
-            "ISL/INV/2506358",
-            "ISL/INV/2506389",
-            "ISL/INV/2506390",
-            "ISL/INV/2506396",
-            "ISL/INV/2506397",
-            "ISL/INV/2506398",
-            "ISL/INV/2506399",
-            "ISL/INV/2506400",
-            "ISL/INV/2506410",
-            "ISL/INV/2506412",
-            "ISL/INV/2506415",
-            "ISL/INV/2506416",
-            "ISL/INV/2506423",
-            "ISL/INV/2506424",
-            "ISL/INV/2506431",
-            "ISL/INV/2506432",
-            "ISL/INV/2506433",
-            "ISL/INV/2506438",
-            "ISL/INV/2506439",
-            "ISL/INV/2506445",
-            "ISL/INV/2506446",
-            "ISL/INV/2506453",
-            "ISL/INV/2506459",
-            "ISL/INV/2506463",
-            "ISL/INV/2506471",
-            "ISL/INV/2506474",
-            "ISL/INV/2506479",
-            "ISL/INV/2506483",
-            "ISL/INV/2506488",
-            "ISL/INV/2506489",
-            "ISL/INV/2506490",
-            "ISL/INV/2506497",
-            "ISL/INV/2506498",
-            "ISL/INV/2506505",
-            "ISL/INV/2506521",
-            "ISL/INV/2506523",
-            "ISL/INV/2506531",
-            "ISL/INV/2506541",
-            "ISL/INV/2506548",
-            "ISL/INV/2506551",
-            "ISL/INV/2506562",
-            "ISL/INV/2506564",
-            "ISL/INV/2506570",
-            "ISL/INV/2506579",
-            "ISL/INV/2506584",
-            "ISL/INV/2506585",
-            "ISL/INV/2506590",
-            "ISL/INV/2506592",
-            "ISL/INV/2506595",
-            "ISL/INV/2506611",
-            "ISL/INV/2506617",
-            "ISL/INV/2506683",
-            "ISL/INV/2506737",
-            "ISL/INV/2506760",
-            "ISL/INV/2506765",
-            "ISL/INV/2506778",
-            "ISL/INV/2506797",
-            "ISL/INV/2506827",
-            "ISL/INV/2506878",
-            "ISL/INV/2506909",
-            "ISL/INV/2506967",
-            "ISL/INV/2506972",
-            "ISL/INV/2506974",
-            "ISL/INV/2506979",
-            "ISL/INV/2506996",
-            "ISL/INV/2507025",
-            "ISL/INV/2507033",
-            "ISL/INV/2507034",
-            "ISL/INV/2507040",
-            "ISL/INV/2507055",
-            "ISL/INV/2507059",
-            "ISL/INV/2507062",
-            "ISL/INV/2507063",
-            "ISL/INV/2507065",
-            "ISL/INV/2507068",
-            "ISL/INV/2507081",
-            "ISL/INV/2507091",
-            "ISL/INV/2507092",
-            "ISL/INV/2507120",
-            "ISL/INV/2507122",
-            "ISL/INV/2507128",
-            "ISL/INV/2507146",
-            "ISL/INV/2507157",
-            "ISL/INV/2507160",
-            "ISL/INV/2507163",
-            "ISL/INV/2507164",
-            "ISL/INV/2507167",
-            "ISL/INV/2507172",
-            "ISL/INV/2507174",
-            "ISL/INV/2507181",
-            "ISL/INV/2507196",
-            "ISL/INV/2507203",
-            "ISL/INV/2507204",
-            "ISL/INV/2507205",
-            "ISL/INV/2507206",
-            "ISL/INV/2507207",
-            "ISL/INV/2507208",
-            "ISL/INV/2507209",
-            "ISL/INV/2507210",
-            "ISL/INV/2507211",
-            "ISL/INV/2507212",
-            "ISL/INV/2507213",
-            "ISL/INV/2507215",
-            "ISL/INV/2507217",
-            "ISL/INV/2507219",
-            "ISL/INV/2507222",
-            "ISL/INV/2507226",
-            "ISL/INV/2507231",
-            "ISL/INV/2507233",
-            "ISL/INV/2507238",
-            "ISL/INV/2507245",
-            "ISL/INV/2507246",
-            "ISL/INV/2507247",
-            "ISL/INV/2507255",
-            "ISL/INV/2507257",
-            "ISL/INV/2507262",
-            "ISL/INV/2507266",
-            "ISL/INV/2507267",
-            "ISL/INV/2507271",
-            "ISL/INV/2507274",
-            "ISL/INV/2507276",
-            "ISL/INV/2507277",
-            "ISL/INV/2507286",
-            "ISL/INV/2507304",
-            "ISL/INV/2507306",
-            "ISL/INV/2507309",
-            "ISL/INV/2507311",
-            "ISL/INV/2507312",
-            "ISL/INV/2507313",
-            "ISL/INV/2507315",
-            "ISL/INV/2507316",
-            "ISL/INV/2507317",
-            "ISL/INV/2507324",
-            "ISL/INV/2507325",
-            "ISL/INV/2507330",
-            "ISL/INV/2507348",
-            "ISL/INV/2507350",
-            "ISL/INV/2507351",
-            "ISL/INV/2507352",
-            "ISL/INV/2507361",
-            "ISL/INV/2507364",
-            "ISL/INV/2507366",
-            "ISL/INV/2507448",
-            "ISL/INV/2507460",
-            "ISL/INV/2507463",
-            "ISL/INV/2507475",
-            "ISL/INV/2507489",
-            "ISL/INV/2507491",
-            "ISL/INV/2507498",
-            "ISL/INV/2507502",
-            "ISL/INV/2507512",
-            "ISL/INV/2507521",
-            "ISL/INV/2507528",
-            "ISL/INV/2507529",
-            "ISL/INV/2507546",
-            "ISL/INV/2507549",
-            "ISL/INV/2507577",
-            "ISL/INV/2507583",
-            "ISL/INV/2507590",
-            "ISL/INV/2507646",
-            "ISL/INV/2507732",
-            "ISL/INV/2507758",
-            "ISL/INV/2507795",
-            "ISL/INV/2507805",
-            "ISL/INV/2507812",
-            "ISL/INV/2507813",
-            "ISL/INV/2507840",
-            "ISL/INV/2507855",
-            "ISL/INV/2507895",
-            "ISL/INV/2507938",
-            "ISL/INV/2507939",
-            "ISL/INV/2507940",
-            "ISL/INV/2507963",
-            "ISL/INV/2507979",
-            "ISL/INV/2508002",
-            "ISL/INV/2508027",
-            "ISL/INV/2508045",
-            "ISL/INV/2508074",
-            "ISL/INV/2508075",
-            "ISL/IV/2500144",
-            "ISL/IV/2500181",
-            "ISL/IV/2500233",
-            "ISL/IV/2500346",
-            "ISL/INV/2508076",
-            "ISL/INV/2508092",
-            "ISL/INV/2508094",
-            "ISL/INV/2508095",
-            "ISL/INV/2508096",
-            "ISL/INV/2508109",
-            "ISL/INV/2508110",
-            "ISL/INV/2508112",
-            "ISL/INV/2508124",
-            "ISL/INV/2508125",
-            "ISL/INV/2508126",
-            "ISL/INV/2508134",
-            "ISL/INV/2508135",
-            "ISL/INV/2508139",
-            "ISL/INV/2508140",
-            "ISL/INV/2508143",
-            "ISL/INV/2508144",
-            "ISL/INV/2508148",
-            "ISL/INV/2508156",
-            "ISL/INV/2508157",
-            "ISL/INV/2508169",
-            "ISL/INV/2508174",
-            "ISL/INV/2508179",
-            "ISL/INV/2508182",
-            "ISL/INV/2508184",
-            "ISL/INV/2508185",
-            "ISL/INV/2508194",
-            "ISL/INV/2508198",
-            "ISL/INV/2508200",
-            "ISL/INV/2508201",
-            "ISL/INV/2508202",
-            "ISL/INV/2508204",
-            "ISL/INV/2508213",
-            "ISL/INV/2508218",
-            "ISL/INV/2508222",
-            "ISL/INV/2508242",
-            "ISL/INV/2508244",
-            "ISL/INV/2508249",
-            "ISL/INV/2508254",
-            "ISL/INV/2508266",
-            "ISL/INV/2508269",
-            "ISL/INV/2508270",
-            "ISL/INV/2508283",
-            "ISL/INV/2508286",
-            "ISL/INV/2508290",
-            "ISL/INV/2508291",
-            "ISL/INV/2508294",
-            "ISL/INV/2508317",
-            "ISL/INV/2508320",
-            "ISL/INV/2508322",
-            "ISL/INV/2508329",
-            "ISL/INV/2508347",
-            "ISL/INV/2508357",
-            "ISL/INV/2508375",
-            "ISL/INV/2508381",
-            "ISL/INV/2508402",
-            "ISL/INV/2508424",
-            "ISL/INV/2508426",
-            "ISL/INV/2508487",
-            "ISL/INV/2508493",
-            "ISL/INV/2508589",
-            "ISL/INV/2508639",
-            "ISL/INV/2508784",
-            "ISL/INV/2508909"
+    private function getRequiredCount($parameter)
+    {
+        $map = [
+            'Debu (P8J)' => 2,
+            'Dustfall' => 2,
+            'Dustfall (S)' => 2,
+            'Kebisingan (P8J)' => 2,
+            'PM 10 (Personil)' => 2,
+            'PM 2.5 (Personil)' => 2,
+
+            'CO (6 Jam)' => 3,
+            'CO (8 Jam)' => 3,
+            'CO2 (8 Jam)' => 3,
+            'H2S (3 Jam)' => 3,
+            'H2S (8 Jam)' => 3,
+            'HC (3 Jam)' => 3,
+            'HC (6 Jam)' => 3,
+            'HC (8 Jam)' => 3,
+            'HCHO (8 Jam)' => 3,
+            'HCNM (3 Jam)' => 3,
+            'HCNM (6 Jam)' => 3,
+            'HCNM (8 Jam)' => 3,
+            'ISBB (8 Jam)' => 3,
+            'Metil Merkaptan (8 Jam)' => 3,
+            'Metil Sulfida (8 Jam)' => 3,
+            'NH3 (8 Jam)' => 3,
+            'NO2 (6 Jam)' => 3,
+            'NO2 (8 Jam)' => 3,
+            'O3 (8 Jam)' => 3,
+            'Pb (6 Jam)' => 3,
+            'Pb (8 Jam)' => 3,
+            'PM 10 (8 Jam)' => 3,
+            'PM 2.5 (8 Jam)' => 3,
+            'SO2 (6 Jam)' => 3,
+            'SO2 (8 Jam)' => 3,
+            'Stirena (8 Jam)' => 3,
+            'Toluene (8 Jam)' => 3,
+            'TSP (6 Jam)' => 3,
+            'TSP (8 Jam)' => 3,
+            'VOC (8 Jam)' => 3,
+            'Xylene (8 Jam)' => 3,
+            'HCl (8 Jam)' => 3,
+            'Fe (8 Jam)' => 3,
+            'T.Bakteri (8 Jam)' => 3,
+            'T. Jamur (8 Jam)' => 3,
+            'Laju Ventilasi (8 Jam)' => 3,
+            'Iklim Kerja Dingin (Cold Stress) - 8 Jam' => 3,
+            'Al. Hidrokarbon (8 Jam)' => 3,
+            'T. Bakteri (KUDR - 8 Jam)' => 3,
+            'T. Jamur (KUDR - 8 Jam)' => 3,
+            'Karbon Hitam (8 jam)' => 3,
+            'N-Hexane Personil (8 Jam)' => 3,
+            'Siklohexane - 8 Jam' => 3,
+            'Silica Crystaline 8 Jam' => 3,
+
+            'CH4 (24 Jam)' => 4,
+            'CO (24 Jam)' => 4,
+            'CO2 (24 Jam)' => 4,
+            'Get. Bangunan (24J)' => 4,
+            'H2S (24 Jam)' => 4,
+            'NH3 (24 Jam)' => 4,
+            'NO2 (24 Jam)' => 4,
+            'SO2 (24 Jam)' => 4,
+            'Cl2 (24 Jam)' => 4,
+
+            'Pb (24 Jam)' => 5,
+            'PM 10 (24 Jam)' => 5,
+            'PM 2.5 (24 Jam)' => 5,
+            'TSP (24 Jam)' => 5,
+
+            'Kebisingan (24 Jam)' => 7,
+
+            'Kebisingan (8 Jam)' => 8,
         ];
 
-        Invoice::whereIn('no_invoice', $invoices)->update(['is_generate' => 1, 'is_emailed' => 1]);
+        return $map[$parameter] ?? 1;
+    }
 
-        return response()->json(['message' => 'Success'], 200);
+    public function checkLengthData($category2, $category3, $parameters, $no_sampel) {
+        $parameters = array_reduce($parameters, function ($carry, $item) {
+            $parameterName = explode(";", $item)[1];
+            $carry[$parameterName] = $this->getRequiredCount($parameterName);
+            return $carry;
+        }, []);
+        // dd($parameters);
+
+        if($category2 == "4-Udara") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["11-Udara Ambient", "27-Udara Lingkungan Kerja", "12-Udara Angka Kuman"])) {
+                    $partikulatMeter = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)->count();
+                    if($partikulatMeter < $requiredCount){
+                        if ($category3 == "11-Udara Ambient") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else if ($parameter == "HCNM (3 Jam)" || $parameter == "HC (3 Jam)") {
+                                if (DetailSenyawaVolatile::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganHidup::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "27-Udara Lingkungan Kerja") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganKerja::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "12-Udara Angka Kuman") {
+                            if (DetailMicrobiologi::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                        }
+                    }else {
+                        return 0;
+                    }
+                }
+
+                else if ($category3 == "23-Kebisingan") {
+                    if ($parameter == "Kebisingan (8 Jam)") {
+                        if (DataLapanganKebisinganPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else {
+                        if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+        
+                else if ($category3 == "24-Kebisingan (24 Jam)") {
+                    if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "28-Pencahayaan") {
+                    $jumlah = DataLapanganCahaya::where('no_sampel', $no_sampel)->count();
+
+                    if($jumlah < $requiredCount) return 0;
+
+                }
+        
+                else if (in_array($category3, ["19-Getaran (Mesin)", "15-Getaran (Kejut Bangunan)", "13-Getaran", "14-Getaran (Bangunan)", "18-Getaran (Lingkungan)"])) {
+                    if (DataLapanganGetaran::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if (in_array($category3, ["17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])) {
+                    if (DataLapanganGetaranPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "21-Iklim Kerja") {
+                    if ($parameter == "ISBB") {
+                        if (DataLapanganIklimPanas::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } elseif ($parameter == "IKD (CS)") {
+                        if (DataLapanganIklimDingin::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+                
+                else if ($category3 == "46-Udara Swab Test") {
+                    if (DataLapanganSwab::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else {
+                    if(in_array($parameter, ["Debu (P8J)", "PM 10 (Personil)", "PM 2.5 (Personil)", "Karbon Hitam (8 jam)"])) {
+                        if(DataLapanganDebuPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if(in_array($parameter, ["Medan Magnit Statis", "Power Density", "Medan Listrik", "Gelombang Elektro"])) {
+                        if(DataLapanganMedanLM::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Sinar UV") {
+                        if(DataLapanganSinarUV::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Psikologi") {
+                        if(DataLapanganPsikologi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else {
+                        return 0;
+                    }
+                }
+        
+            }
+        }else if($category2 == "5-Emisi") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["32-Emisi Kendaraan (Solar)", "31-Emisi Kendaraan (Bensin)", "116-Emisi Kendaraan (Gas)"])) {
+                    if (DataLapanganEmisiKendaraan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                if ($category3 == "34-Emisi Sumber Tidak Bergerak") {
+                    $emisiCerobong = DataLapanganEmisiCerobong::where('no_sampel', $no_sampel)->count();
+                    if ($emisiCerobong < $requiredCount) {
+                        if (DataLapanganIsokinetikHasil::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+
+                // return 1;
+            }
+        } else if($category2 == "1-Air") {
+            if (DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
+                return  1;
+            }else{
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    public function decodeImageToBase64($filename)
+    {
+        // Path penyimpanan
+        $path = public_path('dokumen/cs/signatures');
+        
+        // Path file lengkap
+        $filePath = $path . '/' . $filename;
+
+        // Periksa apakah file ada
+        if (!file_exists($filePath)) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'File tidak ditemukan'
+            ];
+        }
+
+        // Baca konten file
+        $imageContent = file_get_contents($filePath);
+        if($imageContent === false) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'Gagal membaca file'
+            ];
+        }
+
+        // Konversi ke base64
+        $base64Image = base64_encode($imageContent);
+
+        // Deteksi tipe file
+        $fileType = $this->detectFileType($imageContent);
+
+        // Tambahkan data URI header sesuai tipe file
+        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
+
+        // Kembalikan respons
+        return (object) [
+            'status' => 'success',
+            'base64' => $base64WithHeader,
+            'file_type' => $fileType
+        ];
     }
 }
