@@ -23,13 +23,13 @@
                         $akr = !empty($yy['akr']) ? $yy['akr'] : '&nbsp;&nbsp;';
                     @endphp
                     <tr>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ $p }}</td>
-                        <td class="pd-5-{{ $rowClass }}-left"><sup>{!! $akr !!}</sup>&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{!! $yy['C'] ?? '' !!}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{!! $yy['terkoreksi'] ?? '' !!}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
-                        <td class="pd-5-{{ $rowClass }}-center">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ $p }}</td>
+                        <td class="pd-5-{{ $rowClass }}-left" style="white-space: nowrap;"><sup>{!! $akr !!}</sup>&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['C'] ?? '' !!}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['terkoreksi'] ?? '' !!}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>
                     </tr>
                 @endforeach
         </tbody>
