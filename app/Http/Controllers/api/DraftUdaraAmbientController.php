@@ -18,6 +18,8 @@ use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
+use App\Models\DirectLainHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\Subkontrak;
@@ -524,6 +526,8 @@ class DraftUdaraAmbientController extends Controller
                 $models = [
                     Subkontrak::class,
                     LingkunganHeader::class,
+                    PartikulatHeader::class,
+                    DirectLainHeader::class,
                 ];
 
                 foreach ($models as $model) {
@@ -694,6 +698,8 @@ class DraftUdaraAmbientController extends Controller
                 $models = [
                     Subkontrak::class,
                     LingkunganHeader::class,
+                    DirectLainHeader::class,
+                    PartikulatHeader::class
                 ];
 
                 foreach ($models as $model) {
@@ -786,6 +792,8 @@ class DraftUdaraAmbientController extends Controller
             $models = [
                 Subkontrak::class,
                 LingkunganHeader::class,
+                DirectLainHeader::class,
+                PartikulatHeader::class
             ];
 
             foreach ($models as $model) {
