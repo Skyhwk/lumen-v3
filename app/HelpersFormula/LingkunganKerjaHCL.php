@@ -104,9 +104,9 @@ class LingkunganKerjaHCL
             $C1 = round(array_sum($C1_value) / count($C1_value), 4);
 
             $data_pershift = [
-                'Shift 1' => $C1[0],
-                'Shift 2' => $C1[1] ?? 0,
-                'Shift 3' => $C1[2] ?? 0
+                'Shift 1' => $C1_value[0],
+                'Shift 2' => $C1_value[1] ?? 0,
+                'Shift 3' => $C1_value[2] ?? 0
             ];
         }
 
