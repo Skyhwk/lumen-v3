@@ -878,7 +878,7 @@ class DraftUdaraAmbientController extends Controller
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 
                 : (!empty($param->satuan) ? $param->satuan : '-'),
-            'durasi' => $val->ws_value_linkungan->durasi ?? null,
+            'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->ws_value_lingkungan) ? $val->ws_value_lingkungan->durasi : '-'),
             'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
             'status' => $param->status
         ];
@@ -915,7 +915,7 @@ class DraftUdaraAmbientController extends Controller
             "µg/Nm³" => 1
         ];
 
-        
+
         
         // dd($bakumutu->satuan);
         $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
