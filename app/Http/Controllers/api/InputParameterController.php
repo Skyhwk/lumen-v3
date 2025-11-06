@@ -3675,7 +3675,12 @@ class InputParameterController extends Controller
 			->get();
 
         $swab = null;
-        $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
+        $swab_parameter = [
+            'E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)',
+            'Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)',
+            'Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)',
+            'E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'
+        ];
         if(in_array($request->parameter, $swab_parameter)){
             $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
         }
@@ -3787,13 +3792,16 @@ class InputParameterController extends Controller
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->volume = count($volume) > 0 ? array_sum($volume) / count($volume) : null;
-				$header->flow = count($flow) > 0 ? array_sum($flow) / count($flow) : null;
+				$header->flow = count($flowRate) > 0 ? array_sum($flowRate) / count($flowRate) : null;
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
-				if($fdl){
+                $volume_shift = null;
+				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
+                    $volume_shift = json_encode($volume);
 				}
 				$header->data_shift = $data_shift;
+                $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
