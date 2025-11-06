@@ -842,9 +842,9 @@ class DraftUlkController extends Controller
     {
         DB::beginTransaction();
         try {
-            $noSampel = array_map('trim', explode(',', $request->noSampel));
+            // $noSampel = array_map('trim', explode(',', $request->noSampel));
             $data = OrderDetail::where('cfr', $request->no_lhp)
-                ->whereIn('no_sampel', $request->no_sampel)
+                ->where('no_sampel', $request->no_sampel)
                 ->first();
 
             if ($data) {
