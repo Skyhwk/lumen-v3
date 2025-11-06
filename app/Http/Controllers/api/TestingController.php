@@ -4340,4 +4340,181 @@ class TestingController extends Controller
 
         return response()->json(['message' => 'Success'], 200);
     }
+
+    public function decodeImageToBase64($filename)
+    {
+        // Path penyimpanan
+        $path = public_path('dokumen/cs/signatures');
+        
+        // Path file lengkap
+        $filePath = $path . '/' . $filename;
+
+        // Periksa apakah file ada
+        if (!file_exists($filePath)) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'File tidak ditemukan'
+            ];
+        }
+
+        // Baca konten file
+        $imageContent = file_get_contents($filePath);
+        if($imageContent === false) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'Gagal membaca file'
+            ];
+        }
+
+        // Konversi ke base64
+        $base64Image = base64_encode($imageContent);
+
+        // Deteksi tipe file
+        $fileType = $this->detectFileType($imageContent);
+
+        // Tambahkan data URI header sesuai tipe file
+        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
+
+        // Kembalikan respons
+        return (object) [
+            'status' => 'success',
+            'base64' => $base64WithHeader,
+            'file_type' => $fileType
+        ];
+    }
+
+    public function checkLengthData($category2, $category3, $parameters, $no_sampel) {
+        $parameters = array_reduce($parameters, function ($carry, $item) {
+            $parameterName = explode(";", $item)[1];
+            $carry[$parameterName] = $this->getRequiredCount($parameterName);
+            return $carry;
+        }, []);
+        // dd($parameters);
+
+        if($category2 == "4-Udara") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["11-Udara Ambient", "27-Udara Lingkungan Kerja", "12-Udara Angka Kuman"])) {
+                    $partikulatMeter = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)->count();
+                    if($partikulatMeter < $requiredCount){
+                        if ($category3 == "11-Udara Ambient") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else if ($parameter == "HCNM (3 Jam)" || $parameter == "HC (3 Jam)") {
+                                if (DetailSenyawaVolatile::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganHidup::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "27-Udara Lingkungan Kerja") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganKerja::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "12-Udara Angka Kuman") {
+                            if (DetailMicrobiologi::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                        }
+                    }else {
+                        return 0;
+                    }
+                }
+
+                else if ($category3 == "23-Kebisingan") {
+                    if ($parameter == "Kebisingan (8 Jam)") {
+                        if (DataLapanganKebisinganPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else {
+                        if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+        
+                else if ($category3 == "24-Kebisingan (24 Jam)") {
+                    if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "28-Pencahayaan") {
+                    $jumlah = DataLapanganCahaya::where('no_sampel', $no_sampel)->count();
+
+                    if($jumlah < $requiredCount) return 0;
+
+                }
+        
+                else if (in_array($category3, ["19-Getaran (Mesin)", "15-Getaran (Kejut Bangunan)", "13-Getaran", "14-Getaran (Bangunan)", "18-Getaran (Lingkungan)"])) {
+                    if (DataLapanganGetaran::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if (in_array($category3, ["17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])) {
+                    if (DataLapanganGetaranPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "21-Iklim Kerja") {
+                    if ($parameter == "ISBB") {
+                        if (DataLapanganIklimPanas::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } elseif ($parameter == "IKD (CS)") {
+                        if (DataLapanganIklimDingin::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+                
+                else if ($category3 == "46-Udara Swab Test") {
+                    if (DataLapanganSwab::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else {
+                    if(in_array($parameter, ["Debu (P8J)", "PM 10 (Personil)", "PM 2.5 (Personil)", "Karbon Hitam (8 jam)"])) {
+                        if(DataLapanganDebuPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if(in_array($parameter, ["Medan Magnit Statis", "Power Density", "Medan Listrik", "Gelombang Elektro"])) {
+                        if(DataLapanganMedanLM::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Sinar UV") {
+                        if(DataLapanganSinarUV::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Psikologi") {
+                        if(DataLapanganPsikologi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else {
+                        return 0;
+                    }
+                }
+        
+            }
+        }else if($category2 == "5-Emisi") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["32-Emisi Kendaraan (Solar)", "31-Emisi Kendaraan (Bensin)", "116-Emisi Kendaraan (Gas)"])) {
+                    if (DataLapanganEmisiKendaraan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                if ($category3 == "34-Emisi Sumber Tidak Bergerak") {
+                    $emisiCerobong = DataLapanganEmisiCerobong::where('no_sampel', $no_sampel)->count();
+                    if ($emisiCerobong < $requiredCount) {
+                        if (DataLapanganIsokinetikHasil::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+
+                // return 1;
+            }
+        } else if($category2 == "1-Air") {
+            if (DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
+                return  1;
+            }else{
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+
+        return 1;
+    }
 }
