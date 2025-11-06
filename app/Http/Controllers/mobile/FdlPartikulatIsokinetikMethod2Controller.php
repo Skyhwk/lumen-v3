@@ -198,7 +198,7 @@ class FdlPartikulatIsokinetikMethod2Controller extends Controller
         } catch (Exception $e) {
             DB::rollBack();
             return response()->json([
-                'message' => $e.getMessage(),
+                'message' => $e->getMessage(),
                 'line' => $e.getLineNumber(),
                 'code' => $e.getCode()
             ], 401);

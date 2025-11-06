@@ -225,7 +225,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->co        = $co;
                         $data_fdl->hc        = $hc;
                         $data_fdl->o2        = $o2;
-                        $data_fdl->lamda    = $request->lamda;
+                        $data_fdl->lamda    = $request->lambda;
                         $data_fdl->opasitas = $opasitas;
                         $data_fdl->nilai_km = $nilai_k;
                         $data_fdl->rpm        = $rpm;
@@ -292,7 +292,7 @@ class FdlEmisiKendaraanController extends Controller
                     //     }
                     // }
 
-                    if (!isset($request->merk_kendaraan) || $request->merk_kendaraan === null) {
+                    if (!isset($request->merk) || $request->merk === null) {
                         return response()->json(['message' => 'Tolong isi Merk Kendaraan!'], 401);
                     }
 
@@ -342,13 +342,13 @@ class FdlEmisiKendaraanController extends Controller
                         $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
                         if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
                             $data_kendaraan = new MasterKendaraan;
-                            $data_kendaraan->merk_kendaraan     = ucfirst($request->merk_kendaraan);
+                            $data_kendaraan->merk_kendaraan     = ucfirst($request->merk);
                             $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
                             if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
                             if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
-                            $data_kendaraan->plat_nomor         = $request->no_polisi;
+                            $data_kendaraan->plat_nomor         = $request->no_plat;
                             $data_kendaraan->bobot_kendaraan    = $request->bobot;
-                            $data_kendaraan->tahun_pembuatan    = $request->tahun_pembuatan;
+                            $data_kendaraan->tahun_pembuatan    = $request->tahun;
                             $data_kendaraan->no_mesin            = $request->no_mesin;
                             $data_kendaraan->transmisi            = $request->transmisi;
                             $data_kendaraan->kategori_kendaraan    = $request->kategori_kendaraan;
@@ -369,7 +369,6 @@ class FdlEmisiKendaraanController extends Controller
                         }
                         // if($co!=null && $co < 0.02) $co = "<0.02";
                         // if($co2!=null && $co2 < 0.10) $co2 = "<0.10";
-
                         $data_fdl = new DataLapanganEmisiKendaraan;
                         // $data_fdl->id_po 	= $cek_po->id;
                         $data_fdl->no_sampel = strtoupper($request->no_sampel);
@@ -383,7 +382,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_fdl->co        = $co;
                         $data_fdl->hc        = $hc;
                         $data_fdl->o2        = $o2;
-                        $data_fdl->lamda    = $request->lamda;
+                        $data_fdl->lamda    = $request->lambda;
                         $data_fdl->opasitas = $opasitas;
                         $data_fdl->nilai_km = $nilai_k;
                         $data_fdl->rpm        = $rpm;

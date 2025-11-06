@@ -26,6 +26,7 @@ use App\Models\Subkontrak;
 use App\Models\MasterBakumutu;
 
 use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
 use App\Models\DirectLainHeader;
 use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
@@ -148,6 +149,14 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
+			
+			$partikulat = PartikulatHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approve', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->addSelect(DB::raw("'direct' as data_type"))
+				->get();
 
 			$lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
 				->where('no_sampel', $request->no_sampel)
@@ -168,6 +177,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 			$combinedData = collect()
 				->merge($lingkunganData)
 				->merge($subkontrak)
+				->merge($partikulat)
 				->merge($directData);
 
 
@@ -181,6 +191,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						break;
 					case 'direct':
 						$item->source = 'Direct Lain';
+						break;
+					case 'partikulat':
+						$item->source = 'Partikulat';
 						break;
 				}
 				return $item;
@@ -207,42 +220,61 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 			}
 
 			return Datatables::of($processedData)
-                ->addColumn('nilai_uji', function ($item) {
-                    $satuanIndexMap = [
-                        "µg/m³" => 17,
-                        "mg/m³" => 16,
-                        "BDS" => 15,
-                        "CFU/M²" => 14,
-                        "CFU/25cm²" => 13,
-                        "°C" => 12,
-                        "CFU/100 cm²" => 11,
-                        "CFU/m²" => 10,
-                        "CFU/m³" => 9,
-                        "m/s" => 8,
-                        "f/cc" => 7,
-                        "Ton/km²/Bulan" => 6,
-                        "%" => 5,
-                        "ppb" => 4,
-                        "ppm" => 3,
-                        "mg/m³" => 2,
-                        "μg/Nm³" => 1
-                    ];
+				->addColumn('nilai_uji', function ($item) {
+					$satuanIndexMap = [
+						"µg/m³" => 16,
+						"µg/m3" => 16,
+						"mg/m³" => 17,
+						"mg/m3" => 17,
+						"BDS" => 15,
+						"CFU/M²" => 14,
+						"CFU/M2" => 14,
+						"CFU/25cm²" => 13,
+						"CFU/25cm2" => 13,
+						"°C" => 12,
+						"CFU/100 cm²" => 11,
+						"CFU/100 cm2" => 11,
+						"CFU/m²" => 10,
+						"CFU/m2" => 10,
+						"CFU/m³" => 9,
+						"CFU/m3" => 9,
+						"m/s" => 8,
+						"m/detik" => 8,
+						"f/cc" => 7,
+						"Ton/km²/Bulan" => 6,
+						"Ton/km2/Bulan" => 6,
+						"%" => 5,
+						"ppb" => 4,
+						"ppm" => 3,
+						"mg/nm³" => 2,
+						"mg/nm3" => 2,
+						"μg/Nm³" => 1,
+						"μg/Nm3" => 1
+					];
+				
+					$index = $satuanIndexMap[$item->satuan] ?? 1;
+				
+					if (!$item->ws_udara) {
+						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
+					}
+				
+					$fKoreksiKey = "f_koreksi_$index";
+					$hasilKey = "hasil$index";
+				
+					$nilai = $item->ws_udara->$fKoreksiKey
+						?? $item->ws_udara->$hasilKey
+						?? $item->ws_value_lingkungan->f_koreksi_c
+						?? null;
 
-                    $index = $satuanIndexMap[$item->satuan] ?? 1;
-
-                    if (!$item->ws_udara) {
-                        return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
-                    }
-
-                    // Coba f_koreksi_{index}, lalu hasil{index}, lalu fallback ke lingkungan
-                    $fKoreksiKey = "f_koreksi_$index";
-                    $hasilKey = "hasil$index";
-
-                    return $item->ws_udara->$fKoreksiKey
-                        ?? $item->ws_udara->$hasilKey
-                        ?? $item->ws_value_lingkungan->f_koreksi_c
-                        ?? '-';
-                })
+					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
+						$fKoreksi2 = $item->ws_udara->f_koreksi_2 ?? null;
+						$hasil2 = $item->ws_udara->hasil2 ?? null;
+						$nilai = $fKoreksi2 ?? $hasil2 ?? $nilai;
+					}
+				
+					return $nilai ?? '-';
+				})
+			
                 ->make(true);
 		} catch (\Throwable $th) {
 			return response()->json([

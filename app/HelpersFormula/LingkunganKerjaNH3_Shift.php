@@ -21,7 +21,6 @@ class LingkunganKerjaNH3_Shift
             $kb = $data->kb;
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -42,30 +41,31 @@ class LingkunganKerjaNH3_Shift
 
         // dd($data->durasi);
         foreach($data->ks as $key_ks => $item_ks) {
-            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
+            $Ta = floatval($data->suhu_array[$key_ks]) + 273;
+            $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key_ks]) / $Ta) * (298 / 760), 4));
             if($Vu != 0.0) {
-                $C1 = \str_replace(",", "", number_format(($item_ks / floatval($Vu)) * 1000, 4));
+                $C = \str_replace(",", "", number_format(($item_ks / floatval($Vu)) * 1000, 4));
             }else {
-                $C1 = 0;
+                $C = 0;
             }
-            $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
-            $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17, 5));
+            $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
+            $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17.031, 5));
             $C3 = $C2 * 1000;
             $C4 = $C3 * 10000;
 
-            if($data->parameter == 'NH3 (24 Jam)' || $data->tipe_data == 'ambient'){
-                $C14 = $C2;
+            // if($data->parameter == 'NH3 (24 Jam)' || $data->tipe_data == 'ambient'){
+            $C14 = $C2;
 
-                // Vu = Rerata Laju Alir*t*/1000
-                $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
-                // C (mg/Nm3) = (a/Vu)
-                $C15 = \str_replace(",", "", number_format($item_ks / floatval($Vu_alt), 4));
-                $C16 = $C15 / 1000;
+            // Vu = Rerata Laju Alir*t*/1000
+            $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi, 4));
+            // C (mg/Nm3) = (a/Vu)
+            $C15 = \str_replace(",", "", number_format($item_ks / floatval($Vu_alt) * 1000, 4));
+            $C16 = $C15 / 1000;
 
-                $C14_value[$key_ks][] = $C14;
-                $C15_value[$key_ks][] = $C15;
-                $C16_value[$key_ks][] = $C16;
-            }
+            $C14_value[$key_ks][] = $C14;
+            $C15_value[$key_ks][] = $C15;
+            $C16_value[$key_ks][] = $C16;
+            // }
 
             $C_value[$key_ks][] = $C;
             $C1_value[$key_ks][] = $C1;
@@ -133,17 +133,17 @@ class LingkunganKerjaNH3_Shift
             $C2_average = '<0.0007';
 
         $data_pershift = [
-            'Shift 1' => $C_value[0],
-            'Shift 2' => $C_value[1] ?? null,
-            'Shift 3' => $C_value[2] ?? null,
+            'Shift 1' => $C[0],
+            'Shift 2' => $C[1] ?? null,
+            'Shift 3' => $C[2] ?? null,
         ];
 
         if($data->parameter === 'NH3 (24 Jam)'){
             $data_pershift = [
-                'Shift 1' => $C_value[0],
-                'Shift 2' => $C_value[1] ?? null,
-                'Shift 3' => $C_value[2] ?? null,
-                'Shift 4' => $C_value[3] ?? null,
+                'Shift 1' => $C[0],
+                'Shift 2' => $C[1] ?? null,
+                'Shift 3' => $C[2] ?? null,
+                'Shift 4' => $C[3] ?? null,
             ];
         }
 

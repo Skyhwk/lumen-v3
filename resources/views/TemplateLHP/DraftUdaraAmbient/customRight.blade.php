@@ -1,6 +1,40 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
+    use App\Models\DetailLingkunganHidup;
+
+    $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
+    $tanggal_sampling = '';
+    if($header->status_sampling == 'S24'){
+        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+
+        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
+
+        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
+
+        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+        $tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
+
+        if ($tanggalAwal || $tanggalAkhir) {
+            if ($tanggalAwal == $tanggalAkhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    } else {
+        if ($header->tanggal_sampling || $header->tanggal_terima) {
+            if ($header->tanggal_sampling == $header->tanggal_terima) {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+            } else {
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+            }
+        } else {
+            $tanggal_sampling = '-';
+        }
+    }
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -8,12 +42,14 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="50%">No. LHP</td>
-                        <td class="custom" width="50%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP <sup><u>a</u></sup></td>
+                        <td class="custom" width="33%">No. SAMPEL</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">{{ $header->no_sampel }}</td>
+                        <td class="custom">Udara Ambient</td>
                     </tr>
                 </table>
             </td>
@@ -23,8 +59,9 @@
                 {{-- Informasi Pelanggan --}}
                 <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi
-                                Pelanggan</span></td>
+                        <td colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">InformasiPelanggan</span>
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
@@ -45,61 +82,148 @@
                 {{-- Informasi Sampling --}}
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120" colspan="3"><span
-                                style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
-                    </tr>
-                        @php
-                         $methode_sampling = $header->methode_sampling ? $header->methode_sampling : [];
-                    @endphp
-                    <tr>
-                        <td class="custom5" width="120">Metode Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                             <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @foreach($methode_sampling as $index => $item)
-                                    <tr>
-                                        @if (count($methode_sampling) > 1)
-                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                            <td class="custom5">{{ $item ?? '-' }}</td>
-                                        @else
-                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                        @endif
-                                    </tr>
-                                @endforeach
-                            </table>
+                        <td class="custom5" width="120" colspan="3">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
-                       
                     </tr>
                 </table>
 
-          
-                   @if (!empty($header->regulasi))
-                
-                        @foreach (json_decode($header->regulasi) as $y)
-                            <table style="padding-top: 10px;" width="100%">
+                {{-- Informasi Sampling --}}
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                    <tr>
+                        <td class="custom5" width="120">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="custom5" width="120">Tanggal Sampling</td>
+                        <td class="custom5" width="12">:</td>
+                        <td class="custom5">
+                            @php
+                                echo $tanggal_sampling;
+                            @endphp
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="custom5" width="120">Periode Analisa</td>
+                        <td class="custom5" width="12">:</td>
+                        @php
+                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
+                            $periode = explode(' - ', $periode_analisa);
+                            $periode1 = $periode[0] ?? '';
+                            $periode2 = $periode[1] ?? '';
+                        @endphp
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="custom5">Keterangan</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                    </tr>
+                    <tr>
+                        <td class="custom5">Titik Koordinat</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">
+                            @php
+                                // if ($detailLapangan) {
+                                    echo $header->titik_koordinat;
+                                // }
+                            @endphp
+                        </td>
+                    </tr>
+                </table>
+
+                {{-- Kondisi Lingkungan --}}
+                <table style="padding: 10px 0px 0px 0px;" width="100%">
+                    <tr>
+                        <td class="custom5" width="120">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">Kondisi Lingkungan</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td width="50%">
+                            <table>
                                 <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
+                                    <td class="custom5" width="120">Jam Pengambilan</td>
+                                    <td class="custom5" width="12">:</td>
+                                    <td class="custom5">{{ $header->waktu_pengukuran }} WIB</td>
+                                </tr>
+                                <tr>
+                                    <td class="custom5">Cuaca</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->cuaca }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="custom5">Suhu Lingkungan</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->suhu }} °C</td>
+                                </tr>
+                                <tr>
+                                    <td class="custom5">Kelembapan</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->kelembapan }} %</td>
                                 </tr>
                             </table>
-                        @endforeach
-                           @php
-                            // pastikan $header ada nilainya
-                            $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
-                            $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
-                                if (!empty($table)) {
-                                $table = $table->konten;
-                            } else {
-                                $table = '';
-                            }
-                        @endphp
-                        @if($table)
-                        <table style="padding-top: 5px;" width="100%">
+                        </td>
+                        <td width="50%">
+                            <table>
                                 <tr>
-                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                    <td class="custom5">Kecepatan Angin</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->kec_angin}} Km/Jam</td>
                                 </tr>
+                                <tr>
+                                    <td class="custom5">Arah Angin Dominan</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->arah_angin }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="custom5">Tekanan Udara</td>
+                                    <td class="custom5">:</td>
+                                    <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+
+                @if (!empty($header->regulasi))
+                    @foreach (json_decode($header->regulasi) as $y)
+                        <table style="padding-top: 10px;" width="100%">
+                            <tr>
+                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
+                            </tr>
                         </table>
-                        @endif
-                    
+                    @endforeach
+                @endif
+                {{-- Keterangan --}}
+                @php
+                    $temptArrayPush = [];
+                    if (!empty($detail)) {
+                        foreach ($detail as $v) {
+                            if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['akr'];
+                            }
+                            if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['attr'];
+                            }
+                        }
+                    }
+                @endphp
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
+                            @endforeach
+                        @endforeach
+                    </table>
                 @endif
             </td>
         </tr>

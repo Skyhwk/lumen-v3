@@ -14,4 +14,14 @@ class MicrobioHeader extends Sector{
     {
         return $this->hasOne('App\Models\Ftc'::class, 'no_sample', 'no_sampel');
     }
+
+    public function order_detail()
+    {
+        return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function ws_value()
+    {
+        return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
+    }
 }

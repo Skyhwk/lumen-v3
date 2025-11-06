@@ -8,6 +8,7 @@ use App\Models\DetailFlowMeter;
 use App\Models\DeviceIntilabRunning;
 use App\Models\DataLapanganLingkunganHidup;
 use App\Models\DataLapanganLingkunganKerja;
+use App\Models\DeviceOfflineReason;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -358,5 +359,30 @@ class FlowMeterController extends Controller
             ], 500);
         }
 
+    }
+
+    public function offlineReason(Request $request){
+        DB::beginTransaction();
+        try {
+            DeviceOfflineReason::create([
+                'device_running_id' => $request->id,
+                'reason' => $request->reason,
+                'sub_reason' => $request->subReason ?? null,
+                'created_by' => $this->karyawan,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Offline Reason Berhasil disimpan'
+            ], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile()
+            ], 500);
+        }
     }
 }

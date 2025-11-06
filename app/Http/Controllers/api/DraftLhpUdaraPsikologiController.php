@@ -12,6 +12,7 @@ use App\Models\LhpUdaraPsikologiHeaderHistory;
 use App\Models\QrDocument;
 use App\Services\GenerateQrDocumentLhpp;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Services\PrintLhp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,7 @@ use App\Models\OrderHeader;
 use App\Services\SendEmail;
 use App\Services\TemplateLhpp;
 use App\Jobs\JobPrintLhp;
-
+use App\Models\LinkLhp;
 
 class DraftLhpUdaraPsikologiController extends Controller
 {
@@ -351,20 +352,31 @@ class DraftLhpUdaraPsikologiController extends Controller
 					$qr->save();
 				}
 
-				$servicePrint = new PrintLhp();
-				$servicePrint->printByFilename($data->file_lhp, $detail);
+				// $servicePrint = new PrintLhp();
+				// $servicePrint->printByFilename($data->file_lhp, $detail);
+				$periode = OrderDetail::where('cfr', $data->no_cfr)->where('is_active', true)->first()->periode ?? null;
+				// dd($data, $periode);
+				$cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-				if (!$servicePrint) {
-					DB::rollBack();
-					return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-				}
+                if($cekLink) {
+					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $this->karyawan, $periode);
+					$this->dispatch($job);
+                }
+
+				// if (!$servicePrint) {
+				// 	DB::rollBack();
+				// 	return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
+				// }
+			} else {
+				DB::rollBack();
+				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);
 			}
 
 			DB::commit();
 			return response()->json([
 				'data' => $data,
 				'status' => true,
-				'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove'
+				'message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove'
 			], 201);
 		} catch (\Exception $th) {
 			DB::rollBack();

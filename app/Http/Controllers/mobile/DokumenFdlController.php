@@ -450,6 +450,7 @@ class DokumenFdlController extends Controller
 
     public function updateData(Request $request)
     {
+    
         // dd($request->all());
         if ($request->has('data') && !empty($request->data)) {
             DB::beginTransaction();
@@ -465,7 +466,7 @@ class DokumenFdlController extends Controller
                         ->where('no_order', $item['no_order'])
                         ->where('is_active', 1)
                         ->first();
-
+                    
                     if ($po) {
                         $isContract = str_contains($item['nomor_quotation'], 'QTC');
                         if (!$isContract) {
@@ -524,7 +525,7 @@ class DokumenFdlController extends Controller
                                 }
                             }
 
-
+                            
                             // UPDATE QTCH
                             // dd(array_keys($groupedNamedPoints));
                             if ($qtcHeader) {
@@ -567,6 +568,7 @@ class DokumenFdlController extends Controller
                     }
 
                     $po->keterangan_1 = $item['deskripsi'];
+                    
                     $po->save();
                     $noSampel[] = $item['no_sampel'];
                 }

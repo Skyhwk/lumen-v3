@@ -19,7 +19,7 @@ class EmisiHCL
 		$C2 = null;
 
 
-		
+
 		if (is_array($data->ks)) {
 			$ks = array_sum($data->ks) / count($data->ks);
 		}else {
@@ -36,10 +36,14 @@ class EmisiHCL
         // dd($data->volume_dry, $data->suhu, $data->tekanan, $data->tekanan_dry, $data->nil_pv);
         try {
             // $nilbag = \str_replace(",", "", );
-            // $nilbag = number_format(36.5 / 35.5, 4);
-            $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * 50 * (36.5 / 35.5)) / floatval($Vs)) * 1000, 4));
-            // dd((($ks - $kb) * 50 * (36.5 / 35.5)) / floatval($Vs));
+            // C2 (mg/Nm3) = (((A-B) x FP x (36.5/35.5))/Vs) x 1000
+            $C1 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp * (36.5 / 35.5)) / floatval($Vs)) * 1000, 4));
+            // "C1 (ug/Nm3) = C2 x 1000"
+            $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
+            // C3 (PPM) = 24.45 x (C(mg/m3)/36.5)
             $C2 = \str_replace(",", "", number_format(24.45 * (floatval($C1) / 36.5), 4));
+            $C3 = $C;
+            $C4 = $C1;
             if (floatval($C1) < 0.0031)
                 $C1 = '<0.0031';
             if (floatval($C2) < 0.0020)
@@ -48,6 +52,7 @@ class EmisiHCL
             dd($e);
         }
 
+        $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -69,6 +74,9 @@ class EmisiHCL
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

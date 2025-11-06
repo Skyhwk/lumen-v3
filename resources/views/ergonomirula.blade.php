@@ -70,14 +70,14 @@
         }
 
         .table-main {
-            width: 70%;
+            width: 65%;
             float: left;
             padding-right: 5px;
             box-sizing: border-box;
         }
 
         .info-section {
-            width: 29%;
+            width: 34%;
             float: right;
             box-sizing: border-box;
         }
@@ -238,9 +238,9 @@
                 <!-- Tabel A -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td rowspan="2">No</td>
-                        <td rowspan="2">Jenis Skoring</td>
-                        <td colspan="5" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
+                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="30%">Jenis Skoring</td>
+                        <td colspan="5" width="65%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
                     </tr>
                     <tr>
                         <td>Nilai</td>
@@ -253,10 +253,10 @@
                         <td>1</td>
                         <td class="text-left">Lengan Atas</td>
                         <td> {{$pengukuran->lengan_atas}} </td>
-                        <td rowspan="4">{{$pengukuran->total_skor_A}}</td>
-                        <td rowspan="4">{{$pengukuran->beban_A}}</td>
-                        <td rowspan="4">{{$pengukuran->aktivitas_otot_A}}</td>
-                        <td rowspan="4">{{$pengukuran->nilai_tabel_A}}</td>
+                        <td rowspan="4">{{$pengukuran->total_skor_a}}</td>
+                        <td rowspan="4">{{$pengukuran->beban_a}}</td>
+                        <td rowspan="4">{{$pengukuran->aktivitas_otot_a}}</td>
+                        <td rowspan="4">{{$pengukuran->nilai_tabel_a}}</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -278,9 +278,9 @@
                 <!-- Tabel B -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td rowspan="2">No</td>
-                        <td rowspan="2">Jenis Skoring</td>
-                        <td colspan="5" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
+                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="30%">Jenis Skoring</td>
+                        <td colspan="5" width="65%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
                     </tr>
                     <tr>
                         <td>Nilai</td>
@@ -293,10 +293,10 @@
                         <td>1</td>
                         <td class="text-left">Leher</td>
                         <td>{{$pengukuran->leher}}</td>
-                        <td rowspan="3">{{$pengukuran->total_skor_B}}</td>
-                        <td rowspan="3">{{$pengukuran->beban_B}}</td>
-                        <td rowspan="3">{{$pengukuran->aktivitas_otot_B}}</td>
-                        <td rowspan="3">{{$pengukuran->nilai_tabel_B}}</td>
+                        <td rowspan="3">{{$pengukuran->total_skor_b}}</td>
+                        <td rowspan="3">{{$pengukuran->beban_b}}</td>
+                        <td rowspan="3">{{$pengukuran->aktivitas_otot_b}}</td>
+                        <td rowspan="3">{{$pengukuran->nilai_tabel_b}}</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -389,7 +389,7 @@
                         <tr>
                             <th>NO. LHP</th>
                             <th>NO. SAMPEL</th>
-                            <th>#JNS SAMPEL</th>
+                            <th>JENIS SAMPEL</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -418,14 +418,9 @@
                     <div class="info-header">Informasi Sampling</div>
                     <table class="info-table">
                         <tr>
-                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
-                        </tr>
-                        <tr>
-                            <td>Periode Analisis</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
                         </tr>
                     </table>
 
@@ -449,7 +444,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                            <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Analisa</td>

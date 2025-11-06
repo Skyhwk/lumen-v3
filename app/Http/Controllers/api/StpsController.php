@@ -605,9 +605,11 @@ class StpsController extends Controller
                             }
 
                             if (empty($sampleNumbers)) {
-                                return response()->json([
-                                    'message' => 'Parameter/regulasi pada order tidak sesuai dengan penawaran, silahkan hubungi tim IT untuk melakukan crosscheck data',
-                                ], 401);
+                                throw new \Exception(
+                                    "Parameter/regulasi/no sampel pada order tidak sesuai dengan penawaran. Kategori: " 
+                                    . ($data_sampling['kategori_2'] ?? '-') 
+                                    . " | Periode: " . ($item['periode_kontrak'] ?? '-')
+                                );
                             }
 
                             $data = [
@@ -1118,14 +1120,19 @@ class StpsController extends Controller
 
             $i = 1;
             $pe = 0;
+            
             foreach ($dataOrderDetailPerPeriode as $key => $value) {
                 $value = (object) $value;
-                // dump($value);
+                
+                if(!isset($value->kategori_3)){
+                    throw new \Exception("Field 'kategori_3' hilang pada data index ke-$key");
+                }
+
                 $regulasiText = '';
                 if (!empty($value->regulasi) && is_array($value->regulasi)) {
                     $regulasiText = implode(', ', $value->regulasi);
                 }
-                // dd($value);
+                
                 $pdf->WriteHTML(
                     '<tr>
                             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>

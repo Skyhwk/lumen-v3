@@ -224,9 +224,30 @@ class KonfirmasiOrderController extends Controller
 				$data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->save();
 
+                $keterangan = [];
+                if ($request->tanggal_next_fu) {
+                    $keterangan[] = ['tanggal_next_fu' => $request->tanggal_next_fu];
+                }
+                if ($request->nama_lab_lain) {
+                    $keterangan[] = ['nama_lab_lain' => $request->nama_lab_lain];
+                }
+                if ($request->budget_customer) {
+                    $keterangan[] = ['budget_customer' => $request->budget_customer];
+                }
+                if ($request->penawaran_yg_akan_dikirim) {
+                    $keterangan[] = ['penawaran_yg_akan_dikirim' => $request->penawaran_yg_akan_dikirim];
+                }
+                if ($request->blacklist) {
+                    $keterangan[] = ['blacklist' => $request->blacklist];
+                }
+                if ($request->keterangan) {
+                    $keterangan[] = ['keterangan' => $request->keterangan];
+                }
+
                 $alasanVoidQt = new AlasanVoidQt();
                 $alasanVoidQt->no_quotation = $data->no_document;
-                $alasanVoidQt->alasan = $request->reason;
+                $alasanVoidQt->alasan = $request->alasan;
+                $alasanVoidQt->keterangan = json_encode($keterangan);
                 $alasanVoidQt->voided_by = $this->karyawan;
                 $alasanVoidQt->voided_at = Carbon::now()->format('Y-m-d H:i:s');
                 $alasanVoidQt->save();
@@ -410,6 +431,7 @@ class KonfirmasiOrderController extends Controller
 	// }
 	public function store(Request $request)
 	{
+		// dd($request->all());
 		DB::beginTransaction();
 		try {
 			// Tentukan model berdasarkan type
@@ -513,7 +535,9 @@ class KonfirmasiOrderController extends Controller
 	{
 		try {
 			// Extract file information from base64 string
+
 			$fileData = $this->extractBase64FileData($base64File);
+
 
 			if (!$fileData) {
 				return response()->json([
@@ -603,6 +627,9 @@ class KonfirmasiOrderController extends Controller
 			return false;
 		}
 
+
+
+
 		// Get file data
 		list($fileInfo, $fileContent) = explode(';base64,', $base64String);
 
@@ -612,8 +639,9 @@ class KonfirmasiOrderController extends Controller
 		// Get file extension
 		$fileExtension = $this->getExtensionFromMimeType($fileType);
 
+
+
 		if (!$fileExtension) {
-			// dd($fileExtension);
 			return response()->json([
 				'success' => false,
 				'message' => 'Format base64 tidak valid.'
@@ -668,6 +696,7 @@ class KonfirmasiOrderController extends Controller
 	{
 		$konfirmasi->periode = $request->periode_kontrak ?? null;
 		$konfirmasi->approval_order = $request->approval_order;
+		$konfirmasi->no_purchaseorder = $request->no_purchaseorder ?? null;
 		$konfirmasi->filename = json_encode($fileNames) ?? [];
 		$konfirmasi->lampiran_titik = json_encode($lampiranTitikNames) ?? [];
 		$konfirmasi->no_co_qsd = $request->no_co_qsd;

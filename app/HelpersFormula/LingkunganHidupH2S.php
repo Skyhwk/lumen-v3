@@ -16,7 +16,6 @@ class LingkunganHidupH2S
             // dd($data);
         }
 
-        $Ta = floatval($data->suhu) + 273;
         $Qs = null;
         $C = null;
         $C1 = null;
@@ -49,8 +48,9 @@ class LingkunganHidupH2S
 
         $hasil1_array = $hasil2_array = $hasil3_array = $hasil14_array = $hasil15_array = $hasil16_array = [];
 
-        $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4);
         foreach ($data->ks as $key => $value) {
+            $Ta = floatval($data->suhu_array[$key]) + 273;
+            $Vu = round($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4);
             if(floatval($Vu) != 0.0) {
                 // H2S (mg/m3) = (((A1 - A2)/Vs)*(34/24,45))/1000
                 $C1_val = round((($value - $data->kb[$key]) / $Vu) * (34 / 24.45), 4);
