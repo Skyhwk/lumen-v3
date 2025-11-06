@@ -18,6 +18,8 @@ use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
+use App\Models\DirectLainHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\Subkontrak;
@@ -524,6 +526,8 @@ class DraftUdaraAmbientController extends Controller
                 $models = [
                     Subkontrak::class,
                     LingkunganHeader::class,
+                    PartikulatHeader::class,
+                    DirectLainHeader::class,
                 ];
 
                 foreach ($models as $model) {
@@ -694,6 +698,8 @@ class DraftUdaraAmbientController extends Controller
                 $models = [
                     Subkontrak::class,
                     LingkunganHeader::class,
+                    DirectLainHeader::class,
+                    PartikulatHeader::class
                 ];
 
                 foreach ($models as $model) {
@@ -786,6 +792,8 @@ class DraftUdaraAmbientController extends Controller
             $models = [
                 Subkontrak::class,
                 LingkunganHeader::class,
+                DirectLainHeader::class,
+                PartikulatHeader::class
             ];
 
             foreach ($models as $model) {
@@ -860,7 +868,11 @@ class DraftUdaraAmbientController extends Controller
             'id' => $val->id,
             'parameter_lab' => $val->parameter,
             'no_sampel' => $val->no_sampel,
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
+            'akr' => (
+                !empty($bakumutu)
+                    ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ')
+                    : 'ẍ'
+            ),
             'parameter' => $param->nama_lhp ?? $param->nama_regulasi,
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 
@@ -901,7 +913,7 @@ class DraftUdaraAmbientController extends Controller
             "μg/Nm3" => 1
         ];
         
-        $index = $satuanIndexMap[$bakumutu->satuan] ?? 1;
+        $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
 
         $fKoreksiKey = "f_koreksi_$index";
         $hasilKey = "hasil$index";
@@ -912,7 +924,7 @@ class DraftUdaraAmbientController extends Controller
             ?? $val->ws_value_linkungan->C 
             ?? '-';
 
-        if (in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+        if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
             $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
             $hasil2 = $val->ws_udara->hasil2 ?? null;
             $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
