@@ -2733,22 +2733,22 @@ class TestingController extends Controller
 
     public function fixDetailStructure(Request $request)
     {
-       
+
         try {
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
-            
+
             $fixedCount = 0;
             $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
-             
+
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
-                    foreach ($data->quotationKontrakD as $detail) {
+                    foreach ($data->quotationKontrakD as  $detailIndex => $detail) {
                         $dsDetail = json_decode($detail->data_pendukung_sampling, true);
 
                         // ⚙️ 1. Cek apakah sudah sesuai struktur (sudah punya "periode_kontrak")
@@ -2778,9 +2778,8 @@ class TestingController extends Controller
                         }
 
                         // ⚙️ 2. Kalau belum sesuai, bentuk ulang struktur
-                        $index = 1;
-                        $originalStructure = (object) [
-                            $index => (object) [
+                        $originalStructure = [
+                            $detailIndex + 1 => [
                                 "periode_kontrak" => $detail->periode_kontrak,
                                 "data_sampling" => $dsDetail
                             ]
@@ -3410,7 +3409,7 @@ class TestingController extends Controller
             $data = OrderDetail::with([
                 'dataPsikologi',
                 'lhp_psikologi',
-                ])
+            ])
                 ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
                 ->where('is_active', true)
                 ->whereJsonContains('parameter', [
@@ -3426,16 +3425,15 @@ class TestingController extends Controller
 
             foreach ($data as $item) {
                 $lhp = LhpUdaraPsikologiHeader::where('no_cfr', $item->cfr)->where('is_active', true)->first();
-                
+
                 if ($lhp) {
                     $lhp->is_approve = 0;
                     $lhp->save();
-                    
                 }
                 $no_sampel = explode(',', $item->no_sampel);
                 foreach ($no_sampel as $no) {
                     $orderDetail = OrderDetail::where('no_sampel', $no)->first();
-                    if($orderDetail){
+                    if ($orderDetail) {
                         $orderDetail->status = 2;
                         $orderDetail->is_approve = 0;
                         $orderDetail->save();

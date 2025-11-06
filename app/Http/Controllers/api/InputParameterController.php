@@ -3672,7 +3672,7 @@ class InputParameterController extends Controller
 		$fdl = DetailMicrobiologi::where('no_sampel', $request->no_sample)
 			->where('is_active', true)
 			->where('parameter', $request->parameter)
-			->first();
+			->get();
 
         $swab = null;
         $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
@@ -3697,23 +3697,42 @@ class InputParameterController extends Controller
 		if ($fdl || $swab) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				$suhu = $fdl->suhu ?? $swab->suhu;
-				$tekanan = $fdl->tekanan_udara ?? $swab->tekanan_udara;
-				$kelembaban = $fdl->kelembapan ?? $swab->kelembapan;
+				if($fdl){
+					$suhu = [];
+					$tekanan = [];
+					$kelembaban = [];
+					$volume = [];
+					$durasi = [];
+					$flowRate = [];
+					foreach ($fdl as $data) {
+						$suhu[] = $data->suhu ?? $swab->suhu;
+						$tekanan[] = $data->tekanan_udara ?? $swab->tekanan_udara;
+						$kelembaban[] = $data->kelembapan ?? $swab->kelembapan;
+						$pengukuran = json_decode($data->pengukuran);
+						$flowRate[] = (float) ($pengukuran->{"Flow Rate"} ?? null);
+						$durasi[] = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+						$volume[] = ($flowRate * $durasi) / 1000;
+					}
+				}else{
+					$suhu = $swab->suhu ?? 0;
+					$tekanan = $swab->tekanan_udara ?? 0;
+					$kelembaban = $swab->kelembapan ?? 0;
+					$luas = $swab->luas_area_swab ?? 0;
+				}
 
 				// Decode JSON di dalam pengukuran
-                if(isset($fdl->pengukuran)){
-                    $pengukuran = json_decode($fdl->pengukuran);
+                // if(isset($fdl->pengukuran)){
+                //     $pengukuran = json_decode($fdl->pengukuran);
 
-                    // Ambil nilai Flow Rate dan Durasi
-                    $flowRate = (float) ($pengukuran->{"Flow Rate"} ?? null);
-                    $durasi = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+                //     // Ambil nilai Flow Rate dan Durasi
+                //     $flowRate = (float) ($pengukuran->{"Flow Rate"} ?? null);
+                //     $durasi = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
 
-                    $volume = ($flowRate * $durasi) / 1000;
+                //     $volume = ($flowRate * $durasi) / 1000;
 
-                }else{
-                    $luas = $swab->luas_area_swab ?? 0;
-                }
+                // }else{
+                //     $luas = $swab->luas_area_swab ?? 0;
+                // }
 			} catch (\Exception $e) {
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
@@ -3767,6 +3786,14 @@ class InputParameterController extends Controller
 				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
+				$header->volume = count($volume) > 0 ? array_sum($volume) / count($volume) : null;
+				$header->flow = count($flow) > 0 ? array_sum($flow) / count($flow) : null;
+				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
+				$data_shift = null;
+				if($fdl){
+					$data_shift = json_encode($request->jumlah_coloni);
+				}
+				$header->data_shift = $data_shift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;

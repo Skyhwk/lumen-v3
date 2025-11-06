@@ -223,6 +223,8 @@ class FdlPartikulatMeterController extends Controller
                                 'is_active' => 1,
                                 'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
                                 'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
+                                'hasil16' => $data_kalkulasi['c16'] ?? null, // naik setelah tanggal 10-10-2025
+                                'hasil17' => $data_kalkulasi['c17'] ?? null, // naik setelah tanggal 10-10-2025
                                 'satuan' => $data_kalkulasi['satuan'] ?? null,
                             ]
                         );
