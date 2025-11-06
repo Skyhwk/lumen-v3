@@ -154,7 +154,9 @@ class FollowUpController extends Controller
             ->first();
 
         if ($cekLog) {
-            if ($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+            $karyawan_now = $request->attributes->get('user');
+            
+            if (($karyawan_now != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -418,7 +420,9 @@ class FollowUpController extends Controller
                             ->first();
                         // dd($cekLog, $request->sales_penanggung_jawab, 'stop');
                         if ($cekLog) {
-                            if ($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+                            $karyawan_now = $request->attributes->get('user');
+
+                            if (($karyawan_now != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                                 return response()->json([
                                     'status' => 'error',
                                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
