@@ -435,7 +435,7 @@ class FollowUpController extends Controller
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
                         $dfus->kontak = $request->kontak;
-                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ? $karyawan_now->karyawan->id : $request->sales_penanggung_jawab;
+                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ?  $request->sales_penanggung_jawab : $karyawan_now->karyawan->id;
                         $dfus->tanggal = $request->tanggal;
                         $dfus->jam = $request->jam;
                         $dfus->created_by = $this->karyawan;
