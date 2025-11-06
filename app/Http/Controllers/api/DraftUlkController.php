@@ -17,11 +17,18 @@ use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
-use App\Models\LingkunganHeader;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 
 use App\Models\Subkontrak;
+use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
+use App\Models\DirectLainHeader;
+use App\Models\ErgonomiHeader;
+use App\Models\SinarUvHeader;
+use App\Models\MedanLmHeader;
+use App\Models\MicrobioHeader;
+use App\Models\DebuPersonalHeader;
 
 use App\Models\Parameter;
 use App\Models\GenerateLink;
@@ -485,10 +492,13 @@ class DraftUlkController extends Controller
                 $models = [
                     LingkunganHeader::class,
                     Subkontrak::class,
+                    DirectLainHeader::class,
+                    PartikulatHeader::class,
+                    MicrobioHeader::class
                 ];
 
                 foreach ($models as $model) {
-                    $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
+                    $approveField = $model === LingkunganHeader::class || $model === MicrobioHeader::class ? 'is_approved' : 'is_approve';
                     $data = $model::with('ws_value_linkungan', 'parameter_udara')
                         ->where('no_sampel', $request->no_sampel)
                         ->where($approveField, 1)
@@ -577,6 +587,9 @@ class DraftUlkController extends Controller
             $models = [
                 LingkunganHeader::class,
                 Subkontrak::class,
+                DirectLainHeader::class,
+                PartikulatHeader::class,
+                MicrobioHeader::class
             ];
 
             foreach ($models as $model) {
@@ -664,7 +677,7 @@ class DraftUlkController extends Controller
             'satuan' => (!empty($bakumutu->satuan)) 
                 ? $bakumutu->satuan 
                 : (!empty($param->satuan) ? $param->satuan : '-'),
-            'durasi' => $val->ws_value_linkungan->durasi ?? null,
+            'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->ws_value_lingkungan) ? $val->ws_value_lingkungan->durasi : '-'),
             'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
             'status' => $param->status
         ];
