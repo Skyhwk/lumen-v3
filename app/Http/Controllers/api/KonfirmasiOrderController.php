@@ -116,6 +116,7 @@ class KonfirmasiOrderController extends Controller
 			->where('id_quotation', $request->id_quotation)
 			->where('no_quotation', $request->no_quotation)
 			->where('type', $request->type)
+			->where('is_active', true)
 			->first();
 
 		return response()->json([

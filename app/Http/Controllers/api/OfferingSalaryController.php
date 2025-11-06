@@ -521,8 +521,18 @@ class OfferingSalaryController extends Controller
             if ($checkNikKaryawan) {
                 return response()->json([
                     'message' => 'Nik karyawan sudah ada'
-                ], 500);
+                ], 400);
             }
+
+            $checkEmailKaryawan = MasterKaryawan::where('email',  $request->employee['email'])->first();
+
+
+            if ($checkEmailKaryawan) {
+                return response()->json([
+                    'message' => 'Email karyawan sudah ada'
+                ], 400);
+            }
+
 
             if ($request->hasFile('personal.image')) {
                 $profilePicture = $request->file('personal.image');
@@ -690,14 +700,25 @@ class OfferingSalaryController extends Controller
 
             // ================================= BEGIN ACCESS =================================
             $user = User::where('email', $request->employee['email'])->first();
-            if (!$user) {
-                $user = new User;
-                $user->created_by = $this->karyawan;
-                $user->created_at = $timestamp;
-            } else {
-                $user->updated_by = $this->karyawan;
-                $user->updated_at = $timestamp;
+
+            if ($user) {
+                return response()->json([
+                    'message' => 'Email Karyawan sudah ada'
+                ], 400);
             }
+            
+            $username = User::where('username', $request->access['username'])->first();
+
+            if ($username) {
+                return response()->json([
+                    'message' => 'Username karyawan sudah ada'
+                ], 400);
+            }
+
+            $user = new User;
+            $user->created_by = $this->karyawan;
+            $user->created_at = $timestamp;
+
             $user->username = $request->access['username'];
             $user->email = $request->employee['email'];
 
@@ -714,17 +735,11 @@ class OfferingSalaryController extends Controller
             $kandidat->flag = true;
             $kandidat->save();
 
+
             DB::commit();
             return response()->json([
                 'message' => $request->personal['id_kandidat'] ? 'Karyawan updated successfully' : 'Karyawan created successfully'
             ], 200);
-        } catch (QueryException $qe) {
-            DB::rollBack();
-            if ($qe->getCode() == 23000) {
-                return response()->json([
-                    'message' => 'Terdapat duplikasi pada email atau username.!'
-                ], 500);
-            }
         } catch (Exception $e) {
             DB::rollBack();
             return response()->json([

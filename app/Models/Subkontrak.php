@@ -60,6 +60,11 @@ class Subkontrak extends Sector
     {
         return $this->belongsTo('App\Models\WsValueLingkungan', 'id', 'id_subkontrak')->where('is_active', true);
     }
+    
+    public function ws_udara()
+    {
+        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_subkontrak')->where('is_active', true);
+    }
     public function ws_value_cerobong()
     {
         return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_subkontrak');

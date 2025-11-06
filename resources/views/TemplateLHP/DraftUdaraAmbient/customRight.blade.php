@@ -82,15 +82,6 @@
                 {{-- Informasi Sampling --}}
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120" colspan="3">
-                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
-                        </td>
-                    </tr>
-                </table>
-
-                {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
-                    <tr>
                         <td class="custom5" width="120">
                             <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
