@@ -40,32 +40,32 @@ class LingkunganHidupNH3
 
         $Vu = \str_replace(",", "",number_format($data->average_flow * $data->durasi * (floatval($data->tekanan) / $Ta) * (298 / 760), 4));
         if($Vu != 0.0) {
-            $C1 = \str_replace(",", "", number_format($ks / floatval($Vu), 4));
+            $C = \str_replace(",", "", number_format(($ks / $Vu) * 1000, 4));
         }else {
-            $C1 = 0;
+            $C = 0;
         }
-        $C = \str_replace(",", "", number_format(floatval($C1) / 1000, 5));
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 5));
         $C2 = \str_replace(",", "", number_format(24.45 * floatval($C1) / 17.031, 5));
-        $C3 = $C2 * 1000;
-        $C4 = $C3 * 10000;
+        // $C3 = $C2 * 1000;
+        // $C4 = $C3 * 10000;
 
         $C14 = $C2;
 
         // Vu = Rerata Laju Alir*t*/1000
-        $Vu_alt = str_replace(",", "", number_format($data->average_flow * $data->durasi / 1000, 4));
-        $C15 = str_replace(",", "", number_format($ks / floatval($Vu_alt), 4));
+        $Vu_alt = str_replace(",", "", number_format($data->average_flow * $data->durasi, 4));
+        $C15 = str_replace(",", "", number_format($ks / floatval($Vu_alt) * 1000, 4));
 
         // C17 = C16/1000
         $C16 = str_replace(",", "", number_format(floatval($C15) / 1000, 5));
 
         $satuan = 'mg/Nm3';
 
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.0005)
-            $C1 = '<0.0005';
-        if (floatval($C2) < 0.0007)
-            $C2 = '<0.0007';
+        if (floatval($C) < 3.33)
+            $C = '<3.33';
+        if (floatval($C1) < 0.00333)
+            $C1 = '<0.00333';
+        if (floatval($C2) < 0.00478)
+            $C2 = '<0.00478';
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
@@ -84,8 +84,8 @@ class LingkunganHidupNH3
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
-            'C3' => $C3,
-            'C4' => $C4,
+            // 'C3' => $C3,
+            // 'C4' => $C4,
             'C14' => $C14,
             'C15' => $C15,
             'C16' => $C16,
