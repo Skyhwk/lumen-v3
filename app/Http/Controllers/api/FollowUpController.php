@@ -155,8 +155,8 @@ class FollowUpController extends Controller
 
         if ($cekLog) {
             $karyawan_now = $request->attributes->get('user');
-            
-            if (($karyawan_now != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+
+            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -419,10 +419,12 @@ class FollowUpController extends Controller
                             ->orderBy('log_webphone.created_at', 'desc')
                             ->first();
                         // dd($cekLog, $request->sales_penanggung_jawab, 'stop');
-                        if ($cekLog) {
-                            $karyawan_now = $request->attributes->get('user');
 
-                            if (($karyawan_now != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+                        $karyawan_now = $request->attributes->get('user');
+
+                        if ($cekLog) {
+
+                            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                                 return response()->json([
                                     'status' => 'error',
                                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -433,7 +435,7 @@ class FollowUpController extends Controller
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
                         $dfus->kontak = $request->kontak;
-                        $dfus->sales_penanggung_jawab = $request->sales_penanggung_jawab;
+                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ? $karyawan_now->karyawan->id : $request->sales_penanggung_jawab;
                         $dfus->tanggal = $request->tanggal;
                         $dfus->jam = $request->jam;
                         $dfus->created_by = $this->karyawan;
