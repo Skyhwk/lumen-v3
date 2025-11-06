@@ -12,9 +12,9 @@ class DataLapanganAir extends Sector
 
     protected $guarded = [];
 
-    public function detail(){
-        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
+    public function detail()
+    {
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->where('is_active', true);
         // ->where('is_active', true);
     }
-   
 }
