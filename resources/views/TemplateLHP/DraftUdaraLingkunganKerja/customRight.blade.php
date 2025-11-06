@@ -1,9 +1,40 @@
 @php
-    use App\Models\TabelRegulasi;
-    use App\Models\MasterRegulasi;
-    use App\Models\DetailLingkunganKerja;
+use App\Models\TabelRegulasi;
+use App\Models\MasterRegulasi;
+use App\Models\DetailLingkunganKerja;
 
-    $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
+$detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
+$tanggal_sampling = '';
+if($header->status_sampling == 'S24'){
+$detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+
+$tanggalAwal = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->min('created_at');
+
+$tanggalAkhir = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->max('created_at');
+
+$tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+$tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
+
+if ($tanggalAwal || $tanggalAkhir) {
+if ($tanggalAwal == $tanggalAkhir) {
+$tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+} else {
+$tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
+}
+} else {
+$tanggal_sampling = '-';
+}
+} else {
+if ($header->tanggal_sampling || $header->tanggal_terima) {
+if ($header->tanggal_sampling == $header->tanggal_terima) {
+$tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+} else {
+$tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+}
+} else {
+$tanggal_sampling = '-';
+}
+}
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -51,15 +82,6 @@
                 {{-- Informasi Sampling --}}
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120" colspan="3">
-                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
-                        </td>
-                    </tr>
-                </table>
-
-                {{-- Informasi Sampling --}}
-                <table style="padding: 10px 0px 0px 0px;" width="100%">
-                    <tr>
                         <td class="custom5" width="120">
                             <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
                         </td>
@@ -69,30 +91,20 @@
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
                             @php
-                                if ($header->tanggal_sampling || $header->tanggal_terima) {
-                                    if ($header->tanggal_sampling == $header->tanggal_terima) {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-                                    } else {
-                                        echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-                                    }
-                                } else {
-                                    echo '-';
-                                }
+                            echo $tanggal_sampling;
                             @endphp
                         </td>
                     </tr>
                     <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">
-                            @php
-                                if ($header->tanggal_terima) {
-                                    echo \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima) . ' - ' . \App\Helpers\Helper::tanggal_indonesia(date('Y-m-d'));
-                                } else {
-                                    echo '-';
-                                }
-                            @endphp
-                        </td>
+                        @php
+                        $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
+                        $periode = explode(' - ', $periode_analisa);
+                        $periode1 = $periode[0] ?? '';
+                        $periode2 = $periode[1] ?? '';
+                        @endphp
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -104,9 +116,7 @@
                         <td class="custom5">:</td>
                         <td class="custom5">
                             @php
-                                if ($detailLapangan) {
-                                    echo $detailLapangan->titik_koordinat;
-                                }
+                                echo $header->titik_koordinat;
                             @endphp
                         </td>
                     </tr>
@@ -125,17 +135,17 @@
                                 <tr>
                                     <td class="custom5">Suhu Lingkungan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->suhu }} °C</td>
+                                    <td class="custom5">{{ $header->suhu }} °C</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Kelembapan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->kelembapan }} %</td>
+                                    <td class="custom5">{{ $header->kelembapan }} %</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Tekanan Udara</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $detailLapangan->tekanan_udara }} mmHg</td>
+                                    <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
                                 </tr>
                             </table>
                         </td>
@@ -144,30 +154,44 @@
 
 
                 @if (!empty($header->regulasi))
-                    @foreach (json_decode($header->regulasi) as $y)
-                        <table style="padding-top: 10px;" width="100%">
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
-                            </tr>
-                        </table>
-                    @endforeach
-                    @php
-                        // pastikan $header ada nilainya
-                        $regulasi = MasterRegulasi::where('id', explode('-', $y)[0])->first();
-                        $table = TabelRegulasi::whereJsonContains('id_regulasi', explode('-', $y)[0])->first();
-                        if (!empty($table)) {
-                            $table = $table->konten;
-                        } else {
-                            $table = '';
-                        }
-                    @endphp
-                    @if ($table)
-                        <table style="padding-top: 5px;" width="100%">
-                            <tr>
-                                <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
-                            </tr>
-                        </table>
+
+                @foreach (json_decode($header->regulasi) as $y)
+                <table style="padding-top: 10px;" width="100%">
+                    <tr>
+                        @php
+                        @endphp
+                        <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
+                    </tr>
+                </table>
+                @endforeach
+
+                @endif
+                @php
+                $temptArrayPush = [];
+                if (!empty($detail)) {
+                foreach ($detail as $v) {
+                if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
+                $temptArrayPush[] = $v['akr'];
+                }
+                if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
+                $temptArrayPush[] = $v['attr'];
+                }
+                }
+                }
+                @endphp
+                @if (!empty($header->keterangan))
+                <table style="padding: 5px 0px 0px 10px;" width="100%">
+                    @foreach (json_decode($header->keterangan) as $vx)
+                    @foreach ($temptArrayPush as $symbol)
+                    @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                    <tr>
+                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                    </tr>
+                    @break
                     @endif
+                    @endforeach
+                    @endforeach
+                </table>
                 @endif
             </td>
         </tr>

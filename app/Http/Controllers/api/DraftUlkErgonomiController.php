@@ -1573,14 +1573,17 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
-                    if($data_order->periode != null){
-                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
-                    }else{
-                        $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
-                    }
+                    // if($data_order->periode != null){
+                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
+                    // }else{
+                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
+                    // }
+
+                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
                     
                     if($cekLink){
-                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $data_order->periode);
+                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $periode);
                         $this->dispatch($job);
                     }
                     
