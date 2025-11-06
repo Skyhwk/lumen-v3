@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\api;
 
 //models
-use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCCustom,LinkLhp};
+use App\Models\{HistoryAppReject, KonfirmasiLhp, MasterKaryawan, LhpsEmisiHeader, LhpsEmisiDetail, LhpsEmisiHeaderHistory, LhpsEmisiDetailHistory, LhpsEmisiCHeader, LhpsEmisiCDetail, LhpsEmisiCHeaderHistory, LhpsEmisiCDetailHistory, OrderDetail, MetodeSampling, MasterBakumutu, PengesahanLhp, Subkontrak, DataLapanganEmisiCerobong, DataLapanganEmisiKendaraan, EmisiCerobongHeader, MasterRegulasi, Parameter, GenerateLink, QrDocument, LhpsEmisiCCustom, LinkLhp};
 
 // service
-use App\Services\{PrintLhp,TemplateLhps,GenerateQrDocumentLhp,LhpTemplate,SendEmail};
+use App\Services\{PrintLhp, TemplateLhps, GenerateQrDocumentLhp, LhpTemplate, SendEmail};
 // job
 use App\Jobs\RenderLhp;
 use App\Jobs\CombineLHPJob;
@@ -41,212 +41,212 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         return Datatables::of($data1)->make(true);
     }
 
-    
+
 
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
         // if ($request->category2 == 34) {
+        try {
+            $header = LhpsEmisiCHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+
+            // Kode Lama
+            // if (!$header) {
+            //     $header = new LhpsEmisiCHeader();
+            // }
+
+            if ($header == null) {
+                $header = new LhpsEmisiCHeader();
+            } else {
+                $history = $header->replicate();
+                $history->setTable((new LhpsEmisiCHeaderHistory())->getTable());
+                $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $history->save();
+            }
+
+            // dd($request->all());
+            $parameter_uji = explode(', ', $request->parameter_uji);
+            // $keterangan = [];
+            // if ($request->keterangan) {
+            //     foreach ($request->keterangan as $key => $value) {
+            //         if ($value != '')
+            //             array_push($keterangan, $value);
+            //     }
+            // }
             try {
-                $header = LhpsEmisiCHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+                $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
+                    return ['page' => (int) $page, 'regulasi' => $item];
+                })->values()->toArray();
 
-                // Kode Lama
-                // if (!$header) {
-                //     $header = new LhpsEmisiCHeader();
-                // }
+                $header->id_kategori_2 = $request->category2 ?: NULL;
+                $header->id_kategori_3 = $request->category ?: NULL;
+                $header->kategori = $request->kategori ?: NULL;
+                $header->no_order = $request->no_order ?: NULL;
+                $header->no_lhp = $request->no_lhp ?: NULL;
+                $header->no_quotation = $request->no_penawaran ?: NULL;
+                $header->no_sampel = $request->no_sampel ?: NULL;
+                $header->parameter_uji = json_encode($parameter_uji);
+                $header->nama_pelanggan = $request->nama_perusahaan ?: NULL;
+                $header->alamat_sampling = $request->alamat_sampling ?: NULL;
+                $header->sub_kategori = $request->sub_kategori ?: NULL;
+                $header->metode_sampling = $request->metode_sampling ? json_encode($request->metode_sampling) : NULL;
+                $header->tanggal_lhp = $request->tanggal_lhp;
+                $header->konsultan = $request->konsultan ?: NULL;
+                $header->nama_pic = $request->nama_pic ?: NULL;
+                $header->jabatan_pic = $request->jabatan_pic ?: NULL;
+                $header->no_pic = $request->no_pic ?: NULL;
+                $header->email_pic = $request->email_pic ?: NULL;
+                $header->type_sampling = $request->kategori_1 ?: NULL;
+                $header->tanggal_sampling = $request->tanggal_sampling ?: NULL;
+                $header->tanggal_terima = $request->tanggal_terima ?: NULL;
+                $header->tanggal_tugas = $request->tanggal_tugas ?: NULL;
+                $header->periode_analisa = $request->periode_analisa ?: NULL;
+                $header->nama_karyawan = 'Abidah Walfathiyyah';
+                $header->jabatan_karyawan = 'Technical Control Supervisor';
+                $header->keterangan = $request->keterangan ? json_encode($request->keterangan) : NULL;
+                //     $header->nama_karyawan = 'Dwi Meisya Batari';
+                //     $header->jabatan_karyawan = 'Technical Control Manager';
+                $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
+                $header->regulasi_custom = isset($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
+                $header->created_by = $this->karyawan;
+                $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $header->save();
 
-                if ($header == null) {
-                    $header = new LhpsEmisiCHeader();
-                } else {
-                    $history = $header->replicate();
-                    $history->setTable((new LhpsEmisiCHeaderHistory())->getTable());
-                    $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $history->save();
+                $param = $request->parameter;
+                $allDetail = []; // tampung semua detail
+
+                foreach ($param as $key => $val) {
+                    // Kode Lama
+                    // $detail = LhpsEmisiCDetail::where('id_header', $header->id)
+                    //     ->where('parameter', $val)
+                    //     ->first();
+
+                    // if (!$detail) {
+                    //     $detail = new LhpsEmisiCDetail();
+                    //     $detail->id_header = $header->id;
+                    //     $detail->parameter = $val;
+                    // }
+
+                    $existing = LhpsEmisiCDetail::where('id_header', $header->id)
+                        ->where('parameter', $val)
+                        ->first();
+
+                    if ($existing) {
+                        $detailHistory = $existing->replicate();
+                        $detailHistory->setTable((new LhpsEmisiCDetailHistory())->getTable());
+                        $detailHistory->created_by = $this->karyawan;
+                        $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                        $detailHistory->save();
+                    }
+
+                    if (!$existing) {
+                        $detail = new LhpsEmisiCDetail();
+                        $detail->id_header = $header->id;
+                        $detail->parameter = $val;
+                    } else {
+                        $detail = $existing;
+                    }
+
+                    $detail->akr = $request->akr[$key] ?? null;
+                    $detail->parameter_lab = $request->parameter_lab[$key] ?? null;
+                    $detail->C = $request->C[$key] ?? null;
+                    // $detail->C1 = $request->C1[$key] ?? null;
+                    // $detail->C2 = $request->C2[$key] ?? null;
+                    $detail->terukur = $request->terukur[$key] ?? null;
+                    $detail->terkoreksi = $request->terkoreksi[$key] ?? null;
+                    $detail->attr = $request->attr[$key] ?? null;
+                    $detail->spesifikasi_metode = $request->spesifikasi_metode[$key] ?? null;
+                    $detail->satuan = $request->satuan[$key] ?? null;
+                    $detail->baku_mutu = $request->baku_mutu[$key] ?? null;
+
+                    $detail->save();
+
+                    $allDetail[] = $detail; // masukin setiap detail ke array
                 }
 
-                // dd($request->all());
-                $parameter_uji = explode(', ', $request->parameter_uji);
-                // $keterangan = [];
-                // if ($request->keterangan) {
-                //     foreach ($request->keterangan as $key => $value) {
-                //         if ($value != '')
-                //             array_push($keterangan, $value);
-                //     }
-                // }
-                try {
-                    $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                        return ['page' => (int) $page, 'regulasi' => $item];
-                    })->values()->toArray();
 
-                    $header->id_kategori_2 = $request->category2 ?: NULL;
-                    $header->id_kategori_3 = $request->category ?: NULL;
-                    $header->kategori = $request->kategori ?: NULL;
-                    $header->no_order = $request->no_order ?: NULL;
-                    $header->no_lhp = $request->no_lhp ?: NULL;
-                    $header->no_quotation = $request->no_penawaran ?: NULL;
-                    $header->no_sampel = $request->no_sampel ?: NULL;
-                    $header->parameter_uji = json_encode($parameter_uji);
-                    $header->nama_pelanggan = $request->nama_perusahaan ?: NULL;
-                    $header->alamat_sampling = $request->alamat_sampling ?: NULL;
-                    $header->sub_kategori = $request->sub_kategori ?: NULL;
-                    $header->metode_sampling = $request->metode_sampling ? json_encode($request->metode_sampling) : NULL;
-                    $header->tanggal_lhp = $request->tanggal_lhp;
-                    $header->konsultan = $request->konsultan ?: NULL;
-                    $header->nama_pic = $request->nama_pic ?: NULL;
-                    $header->jabatan_pic = $request->jabatan_pic ?: NULL;
-                    $header->no_pic = $request->no_pic ?: NULL;
-                    $header->email_pic = $request->email_pic ?: NULL;
-                    $header->type_sampling = $request->kategori_1 ?: NULL;
-                    $header->tanggal_sampling = $request->tanggal_sampling ?: NULL;
-                    $header->tanggal_terima = $request->tanggal_terima ?: NULL;
-                    $header->tanggal_tugas = $request->tanggal_tugas ?: NULL;
-                    $header->periode_analisa = $request->periode_analisa ?: NULL;
-                    $header->nama_karyawan = 'Abidah Walfathiyyah';
-                    $header->jabatan_karyawan = 'Technical Control Supervisor';
-                    $header->keterangan = $request->keterangan ? json_encode($request->keterangan) : NULL;
-                    //     $header->nama_karyawan = 'Dwi Meisya Batari';
-                    //     $header->jabatan_karyawan = 'Technical Control Manager';
-                    $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
-                    $header->regulasi_custom = isset($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
-                    $header->created_by = $this->karyawan;
-                    $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $header->save();
+                // dd($request->custom_parameter);
 
-                    $param = $request->parameter;
-                    $allDetail = []; // tampung semua detail
+                LhpsEmisiCCustom::where('id_header', $header->id)->delete();
+                if (isset($request->custom_parameter)) {
+                    foreach ($request->custom_parameter as $page => $values) {
+                        foreach ($values as $param => $val) {
+                            $custom = new LhpsEmisiCCustom();
+                            $custom->id_header = $header->id;
+                            $custom->page = $page;
+                            $custom->parameter = $param;
+                            $custom->akr = $request->custom_akr[$page][$param] ?? null;
+                            $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
+                            $custom->C = $request->custom_C[$page][$param] ?? null;
+                            // $custom->C1 = $request->custom_C1[$page][$param] ?? null;
+                            // $custom->C2 = $request->custom_C2[$page][$param] ?? null;
+                            $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
+                            $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
+                            $custom->attr = $request->custom_attr[$page][$param] ?? null;
+                            $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
+                            $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
+                            $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
 
-                    foreach ($param as $key => $val) {
-                        // Kode Lama
-                        // $detail = LhpsEmisiCDetail::where('id_header', $header->id)
-                        //     ->where('parameter', $val)
-                        //     ->first();
-
-                        // if (!$detail) {
-                        //     $detail = new LhpsEmisiCDetail();
-                        //     $detail->id_header = $header->id;
-                        //     $detail->parameter = $val;
-                        // }
-
-                        $existing = LhpsEmisiCDetail::where('id_header', $header->id)
-                            ->where('parameter', $val)
-                            ->first();
-
-                        if ($existing) {
-                            $detailHistory = $existing->replicate();
-                            $detailHistory->setTable((new LhpsEmisiCDetailHistory())->getTable());
-                            $detailHistory->created_by = $this->karyawan;
-                            $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                            $detailHistory->save();
-                        }
-
-                        if (!$existing) {
-                            $detail = new LhpsEmisiCDetail();
-                            $detail->id_header = $header->id;
-                            $detail->parameter = $val;
-                        } else {
-                            $detail = $existing;
-                        }
-
-                        $detail->akr = $request->akr[$key] ?? null;
-                        $detail->parameter_lab = $request->parameter_lab[$key] ?? null;
-                        $detail->C = $request->C[$key] ?? null;
-                        // $detail->C1 = $request->C1[$key] ?? null;
-                        // $detail->C2 = $request->C2[$key] ?? null;
-                        $detail->terukur = $request->terukur[$key] ?? null;
-                        $detail->terkoreksi = $request->terkoreksi[$key] ?? null;
-                        $detail->attr = $request->attr[$key] ?? null;
-                        $detail->spesifikasi_metode = $request->spesifikasi_metode[$key] ?? null;
-                        $detail->satuan = $request->satuan[$key] ?? null;
-                        $detail->baku_mutu = $request->baku_mutu[$key] ?? null;
-
-                        $detail->save();
-
-                        $allDetail[] = $detail; // masukin setiap detail ke array
-                    }
-
-                    
-                    // dd($request->custom_parameter);
-                    
-                    LhpsEmisiCCustom::where('id_header', $header->id)->delete(); 
-                    if(isset($request->custom_parameter)){
-                        foreach ($request->custom_parameter as $page => $values) {
-                            foreach ($values as $param => $val) {
-                                $custom = new LhpsEmisiCCustom();
-                                $custom->id_header = $header->id;
-                                $custom->page = $page;
-                                $custom->parameter = $param;
-                                $custom->akr = $request->custom_akr[$page][$param] ?? null;
-                                $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
-                                $custom->C = $request->custom_C[$page][$param] ?? null;
-                                // $custom->C1 = $request->custom_C1[$page][$param] ?? null;
-                                // $custom->C2 = $request->custom_C2[$page][$param] ?? null;
-                                $custom->terukur = $request->custom_terukur[$page][$param] ?? null;
-                                $custom->terkoreksi = $request->custom_terkoreksi[$page][$param] ?? null;
-                                $custom->attr = $request->custom_attr[$page][$param] ?? null;
-                                $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
-                                $custom->satuan = $request->custom_satuan[$page][$param] ?? null;
-                                $custom->baku_mutu = $request->custom_baku_mutu[$page][$param] ?? null;
-    
-                                $custom->save();
-                            }
+                            $custom->save();
                         }
                     }
+                }
 
 
 
-                    if ($header != null) {
+                if ($header != null) {
 
-                        $file_qr = new GenerateQrDocumentLhp();
-                        $file_qr = $file_qr->insert('LHP_EMISI_C', $header, $this->karyawan);
-                        if ($file_qr) {
-                            $header->file_qr = $file_qr;
-                            $header->save();
-                        }
-
-                        $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-
-                        $custom = LhpsEmisiCCustom::where('id_header', $header->id)
-                            ->get()
-                            ->groupBy('page')
-                            ->toArray();
-
-                        $view = 'DraftESTB';
-
-                        $fileName = LhpTemplate::setDataHeader($header)
-                            ->setDataDetail($detail)
-                            ->setDataCustom($custom)
-                            ->whereView($view)
-                            ->render('downloadLHPFinal');
-
-                        $header->file_lhp = $fileName;
-
-                        // if ($header->is_revisi == 1) {
-                        //     $header->is_revisi = 0;
-                        //     $header->is_generated = 0;
-                        //     $header->count_revisi++;
-                        //     if ($header->count_revisi > 2) {
-                        //         $this->handleApprove($request, false);
-                        //     }
-                        // }
+                    $file_qr = new GenerateQrDocumentLhp();
+                    $file_qr = $file_qr->insert('LHP_EMISI_C', $header, $this->karyawan);
+                    if ($file_qr) {
+                        $header->file_qr = $file_qr;
                         $header->save();
                     }
-                } catch (\Exception $e) {
-                    throw new \Exception("Error in header or detail assignment: " . $e->getMessage() . "line " . $e->getLine() . "file : " .$e->getFile());
-                }
 
-                DB::commit();
-                return response()->json([
-                    'message' => 'Data draft LHP air no sampel ' . $request->no_sampel . ' berhasil disimpan',
-                    'status' => true
-                ], 201);
-            } catch (\Exception $th) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'status' => false
-                ], 500);
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+
+                    $custom = LhpsEmisiCCustom::where('id_header', $header->id)
+                        ->get()
+                        ->groupBy('page')
+                        ->toArray();
+
+                    $view = 'DraftESTB';
+
+                    $fileName = LhpTemplate::setDataHeader($header)
+                        ->setDataDetail($detail)
+                        ->setDataCustom($custom)
+                        ->whereView($view)
+                        ->render('downloadLHPFinal');
+
+                    $header->file_lhp = $fileName;
+
+                    // if ($header->is_revisi == 1) {
+                    //     $header->is_revisi = 0;
+                    //     $header->is_generated = 0;
+                    //     $header->count_revisi++;
+                    //     if ($header->count_revisi > 2) {
+                    //         $this->handleApprove($request, false);
+                    //     }
+                    // }
+                    $header->save();
+                }
+            } catch (\Exception $e) {
+                throw new \Exception("Error in header or detail assignment: " . $e->getMessage() . "line " . $e->getLine() . "file : " . $e->getFile());
             }
+
+            DB::commit();
+            return response()->json([
+                'message' => 'Data draft LHP air no sampel ' . $request->no_sampel . ' berhasil disimpan',
+                'status' => true
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'line' => $th->getLine(),
+                'status' => false
+            ], 500);
+        }
         // }
     }
     public function updateTanggalLhp(Request $request)
@@ -291,7 +291,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             foreach ($custom as $item) {
                 $page = $item->page;
                 $groupedByPage[$page][] = $item->toArray();
-
             }
 
             $view = 'DraftESTB';
@@ -542,10 +541,13 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     {
         $param = $val->parameter_emisi;
 
+
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
             ->where('id_parameter', $param->id)
             ->first();
         $satuan = $bakumutu ? $bakumutu->satuan : null;
+        $akreditasi = $bakumutu && isset($bakumutu->akreditasi) ? $bakumutu->akreditasi : '';
+
         $entry = [
             'id' => $val->id,
             'no_sampel' => $val->no_sampel,
@@ -557,11 +559,10 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'satuan' => $param->satuan,
             'methode' => $param->method,
             'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
-            'akr' => str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ',
+            'akr' => str_contains($akreditasi, 'akreditasi') ? '' : 'ẍ',
         ];
+        
 
-        
-        
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
             $entry['methode'] = $bakumutu->method;
@@ -575,7 +576,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     private function getHasilUji($val, $satuan)
     {
         $cerobong = $val->ws_value_cerobong;
-        if($cerobong == null){
+        if ($cerobong == null) {
             return null;
         }
 
@@ -619,7 +620,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     }
 
 
-    
+
 
     public function handleReject(Request $request)
     {
@@ -743,7 +744,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         return response()->json($users);
     }
 
-    
+
 
     public function sendEmail(Request $request)
     {
@@ -889,9 +890,9 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if($cekLink){
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
-                        $this->dispatch($job);
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $this->dispatch($job);
                 }
                 // $servicePrint = new PrintLhp();
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
