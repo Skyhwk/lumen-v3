@@ -137,7 +137,10 @@ class FdlCahayaController extends Controller
 
                 $no_sample = $data->no_sampel;
 
-                $po = OrderDetail::where('no_sampel', $data->no_sampel)->first();
+                $po = OrderDetail::where('no_sampel', $data->no_sampel)
+                ->where('is_active', true)
+                ->first();
+
                 if ($po) {
                     // Decode parameter jika dalam format JSON
                     $decoded = json_decode($po->parameter, true);
