@@ -914,6 +914,8 @@ class DraftUdaraAmbientController extends Controller
             "μg/Nm3" => 1,
             "µg/Nm³" => 1
         ];
+
+        
         
         // dd($bakumutu->satuan);
         $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
