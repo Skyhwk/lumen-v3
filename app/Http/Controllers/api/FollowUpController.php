@@ -199,6 +199,10 @@ class FollowUpController extends Controller
                 $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
                 break;
 
+            case 148: // Sales Staff
+                $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
+                break;
+
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
                     ->pluck('nama_lengkap')
