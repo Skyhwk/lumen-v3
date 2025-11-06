@@ -797,7 +797,7 @@ class DraftUdaraAmbientController extends Controller
             ];
 
             foreach ($models as $model) {
-                $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
+                $approveField = $model === LingkunganHeader::class ? 'is_approved' : 'is_approve';
                 $with = ['ws_value_linkungan', 'parameter_udara'];
                 if ($model === LingkunganHeader::class) {
                     $with[] = 'ws_udara';
@@ -828,6 +828,7 @@ class DraftUdaraAmbientController extends Controller
             foreach ($otherRegulations as $id => $regulations) {
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
             }
+        
             $methodsUsed = array_values(array_unique($methodsUsed));
             $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
                 ->whereNotNull('method')->groupBy('method')
@@ -910,9 +911,13 @@ class DraftUdaraAmbientController extends Controller
             "mg/nm³" => 2,
             "mg/nm3" => 2,
             "μg/Nm³" => 1,
-            "μg/Nm3" => 1
+            "μg/Nm3" => 1,
+            "µg/Nm³" => 1
         ];
+
         
+        
+        // dd($bakumutu->satuan);
         $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
 
         $fKoreksiKey = "f_koreksi_$index";
