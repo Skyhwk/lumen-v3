@@ -56,9 +56,11 @@ class EmisiICP
         $C1 = number_format($C / 1000, 4, ".", "");
 
         // C (ug/m3) = (((Ct - Cb)*Vt*S/St) / (Rerata Laju Alir * t))
-        $C3 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
+        // $C3 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
+        $C3 = $C;
 
-        $C4 = number_format($C3 / 1000, 4, ".", "");
+        // $C4 = number_format($C3 / 1000, 4, ".", "");
+        $C4 = $C1;
 
 
         switch ($data->parameter) {
