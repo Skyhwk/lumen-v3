@@ -308,6 +308,20 @@ class LingkunganKerjaLogam
                 // C (mg/m3) = (((Ct - Cb)*(Vt/1000)*1)/Vstd)
                 $C16 = ((($ks - $kb) * ($data->vl / 1000) * 1) / $Vstd);
                 $C15 = $C16 * 1000;
+
+                // "C (mg/Nm3 dan mg/m3) = <0.000013 mg/Nm3
+                // C (ug/Nm3 dan ug/m3) = <0.0128 ug/Nm3
+                // C (PPM) = <0.00011 PPM
+                // "
+                if ($C1 < 0.000013) {
+                    $C1 = 0.000013;
+                }
+                if ($C < 0.0128) {
+                    $C = 0.0128;
+                }
+                if ($C2 < 0.00011) {
+                    $C2 = 0.00011;
+                }
             }
 
             $C = isset($C) ? number_format($C, 6) : '0.000000';
