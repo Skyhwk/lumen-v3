@@ -319,7 +319,7 @@ class DraftUdaraAmbientController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsLingDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-                ->useLampiran(true)
+                // ->useLampiran(true)
                 ->whereView('DraftUdaraAmbient')
                 ->render('downloadLHPFinal');
 
