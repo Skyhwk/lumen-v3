@@ -535,7 +535,7 @@ class RenderInvoiceTitik
                                             $hasil = implode(", ", $penamaan_titik);
                                             $hasil = ' (' . $hasil . ') - ';
                                         }
-
+                                        // dd($penamaan_titik);
                                         $total_harga_qtc = self::rupiah($dataSampling->harga_satuan * ($dataSampling->jumlah_titik * count($dataSampling->periode)));
                                         $pdf->writeHTML('
                                             <tr>
@@ -572,40 +572,38 @@ class RenderInvoiceTitik
 
 
                                 } else {
-                                    
-                                    if (isset($dataSampling->keterangan_pengujian)) {
-
+                                    if (isset($dataSampling->penamaan_titik)) {
+                                        $penamaan_titik = [];
+                                        foreach($dataSampling->penamaan_titik as $valll) {
+                                            $titik = reset($valll);
+                                            $penamaan_titik[] = $titik;
+                                        }
                                         $pdf->writeHTML('
                                             <tr>
-                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $dataSampling->keterangan_pengujian . '</span><br>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . '(' . implode(", ", $penamaan_titik) . ')' .' - ' . $dataSampling->total_parameter . '</span><br>
                                         ');
-
                                     } else {
-
                                         $pdf->writeHTML('
                                             <tr>
                                                 <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . strtoupper($kategori2[1]) . ' - ' . $dataSampling->total_parameter . ' Parameter</span><br>
-                                        ');
+                                        ');                                        
+                                    }
+                                    if (is_array($dataSampling->regulasi)) {
 
+                                        foreach ($dataSampling->regulasi as $rg => $v) {
+                                            $reg = '';
 
-                                        if (is_array($dataSampling->regulasi)) {
+                                            if ($v != '') {
+                                                $regulasi = explode("-", $v);
+                                                $reg = $regulasi[1];
+                                            }
 
-                                            foreach ($dataSampling->regulasi as $rg => $v) {
-                                                $reg = '';
-
-                                                if ($v != '') {
-                                                    $regulasi = explode("-", $v);
-                                                    $reg = $regulasi[1];
-                                                }
-
-                                                if ($rg == 0) {
-                                                    $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
-                                                } else {
-                                                    $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
-                                                }
+                                            if ($rg == 0) {
+                                                $pdf->WriteHTML('<span style="font-size: 9px;">' . $reg . "</span>");
+                                            } else {
+                                                $pdf->WriteHTML('<br><span style="font-size: 9px;">' . $reg . "</span>");
                                             }
                                         }
-
                                     }
 
 
@@ -809,7 +807,7 @@ class RenderInvoiceTitik
                                             $hasil = implode(", ", $penamaan_titik);
                                             $hasil = ' (' . $hasil . ') - ';
                                         }
-
+                                        // dd($penamaan_titik);
                                         // dd($hasil);
                                         $keterangan_pengujian = strtoupper($kategori2[1]). $hasil . $datasp->total_parameter . ' Parameter';
                                         $harga_total = self::rupiah($datasp->harga_satuan * $datasp->jumlah_titik);
@@ -1542,6 +1540,7 @@ class RenderInvoiceTitik
                             
                         
                 $filePath = public_path('invoice/' . $fileName);
+                // dd($filePath);
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
                 return $fileName;
             

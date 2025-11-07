@@ -432,7 +432,6 @@ class TestingController extends Controller
                         return response()->json(['message' => $ex->getMessage(), 'line' => $ex->getLine()], 400);
                     }
                 case 'global label':
-                    dd('ss');
                     if ($request->mode == 'byrangetanggal') {
                         DB::beginTransaction();
                         try {
@@ -3894,5 +3893,14 @@ class TestingController extends Controller
             'base64' => $base64WithHeader,
             'file_type' => $fileType
         ];
+    }
+
+    public function recoverInvoice(Request $request) {
+        $invoices = Invoice::where(function ($query) {
+            $query->where('updated_at', '>=', Carbon::now()->startOfDay());
+        })->get()->pluck('no_invoice')->toArray();
+
+        return response()->json($invoices);
+    
     }
 }

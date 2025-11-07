@@ -9,7 +9,8 @@
     if($header->status_sampling == 'S24'){
         $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
+        // $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
+        $tanggalAwal = $header->tanggal_sampling;
 
         $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
 
