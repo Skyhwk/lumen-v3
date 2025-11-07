@@ -288,9 +288,9 @@ class DraftUdaraAmbientController extends Controller
                         LhpsLingCustom::create([
                             'id_header' => $header->id,
                             'page' => $page,
-                            'parameter_lab' => $request->custom_parameter[$page][$param] ?? '',
+                            'parameter_lab' => $request->custom_parameter_lab[$page][$param] ?? '',
                             'akr' => $request->custom_akr[$page][$param] ?? '',
-                            'parameter' => $request->custom_parameter_lab[$page][$param],
+                            'parameter' => $request->custom_parameter[$page][$param],
                             'hasil_uji' => $hasil,
                             'baku_mutu' => $request->custom_baku_mutu[$page][$param] ?: '{}',
                             'attr' => $request->custom_attr[$page][$param] ?? '',
