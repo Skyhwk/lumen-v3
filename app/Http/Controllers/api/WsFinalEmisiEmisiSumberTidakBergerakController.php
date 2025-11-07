@@ -307,29 +307,45 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 						->where('id_emisi_cerobong_header', $emisiCerobong->id)
 						->where('is_active', true)
 						->first();
-
-					$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
-					$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
-					if ($ws_value != null) {
-						$ws_value->input_koreksi = $request->faktor_koreksi;
-						$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');
-						// $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
-						$keterangan = $request->jenis_koreksi; // Jenis Koreksi
-						$keterangan[] = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
-						$ws_value->keterangan_koreksi = json_encode($keterangan);
-						$ws_value->C3_persen = $dataLapangan->O2;
-						$ws_value->is_active = true;
-						$ws_value->updated_at = Carbon::now();
-						$ws_value->updated_by = $this->karyawan;
-						// dd($ws_value);
-						$ws_value->save();
+					if($request->faktor_koreksi > 0) {
+						$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
+						$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
+						if ($ws_value != null) {
+							$ws_value->input_koreksi = $request->faktor_koreksi;
+							$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');
+							// $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
+							$keterangan = $request->jenis_koreksi; // Jenis Koreksi
+							$keterangan[] = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
+							$ws_value->keterangan_koreksi = json_encode($keterangan);
+							$ws_value->C3_persen = $dataLapangan->O2;
+							$ws_value->is_active = true;
+							$ws_value->updated_at = Carbon::now();
+							$ws_value->updated_by = $this->karyawan;
+							// dd($ws_value);
+							$ws_value->save();
+						} else {
+							return response()->json([
+								'message' => 'Data C1 tidak ditemukan.',
+								'success' => false,
+								'status' => 404
+							], 404);
+						}
 					} else {
-						return response()->json([
-							'message' => 'Data C1 tidak ditemukan.',
-							'success' => false,
-							'status' => 404
-						], 404);
+						if ($ws_value != null) {
+							$ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
+							$ws_value->updated_at = Carbon::now();
+							$ws_value->updated_by = $this->karyawan;
+							// dd($ws_value);
+							$ws_value->save();
+						} else {
+							return response()->json([
+								'message' => 'Data C1 tidak ditemukan.',
+								'success' => false,
+								'status' => 404
+							], 404);
+						}
 					}
+					
 
 					DB::commit();
 					return response()->json(['message' => 'Data berhasil diupdate.', 'success' => true], 200);
