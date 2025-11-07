@@ -180,14 +180,16 @@
                 </table>
 
 
-                @if (!empty($header->regulasi))
-                    @foreach (json_decode($header->regulasi) as $y)
-                        <table style="padding-top: 10px;" width="100%">
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
-                            </tr>
-                        </table>
-                    @endforeach
+                @if ($header->regulasi_custom!=null)
+                    <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                </tr>
+                            @endif
+                        @endforeach
+                    </table>
                 @endif
                 {{-- Keterangan --}}
                 @php
