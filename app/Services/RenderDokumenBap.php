@@ -75,7 +75,7 @@ class RenderDokumenBap
         $mpdf->keep_table_proportions = true;
 
         $mpdf->SetHTMLHeader($htmlHeader);
-        $mpdf->setFooter($htmlFooter);
+        $mpdf->setHTMLFooter($htmlFooter);
         $mpdf->WriteHTML(self::generateStylesheet(), \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML($htmlBody);
 
@@ -85,34 +85,22 @@ class RenderDokumenBap
 
     private function footer($qr_img)
     {
-        return array(
-            'odd' => array(
-                'C' => array(
-                    'content' => 'Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi} <br> Hal {PAGENO} dari {nbpg}',
-                    'font-size' => 5,
-                    'font-style' => 'I',
-                    'font-family' => 'serif',
-                    'color' => '#000000'
-                ),
-                'R' => array(
-                    'content' => '' . $qr_img . '',
-                    'font-size' => 5,
-                    'font-style' => 'I',
-                    // 'font-style' => 'B',
-                    'font-family' => 'serif',
-                    'color' => '#000000'
-                ),
-                'L' => array(
-                    'content' => 'PT Inti Surya Laboratorium <br> Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, <br> Sampora Kab. Tangerang 15341 021-5089-8988/89 contact@intilab.com',
-                    'font-size' => 4,
-                    'font-style' => 'I',
-                    // 'font-style' => 'B',
-                    'font-family' => 'serif',
-                    'color' => '#000000'
-                ),
-                'line' => -1,
-            )
-        );
+        return '<table width="100%" style="font-size:6pt; font-style:italic; font-family:serif; border-top:1px solid #000; padding-top:4px;">
+                <tr>
+                    <td width="30%" align="left">
+                    PT Inti Surya Laboratorium <br>
+                    Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk,
+                    Sampora Kab. Tangerang 15341 021-5089-8988/89
+                    contact@intilab.com
+                    </td>
+                    <td width="40%" align="center">
+                    Dokumen ini diterbitkan otomatis oleh sistem
+                    </td>
+                    <td width="30%" align="right">
+                    ' . $qr_img . '
+                    </td>
+                </tr>
+                </table>';
     }
 
     private function generateStylesheet()
