@@ -432,7 +432,6 @@ class TestingController extends Controller
                         return response()->json(['message' => $ex->getMessage(), 'line' => $ex->getLine()], 400);
                     }
                 case 'global label':
-                    dd('ss');
                     if ($request->mode == 'byrangetanggal') {
                         DB::beginTransaction();
                         try {
