@@ -2,6 +2,7 @@
 use App\Models\TabelRegulasi;
 use App\Models\MasterRegulasi;
 use App\Models\DetailLingkunganKerja;
+use \Carbon\Carbon;
 
 $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
 $tanggal_sampling = '';
