@@ -423,18 +423,21 @@ class RenderInvoice
                         ');
                     } else {
                         if (is_array($cekArray)) { // kondisi array
-
-                            for ($i = 0; $i < count(array_chunk($cekArray, 15)); $i++) {
-                                foreach (array_chunk($cekArray, 15)[$i] as $keys => $dataSampling) {
+                            $resetData = reset($cekArray);
+                            $usingData = (isset($resetData->data_sampling) && is_array($resetData->data_sampling))
+                                ? $resetData->data_sampling
+                                : $cekArray;
+                            for ($i = 0; $i < count(array_chunk($usingData, 15)); $i++) {
+                                foreach (array_chunk($usingData, 15)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
-                                        if ($i == count(array_chunk($cekArray, 15)) - 1) {
+                                        if ($i == count(array_chunk($usingData, 15)) - 1) {
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
                                                 <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count(array_chunk($cekArray, 15)[$i]) + 1;
+                                            $rowspan = count(array_chunk($usingData, 15)[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;">' . $no . '</td>
@@ -443,10 +446,9 @@ class RenderInvoice
                                         }
                                     }
 
-
-                                    $kategori2 = explode("-", $dataSampling->kategori_2);
+                                    // dd($dataSampling);
+                                    // $kategori2 = explode("-", $dataSampling->kategori_2);
                                     $split = explode("/", $values->no_document);
-
                                     if ($split[1] == 'QTC') {
                                         if (isset($dataSampling->keterangan_pengujian)) {
                                             $totalBiayaQt += $dataSampling->harga_total;
@@ -458,7 +460,7 @@ class RenderInvoice
                                     }
                                 }
 
-                                $isLastElement = $i == count(array_chunk($cekArray, 15)) - 1;
+                                $isLastElement = $i == count(array_chunk($usingData, 15)) - 1;
 
                                 if ($isLastElement) {
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
