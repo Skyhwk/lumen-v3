@@ -61,17 +61,19 @@ class LingkunganHidupLogam24_6j
         if($data->tipe_data == 'ulk'){
             $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
-            if(!is_null($mdl) && $C1 < 0.000013) {
-                $C1 = '<0.000013';
-            }
+            // if(!is_null($mdl) && $C1 < 0.000013) {
+            //     $C1 = '<0.000013';
+            // }
 
             $satuan = 'mg/m³';
         }else if($data->tipe_data == 'ambient') {
             $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
 
-            if(!is_null($mdl) && $C < 0.0128) {
-                $C = '<0.0128';
-            }
+            // if(!is_null($mdl) && $C < 0.0128) {
+            //     $C = '<0.0128';
+            // }
+
+            $C1 = $C / 1000;
             $satuan = 'ug/Nm³';
         }
 
@@ -88,6 +90,19 @@ class LingkunganHidupLogam24_6j
                 'Shift 3' => $arr_hasil[2] ?? null,
                 'Shift 4' => $arr_hasil[3] ?? null
             ];
+
+            // "C (mg/Nm3 dan mg/m3) = <0.0001 mg/Nm3
+            // C (ug/Nm3 dan ug/m3) = <0.101 ug/Nm3
+            // C (PPM) = <0.00011 PPM
+            // "
+            if($C < 0.101) {
+                $C = '<0.101';
+            }
+
+            if($C1 < 0.0001) {
+                $C1 = '<0.0001';
+            }
+
         }
 
         // dd($C, $C1, $C2);
