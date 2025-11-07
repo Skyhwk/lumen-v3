@@ -329,6 +329,16 @@ class LingkunganKerjaLogam
                 if ($C1 < 0.00005) {
                     $C1 = "<0.00005";
                 }
+
+                $C = number_format($C, 5);
+                if ($C < 0.05) {
+                    $C = "<0.05";
+                }
+
+                $C2 = number_format($C2, 6);
+                if ($C2 < 0.0000011) {
+                    $C2 = "<0.0000011";
+                }
             } elseif (in_array($data->parameter, ['Co'])) {
                 // "<0,000292 PPM
                 // <0,0078 ug/Nm3"
