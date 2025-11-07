@@ -2,6 +2,8 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
+    use \Carbon\Carbon;
+
 
     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
     $tanggal_sampling = '';
