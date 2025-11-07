@@ -683,10 +683,10 @@ class DraftUlkController extends Controller
         ];
 
         $satuanIndexMap = [
-            "µg/m³" => 17,
-            "µg/m3" => 17,
-            "mg/m³" => 16,
-            "mg/m3" => 16,
+            "µg/m³" => 16,
+            "µg/m3" => 16,
+            "mg/m³" => 17,
+            "mg/m3" => 17,
             "BDS" => 15,
             "CFU/M²" => 14,
             "CFU/M2" => 14,
@@ -701,6 +701,7 @@ class DraftUlkController extends Controller
             "CFU/m3" => 9,
             "CFU/mᶟ" => 9,
             "m/s" => 8,
+            "m/detik" => 8,
             "f/cc" => 7,
             "Ton/km²/Bulan" => 6,
             "Ton/km2/Bulan" => 6,

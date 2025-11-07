@@ -73,8 +73,8 @@ class DraftUdaraAmbientController extends Controller
                     ->where('shift_pengambilan', 'L2')
                     ->take(1)
                     ->values();
-            } 
-            
+            }
+
             // 🔹 Jika bukan → ambil 1 data pertama saja
             else {
                 $item->data_lapangan_lingkungan_hidup = $item->allDetailLingkunganHidup
@@ -148,7 +148,6 @@ class DraftUdaraAmbientController extends Controller
                 'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
                 'data' => $result,
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -293,7 +292,7 @@ class DraftUdaraAmbientController extends Controller
                             'akr' => $request->custom_akr[$page][$param] ?? '',
                             'parameter' => $request->custom_parameter_lab[$page][$param],
                             'hasil_uji' => $hasil,
-                            'baku_mutu' => $request->custom_baku_mutu[$page][$param] ?? '',
+                            'baku_mutu' => $request->custom_baku_mutu[$page][$param] ?: '{}',
                             'attr' => $request->custom_attr[$page][$param] ?? '',
                             'satuan' => $request->custom_satuan[$page][$param] ?? '',
                             'durasi' => $request->custom_durasi[$page][$param] ?? '',
@@ -339,7 +338,6 @@ class DraftUdaraAmbientController extends Controller
                 'message' => "Data draft lhp air no sampel {$request->no_sampel} berhasil disimpan",
                 'status' => true
             ], 201);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -823,7 +821,7 @@ class DraftUdaraAmbientController extends Controller
             foreach ($otherRegulations as $id => $regulations) {
                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
             }
-        
+
             $methodsUsed = array_values(array_unique($methodsUsed));
             $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
                 ->whereNotNull('method')->groupBy('method')
@@ -837,12 +835,11 @@ class DraftUdaraAmbientController extends Controller
                 'next_page' => $otherRegulations,
                 'spesifikasi_method' => $resultMethods,
                 'keterangan' => [
-                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                        'ẍ Parameter belum terakreditasi.'
-                    ]
+                    '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                    '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                    'ẍ Parameter belum terakreditasi.'
+                ]
             ], 201);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -856,7 +853,7 @@ class DraftUdaraAmbientController extends Controller
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_udara;
-        
+
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
             ->where('parameter', $val->parameter)
             ->first();
@@ -866,12 +863,12 @@ class DraftUdaraAmbientController extends Controller
             'no_sampel' => $val->no_sampel,
             'akr' => (
                 !empty($bakumutu)
-                    ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
-                    : 'ẍ'
+                ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                : 'ẍ'
             ),
             'parameter' => $param->nama_lhp ?? $param->nama_regulasi,
-            'satuan' => (!empty($bakumutu->satuan)) 
-                ? $bakumutu->satuan 
+            'satuan' => (!empty($bakumutu->satuan))
+                ? $bakumutu->satuan
                 : (!empty($param->satuan) ? $param->satuan : '-'),
             'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->ws_value_lingkungan) ? $val->ws_value_lingkungan->durasi : '-'),
             'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
@@ -879,10 +876,10 @@ class DraftUdaraAmbientController extends Controller
         ];
 
         $satuanIndexMap = [
-            "µg/m³" => 17,
-            "µg/m3" => 17,
-            "mg/m³" => 16,
-            "mg/m3" => 16,
+            "µg/m³" => 16,
+            "µg/m3" => 16,
+            "mg/m³" => 17,
+            "mg/m3" => 17,
             "BDS" => 15,
             "CFU/M²" => 14,
             "CFU/M2" => 14,
@@ -897,6 +894,7 @@ class DraftUdaraAmbientController extends Controller
             "CFU/m3" => 9,
             "CFU/mᶟ" => 9,
             "m/s" => 8,
+            "m/detik" => 8,
             "f/cc" => 7,
             "Ton/km²/Bulan" => 6,
             "Ton/km2/Bulan" => 6,
@@ -911,7 +909,7 @@ class DraftUdaraAmbientController extends Controller
         ];
 
 
-        
+
         // dd($bakumutu->satuan);
         $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
 
@@ -921,7 +919,7 @@ class DraftUdaraAmbientController extends Controller
         $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
             ?? $val->ws_udara->$hasilKey
             ?? $val->ws_value_linkungan->f_koreksi_c
-            ?? $val->ws_value_linkungan->C 
+            ?? $val->ws_value_linkungan->C
             ?? '-';
 
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
@@ -1022,11 +1020,11 @@ class DraftUdaraAmbientController extends Controller
                 $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if($cekLink) {
+                if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
                     $this->dispatch($job);
                 }
-                
+
                 DB::commit();
                 return response()->json([
                     'data' => $data,
@@ -1040,7 +1038,6 @@ class DraftUdaraAmbientController extends Controller
                     'status' => false
                 ], 404);
             }
-
         } catch (\Exception $th) {
             DB::rollBack();
             dd($th);
