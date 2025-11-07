@@ -197,9 +197,23 @@ class DraftUdaraAmbientController extends Controller
             $parameter_uji = !empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
             $keterangan = array_values(array_filter($request->keterangan ?? []));
 
+            // $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
+            //     return ['page' => (int) $page, 'regulasi' => $item];
+            // })->values()->toArray();
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                return ['page' => (int) $page, 'regulasi' => $item];
+
+                [$id, $regulasi] = explode(';', $item);
+
+                // Hilangkan prefix id_ bila ada
+                $id = (int) str_replace('id_', '', $id);
+
+                return [
+                    'page' => (int) $page,
+                    'regulasi' => trim($regulasi),
+                    'id' => $id,
+                ];
             })->values()->toArray();
+
             // === 4. Simpan / update header ===
             $header->fill([
                 'no_order' => $request->no_order ?: null,
@@ -625,47 +639,50 @@ class DraftUdaraAmbientController extends Controller
                         ->get()
                         ->toArray();
                 }
+                if (isset($request->other_regulasi) && !empty($request->other_regulasi)) {
+                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)->select('id', 'peraturan as regulasi')->get()->toArray();
+                }
 
                 // Proses regulasi custom dari LHP
                 if (!empty($cek_lhp->lhpsLingDetail) && !empty($cek_lhp->regulasi_custom)) {
                     $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
-                    // Mapping regulasi id
+                    // Mapping id regulasi jika ada other_regulasi
                     if (!empty($cek_regulasi)) {
+                        // Buat mapping regulasi => id
                         $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
-
+                        // Cari regulasi yang belum ada id-nya
                         $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
                             $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
                             if (isset($mapRegulasi[$regulasi_clean])) {
                                 $item['id'] = $mapRegulasi[$regulasi_clean];
                             } else {
-                                $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
-                                if ($db) {
-                                    $item['id'] = $db->id;
-                                    $mapRegulasi[$regulasi_clean] = $db->id;
+                                // Cari id regulasi jika belum ada di mapping
+                                $regulasi_db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
+                                if ($regulasi_db) {
+                                    $item['id'] = $regulasi_db->id;
+                                    $mapRegulasi[$regulasi_clean] = $regulasi_db->id;
                                 }
                             }
                             return $item;
                         }, $regulasi_custom);
                     }
-
-                    // Group custom by page
+                    // Group custom berdasarkan page
                     $groupedCustom = [];
                     foreach ($cek_lhp->lhpsLingCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
-
+                    // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
-
+                    usort($regulasi_custom, function ($a, $b) {
+                        return $a['page'] <=> $b['page'];
+                    });
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['page']))
-                            continue;
-                        // $id_regulasi = "id_" . $item['id'];
-                        $id_regulasi = (string) "id_" . explode('-', $item['regulasi'])[0];
+                        // dd($item['page']);
+                        if (empty($item['page'])) continue;
+                        $id_regulasi = (string)"id_" . $item['id'];
                         $page = $item['page'];
-
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
                                 $data_custom[$id_regulasi][] = [
@@ -701,11 +718,7 @@ class DraftUdaraAmbientController extends Controller
                 ];
 
                 foreach ($models as $model) {
-                    if ($model === Subkontrak::class || $model === DirectLainHeader::class || $model === PartikulatHeader::class ) {
-                        $approveField = 'is_approve';
-                    } else {
-                        $approveField = 'is_approved';
-                    }
+                    $approveField = $model === LingkunganHeader::class ? 'is_approved' : 'is_approve';
                     $data = $model::with('ws_value_linkungan', 'parameter_udara')
                         ->where('no_sampel', $request->no_sampel)
                         ->where($approveField, 1)
@@ -728,11 +741,6 @@ class DraftUdaraAmbientController extends Controller
                 // Sort mainData
                 $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
 
-                // Sort otherRegulations
-                foreach ($otherRegulations as $id => $regulations) {
-                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-                }
-
                 // ==============================
                 // Sinkronisasi data_entry dengan mainData
                 // ==============================
@@ -744,23 +752,6 @@ class DraftUdaraAmbientController extends Controller
                     }
                 }
 
-                // ==============================
-                // Sinkronisasi data_custom dengan otherRegulations
-                // ==============================
-                $dataCustomSamples = [];
-                foreach ($data_custom as $group) {
-                    foreach ($group as $row) {
-                        $dataCustomSamples[] = $row['no_sampel'];
-                    }
-                }
-
-                foreach ($otherRegulations as $id_regulasi => $entries) {
-                    foreach ($entries as $other) {
-                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
-                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
-                        }
-                    }
-                }
                 $defaultMethods = Parameter::where('is_active', true)
                     ->where('id_kategori', 4)
                     ->whereNotNull('method')
