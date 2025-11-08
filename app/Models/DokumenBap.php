@@ -11,6 +11,6 @@ class DokumenBap extends Sector
     protected $guarded = [];
 
     public function order(){
-        return $this->belongsTo(OrderHeader::class, 'id', 'id_order');
+        return $this->belongsTo(OrderHeader::class, 'id_order', 'id');
     }
 }
