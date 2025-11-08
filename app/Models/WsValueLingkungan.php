@@ -11,6 +11,7 @@ class WsValueLingkungan extends Sector
     public $timestamps = false;
 
     protected $guarded = [];
+
     public function dataLapanganLingkunganHidup() {
         return $this->belongsTo('App\Models\DataLapanganLingkunganHidup', 'no_sampel', 'no_sampel');
     }
@@ -22,5 +23,18 @@ class WsValueLingkungan extends Sector
     }
     public function detailLingkunganKerja() {
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
+    }
+
+    public function subkontrak(){
+        return $this->belongsTo('App\Models\SubKontrak', 'id_subkontrak', 'id');
+    }
+    public function lingkungan(){
+        return $this->belongsTo('App\Models\LingkunganHeader', 'lingkungan_header_id', 'id');
+    }
+    public function directlain(){
+        return $this->belongsTo('App\Models\DirectLainHeader', 'lingkungan_header_id', 'id');
+    }
+    public function partikulat(){
+        return $this->belongsTo('App\Models\PartikulatHeader', 'lingkungan_header_id', 'id');
     }
 }
