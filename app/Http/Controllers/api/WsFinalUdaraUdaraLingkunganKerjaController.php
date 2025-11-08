@@ -143,6 +143,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 				return Datatables::of($data)->make(true);
 			}
+
 			$directData = DirectLainHeader::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
@@ -167,7 +168,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
 
-			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
+			$subkontrak = Subkontrak::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
