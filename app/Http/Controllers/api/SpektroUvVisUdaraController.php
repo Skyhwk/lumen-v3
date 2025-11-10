@@ -25,7 +25,7 @@ class SpektroUvVisUdaraController extends Controller
     // 20-03-2025
     public function index(Request $request)
     {
-        $data = LingkunganHeader::with('ws_value', 'order_detail')
+        $data = LingkunganHeader::with('ws_udara', 'order_detail')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp);
