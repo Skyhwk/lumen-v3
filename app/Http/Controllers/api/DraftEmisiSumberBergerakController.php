@@ -92,6 +92,10 @@ class DraftEmisiSumberBergerakController extends Controller
                     ], 400);
                 }
 
+                $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+                
                 try {
                     $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                         return ['page' => (int) $page, 'regulasi' => $item];
@@ -110,17 +114,16 @@ class DraftEmisiSumberBergerakController extends Controller
                     $header->type_sampling = $request->kategori_1 ?: NULL;
                     $header->metode_sampling = isset($request->metode_sampling) ? json_encode($request->metode_sampling) : NULL;
                     $header->tanggal_lhp = $request->tanggal_lhp;
-                    // $header->tanggal_sampling = $request->tanggal_tugas ?: NULL;
+                    $header->tgl_tugas = $request->tanggal_terima ?: NULL;
+                    $header->tanggal_sampling = $request->tanggal_terima ?: NULL;
                     $header->periode_analisa = $request->periode_analisa ?: NULL;
                     $header->konsultan = $request->konsultan != '' ? $request->konsultan : NULL;
                     $header->nama_pic = $request->nama_pic ?: NULL;
                     $header->jabatan_pic = $request->jabatan_pic ?: NULL;
                     $header->no_pic = $request->no_pic ?: NULL;
                     $header->email_pic = $request->email_pic ?: NULL;
-                    $header->nama_karyawan = 'Abidah Walfathiyyah';
-                    $header->jabatan_karyawan = 'Technical Control Supervisor';
-                    // $header->nama_karyawan = 'Dwi Meisya Batari';
-                    // $header->jabatan_karyawan = 'Technical Control Manager';
+                    $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+                    $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
                     $header->regulasi = isset($request->regulasi) ? json_encode($request->regulasi) : NULL;
                     $header->regulasi_custom = isset($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
                     $header->save();
