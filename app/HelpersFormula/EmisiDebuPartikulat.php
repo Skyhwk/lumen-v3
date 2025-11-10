@@ -35,21 +35,25 @@ class EmisiDebuPartikulat
             }
         }
 
+        // Vstd (Nm3) = (Rerata Laju Alir TSP (Liter) x t) x (298/760) x (Pa/Ta) / 1000
         $Vstd = str_replace(",", "", number_format(
-            $data->flow * pow(((298 * $data->tekanan) / ((273 + $data->suhu) * 760)), 0.5) * $data->durasi_dry,
+            ($data->flow * $data->durasi_dry) * (298 / 760) * ($data->tekanan / (273 + $data->suhu)) / 1000,
             4
         ));
 
 
-        $rawC = ((floatval($data->w2) - floatval($data->w1)) * 10 ** 6) / floatval($Vstd);
-        $C = intval(round($rawC + (0.5 - ($rawC - intval($rawC))), 0));
+        // $raCwC = ((floatval($data->w2) - floatval($data->w1)) * 10 ** 6) / floatval($Vstd);
+        $C = ((floatval($data->w2) - floatval($data->w1)) * 10 ** 6) / floatval($Vstd);
         // $C = \str_replace(",", "", number_format($rawC, 4));
-        $C1 = \str_replace(",", "", number_format(floatval($rawC) / 1000, 4));
+        $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 4));
+        $C3 = $C;
+        $C4 = $C1;
         $w1 = $data->w1;
         $w2 = $data->w2;
 
         // dd($C, $C1);
 
+        $satuan = 'ug/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,
@@ -71,6 +75,9 @@ class EmisiDebuPartikulat
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C3' => $C3,
+            'C4' => $C4,
+            'satuan' => $satuan,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;
