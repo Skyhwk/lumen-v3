@@ -1075,7 +1075,7 @@ class DraftUlkController extends Controller
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($dataHeader)
                 ->setDataCustom($groupedByPage)
-                ->whereView('DraftUdaraAmbient')
+                ->whereView('DraftUdaraLingkunganKerja')
                 ->render();
 
             if ($dataHeader->file_lhp != $fileName) {
