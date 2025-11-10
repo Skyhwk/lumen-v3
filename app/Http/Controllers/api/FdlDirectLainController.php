@@ -131,8 +131,8 @@ class FdlDirectLainController extends Controller
 
             // Retrieve initial record
             $initialRecord = DataLapanganDirectLain::findOrFail($request->id);
-            $no_sample = $initialRecord->no_sampel;
-            $parameterData = $initialRecord->parameter;
+            $no_sample = trim($initialRecord->no_sampel);
+            $parameterData = trim($initialRecord->parameter);
             $shift = explode('-', $initialRecord->shift)[0];
 
             // Get PO & parameter
