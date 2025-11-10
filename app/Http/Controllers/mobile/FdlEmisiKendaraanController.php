@@ -137,7 +137,7 @@ class FdlEmisiKendaraanController extends Controller
                 ], 401);
             }
         } else if (isset($request->no_sampel) && $request->no_sampel != null) {
-            $po_s = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $po_s = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
             return response()->json([
                 'client' => $po_s->nama_perusahaan,
                 'kategori_3' => explode('-', $po_s->kategori_3)[0],
@@ -156,7 +156,7 @@ class FdlEmisiKendaraanController extends Controller
         try {
             if (isset($request->kode_qr) && $request->kode_qr != null) {
                 
-                $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', $request->no_sampel)->where('is_active',true)->first();
+                $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', trim($request->no_sampel))->where('is_active',true)->first();
                 if($fdlKendaraan){
                     return response()->json([
                         'message'=>'No Sampel sudah terinput'
@@ -171,7 +171,7 @@ class FdlEmisiKendaraanController extends Controller
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
 
-                    $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+                    $cek_po = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
                     if ($cek_po != null) {
                         $co2 = NULL;
                         $co = NULL;
@@ -214,7 +214,7 @@ class FdlEmisiKendaraanController extends Controller
                         }
                         $data_fdl = new DataLapanganEmisiKendaraan;
                         // $data_fdl->id_po 	= $cek_po->id;
-                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->no_sampel = strtoupper(trim($request->no_sampel));
                         $data_fdl->data_co     = $data_co;
                         $data_fdl->data_co2     = $data_co2;
                         $data_fdl->data_hc     = $data_hc;
@@ -242,7 +242,7 @@ class FdlEmisiKendaraanController extends Controller
 
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
-                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->no_sampel            = strtoupper(trim($request->no_sampel));
                         $data_order->id_qr            = $cek_qr->id;
                         $data_order->id_fdl            = $data_fdl->id;
                         $data_order->id_kendaraan    = $cek_qr->id_kendaraan;
@@ -251,8 +251,11 @@ class FdlEmisiKendaraanController extends Controller
                         $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
                         $data_order->save();
 
-                        $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))
-                            ->first();
+                        $orderDetail = OrderDetail::where(
+                            'no_sampel',
+                            strtoupper(trim($request->no_sampel))
+                        )->first();
+
                         if($orderDetail->tanggal_terima == null){
                             $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
                             $orderDetail->save();
@@ -297,7 +300,7 @@ class FdlEmisiKendaraanController extends Controller
                     }
 
 
-                    $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+                    $cek_po = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
                     if ($cek_po != null) {
                         $co2 = NULL;
                         $co = NULL;
@@ -371,7 +374,7 @@ class FdlEmisiKendaraanController extends Controller
                         // if($co2!=null && $co2 < 0.10) $co2 = "<0.10";
                         $data_fdl = new DataLapanganEmisiKendaraan;
                         // $data_fdl->id_po 	= $cek_po->id;
-                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->no_sampel = strtoupper(trim($request->no_sampel));
                         $data_fdl->data_co     = $data_co;
                         $data_fdl->data_co2     = $data_co2;
                         $data_fdl->data_hc     = $data_hc;
@@ -399,7 +402,7 @@ class FdlEmisiKendaraanController extends Controller
 
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
-                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->no_sampel            = strtoupper(trim($request->no_sampel));
                         $data_order->id_qr            = $cek_qr->id;
                         $data_order->id_fdl            = $data_fdl->id;
                         $data_order->id_kendaraan    = $data_kendaraan->id;
@@ -409,7 +412,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_order->save();
 
 
-                        $update_order = OrderDetail::where('no_sampel', strtoupper($request->no_sampel))->where('is_active', 1)->update([
+                        $update_order = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->update([
                             'tanggal_terima' => Carbon::now()->format('Y-m-d'),
                         ]);
                         DB::commit();
@@ -642,7 +645,7 @@ class FdlEmisiKendaraanController extends Controller
 
     public function getPerusahaan(Request $request)
     {
-        $data = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->select('nama_perusahaan')->first();
+        $data = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->select('nama_perusahaan')->first();
         return response()->json(['data' => $data], 200);
     }
 }

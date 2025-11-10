@@ -9,12 +9,10 @@ $tanggal_sampling = '';
 if($header->status_sampling == 'S24'){
 $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-$tanggalAwal = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->min('created_at');
+$tanggalAwal = $header->tanggal_sampling;
 
-$tanggalAkhir = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->max('created_at');
-
+$tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
 $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
-$tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
 
 if ($tanggalAwal || $tanggalAkhir) {
 if ($tanggalAwal == $tanggalAkhir) {
