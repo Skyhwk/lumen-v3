@@ -28,8 +28,6 @@
         <tbody>
             @foreach ($data as $kk => $yy)
                 @continue(!$yy)
-                @continue(empty($yy['terkoreksi']) || $yy['terkoreksi'] === '-')
-
                 @php
                     $p = $kk + 1;
                     $rowClass = ($p == $total) ? 'solid' : 'dot';
