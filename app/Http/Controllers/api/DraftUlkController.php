@@ -491,8 +491,15 @@ class DraftUlkController extends Controller
                     'lingkungan',
                     'partikulat',
                     'direct_lain',
-                    'subkontrak'
-                ])->where('no_sampel', $request->no_sampel)
+                    'subkontrak',
+                    'microbiologi'
+                ])->where(function ($q) {
+                    $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                        ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                        ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
+                        ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true))
+                        ->orWhereHas('microbiologi', fn($r) => $r->where('microbio_header.is_approved', true));
+                })->where('no_sampel', $request->no_sampel)
                     ->get();
 
                 if ($validasi->isEmpty()) {
@@ -500,10 +507,18 @@ class DraftUlkController extends Controller
                         'lingkungan',
                         'partikulat',
                         'directlain',
-                        'subkontrak'
-                    ])->where('no_sampel', $request->no_sampel)
-                        ->get();
-                    $isMain = false;
+                        'subkontrak',
+                        'microbio'
+                    ])
+                    ->where(function ($q) {
+                        $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                            ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                            ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
+                            ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true))
+                            ->orWhereHas('microbio', fn($r) => $r->where('microbio_header.is_approved', true));
+                        })->where('no_sampel', $request->no_sampel)
+                                ->get();
+                            $isMain = false;
                 }
 
                 $validasi = $validasi->map(function ($item) use ($isMain) {
