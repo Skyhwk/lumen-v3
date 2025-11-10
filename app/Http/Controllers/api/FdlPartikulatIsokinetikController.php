@@ -950,10 +950,11 @@ class FdlPartikulatIsokinetikController extends Controller
         if (isset($request->id) && $request->id != null) {
             if ($request->method == 1) {
                 $data = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
+                
                 if($data->bentuk_cerobong == "Persegi"){
-                    $data->luas_penampang = number_format($panjang * $lebar, 2, '.', ',');
+                    $data->luas_penampang = number_format($data->lfw * $data->lnw, 2, '.', ',');
                 }else{
-                    $data->luas_penampang = number_format(3.14 * 0.25 * $diameter * $diameter, 2, '.', ',');
+                    $data->luas_penampang = number_format(3.14 * 0.25 * $data->diameter_cerobong * $data->diameter_cerobong, 2, '.', ',');
                 }
                 $data->is_approve = true;
                 $data->approved_by = $this->karyawan;
