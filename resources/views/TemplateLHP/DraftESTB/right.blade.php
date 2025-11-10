@@ -3,16 +3,17 @@
     use App\Models\MasterRegulasi;
     use App\Models\DataLapanganEmisiCerobong;
     use App\Models\WsValueEmisiCerobong;
-    use \Carbon\Carbon;
+    use Carbon\Carbon;
+    use Illuminate\Support\Str;
 
     $wsvalue = WsValueEmisiCerobong::where('no_sampel', $header->no_sampel)->get();
     $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $header->no_sampel)->first();
-    
+
     $keterangan_koreksi = [];
-    foreach($wsvalue as $k => $v){
-        if($v->keterangan_koreksi != null && $v->keterangan_koreksi != ''){
-            foreach(json_decode($v->keterangan_koreksi) as $kk => $vv){
-                if(in_array($vv, $keterangan_koreksi) == false){
+    foreach ($wsvalue as $k => $v) {
+        if ($v->keterangan_koreksi != null && $v->keterangan_koreksi != '') {
+            foreach (json_decode($v->keterangan_koreksi) as $kk => $vv) {
+                if (in_array($vv, $keterangan_koreksi) == false) {
                     $keterangan_koreksi[] = $vv;
                 }
             }
@@ -66,7 +67,8 @@
                 {{-- Informasi Pelanggan --}}
                 <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
+                        <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span>
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
@@ -100,7 +102,8 @@
                 @endphp
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
-                        <td class="custom5" width="120"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
+                        <td class="custom5" width="120"><span
+                                style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
                     {{-- <tr>
                         <td class="custom5">Kategori</td>
@@ -153,7 +156,7 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $dataLapangan->titik_koordinat }}</td>
                     </tr>
-                    @if($laju_velocity != '-')
+                    @if ($laju_velocity != '-')
                         <tr>
                             <td class="custom5">Laju Velocity</td>
                             <td class="custom5">:</td>
@@ -178,15 +181,61 @@
                         @endforeach
                     </table>
                 @endif
-
                 @if (!empty($keterangan_koreksi))
-                    <table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach ($keterangan_koreksi as $kk => $vv)
+                    @php
+                        // Bersihkan nilai kosong & spasi berlebih
+                        $items = array_map('trim', array_filter($keterangan_koreksi));
+
+                        // Inisialisasi variabel hasil
+                        $bagian_standar = '';
+                        $bagian_o2 = '';
+                        $bagian_kering = '';
+                        $bagian_semua = '';
+                        $bagian_angka = '';
+
+                        // Deteksi bagian berdasarkan isi teks
+                        foreach ($items as $v) {
+                            if (Str::contains(strtolower($v), 'standar')) {
+                                $bagian_standar =
+                                    'Volume Gas diukur dalam keadaan standar (25°C dan 1 tekanan atmosfer)';
+                            } elseif (Str::contains(strtolower($v), 'o2')) {
+                                $bagian_o2 = 'dengan O₂ terkoreksi';
+                            } elseif (Str::contains(strtolower($v), 'kering')) {
+                                $bagian_kering = 'dalam keadaan kering';
+                            } elseif (Str::contains(strtolower($v), 'parameter')) {
+                                $bagian_semua = 'untuk semua parameter';
+                            } elseif (Str::contains(strtolower($v), 'angka') || Str::contains(strtolower($v), '15')) {
+                                $bagian_angka = 'sebesar 15%';
+                            }
+                        }
+
+                        // Gabungkan secara berurutan
+                        $gabungKeterangan = trim(
+                            implode(
+                                ' ',
+                                array_filter([
+                                    $bagian_standar,
+                                    $bagian_o2,
+                                    $bagian_angka,
+                                    $bagian_kering,
+                                    $bagian_semua,
+                                ]),
+                            ),
+                        );
+
+                        // Tambahkan titik di akhir jika belum ada
+                        if ($gabungKeterangan && !preg_match('/[.!?]$/', $gabungKeterangan)) {
+                            $gabungKeterangan .= '.';
+                        }
+                    @endphp
+
+                    @if ($gabungKeterangan)
+                        <table style="padding: 10px 0px 0px 0px;" width="100%">
                             <tr>
-                                <td class="custom5" colspan="3">- {{ $vv }}</td>
+                                <td class="custom5" colspan="3">- {{ $gabungKeterangan }}</td>
                             </tr>
-                        @endforeach
-                    </table>
+                        </table>
+                    @endif
                 @endif
                 {{-- Keterangan --}}
                 @php
