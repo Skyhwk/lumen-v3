@@ -4232,7 +4232,7 @@ class InputParameterController extends Controller
                         ->where('parameter', $request->parameter)
                         ->where('is_active', true)
                         ->first();
-                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01')) {
                         $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
                         $data_udara->id_subkontrak  = $data->id;
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
