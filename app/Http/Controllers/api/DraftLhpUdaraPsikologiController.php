@@ -152,11 +152,10 @@ class DraftLhpUdaraPsikologiController extends Controller
 			} else {
 				$alamat = $request->alamat_perusahaan;
 			}
-
-			$pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+			$pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_rilis_lhp)
 			->orderByDesc('berlaku_mulai')
 			->first();
-
+			
 			$waktu_pemeriksaan = $request->waktu_pemeriksaan_awal . ' - ' . $request->waktu_pemeriksaan_akhir;
 			if ($data) {
 				$data->nama_perusahaan = $request->nama_perusahaan;
@@ -171,8 +170,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
 				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
 				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
-				$data->nama_karyawan = $request->nama_karyawan;
-				$data->jabatan_karyawan = $request->jabatan_karyawan;
+				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 				$data->updated_at = Carbon::now();
 				$data->updated_by = $this->karyawan;
 				$data->save();
@@ -192,8 +191,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
 				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
 				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
-				$data->nama_karyawan = $request->nama_karyawan;
-				$data->jabatan_karyawan = $request->jabatan_karyawan;
+				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 				$data->created_at = Carbon::now();
 				$data->created_by = $this->karyawan;
 				$data->save();
