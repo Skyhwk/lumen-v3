@@ -1095,9 +1095,9 @@ class FdlPartikulatIsokinetikController extends Controller
                     $data->save();
 
                     $method6 = DataLapanganIsokinetikHasil::where('no_sampel', $data->no_sampel)->first();
+                    
                     // GAS VOL
-                    $parsed = json_decode($data->DGM, true); // true agar jadi array asosiatif
-                    $avgDGM = $parsed[0]['avgDGM'];
+                    $avgDGM = $data->DGM[0]['avgDGM'] ?? null;
 
                     $gas_vol = number_format($avgDGM / 1000, 4, '.', ',');
                     
@@ -1114,20 +1114,37 @@ class FdlPartikulatIsokinetikController extends Controller
                     DB::rollBack();
                     return response()->json([
                         'message' => 'Terjadi kesalahan saat menyimpan data.',
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
+                        'line' => $e->getLine()
                     ], 500);
                 }
             } else if ($request->method == 6) {
                 try {
-                    DB::beginTransaction();
 
                     $data = DataLapanganIsokinetikHasil::where('id', $request->id)->first();
-
                     $method1 = DataLapanganIsokinetikSurveiLapangan::where('id', $data->id_lapangan)->where('is_approve', 1)->first();
                     $method2 = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method3 = DataLapanganIsokinetikBeratMolekul::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method4 = DataLapanganIsokinetikKadarAir::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method5 = DataLapanganIsokinetikPenentuanPartikulat::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
+                    
+                    $notApproved = [];
+                    if (!$method1)
+                        $notApproved[] = 'Survei Lapangan';
+                    if (!$method2)
+                        $notApproved[] = 'Penentuan Kecepatan Linier';
+                    if (!$method3)
+                        $notApproved[] = 'Berat Molekul';
+                    if (!$method4)
+                        $notApproved[] = 'Kadar Air';
+                    if (!$method5)
+                        $notApproved[] = 'Penentuan Partikulat';
+
+                    if (count($notApproved)) {
+                        return response()->json([
+                            'message' => 'Data berikut belum disetujui: ' . implode(', ', $notApproved)
+                        ], 400);
+                    }
 
                     // Fungsi Rata-rata
                     function getAverageFromData($data) {
@@ -1191,23 +1208,6 @@ class FdlPartikulatIsokinetikController extends Controller
                         $diameterCerobong = ($panjang / 100) * ($lebar / 100);
                     }
 
-                    $notApproved = [];
-                    if (!$method1)
-                        $notApproved[] = 'Survei Lapangan';
-                    if (!$method2)
-                        $notApproved[] = 'Penentuan Kecepatan Linier';
-                    if (!$method3)
-                        $notApproved[] = 'Berat Molekul';
-                    if (!$method4)
-                        $notApproved[] = 'Kadar Air';
-                    if (!$method5)
-                        $notApproved[] = 'Penentuan Partikulat';
-
-                    if (count($notApproved)) {
-                        return response()->json([
-                            'message' => 'Data berikut belum disetujui: ' . implode(', ', $notApproved)
-                        ], 400);
-                    }
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
 
                     if (!$order) {
