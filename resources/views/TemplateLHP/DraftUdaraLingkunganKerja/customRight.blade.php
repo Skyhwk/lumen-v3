@@ -12,7 +12,7 @@ $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)-
 $tanggalAwal = $header->tanggal_sampling;
 
 $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
-$tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
+$tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
 
 if ($tanggalAwal || $tanggalAkhir) {
 if ($tanggalAwal == $tanggalAkhir) {
