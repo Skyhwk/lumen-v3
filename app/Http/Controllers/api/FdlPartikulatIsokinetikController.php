@@ -1097,9 +1097,13 @@ class FdlPartikulatIsokinetikController extends Controller
                     $method6 = DataLapanganIsokinetikHasil::where('no_sampel', $data->no_sampel)->first();
                     
                     // GAS VOL
-                    $avgDGM = $data->DGM[0]['avgDGM'] ?? null;
+                    $nilaiDGM = $data->DGM[0]['nilaiDGM'];
 
-                    $gas_vol = number_format($avgDGM / 1000, 4, '.', ',');
+                    $lastHole = array_key_last($nilaiDGM);
+
+                    $lastValue = end($nilaiDGM[$lastHole]);
+
+                    $gas_vol = number_format($lastValue / 1000, 4, '.', ',');
                     
                     $method6->gas_vol = $gas_vol;
                     $method6->save();
