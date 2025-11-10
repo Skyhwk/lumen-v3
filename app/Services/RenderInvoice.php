@@ -1439,10 +1439,10 @@ class RenderInvoice
 
                     if ($biayaDiLuarPajak->select != []) {
                         $luarPajak = round($el->total_discount_transport) + round($el->total_discount_perdiem);
-                        $totDisk = $el->diskon == null ? 0 : round($el->diskon + $el->cash_discount) - $luarPajak;
+                        $totDisk = $el->diskon == null ? 0 : round($el->diskon) - $luarPajak;
                         $pajak = 0;
                     } else {
-                        $totDisk = $el->diskon == null ? 0 : round($el->diskon + $el->cash_discount);
+                        $totDisk = $el->diskon == null ? 0 : round($el->diskon);
                         $pajak = 1;
                     }
 
@@ -1457,7 +1457,7 @@ class RenderInvoice
                 } else {
 
                     $sub_total += (int) round($el->sub_total);
-                    $diskon += $el->diskon == null ? 0 : round($el->diskon + $el->cash_discount);
+                    $diskon += $el->diskon == null ? 0 : round($el->diskon);
                     $ppn += $el->ppn == null ? 0 : round($el->ppn);
                     $pph += $el->pph == null ? 0 : round($el->pph);
                     $total_harga += (int) round($el->total_harga);
