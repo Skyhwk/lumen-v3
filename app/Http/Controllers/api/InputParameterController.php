@@ -3706,10 +3706,10 @@ class InputParameterController extends Controller
 			];
 		}
 
-		if ($fdl || $swab) { // Periksa apakah $fdl tidak null
+		if (count($fdl) > 0 || !is_null($swab)) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				if($fdl){
+				if($fdl->count() >= 0){
 					$suhu = [];
 					$tekanan = [];
 					$kelembaban = [];
@@ -3721,9 +3721,11 @@ class InputParameterController extends Controller
 						$tekanan[] = $data->tekanan_udara ?? $swab->tekanan_udara;
 						$kelembaban[] = $data->kelembapan ?? $swab->kelembapan;
 						$pengukuran = json_decode($data->pengukuran);
-						$flowRate[] = (float) ($pengukuran->{"Flow Rate"} ?? null);
-						$durasi[] = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
-						$volume[] = ($flowRate * $durasi) / 1000;
+                        $flow = (float) ($pengukuran->{"Flow Rate"} ?? null);
+						$flowRate[] = $flow;
+                        $durasi_value = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+						$durasi[] = $durasi_value;
+						$volume[] = ($flow * $durasi_value) / 1000;
 					}
 				}else{
 					$suhu = $swab->suhu ?? 0;
@@ -3766,16 +3768,12 @@ class InputParameterController extends Controller
 				$data_parsing = $request->all();
 				$data_parsing = (object) $data_parsing;
 
-                $data_parsing->suhu = $suhu;
-                $data_parsing->tekanan = $tekanan;
-                $data_parsing->kelembaban = $kelembaban;
-				if($fdl){
-                    $data_parsing->flow_rate = $flowRate;
-                    $data_parsing->durasi = $durasi;
-                    $data_parsing->volume = $volume;
-                }else{
-                    $data_parsing->luas = $luas;
-                }
+				$data_parsing->suhu = $suhu;
+				$data_parsing->tekanan = $tekanan;
+				$data_parsing->kelembaban = $kelembaban;
+				$data_parsing->flow_rate = $flowRate;
+				$data_parsing->durasi = $durasi;
+				$data_parsing->volume = $volume;
 				$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 				$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3811,7 +3809,6 @@ class InputParameterController extends Controller
                 $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
-				$header->data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
 				$header->save();
 
 				// $data_kalkulasi['id_microbio_header'] = $header->id;
@@ -3823,15 +3820,7 @@ class InputParameterController extends Controller
 				$data_udara = array();
 				$data_udara['id_microbiologi_header'] = $header->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				if(in_array($request->parameter, $swab_parameter)){
-                    $data_udara['hasil10'] = $data_kalkulasi['hasil'];
-                    $data_udara['hasil11'] = $data_kalkulasi['hasil2'];
-                    $data_udara['hasil13'] = $data_kalkulasi['hasil3'];
-                    $data_udara['hasil14'] = $data_kalkulasi['hasil4'];
-                }else{
-                    $data_udara['hasil9'] = $data_kalkulasi['hasil'];
-                }
-				$data_udara['satuan'] = $data_kalkulasi['satuan'];
+				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
 				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
@@ -3854,7 +3843,7 @@ class InputParameterController extends Controller
 			}
 		} else {
 			return (object)[
-				'message' => 'Data tidak ditemukan untuk sample yang diberikan.',
+				'message' => 'Data lapangan tidak ditemukan untuk sample yang diberikan.',
 				'status' => 404
 			];
 		}
