@@ -4193,7 +4193,7 @@ class InputParameterController extends Controller
 				}
 
 				$data 						= new Subkontrak;
-				$data->no_sampel 			= $request->no_sample;
+				$data->no_sampel 			= trim($request->no_sample);
 				$data->category_id 			= 1;
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
@@ -4209,11 +4209,11 @@ class InputParameterController extends Controller
 				$data->save();
 
 				$data_kalkulasi['id_subkontrak'] = $data->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
+				$data_kalkulasi['no_sampel'] = trim($request->no_sample);
 				if($stp->sample->nama_kategori = 'Air'){
                     $kalkulasi1 = WsValueAir::create($data_kalkulasi);
                 }else if($stp->sample->nama_kategori = 'Udara'){
-                    $existLingkungan = LingkunganHeader::where('no_sampel', $request->no_sample)
+                    $existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))
                         ->where('parameter', $request->parameter)
                         ->where('is_active', true)
                         ->first();
@@ -4229,7 +4229,7 @@ class InputParameterController extends Controller
                     }else{
                         $data_udara = [];
                         $data_udara['id_subkontrak'] = $data->id;
-                        $data_udara['no_sampel'] = $request->no_sample;
+                        $data_udara['no_sampel'] = trim($request->no_sample);
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_' . $i;
                             if (isset($data_udara[$key])) {
@@ -4239,7 +4239,7 @@ class InputParameterController extends Controller
                         $kalkulasi1 = WsValueUdara::create($data_udara);
                     }
                 }else if($stp->sample->nama_kategori = 'Emisi'){
-                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', $request->no_sample)
+                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
                         ->where('parameter', $request->parameter)
                         ->where('is_active', true)
                         ->first();
@@ -4255,7 +4255,7 @@ class InputParameterController extends Controller
                     }else{
                         $data_emisi = [];
                         $data_emisi['id_subkontrak'] = $data->id;
-                        $data_emisi['no_sampel'] = $request->no_sample;
+                        $data_emisi['no_sampel'] = trim($request->no_sample);
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
                             if (isset($data_emisi[$key])) {
