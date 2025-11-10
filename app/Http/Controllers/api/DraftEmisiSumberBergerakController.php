@@ -109,7 +109,7 @@ class DraftEmisiSumberBergerakController extends Controller
                     $header->sub_kategori = $request->sub_kategori ?: NULL;
                     $header->type_sampling = $request->kategori_1 ?: NULL;
                     $header->metode_sampling = isset($request->metode_sampling) ? json_encode($request->metode_sampling) : NULL;
-                    $header->tgl_lhp = $request->tanggal_terima;
+                    $header->tanggal_lhp = $request->tanggal_lhp;
                     // $header->tanggal_sampling = $request->tanggal_tugas ?: NULL;
                     $header->periode_analisa = $request->periode_analisa ?: NULL;
                     $header->konsultan = $request->konsultan != '' ? $request->konsultan : NULL;
@@ -371,7 +371,7 @@ class DraftEmisiSumberBergerakController extends Controller
             }
 
             // Update tanggal LHP dan data pengesahan
-            $dataHeader->tgl_lhp = $request->value;
+            $dataHeader->tanggal_lhp = $request->value;
 
             $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
                 ->orderByDesc('berlaku_mulai')
