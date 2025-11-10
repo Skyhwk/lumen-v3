@@ -127,78 +127,137 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 			}
 		}
 
+		// , %, -, m/s, mg/Mm³, mg/m³, mg/Nm3, mg/Nm³, ppm, °C
 		return Datatables::of($data)
-		->addColumn('nilai_uji', function ($item) {
-			$satuanIndexMap = [
-				"ug/nm3" => 1,
-				"mg/nm3" => 2,
-				"ppm"    => 3,
-				"%"      => 4,
-				"oc"     => 5,
-				"g/gmol" => 6,
-				"m3/s"   => 7,
-				"m/s"    => 8,
-				"kg/tahun" => 9,
-			];
+			->addColumn('nilai_uji', function ($item) {
+				// $satuanIndexMap = [
+				// 	"ug/nm3" => 1,
+				// 	"mg/Nm3" => 2,
+				// 	"ppm"    => 3,
+				// 	"%"      => 4,
+				// 	"°C"     => 5,
+				// 	"g/gmol" => 6,
+				// 	"m3/s"   => 7,
+				// 	"m/s"    => 8,
+				// 	"kg/tahun" => 9,
+				// 	"mg/m³" => 10,
 
-			$satuan = $item['satuan'] ?? '-';
+				// ];
+				$satuanIndexMap = [
+					"μg/Nm³" => "",
+					"μg/Nm3" => "",
 
-			// lowercase UTF-8
-			$satuan = mb_strtolower($satuan, 'UTF-8');
+					"mg/nm³" => 1,
+					"mg/nm3" => 1,
+					"mg/Mm³" =>1,
+					"mg/Nm3" =>1,
+					"mg/Nm³" =>1,
+					"mg/Nm³" =>1,
 
-			// normalisasi karakter pangkat & mikro
-			$satuan = str_replace(
-				['³', 'μg', 'µg', 'µ', 'nm³', 'm³'],
-				['3', 'ug', 'ug', 'ug', 'nm3', 'm3'],
-				$satuan
-			);
+					"ppm"    => 2,
+					"PPM" => 2,
 
-			// buang spasi
-			$satuan = str_replace(' ', '', $satuan);
+					"ug/m3"=> 3,
+					"ug/m³"=> 3,
 
-			$index = $satuanIndexMap[$satuan] ?? null;
+					"mg/m3"  =>4,
+					"mg/m³"  =>4,
+					"mg/m³"  =>4,
 
-			$ws = $item['ws_value_cerobong'] ?? null;
-			if (!$ws) return "noWs";
+					"%"      => 5,
+					"°C"     => 6,
+					"g/gmol" => 7,
+					"m3/s"   => 8,
+					"m/s"    => 9,
+					"kg/tahun" => 10,
+				];
 
-			$ws = (array) $ws; // pastikan array
-			if ($index === null) {
-				// fallback default: pakai C atau C1 atau apa yang kamu mau
-				return $ws['f_koreksi_c'] ?? $ws['C'] ?? "-";
-			}
 
-			if ($index == 1) {
-				$hasilKey    = "C";
-				$fKoreksiKey = "f_koreksi_c";
-			} else {
-				$field       = $index - 1;
+				$satuan = $item['satuan'] ?? '-';
+
+				// // lowercase UTF-8
+				// $satuan = mb_strtolower($satuan, 'UTF-8');
+
+				// // normalisasi karakter pangkat & mikro
+				// $satuan = str_replace(
+				// 	['³', 'μg', 'µg', 'µ', 'nm³', 'm³'],
+				// 	['3', 'ug', 'ug', 'ug', 'nm3', 'm3'],
+				// 	$satuan
+				// );
+
+
+				// // buang spasi
+				// $satuan = str_replace(' ', '', $satuan);
+				
+				$index = $satuanIndexMap[$satuan] ?? null;
+
+				$ws = $item['ws_value_cerobong'] ?? null;
+				if (!$ws) return "noWs";
+
+				$ws = (array) $ws; // pastikan array
+				if ($index === null) {
+					$nilai = null;
+
+					for ($i = 0; $i <= 10; $i++) {
+						$key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
+						if (!empty($ws[$key])) {
+							$nilai = $ws[$key];
+							break;
+						}
+					}
+
+					if ($nilai === null) {
+						for ($i = 0; $i <= 10; $i++) {
+							$key = $i === 0 ? 'C' : 'C' . $i;
+							if($i == 3) {
+								if (!empty($ws[$key])) {
+									$nilai = $ws[$key];
+									break;
+								} else {
+									$nilai = $ws['C3_persen'];
+									break;
+								}
+							} else {
+								if (!empty($ws[$key])) {
+									$nilai = $ws[$key];
+									break;
+								}
+							}
+						}
+					}
+
+					$nilai = $nilai ?? '-';
+
+					return $nilai;
+				}
+
+				$field       = $index;
 				$hasilKey    = "C$field";
 				$fKoreksiKey = "f_koreksi_c$field";
-			}
 
-			// ambil nilai
-			$nilai = null;
+				// ambil nilai
+				$nilai = null;
 
-			if (array_key_exists($fKoreksiKey, $ws)) {
-				$nilai = $ws[$fKoreksiKey];
-			} elseif (array_key_exists($hasilKey, $ws)) {
-				$nilai = $ws[$hasilKey];
-			}
+				if (array_key_exists($fKoreksiKey, $ws)) {
+					$nilai = $ws[$fKoreksiKey];
+				} elseif (array_key_exists($hasilKey, $ws)) {
+					$nilai = $ws[$hasilKey];
+				}
 
-			// jika nilai ada (termasuk 0), return nilai
-			if ($nilai !== null) {
-				return $nilai;
-			}
+				// jika nilai ada (termasuk 0), return nilai
+				if ($nilai !== null) {
+					return $nilai;
+				}
 
-			// fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
-			return $ws[$fKoreksiKey] 
-				?? $ws[$hasilKey] 
-				?? $ws['f_koreksi_c'] 
-				?? $ws['C'] 
-				?? "-";
-		})
+				// fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
+				return $ws[$fKoreksiKey]
+					?? $ws[$hasilKey]
+					?? $ws['f_koreksi_c']
+					?? $ws['C']
+					?? "-";
+			})
 
-		->make(true);
+			->make(true);
 	}
 
 
@@ -248,29 +307,45 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 						->where('id_emisi_cerobong_header', $emisiCerobong->id)
 						->where('is_active', true)
 						->first();
-
-					$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
-					$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
-					if ($ws_value != null) {
-						$ws_value->input_koreksi = $request->faktor_koreksi;
-						$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');
-						// $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
-						$keterangan = $request->jenis_koreksi; // Jenis Koreksi
-						$keterangan[] = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
-						$ws_value->keterangan_koreksi = json_encode($keterangan);
-						$ws_value->C3_persen = $dataLapangan->O2;
-						$ws_value->is_active = true;
-						$ws_value->updated_at = Carbon::now();
-						$ws_value->updated_by = $this->karyawan;
-						// dd($ws_value);
-						$ws_value->save();
+					if($request->faktor_koreksi > 0) {
+						$C1_value = $ws_value->f_koreksi_c1 !== null ? floatval($ws_value->f_koreksi_c1) : floatval($ws_value->C1);
+						$hasil = ((21 - $faktor_koreksi) / (21 - floatval($dataLapangan->O2))) * $C1_value;
+						if ($ws_value != null) {
+							$ws_value->input_koreksi = $request->faktor_koreksi;
+							$ws_value->nil_koreksi = number_format((float) $hasil, 4, '.', '');
+							// $ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
+							$keterangan = $request->jenis_koreksi; // Jenis Koreksi
+							$keterangan[] = 'Angka koreksi ' . $request->faktor_koreksi . '%'; // Menambahkan keterangan angka koreksi
+							$ws_value->keterangan_koreksi = json_encode($keterangan);
+							$ws_value->C3_persen = $dataLapangan->O2;
+							$ws_value->is_active = true;
+							$ws_value->updated_at = Carbon::now();
+							$ws_value->updated_by = $this->karyawan;
+							// dd($ws_value);
+							$ws_value->save();
+						} else {
+							return response()->json([
+								'message' => 'Data C1 tidak ditemukan.',
+								'success' => false,
+								'status' => 404
+							], 404);
+						}
 					} else {
-						return response()->json([
-							'message' => 'Data C1 tidak ditemukan.',
-							'success' => false,
-							'status' => 404
-						], 404);
+						if ($ws_value != null) {
+							$ws_value->keterangan_koreksi = json_encode($request->jenis_koreksi);
+							$ws_value->updated_at = Carbon::now();
+							$ws_value->updated_by = $this->karyawan;
+							// dd($ws_value);
+							$ws_value->save();
+						} else {
+							return response()->json([
+								'message' => 'Data C1 tidak ditemukan.',
+								'success' => false,
+								'status' => 404
+							], 404);
+						}
 					}
+					
 
 					DB::commit();
 					return response()->json(['message' => 'Data berhasil diupdate.', 'success' => true], 200);
@@ -430,11 +505,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		}
 	}
 
-	private function hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan)
+	private function hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan)
 	{
 		try {
 			$hasil = 0;
-			$hasil = $this->rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan);
+			$hasil = $this->rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan);
 
 			return $hasil;
 		} catch (\Exception $e) {
@@ -444,7 +519,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		}
 	}
 
-	public function rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic , $satuan)
+	public function rumusEmisiC($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $satuan)
 	{
 		function removeSpecialChars($value)
 		{
@@ -596,7 +671,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 		$parameter = $request->parameter;
 		$satuan = $request->satuan;
 		$hasilujic = $request->hasil_c;
-		if($hasilujic == null || $hasilujic == '-'){
+		if ($hasilujic == null || $hasilujic == '-') {
 			return response()->json(['message' => 'Hasil Uji tidak boleh kosong atau - .'], 400);
 		}
 		$faktor_koreksi = (float) $request->faktor_koreksi;
@@ -734,6 +809,5 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 			DB::rollback();
 			throw $th;
 		}
-
 	}
 }

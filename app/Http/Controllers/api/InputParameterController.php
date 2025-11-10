@@ -3062,6 +3062,8 @@ class InputParameterController extends Controller
 				$data_parsing->nilQs = $nilQs;
 				$data_parsing->data_total = $datot;
 				$data_parsing->average_flow = $rerataFlow;
+				$data_parsing->flow_array = $rerata;
+				$data_parsing->durasi_array = $durasi;
 			} else {
 				$data_parsing->durasi = [$rerata1Durasi, $rerata2Durasi];
 				$data_parsing->nilQs = [$nil1Qs, $nil2Qs];
@@ -3319,8 +3321,12 @@ class InputParameterController extends Controller
 					$dat = json_decode($data_lapangan->HCI);
 				} else if ($request->parameter == 'H2S') {
                     $dat = json_decode($data_lapangan->H2S);
-                } else if($request->parameter == 'Debu' || $request->parameter == 'Partikulat' || $request->parameter == 'Cd' || $request->parameter == 'Cr' || $request->parameter == 'Pb' || $request->parameter == 'Zn') {
-					// dd($data_lapangan);
+                } else if (in_array($request->parameter, [
+					'Debu', 'Partikulat',
+					'As', 'Cd', 'Co', 'Cr', 'Cu', 'Hg', 'Mn', 'Pb',
+					'Sb', 'Se', 'Tl', 'Zn', 'Sn', 'Al', 'Ba', 'Be', 'Bi',
+                    'Debu (P)'
+				])) {
 					$dat = json_decode($data_lapangan->partikulat);
 					$status_par = 'Partikulat';
 				}
@@ -3440,6 +3446,10 @@ class InputParameterController extends Controller
                     $formatted_data_analis['k_sampel'] = $value;
                 } elseif ($key === 'kb') {
                     $formatted_data_analis['k_blanko'] = $value;
+                } else if($key === 'w1'){
+                    $formatted_data_analis['berat_filter_awal'] = $value;
+                } else if($key === 'w2'){
+                    $formatted_data_analis['berat_filter_akhir'] = $value;
                 } elseif ($key === 'vs') {
                     $formatted_data_analis['volume_sampel'] = $value;
                 } elseif ($key === 'vtp') {
@@ -3578,7 +3588,12 @@ class InputParameterController extends Controller
 			->get();
 
         $swab = null;
-        $swab_parameter = ['E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)','Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)','Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)','E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'];
+        $swab_parameter = [
+            'E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)',
+            'Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)',
+            'Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)',
+            'E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'
+        ];
         if(in_array($request->parameter, $swab_parameter)){
             $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
         }
@@ -3686,13 +3701,16 @@ class InputParameterController extends Controller
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
 				$header->volume = count($volume) > 0 ? array_sum($volume) / count($volume) : null;
-				$header->flow = count($flow) > 0 ? array_sum($flow) / count($flow) : null;
+				$header->flow = count($flowRate) > 0 ? array_sum($flowRate) / count($flowRate) : null;
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
-				if($fdl){
+                $volume_shift = null;
+				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
+                    $volume_shift = json_encode($volume);
 				}
 				$header->data_shift = $data_shift;
+                $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->save();

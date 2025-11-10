@@ -13,65 +13,56 @@ class GenerateQrDocumentLhpp
 {
     public function insert($type_doc, $data, $generated_by, $status)
     {
-        $manager = MasterKaryawan::where('id_jabatan', 103)->where('is_active', 1)->first();
-        $id_order = OrderHeader::where('no_order', $data->no_order)->first()->id;
-        $cek = QrDocument::where('id_document', $id_order)->where('type_document', $type_doc)
-            ->first();
-        // dd($cek);
-        if ($cek)
-            return $cek->file;
+        
         DB::beginTransaction();
         try {
+            $doc = $type_doc . '-' . \str_replace("/", "_", $data->no_cfr . ($status == 'k3' ? '-' . $status : ''));
 
+            $cek = QrDocument::where('file', $doc)->first();
+            // dd($cek);
+            if ($cek) {
+                $cek->id_document = $data->id;
+                $cek->data = json_encode([
+                    'Nomor_LHP' => $data->no_lhp,
+                    'Nama_Pelanggan' => $data->nama_pelanggan,
+                    'Pelanggan_ID' => substr($data->no_order, 0, 6),
+                    'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_rilis_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'Disahkan_Oleh' => $data->nama_karyawan,
+                    'Jabatan' => $data->jabatan_karyawan
+                ]);
+                $cek->created_at =Carbon::now()->format('Y-m-d H:i:s');
+                $cek->created_by = $generated_by;
+                $cek->save();
+                return $cek->file;
+            }
 
-            if ($status == 'k3') {
-                $filename = $type_doc . '-' . \str_replace("/", "_", $data->no_cfr . '-' . $status);
+            $filename = $type_doc . '-' . \str_replace("/", "_", $data->no_cfr . ($status == 'k3' ? '-' . $status : ''));
+            $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            $link = 'https://www.intilab.com/validation/';
+            $unique = 'isldc' . (int) floor(microtime(true) * 1000);
 
-                $path = public_path() . "/qr_documents/" . $filename . '.svg';
-                $link = 'https://www.intilab.com/validation/';
-                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-                QrCode::size(200)->generate($link . $unique, $path);
-                $dataQr = [
-                    'id_document' => $id_order,
-                    'type_document' => $type_doc,
-                    'kode_qr' => $unique,
-                    'file' => $filename,
-                    'data' => json_encode([
-                        'Nomor_LHP' => $data->no_order,
-                        'Nama_Pelanggan' => $data->nama_perusahaan,
-                        'Pelanggan_ID' => substr($data->no_order, 0, 6),
-                        'Tanggal_Pengesahan' => Carbon::now()->locale('id')->isoFormat('DD MMMM YYYY'),
-                        'Disahkan_Oleh' => $manager->nama_lengkap,
+            QrCode::size(200)->generate($link . $unique, $path);
+            
+            $dataQr = [
+                'id_document' => $data->id,
+                'type_document' => $type_doc,
+                'kode_qr' => $unique,
+                'file' => $filename,
+                'data' => json_encode([
+                    'Nomor_LHP' => $data->no_order,
+                    'Nama_Pelanggan' => $data->nama_perusahaan,
+                    'Pelanggan_ID' => substr($data->no_order, 0, 6),
+                    'Tanggal_Pengesahan' => Carbon::parse($data->tanggal_rilis_lhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'Disahkan_Oleh' => $data->nama_karyawan,
+                    'Jabatan' => $data->jabatan_karyawan,
+                    ...($status == 'k3' ? [
                         'Yang_Memeriksa_dan_Menguji_Ahli_K3_Lingkungan_Kerja_Muda' => $data->nama_skp_ahli_k3,
                         'Nomor_Registrasi' => $data->no_skp_ahli_k3,
-                    ]),
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $manager->nama_lengkap
-                ];
-            } else {
-                $filename = $type_doc . '-' . \str_replace("/", "_", $data->no_cfr);
-                $path = public_path() . "/qr_documents/" . $filename . '.svg';
-                $link = 'https://www.intilab.com/validation/';
-                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-                QrCode::size(200)->generate($link . $unique, $path);
-                $dataQr = [
-                    'id_document' => $id_order,
-                    'type_document' => $type_doc,
-                    'kode_qr' => $unique,
-                    'file' => $filename,
-                    'data' => json_encode([
-                        'Nomor_LHP' => $data->no_order,
-                        'Nama_Pelanggan' => $data->nama_perusahaan,
-                        'Pelanggan_ID' => substr($data->no_order, 0, 6),
-                        'Tanggal_Pengesahan' => Carbon::now()->locale('id')->isoFormat('DD MMMM YYYY'),
-                        'Disahkan_Oleh' => $manager->nama_lengkap,
-                    ]),
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $manager->nama_lengkap
-                ];
-            }
+                    ] : [])
+                ]),
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $generated_by
+            ];
 
 
 
@@ -80,7 +71,6 @@ class GenerateQrDocumentLhpp
             return $filename;
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' => $th->getMessage()
             ], 500);

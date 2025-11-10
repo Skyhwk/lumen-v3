@@ -28,11 +28,11 @@ class TemplateLhpp
         $qr_img_k3 = '';
         $tanggal_qr = '';
         if (!is_null($data->file_qr) && !is_null($data->file_qr_k3)) {
-            $qr_img = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr) . '" width="40px" height="40px" style="margin: 20px 0;">';
-            $qr_img_k3 = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr_k3) . '" width="60px" height="60px" style="margin: 20px 0;">';
+            $qr_img = public_path('qr_documents/' . $data->file_qr);
+            $qr_img_k3 = public_path('qr_documents/' . $data->file_qr_k3);
             $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia($data->tanggal_rilis_lhp);
         } else {
-            $qr_img = '<img src="' . env('APP_URL') . ('/public/qr_documents/' . $data->file_qr) . '" width="40px" height="40px" style="margin: 20px 0;">';
+            $qr_img = public_path('qr_documents/' . $data->file_qr);
             $tanggal_qr = 'Tangerang, ' . self::tanggal_indonesia($data->tanggal_rilis_lhp);
         }
 

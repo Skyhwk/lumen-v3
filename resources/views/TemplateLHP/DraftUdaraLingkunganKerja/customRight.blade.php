@@ -2,6 +2,7 @@
 use App\Models\TabelRegulasi;
 use App\Models\MasterRegulasi;
 use App\Models\DetailLingkunganKerja;
+use \Carbon\Carbon;
 
 $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
 $tanggal_sampling = '';
@@ -111,7 +112,7 @@ $tanggal_sampling = '-';
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $header->deskripsi_titik }}</td>
                     </tr>
-                    <tr>
+                    {{-- <tr>
                         <td class="custom5">Titik Koordinat</td>
                         <td class="custom5">:</td>
                         <td class="custom5">
@@ -119,7 +120,7 @@ $tanggal_sampling = '-';
                                 echo $header->titik_koordinat;
                             @endphp
                         </td>
-                    </tr>
+                    </tr> --}}
                 </table>
 
                 {{-- Kondisi Lingkungan --}}

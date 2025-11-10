@@ -556,12 +556,13 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'C' => self::getHasilUji($val, $satuan),
             // 'C1' => $val->ws_value_cerobong->C1,
             // 'C2' => $val->ws_value_cerobong->C2,
+            'terkoreksi' => self::getKoreksi($val, $satuan),
             'satuan' => $param->satuan,
             'methode' => $param->method,
             'baku_mutu' => $val->baku_mutu->baku_mutu ?? '-',
             'akr' => str_contains($akreditasi, 'akreditasi') ? '' : 'ẍ',
         ];
-        
+
 
         if ($bakumutu && $bakumutu->method) {
             $entry['satuan'] = $bakumutu->satuan;
@@ -573,50 +574,103 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         return $entry;
     }
 
+    private function kumpulanSatuan($satuan)
+    {
+        $satuanIndexMap = [
+            "μg/Nm³" => "",
+            "μg/Nm3" => "",
+
+            "mg/nm³" => 1,
+            "mg/nm3" => 1,
+            "mg/Mm³" => 1,
+            "mg/Nm3" => 1,
+            "mg/Nm³" => 1,
+            "mg/Nm³" => 1,
+
+            "ppm"    => 2,
+            "PPM" => 2,
+
+            "ug/m3" => 3,
+            "ug/m³" => 3,
+
+            "mg/m3"  => 4,
+            "mg/m³"  => 4,
+            "mg/m³"  => 4,
+
+            "%"      => 5,
+            "°C"     => 6,
+            "g/gmol" => 7,
+            "m3/s"   => 8,
+            "m/s"    => 9,
+            "kg/tahun" => 10,
+        ];
+
+
+        return $satuanIndexMap[$satuan] ?? null;
+    }
+
     private function getHasilUji($val, $satuan)
     {
+
         $cerobong = $val->ws_value_cerobong;
-        if ($cerobong == null) {
-            return null;
+        $ws = $cerobong->toArray();
+        $index = $this->kumpulanSatuan($satuan);
+         $nilai = null;
+
+        if ($index === null) {
+
+            // Kalau belum ketemu, cari dari C...C10
+                for ($i = 0; $i <= 10; $i++) {
+                    $key = $i === 0 ? 'C' : "C$i";
+
+                    // Khusus C3, kalau kosong ambil dari C3_persen
+                    if ($i === 3) {
+                        $nilai = !empty($ws[$key]) ? $ws[$key] : ($ws['C3_persen'] ?? null);
+                    } elseif (!empty($ws[$key])) {
+                        $nilai = $ws[$key];
+                    }
+
+                    if (!empty($nilai)) break;
+                }
+            
+
+            $nilai = $nilai ?? '-';
+        } else {
+            $hasilKey    = "C$index";
+
+            $nilai = $ws[$hasilKey] ?? $ws[$hasilKey] ?? '-';
         }
+        return $nilai;
 
-        switch ($satuan) {
-            case 'ug/m3':
-                return $cerobong->C2;
+    }
+     private function getKoreksi($val, $satuan)
+    {
 
-            case 'mg/Nm3':
-                return $cerobong->C1 ?? $cerobong->C;
+        $cerobong = $val->ws_value_cerobong;
+        $ws = $cerobong->toArray();
+        $index = $this->kumpulanSatuan($satuan);
+         $nilai = null;
 
-            case 'ug/Nm3':
-                return $cerobong->C;
+        if ($index === null) {
+            // Cari dari f_koreksi_c...f_koreksi_c10
+            for ($i = 0; $i <= 10; $i++) {
+                $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
+                if (!empty($ws[$key])) {
+                    $nilai = $ws[$key];
+                    break;
+                }
+            }
 
-            case 'mg/m3':
-                return $cerobong->C3;
+            // Kalau belum ketemu, cari dari C...C1
 
-            case 'ppm':
-                return $cerobong->C4 ?? $cerobong->C;
+            $nilai = $nilai ?? '-';
+        } else {
+            $fKoreksiKey = "f_koreksi_c$index";
 
-            case '%':
-                return $cerobong->C5 ?? $cerobong->C3_persen;
-
-            case '°C':
-                return $cerobong->C6;
-
-            case 'g/gmol':
-                return $cerobong->C7;
-
-            case 'm3/s':
-                return $cerobong->C8;
-
-            case 'm/s':
-                return $cerobong->C9;
-
-            case 'kg/tahun':
-                return $cerobong->C10;
-
-            default:
-                return $cerobong->C1 ?? $cerobong->C;
+            $nilai = $ws[$fKoreksiKey] ?? $ws[$fKoreksiKey] ?? '-';
         }
+        return $nilai;
+
     }
 
 

@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Helpers\HelperSatuan;
 use App\Models\DetailLingkunganHidup;
 use App\Models\DirectLainHeader;
 use App\Models\HistoryAppReject;
 
 use App\Models\LingkunganHeader;
+use App\Models\PartikulatHeader;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 
@@ -32,7 +34,7 @@ class TqcUdaraLingkunganHidupController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-   public function approveData(Request $request)
+    public function approveData(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -89,98 +91,164 @@ class TqcUdaraLingkunganHidupController extends Controller
     }
 
 
-    	public function detail(Request $request)
-	{
-		try {
-			$directData = DirectLainHeader::with(['ws_udara'])
-				->where('no_sampel', $request->no_sampel)
-				->where('is_approve', 1)
-				->where('status', 0)
-				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-				->addSelect(DB::raw("'direct' as data_type"))
-				->get();
+    public function detail(Request $request)
+    {
+        try {
+            $directData = DirectLainHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'direct' as data_type"))
+                ->get();
 
-			$lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
-				->where('no_sampel', $request->no_sampel)
-				->where('is_approved', 1)
-				->where('status', 0)
-				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-				->addSelect(DB::raw("'lingkungan' as data_type"))
-				->get();
-			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
-				->where('no_sampel', $request->no_sampel)
-				->where('is_approve', 1)
-				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
-				->addSelect(DB::raw("'subKontrak' as data_type"))
-				->get();
-
-
-
-			$combinedData = collect()
-				->merge($lingkunganData)
-				->merge($subkontrak)
-				->merge($directData);
-
-
-			$processedData = $combinedData->map(function ($item) {
-				switch ($item->data_type) {
-					case 'lingkungan':
-						$item->source = 'Lingkungan';
-						break;
-					case 'subKontrak':
-						$item->source = 'Subkontrak';
-						break;
-					case 'direct':
-						$item->source = 'Direct Lain';
-						break;
-				}
-				return $item;
-			});
-			// $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
-			$id_regulasi = $request->regulasi;
-			foreach ($processedData as $item) {
-
-				$dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
-					->select('durasi_pengambilan')
-					->where('parameter', $item->parameter)
-					->first();
-				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
-					->where('id_regulasi', $id_regulasi)
-					->where('is_active', 1)
-					->select('baku_mutu', 'satuan', 'method')
-					->first();
-				$item->durasi = $dataLapangan->durasi_pengambilan ?? null;
-				$item->satuan = $bakuMutu->satuan ?? null;
-				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
-				$item->method = $bakuMutu->method ?? null;
-				$item->nama_header = $bakuMutu->nama_header ?? null;
-			
-			}
+            $lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('status', 0)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'lingkungan' as data_type"))
+                ->get();
+            $subkontrak = Subkontrak::with(['ws_value_linkungan'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+                ->addSelect(DB::raw("'subKontrak' as data_type"))
+                ->get();
+            $partikulat = PartikulatHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->where('is_active', 1)
+                ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+                ->addSelect(DB::raw("'partikulat' as data_type"))
+                ->get();
 
 
-			return Datatables::of($processedData)->make(true);
+            $combinedData = collect()
+                ->merge($lingkunganData)
+                ->merge($subkontrak)
+                ->merge($directData)
+                ->merge($partikulat);
 
-		} catch (\Throwable $th) {
-			return response()->json([
-				'message' => $th->getMessage(),
-			], 401);
-		}
-	}
 
-	public function detailLapangan(Request $request)
-	{
-			try {
-                $data = DetailLingkunganHidup::where('no_sampel', $request->no_sampel)->first();
-                if ($data) {
-                    return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-                } else {
-                    return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
+            $processedData = $combinedData->map(function ($item) {
+                switch ($item->data_type) {
+                    case 'lingkungan':
+                        $item->source = 'Lingkungan';
+                        break;
+                    case 'subKontrak':
+                        $item->source = 'Subkontrak';
+                        break;
+                    case 'direct':
+                        $item->source = 'Direct Lain';
+                        break;
+                    case 'partikulat':
+                        $item->source = 'Partikulat';
+                        break;
                 }
-			} catch (\Exception $ex) {
-				dd($ex);
-			}
-		
-	}
+                return $item;
+            });
+            // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
+            $id_regulasi = $request->regulasi;
+            $getSatuan = new HelperSatuan;
+
+            foreach ($processedData as $item) {
+
+                $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
+                    ->select('durasi_pengambilan')
+                    ->where('parameter', $item->parameter)
+                    ->first();
+                $bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
+                    ->where('id_regulasi', $id_regulasi)
+                    ->where('is_active', 1)
+                    ->select('baku_mutu', 'satuan', 'method')
+                    ->first();
+
+                $item->durasi = $dataLapangan->durasi_pengambilan ?? null;
+                $item->satuan = $bakuMutu->satuan ?? null;
+                $item->baku_mutu = $bakuMutu->baku_mutu ?? null;
+                $item->method = $bakuMutu->method ?? null;
+                $item->nama_header = $bakuMutu->nama_header ?? null;
+
+                $hasil = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+                if ($hasil != null) {
+                    $hasil = $hasil->toArray();
+                    $index = $getSatuan->udara($item->satuan);
+                    $nilai = null;
+                    if ($index == null) {
+                        for ($i = 0; $i <= 16; $i++) {
+                            $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
+                            if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                $nilai = $hasil[$key];
+                                break;
+                            }
+                        }
+                        if (empty($nilai)) {
+                            for ($i = 0; $i <= 16; $i++) {
+                                $key = $i === 0 ? 'C' : "C$i";
+                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                    $nilai = $hasil[$key];
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (empty($nilai)) {
+                            for ($i = 1; $i <= 17; $i++) {
+                                $key = "f_koreksi_$i";
+                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                    $nilai = $hasil[$key];
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (empty($nilai)) {
+                            for ($i = 1; $i <= 17; $i++) {
+                                $key = "hasil$i";
+                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                    $nilai = $hasil[$key];
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        $fKoreksiKey = "f_koreksi_c$index";
+                        $hasilKey    = "C$index";
+                        $fKoreksiHasil = "f_koreksi_$index";
+                        $fhasil = "hasil$index";
+
+                        $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? '-';
+                    }
+
+                    $item->nilai_uji = $nilai;
+                } else {
+                    $item->nilai_uji = '-';
+                }
+            }
+
+
+            return Datatables::of($processedData)->make(true);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'message' => $th->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function detailLapangan(Request $request)
+    {
+        try {
+            $data = DetailLingkunganHidup::where('no_sampel', $request->no_sampel)->first();
+            if ($data) {
+                return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+            } else {
+                return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
+            }
+        } catch (\Exception $ex) {
+            dd($ex);
+        }
+    }
 
     public function handleApproveSelected(Request $request)
     {

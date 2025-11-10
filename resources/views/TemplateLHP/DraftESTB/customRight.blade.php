@@ -100,7 +100,7 @@
 
                 {{-- Regulasi --}}
                 @php
-                    $bintang = '**';
+                    $bintang = '';
                 @endphp
                 @if ($header->regulasi_custom != null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">

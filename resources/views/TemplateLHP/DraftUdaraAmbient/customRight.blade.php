@@ -2,13 +2,14 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
+    use \Carbon\Carbon;
 
     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
     $tanggal_sampling = '';
     if($header->status_sampling == 'S24'){
         $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
+        $tanggalAwal = $header->tanggal_sampling;
 
         $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
 
@@ -179,14 +180,16 @@
                 </table>
 
 
-                @if (!empty($header->regulasi))
-                    @foreach (json_decode($header->regulasi) as $y)
-                        <table style="padding-top: 10px;" width="100%">
-                            <tr>
-                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
-                            </tr>
-                        </table>
-                    @endforeach
+                @if ($header->regulasi_custom!=null)
+                    <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                </tr>
+                            @endif
+                        @endforeach
+                    </table>
                 @endif
                 {{-- Keterangan --}}
                 @php
