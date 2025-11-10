@@ -712,12 +712,20 @@ class DraftUdaraAmbientController extends Controller
                 $mainData = [];
                 $otherRegulations = [];
                 $methodsUsed = [];
+
                 $validasi = WsValueUdara::with([
                     'lingkungan',
                     'partikulat',
                     'direct_lain',
-                    'subkontrak'
-                ])->where('no_sampel', $request->no_sampel)
+                    'subkontrak',
+                    
+                ])->where(function ($q) {
+                    $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                        ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                        ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
+                        ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true));
+                })
+                ->where('no_sampel', $request->no_sampel)
                     ->get()
                     ->map(function ($item) {
                         $detail = $item->subkontrak ?? $item->direct_lain ?? $item->partikulat ?? $item->lingkungan;

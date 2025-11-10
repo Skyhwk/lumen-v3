@@ -37,4 +37,7 @@ class WsValueLingkungan extends Sector
     public function partikulat(){
         return $this->belongsTo('App\Models\PartikulatHeader', 'lingkungan_header_id', 'id');
     }
+    public function microbiologi(){
+        return $this->belongsTo('App\Models\MicrobioHeader', 'lingkungan_header_id', 'id');
+    }
 }
