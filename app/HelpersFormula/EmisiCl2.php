@@ -20,7 +20,7 @@ class EmisiCl2
 			// C1 Formula
 			// ((0.316 x (A-B) x 25 x 50 / V) / Vs) x 1000
 			if ($data->volume_sample != 0 && $vs != 0) {
-				$c1 = ((0.316 * (($data->konsentrasi_klorin - $data->konsentrasi_blanko) * 25 * 50) / $data->volume_sample) / $vs) * 1000;
+				$c1 = (((($data->konsentrasi_klorin - $data->konsentrasi_blanko) * 25 * 50) / $data->volume_sample) / $vs) * 1000;
 			} else {
 				$c1 = 0; // Handle division by zero
 			}
@@ -36,7 +36,7 @@ class EmisiCl2
 
 			// C2 Formula
 			// C (ppm) = ((0.316 x (A-B) x 25 x 50 / V) / Vs) x 1000
-			$c2 = (0.316 * (($data->konsentrasi_klorin - $data->konsentrasi_blanko) * 25 * 50) / $data->volume_sample) / $vs;
+			$c2 = ((0.316 * (($data->konsentrasi_klorin - $data->konsentrasi_blanko) * 25 * 50) / $data->volume_sample) / $vs) * 1000;
 
             $c3 = $c;
             $c4 = $c1;
@@ -50,6 +50,7 @@ class EmisiCl2
             $c4 = str_replace(",", "", number_format($c4, 4));
 
             $satuan = 'mg/Nm3';
+            // dd($data);
 
 			$data = [
 				'id_parameter' => $id_parameter,
@@ -69,9 +70,9 @@ class EmisiCl2
 				'k_blanko' => $data->konsentrasi_blanko,
 				'w1' => null,
 				'w2' => null,
-				'C' => $c2,
-				'C1' => $c,
-				'C2' => $c1,
+				'C' => $c,
+				'C1' => $c1,
+				'C2' => $c2,
                 'C3' => $c3,
                 'C4' => $c4,
                 'satuan' => $satuan,

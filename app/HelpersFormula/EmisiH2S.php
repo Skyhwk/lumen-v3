@@ -46,26 +46,25 @@ class EmisiH2S
         $Vs = \str_replace(",", "", number_format($data->volume_dry * (298 / (273 + $data->suhu)) * (($data->tekanan + $data->tekanan_dry - $data->nil_pv) / 760), 4));
 
         // C(PPM) = (A x (B/C)) / D
-        $c_ppm = number_format((floatval($ks) * (floatval($data->vtp) / floatval($data->vs))) / floatval($Vs), 4, '.', '');
+        $c_ppm = number_format(floatval($ks) * (floatval($data->vtp) / floatval($data->vs)) / floatval($Vs), 4, '.', '');
 
         // HP = C(PPM) x (34 / 24.45)
-        $C1 = number_format(floatval($c_ppm) * (34 / 24.45), 4);
+        $C1 = floatval($c_ppm) * (34 / 24.45);
 
-
+        // dd($C1, $c_ppm);
         // (ug/Nm3) = C2 x 1000
         $C = number_format(floatval($C1) * 1000, 4);
 
-
-        $C4 = number_format((floatval($ks) * (floatval($data->vtp) / floatval($data->vs))) / floatval($data->volume_dry), 4, '.', '');
-
-        $C3 = number_format(floatval($C3) * 1000, 4);
-
         $C2 = $c_ppm; // ppm
+
+        $C3 = $C;
+
+        $C1 = number_format($C1, 4);
+
+        $C4 = $C1;
 
 
         $satuan = 'mg/Nm3';
-
-
 
 
         if ($C1 < 0.046) {
