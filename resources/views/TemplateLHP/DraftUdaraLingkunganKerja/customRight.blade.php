@@ -131,21 +131,21 @@ $tanggal_sampling = '-';
                         </td>
                     </tr>
                     <tr>
-                        <td width="50%">
+                        <td>
                             <table>
                                 <tr>
-                                    <td class="custom5">Suhu Lingkungan</td>
-                                    <td class="custom5">:</td>
+                                    <td class="custom5" width="120">Suhu Lingkungan</td>
+                                    <td class="custom5" width="12">:</td>
                                     <td class="custom5">{{ $header->suhu }} °C</td>
                                 </tr>
                                 <tr>
-                                    <td class="custom5">Kelembapan</td>
-                                    <td class="custom5">:</td>
+                                    <td class="custom5" width="120">Kelembapan</td>
+                                    <td class="custom5" width="12">:</td>
                                     <td class="custom5">{{ $header->kelembapan }} %</td>
                                 </tr>
                                 <tr>
-                                    <td class="custom5">Tekanan Udara</td>
-                                    <td class="custom5">:</td>
+                                    <td class="custom5" width="120">Tekanan Udara</td>
+                                    <td class="custom5" width="12">:</td>
                                     <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
                                 </tr>
                             </table>

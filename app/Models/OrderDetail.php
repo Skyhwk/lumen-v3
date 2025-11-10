@@ -513,7 +513,7 @@ class OrderDetail extends Sector
     }
 
     public function udaraMicrobio(){
-        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approved', true);
+        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
     }
 
 
