@@ -28,4 +28,4 @@
     @endif
 </table>
 
-@include($view . '.right', ['header' => $header, 'detail' => $detail, 'mode' => $mode])
+@include($view . '.right', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'showKan' => $showKan])
