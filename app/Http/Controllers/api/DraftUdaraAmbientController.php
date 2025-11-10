@@ -204,7 +204,7 @@ class DraftUdaraAmbientController extends Controller
             $header->fill([
                 'no_order' => $request->no_order ?: null,
                 'no_sampel' => $request->no_sampel ? trim($request->no_sampel) : null,
-                'no_lhp'    => $request->no_lhp ? trim($request->no_lhp) : null,
+                'no_lhp' => $request->no_lhp ? trim($request->no_lhp) : null,
                 'no_qt' => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
                 'tanggal_terima' => $request->tanggal_terima ?: null,
@@ -666,8 +666,9 @@ class DraftUdaraAmbientController extends Controller
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
                         // dd($item['page']);
-                        if (empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
+                        if (empty($item['page']))
+                            continue;
+                        $id_regulasi = (string) "id_" . $item['id'];
                         $page = $item['page'];
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
@@ -718,14 +719,14 @@ class DraftUdaraAmbientController extends Controller
                     'partikulat',
                     'direct_lain',
                     'subkontrak',
-                    
+
                 ])->where(function ($q) {
                     $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
                         ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
                         ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
                         ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true));
                 })
-                ->where('no_sampel', $request->no_sampel)
+                    ->where('no_sampel', $request->no_sampel)
                     ->get()
                     ->map(function ($item) {
                         $detail = $item->subkontrak ?? $item->direct_lain ?? $item->partikulat ?? $item->lingkungan;
@@ -753,12 +754,12 @@ class DraftUdaraAmbientController extends Controller
                     })->toArray();
 
                 foreach ($validasi as $item) {
-                    $entry = $this->formatEntry((object)$item, $request->regulasi, $methodsUsed);
+                    $entry = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
                         foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object)$item, $id_regulasi);
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi);
                         }
                     }
                 }
@@ -824,7 +825,7 @@ class DraftUdaraAmbientController extends Controller
         $getSatuan = new HelperSatuan;
 
 
-        $index = $getSatuan->udara($bakumutu->satuan);
+        $index = $getSatuan->udara($bakumutu->satuan ?? null);
 
         $ws_udara = (object) $val->ws_udara;
 
