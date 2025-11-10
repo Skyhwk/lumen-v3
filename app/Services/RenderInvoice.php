@@ -85,7 +85,7 @@ class RenderInvoice
                             ->orderBy('invoice.no_order')
                             ->first();
 
-                        $hargaDetail = Invoice::select(DB::raw('SUM(quot_d.total_discount) AS diskon, SUM(quot_d.total_ppn) AS ppn, SUM(quot_d.grand_total) AS sub_total, SUM(quot_d.total_pph) AS pph, SUM(quot_d.biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(invoice.piutang) AS sisa_tagihan, invoice.keterangan, SUM(invoice.total_tagihan) AS total_tagihan, quot_d.total_discount_transport, quot_d.biaya_di_luar_pajak, quot_d.total_discount_perdiem'))
+                        $hargaDetail = Invoice::select(DB::raw('SUM(quot_d.total_discount) AS diskon, SUM(quot_d.cash_discount) AS cash_discount, SUM(quot_d.total_ppn) AS ppn, SUM(quot_d.grand_total) AS sub_total, SUM(quot_d.total_pph) AS pph, SUM(quot_d.biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(invoice.piutang) AS sisa_tagihan, invoice.keterangan, SUM(invoice.total_tagihan) AS total_tagihan, quot_d.total_discount_transport, quot_d.biaya_di_luar_pajak, quot_d.total_discount_perdiem'))
                             ->leftJoin('request_quotation_kontrak_H AS quot_h', 'invoice.no_quotation', '=', 'quot_h.no_document')
                             ->leftJoin('request_quotation_kontrak_D AS quot_d', 'quot_h.id', '=', 'quot_d.id_request_quotation_kontrak_h')
                             ->where('no_invoice', $noInvoice)
@@ -106,7 +106,7 @@ class RenderInvoice
                             ->orderBy('invoice.no_order')
                             ->first();
 
-                        $hargaDetail = Invoice::select(DB::raw('quot_h.total_discount AS diskon, quot_h.total_ppn AS ppn, quot_h.grand_total AS sub_total, quot_h.total_pph AS pph, quot_h.biaya_akhir AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, invoice.piutang AS sisa_tagihan, invoice.keterangan, SUM(invoice.total_tagihan) AS total_tagihan, quot_h.total_discount_transport, quot_h.biaya_diluar_pajak AS biaya_di_luar_pajak, quot_h.total_discount_perdiem'))
+                        $hargaDetail = Invoice::select(DB::raw('quot_h.total_discount AS diskon, quot_h.cash_discount AS cash_discount, quot_h.total_ppn AS ppn, quot_h.grand_total AS sub_total, quot_h.total_pph AS pph, quot_h.biaya_akhir AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, invoice.piutang AS sisa_tagihan, invoice.keterangan, SUM(invoice.total_tagihan) AS total_tagihan, quot_h.total_discount_transport, quot_h.biaya_diluar_pajak AS biaya_di_luar_pajak, quot_h.total_discount_perdiem'))
                             ->leftJoin('request_quotation_kontrak_H AS quot_h', 'invoice.no_quotation', '=', 'quot_h.no_document')
                             ->where('no_invoice', $noInvoice)
                             ->where('quot_h.is_active', true)
@@ -129,7 +129,7 @@ class RenderInvoice
                         ->orderBy('invoice.no_order')
                         ->first();
 
-                    $hargaDetail = Invoice::select(DB::raw('SUM(total_discount) AS diskon, SUM(total_ppn) AS ppn, SUM(grand_total) AS sub_total, SUM(total_pph) AS pph, SUM(biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(piutang) AS sisa_tagihan, keterangan, SUM(invoice.total_tagihan) AS total_tagihan, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem'))
+                    $hargaDetail = Invoice::select(DB::raw('SUM(total_discount) AS diskon, SUM(cash_discount) AS cash_discount, SUM(total_ppn) AS ppn, SUM(grand_total) AS sub_total, SUM(total_pph) AS pph, SUM(biaya_akhir) AS total_harga, SUM(nilai_tagihan) AS nilai_tagihan, SUM(piutang) AS sisa_tagihan, keterangan, SUM(invoice.total_tagihan) AS total_tagihan, total_discount_transport, biaya_di_luar_pajak, total_discount_perdiem'))
                         ->where('no_invoice', $noInvoice)
                         ->where('quot.no_document', $value->no_quotation)
                         ->where('invoice.is_active', true)
@@ -898,18 +898,18 @@ class RenderInvoice
                                 ? $resetData->data_sampling
                                 : $cekArray;
                             // dd($usingData);
-                            for ($i = 0; $i < count(array_chunk($usingData, 12)); $i++) {
-                                foreach (array_chunk($usingData, 12)[$i] as $keys => $dataSampling) {
+                            for ($i = 0; $i < count(array_chunk($usingData, 13)); $i++) {
+                                foreach (array_chunk($usingData, 13)[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
-                                        if ($i == count(array_chunk($usingData, 12)) - 1) {
-                                            $rowspan = count(array_chunk($usingData, 12)[$i]) + 1 + $tambah;
+                                        if ($i == count(array_chunk($usingData, 13)) - 1) {
+                                            $rowspan = count(array_chunk($usingData, 13)[$i]) + 1 + $tambah;
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                                                 <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count(array_chunk($usingData, 12)[$i]) + 1;
+                                            $rowspan = count(array_chunk($usingData, 13)[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
@@ -1007,7 +1007,7 @@ class RenderInvoice
                                     }
                                 }
 
-                                $isLastElement = $i == count(array_chunk($usingData, 12)) - 1;
+                                $isLastElement = $i == count(array_chunk($usingData, 13)) - 1;
 
                                 if ($isLastElement) {
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
@@ -1433,7 +1433,6 @@ class RenderInvoice
 
                 $el = json_decode(json_encode($detailHargaInvo));
 
-
                 //cek apakah ada biaya diluar pajak
                 if (isset($el->biaya_di_luar_pajak)) {
                     $biayaDiLuarPajak = json_decode($el->biaya_di_luar_pajak);
@@ -1469,7 +1468,6 @@ class RenderInvoice
                 }
             };
             $spk = '';
-
             if ($dataHead->no_spk != null && $dataHead->no_faktur != null) {
                 $spk = '<span style="font-size:10px">- No. SPK: ' . $dataHead->no_spk . ' - No. Faktur: ' . $dataHead->no_faktur . '</span>';
             } else if ($dataHead->no_faktur != null && $dataHead->no_spk == null) {

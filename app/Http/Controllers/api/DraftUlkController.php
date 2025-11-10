@@ -1,6 +1,8 @@
 <?php
 
 namespace App\Http\Controllers\api;
+
+use App\Helpers\HelperSatuan;
 use App\Models\HistoryAppReject;
 
 use App\Models\KonfirmasiLhp;
@@ -39,6 +41,8 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
 use App\Models\LinkLhp;
+use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -48,66 +52,43 @@ class DraftUlkController extends Controller
     // AmanghandleDatadetail
     public function index()
     {
-        DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
             'lhps_ling',
             'allDetailLingkunganKerja',
-            'orderHeader' => function ($query) {
-                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
-            }
+            'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling'
         ])
-            ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
-            ->where('is_approve', 0)
-            ->where('is_active', true)
-            ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', "27-Udara Lingkungan Kerja")
+            ->where([
+                ['is_approve', 0],
+                ['is_active', true],
+                ['kategori_2', '4-Udara'],
+                ['kategori_3', '27-Udara Lingkungan Kerja'],
+                ['status', 2],
+            ])
             ->where(function ($query) {
                 $query->where('parameter', 'not like', '%Power Density%')
-                    ->orWhere('parameter', 'not like', '%Medan Magnit Statis%')
-                    ->orWhere('parameter', 'not like', '%Medan Listrik%');
+                    ->where('parameter', 'not like', '%Medan Magnit Statis%')
+                    ->where('parameter', 'not like', '%Medan Listrik%')
+                    ->where('parameter', 'not like', '%Sinar UV%')
+                    ->where('parameter', 'not like', '%Ergonomi%');
             })
-            ->where('parameter', 'not like', '%Sinar UV%')
-            ->where('parameter', 'not like', '%Ergonomi%')
-            ->groupBy('cfr')
-            ->where('status', 2)
             ->get();
-        
-        foreach ($data as $item) {
 
-            // 🔹 Jika kategori_1 = 'S24' → ambil shift L2 dan hanya first
-            if ($item->kategori_1 == 'S24') {
-                $cek = $item->allDetailLingkunganKerja
-                    ->where('shift_pengambilan', 'L2')
-                    ->take(1)
-                    ->values();
+        $data->transform(function ($item) {
+            // Tentukan data lapangan
+            $lapangan = $item->allDetailLingkunganKerja;
+            $item->data_lapangan_lingkungan_kerja = $item->kategori_1 === 'S24'
+                ? ($lapangan->where('shift_pengambilan', 'L2')->take(1)->values()->isNotEmpty()
+                    ? $lapangan->where('shift_pengambilan', 'L2')->take(1)->values()
+                    : $lapangan->take(1)->values())
+                : $lapangan->take(1)->values();
 
-                // Jika data shift L2 kosong → gunakan default
-                if ($cek->isEmpty()) {
-                    $cek = $item->allDetailLingkunganKerja
-                        ->take(1)
-                        ->values();
-                }
-
-                $item->data_lapangan_lingkungan_kerja = $cek;
-            } 
-            
-            // 🔹 Jika bukan → ambil 1 data pertama saja
-            else {
-                $item->data_lapangan_lingkungan_kerja = $item->allDetailLingkunganKerja
-                    ->take(1)
-                    ->values();
-            }
-
-            // 🟢 JSON decode methode_sampling jika ada
+            // Decode metode_sampling jika ada
             if (!empty($item->lhps_ling->methode_sampling)) {
                 $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
             }
-        }
-        // foreach ($data as $key => $value) {
-        //     if (isset($value->lhps_ling) && $value->lhps_ling->metode_sampling != null) {
-        //         $data[$key]->lhps_ling->metode_sampling = json_decode($value->lhps_ling->metode_sampling);
-        //     }
-        // }
+
+            return $item;
+        });
 
         return Datatables::of($data)->make(true);
     }
@@ -169,7 +150,6 @@ class DraftUlkController extends Controller
                 'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
                 'data' => $result,
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -363,7 +343,6 @@ class DraftUlkController extends Controller
                 'message' => "Data draft Lingkungan Kerja no LHP $request->no_lhp berhasil disimpan",
                 'status' => true
             ], 201);
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
@@ -482,78 +461,6 @@ class DraftUlkController extends Controller
                     }
                 }
 
-                // ==============================
-                // Ambil mainData & otherRegulations
-                // ==============================
-                $mainData = [];
-                $otherRegulations = [];
-                $methodsUsed = [];
-
-                $models = [
-                    LingkunganHeader::class,
-                    Subkontrak::class,
-                    DirectLainHeader::class,
-                    PartikulatHeader::class,
-                    MicrobioHeader::class
-                ];
-
-                foreach ($models as $model) {
-                    $approveField = $model === LingkunganHeader::class || $model === MicrobioHeader::class ? 'is_approved' : 'is_approve';
-                    $data = $model::with('ws_value_linkungan', 'parameter_udara')
-                        ->where('no_sampel', $request->no_sampel)
-                        ->where($approveField, 1)
-                        ->where('is_active', true)
-                        ->where('lhps', 1)
-                        ->get();
-
-                    foreach ($data as $val) {
-                        $entry = $this->formatEntry($val, $request->regulasi, $methodsUsed);
-                        $mainData[] = $entry;
-
-                        if ($request->other_regulasi) {
-                            foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi);
-                            }
-                        }
-                    }
-                }
-
-                // Sort mainData
-                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-
-                // Sort otherRegulations
-                foreach ($otherRegulations as $id => $regulations) {
-                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-                }
-
-                // ==============================
-                // Sinkronisasi data_entry dengan mainData
-                // ==============================
-                $dataEntrySamples = array_column($data_entry, 'no_sampel');
-
-                foreach ($mainData as $main) {
-                    if (!in_array($main['no_sampel'], $dataEntrySamples)) {
-                        $data_entry[] = array_merge($main, ['status' => 'belom_diadjust']);
-                    }
-                }
-
-                // ==============================
-                // Sinkronisasi data_custom dengan otherRegulations
-                // ==============================
-                $dataCustomSamples = [];
-                foreach ($data_custom as $group) {
-                    foreach ($group as $row) {
-                        $dataCustomSamples[] = $row['no_sampel'];
-                    }
-                }
-
-                foreach ($otherRegulations as $id_regulasi => $entries) {
-                    foreach ($entries as $other) {
-                        if (!in_array($other['no_sampel'], $dataCustomSamples)) {
-                            $data_custom["id_" . $id_regulasi][] = array_merge($other, ['status' => 'belom_diadjust']);
-                        }
-                    }
-                }
                 $defaultMethods = Parameter::where('is_active', true)
                     ->where('id_kategori', 4)
                     ->whereNotNull('method')
@@ -575,74 +482,106 @@ class DraftUlkController extends Controller
                         'ẍ Parameter belum terakreditasi.'
                     ]
                 ], 201);
-            }
-
-            // ==============================
-            // CASE 2: Jika tidak ada cek_lhp
-            // ==============================
-            $mainData = [];
-            $otherRegulations = [];
-            $methodsUsed = [];
-
-            $models = [
-                LingkunganHeader::class,
-                Subkontrak::class,
-                DirectLainHeader::class,
-                PartikulatHeader::class,
-                MicrobioHeader::class
-            ];
-
-            foreach ($models as $model) {
-                $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                $with = ['ws_value_linkungan', 'parameter_udara'];
-                if ($model === LingkunganHeader::class) {
-                    $with[] = 'ws_udara';
-                }
-                $data = $model::with($with)
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where($approveField, 1)
-                    ->where('is_active', true)
-                    ->where('lhps', 1)
+            } else {
+                $mainData = [];
+                $otherRegulations = [];
+                $methodsUsed = [];
+                $isMain = true;
+                $validasi = WsValueUdara::with([
+                    'lingkungan',
+                    'partikulat',
+                    'direct_lain',
+                    'subkontrak',
+                    'microbiologi'
+                ])->where(function ($q) {
+                    $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                        ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                        ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
+                        ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true))
+                        ->orWhereHas('microbiologi', fn($r) => $r->where('microbio_header.is_approved', true));
+                })->where('no_sampel', $request->no_sampel)
                     ->get();
 
-                foreach ($data as $val) {
-                    $entry = $this->formatEntry($val, $request->regulasi, $methodsUsed);
+                if ($validasi->isEmpty()) {
+                    $validasi = WsValueLingkungan::with([
+                        'lingkungan',
+                        'partikulat',
+                        'directlain',
+                        'subkontrak',
+                        'microbiologi'
+                    ])
+                    ->where(function ($q) {
+                        $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                            ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                            ->orWhereHas('directlain', fn($r) => $r->where('directlain_header.is_approve', true))
+                            ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true))
+                            ->orWhereHas('microbiologi', fn($r) => $r->where('microbio_header.is_approved', true));
+                        })->where('no_sampel', $request->no_sampel)
+                                ->get();
+                            $isMain = false;
+                }
+
+                $validasi = $validasi->map(function ($item) use ($isMain) {
+                    $detail = $item->subkontrak ?? $item->direct_lain ?? $item->partikulat ?? $item->lingkungan;
+                    $newQuery = Parameter::where('nama_lab', $detail->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
+                    if ($isMain) {
+                        $subQuery = WsValueLingkungan::with(['lingkungan', 'subkontrak', 'directlain', 'partikulat'])->where('no_sampel', $item->no_sampel)
+                            ->where(function ($q) use ($detail) {
+                                $q->whereHas('lingkungan', fn($r) => $r->where('parameter', $detail->parameter))
+                                    ->orWhereHas('subkontrak', fn($r) => $r->where('parameter', $detail->parameter))
+                                    ->orWhereHas('directlain', fn($r) => $r->where('parameter', $detail->parameter))
+                                    ->orWhereHas('partikulat', fn($r) => $r->where('parameter', $detail->parameter));
+                            })->where('is_active', true)->first();
+                    }
+
+                    return [
+                        'id' => $item->id,
+                        'parameter' => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
+                        'nama_lab' => $detail->parameter,
+                        'satuan' => $newQuery->satuan,
+                        'method' => $newQuery->method,
+                        'status' => $newQuery->status,
+                        'no_sampel' => $item->no_sampel,
+                        'durasi' => $isMain ?  $subQuery->durasi ?? null : $item->durasi,
+                        'ws_udara' => $isMain ? $item->toArray() : [],
+                        'ws_lingkungan' => $isMain ? ($subQuery ? (array) $subQuery : null) : $item
+                    ];
+                })->toArray();
+
+                foreach ($validasi as $item) {
+                    $entry = $this->formatEntry((object)$item, $request->regulasi, $methodsUsed);
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
                         foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi);
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object)$item, $id_regulasi);
                         }
                     }
                 }
-            }
-            
-            // Sort mainData
-            $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-            
-            // Sort otherRegulations
-            foreach ($otherRegulations as $id => $regulations) {
-                $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-            }
-            $methodsUsed = array_values(array_unique($methodsUsed));
-            $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
-                ->whereNotNull('method')->groupBy('method')
-                ->pluck('method')->toArray();
+                // Sort mainData
+                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+                // Sort otherRegulations
+                foreach ($otherRegulations as $id => $regulations) {
+                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+                }
+                $methodsUsed = array_values(array_unique($methodsUsed));
+                $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
+                    ->whereNotNull('method')->groupBy('method')
+                    ->pluck('method')->toArray();
+                $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
 
-            $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-            
-            return response()->json([
-                'status' => true,
-                'data' => $mainData,
-                'next_page' => $otherRegulations,
-                'spesifikasi_method' => $resultMethods,
-                'keterangan' => [
+                return response()->json([
+                    'status' => true,
+                    'data' => $mainData,
+                    'next_page' => $otherRegulations,
+                    'spesifikasi_method' => $resultMethods,
+                    'keterangan' => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                         'ẍ Parameter belum terakreditasi.'
                     ]
-            ], 201);
-
+                ], 201);
+            }
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -656,78 +595,54 @@ class DraftUlkController extends Controller
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-        ->where('parameter', $val->parameter)
-        ->first();
-        
-        $param = $val->parameter_udara;
+            ->where('parameter', $val->nama_lab)
+            ->first();
+
+        $parameter = $val->parameter;
         $entry = [
             'id' => $val->id,
-            'parameter_lab' => $val->parameter,
+            'parameter_lab' => $val->nama_lab,
             'no_sampel' => $val->no_sampel,
             'akr' => (
                 !empty($bakumutu)
-                    ? (str_contains($bakumutu->akreditasi, 'akreditasi') ? '' : 'ẍ')
-                    : 'ẍ'
+                ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                : 'ẍ'
             ),
-            'parameter' => $param->nama_regulasi ?: $param->nama_lhp,
+            'parameter' => $parameter,
             // 'satuan' => $param->satuan,
-            'nab' => $bakumutu ? ($bakumutu->nama_header == 'NAB' ? $bakumutu->baku_mutu : '-') : '-',
-            'psd_ktd' => $bakumutu ? ($bakumutu->nama_header == 'PSD' || $bakumutu->nama_header == 'KTD' ? $bakumutu->baku_mutu : '-') : '-',
+            'jenis_persyaratan' => $bakumutu ? $bakumutu->nama_header : '-',
+            'nilai_persyaratan' => $bakumutu ? $bakumutu->baku_mutu : '-',
             // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
-            'satuan' => (!empty($bakumutu->satuan)) 
-                ? $bakumutu->satuan 
-                : (!empty($param->satuan) ? $param->satuan : '-'),
-            'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->ws_value_lingkungan) ? $val->ws_value_lingkungan->durasi : '-'),
-            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($param->method) ? $param->method : '-'),
-            'status' => $param->status
+            'satuan' => (!empty($bakumutu->satuan))
+                ? $bakumutu->satuan
+                : (!empty($val->satuan) ? $val->satuan : '-'),
+            'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->durasi) ? $val->durasi : '-'),
+            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($val->method) ? $val->method : '-'),
+            'status' => $val->status
         ];
 
-        $satuanIndexMap = [
-            "µg/m³" => 16,
-            "µg/m3" => 16,
-            "mg/m³" => 17,
-            "mg/m3" => 17,
-            "BDS" => 15,
-            "CFU/M²" => 14,
-            "CFU/M2" => 14,
-            "CFU/25cm²" => 13,
-            "CFU/25cm2" => 13,
-            "°C" => 12,
-            "CFU/100 cm²" => 11,
-            "CFU/100 cm2" => 11,
-            "CFU/m²" => 10,
-            "CFU/m2" => 10,
-            "CFU/m³" => 9,
-            "CFU/m3" => 9,
-            "CFU/mᶟ" => 9,
-            "m/s" => 8,
-            "m/detik" => 8,
-            "f/cc" => 7,
-            "Ton/km²/Bulan" => 6,
-            "Ton/km2/Bulan" => 6,
-            "%" => 5,
-            "ppb" => 4,
-            "ppm" => 3,
-            "mg/nm³" => 2,
-            "mg/nm3" => 2,
-            "μg/Nm³" => 1,
-            "μg/Nm3" => 1
-        ];
+        $getSatuan = new HelperSatuan;
 
-        $index = (!empty($bakumutu)) ? $satuanIndexMap[$bakumutu->satuan] : 1;
-        
+
+
+        $index = $getSatuan->udara($bakumutu->satuan ?? null);
+
+        $ws_udara = (object) $val->ws_udara;
+
+        $ws_value_lingkungan = (object) $val->ws_lingkungan;
+
         $fKoreksiKey = "f_koreksi_$index";
         $hasilKey = "hasil$index";
 
-        $entry['hasil_uji'] = $val->ws_udara->$fKoreksiKey
-            ?? $val->ws_udara->$hasilKey
-            ?? $val->ws_value_lingkungan->f_koreksi_c
-            ?? $val->ws_value_lingkungan->C
+        $entry['hasil_uji'] = $ws_udara->$fKoreksiKey
+            ?? $ws_udara->$hasilKey
+            ?? $ws_value_lingkungan->f_koreksi_c
+            ?? $ws_value_lingkungan->C
             ?? '-';
 
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi2 = $val->ws_udara->f_koreksi_2 ?? null;
-            $hasil2 = $val->ws_udara->hasil2 ?? null;
+            $fKoreksi2 = $ws_udara->f_koreksi_2 ?? null;
+            $hasil2 = $ws_udara->hasil2 ?? null;
             $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
         }
 
@@ -823,7 +738,7 @@ class DraftUlkController extends Controller
                 $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
                 $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if($cekLink) {
+                if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
                     $this->dispatch($job);
                 }

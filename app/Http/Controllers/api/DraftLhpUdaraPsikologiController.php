@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Http\Controllers\Controller;
+use App\Jobs\RenderLhpp;
+use App\Jobs\JobPrintLhp;
+use App\Jobs\CombineLHPJob;
 use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\PsikologiHeader;
@@ -9,23 +13,20 @@ use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\LhpUdaraPsikologiDetail;
 use App\Models\LhpUdaraPsikologiDetailHistory;
 use App\Models\LhpUdaraPsikologiHeaderHistory;
-use App\Models\QrDocument;
-use App\Services\GenerateQrDocumentLhpp;
-use App\Http\Controllers\Controller;
-use App\Jobs\CombineLHPJob;
-use App\Services\PrintLhp;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use Yajra\Datatables\Datatables;
-use App\Jobs\RenderLhpp;
-use App\Models\GenerateLink;
-use App\Models\MasterKaryawan;
 use App\Models\OrderHeader;
+use App\Models\MasterKaryawan;
+use App\Models\QrDocument;
+use App\Models\LinkLhp;
+use App\Models\PengesahanLhp;
+use App\Models\GenerateLink;
+use App\Services\GenerateQrDocumentLhpp;
+use App\Services\PrintLhp;
 use App\Services\SendEmail;
 use App\Services\TemplateLhpp;
-use App\Jobs\JobPrintLhp;
-use App\Models\LinkLhp;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Yajra\Datatables\Datatables;
 
 class DraftLhpUdaraPsikologiController extends Controller
 {
@@ -151,7 +152,10 @@ class DraftLhpUdaraPsikologiController extends Controller
 			} else {
 				$alamat = $request->alamat_perusahaan;
 			}
-
+			$pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_rilis_lhp)
+			->orderByDesc('berlaku_mulai')
+			->first();
+			
 			$waktu_pemeriksaan = $request->waktu_pemeriksaan_awal . ' - ' . $request->waktu_pemeriksaan_akhir;
 			if ($data) {
 				$data->nama_perusahaan = $request->nama_perusahaan;
@@ -166,6 +170,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
 				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
 				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
+				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 				$data->updated_at = Carbon::now();
 				$data->updated_by = $this->karyawan;
 				$data->save();
@@ -185,6 +191,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
 				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
 				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
+				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 				$data->created_at = Carbon::now();
 				$data->created_by = $this->karyawan;
 				$data->save();
@@ -228,7 +236,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 			if ($header != null) {
 				$qr = new GenerateQrDocumentLhpp();
-				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, 'Kharina Waty', '');
+				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
 
 
 				if ($file_qr) {
