@@ -25,13 +25,13 @@ class GravimetriUdaraController extends Controller
 
     // 20-03-2025
     public function index(Request $request){
-        $dataLingkungan = LingkunganHeader::with('ws_udara', 'order_detail')
+        $dataLingkungan = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
-        $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail')
+        $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('debu_personal_header.is_active', true)
             ->where('template_stp', $request->template_stp)

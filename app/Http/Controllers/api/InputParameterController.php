@@ -3464,10 +3464,6 @@ class InputParameterController extends Controller
                     $formatted_data_analis['k_sampel'] = $value;
                 } elseif ($key === 'kb') {
                     $formatted_data_analis['k_blanko'] = $value;
-                } else if($key === 'w1'){
-                    $formatted_data_analis['berat_filter_awal'] = $value;
-                } else if($key === 'w2'){
-                    $formatted_data_analis['berat_filter_akhir'] = $value;
                 } elseif ($key === 'vs') {
                     $formatted_data_analis['volume_sampel'] = $value;
                 } elseif ($key === 'vtp') {
