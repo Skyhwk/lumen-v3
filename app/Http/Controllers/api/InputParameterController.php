@@ -3070,6 +3070,8 @@ class InputParameterController extends Controller
 				$data_parsing->nilQs = $nilQs;
 				$data_parsing->data_total = $datot;
 				$data_parsing->average_flow = $rerataFlow;
+				$data_parsing->flow_array = $rerata;
+				$data_parsing->durasi_array = $durasi;
 			} else {
 				$data_parsing->durasi = [$rerata1Durasi, $rerata2Durasi];
 				$data_parsing->nilQs = [$nil1Qs, $nil2Qs];
@@ -3341,7 +3343,8 @@ class InputParameterController extends Controller
                 } else if (in_array($request->parameter, [
 					'Debu', 'Partikulat',
 					'As', 'Cd', 'Co', 'Cr', 'Cu', 'Hg', 'Mn', 'Pb',
-					'Sb', 'Se', 'Tl', 'Zn', 'Sn', 'Al', 'Ba', 'Be', 'Bi'
+					'Sb', 'Se', 'Tl', 'Zn', 'Sn', 'Al', 'Ba', 'Be', 'Bi',
+                    'Debu (P)'
 				])) {
 					$dat = json_decode($data_lapangan->partikulat);
 					$status_par = 'Partikulat';
@@ -3461,6 +3464,10 @@ class InputParameterController extends Controller
                     $formatted_data_analis['k_sampel'] = $value;
                 } elseif ($key === 'kb') {
                     $formatted_data_analis['k_blanko'] = $value;
+                } else if($key === 'w1'){
+                    $formatted_data_analis['berat_filter_awal'] = $value;
+                } else if($key === 'w2'){
+                    $formatted_data_analis['berat_filter_akhir'] = $value;
                 } elseif ($key === 'vs') {
                     $formatted_data_analis['volume_sampel'] = $value;
                 } elseif ($key === 'vtp') {

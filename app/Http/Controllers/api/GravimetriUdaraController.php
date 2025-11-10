@@ -42,6 +42,9 @@ class GravimetriUdaraController extends Controller
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
+            ->editColumn('data_shift', function ($data) {
+                return $data->data_shift ? json_decode($data->data_shift, true) : null;
+            })
             // ->orderColumn('tanggal_terima', function ($query, $order) {
             //     $query->orderBy('tanggal_terima', $order);
             // })
