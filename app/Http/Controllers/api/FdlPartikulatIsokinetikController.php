@@ -1142,7 +1142,7 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     if (count($notApproved)) {
                         return response()->json([
-                            'message' => 'Data berikut belum disetujui: ' . implode(', ', $notApproved)
+                            'message' => 'Data berikut belum dilakukan approved: ' . implode(', ', $notApproved)
                         ], 400);
                     }
 
