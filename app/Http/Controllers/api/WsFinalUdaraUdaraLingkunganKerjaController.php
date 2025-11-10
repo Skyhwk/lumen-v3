@@ -590,7 +590,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						], 200);
 					}
 				} else if ($request->data_type == 'direct') {
-					$data = DirectLainHeader::where('no_sampel', $request->no_sampel)->get();
+					$data = DirectLainHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
 					if ($data) {
 						$cek = DirectLainHeader::where('id', $data->id)->first();
 						$cek->lhps = 0;
