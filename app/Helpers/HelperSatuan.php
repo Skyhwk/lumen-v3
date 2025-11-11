@@ -11,6 +11,7 @@ class HelperSatuan
             "µg/m³" => 16,
             "µg/m3" => 16,
             "mg/m³" => 17,
+            "mg/m³" => 17,
             "mg/m3" => 17,
             "BDS" => 15,
             "CFU/M²" => 14,
