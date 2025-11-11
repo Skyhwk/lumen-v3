@@ -2,7 +2,7 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
-    use \Carbon\Carbon;
+    use Carbon\Carbon;
 
     // $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
     // $tanggal_sampling = '';
@@ -25,16 +25,28 @@
     //         $tanggal_sampling = '-';
     //     }
     // } else {
-        if ($header->tanggal_sampling || $header->tanggal_terima) {
-            if ($header->tanggal_sampling == $header->tanggal_terima) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-            }
+    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
+        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
         } else {
-            $tanggal_sampling = '-';
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
         }
-    // }   
+    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
+        if ($header->tanggal_sampling == $header->tanggal_terima) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+        } else {
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+        }
+    } else {
+        $tanggal_sampling = '-';
+    }
+    // }
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -98,12 +110,11 @@
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
+                            $periode1 = $header->tanggal_analisa_awal ?? '';
+                            $periode2 = $header->tanggal_analisa_akhir ?? '';
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                            {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -116,7 +127,7 @@
                         <td class="custom5">
                             @php
                                 // if ($detailLapangan) {
-                                    echo $header->titik_koordinat;
+                                echo $header->titik_koordinat;
                                 // }
                             @endphp
                         </td>

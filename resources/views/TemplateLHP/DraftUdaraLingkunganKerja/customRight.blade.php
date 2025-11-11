@@ -25,11 +25,23 @@ use \Carbon\Carbon;
 //     }
 
 // } else {
-    if ($header->tanggal_sampling || $header->tanggal_terima) {
+    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
+        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } else {
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
+        }
+    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
         if ($header->tanggal_sampling == $header->tanggal_terima) {
             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
         } else {
-            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
         }
     } else {
         $tanggal_sampling = '-';
@@ -98,11 +110,9 @@ use \Carbon\Carbon;
                     <tr>
                         <td class="custom5">Periode Analisa</td>
                         <td class="custom5">:</td>
-                        @php
-                        $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                        $periode = explode(' - ', $periode_analisa);
-                        $periode1 = $periode[0] ?? '';
-                        $periode2 = $periode[1] ?? '';
+                       @php
+                            $periode1 = $header->tanggal_analisa_awal ?? '';
+                            $periode2 = $header->tanggal_analisa_akhir ?? '';
                         @endphp
                         <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
                     </tr>

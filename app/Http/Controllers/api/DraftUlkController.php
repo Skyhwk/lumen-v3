@@ -1,49 +1,32 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
-use App\Models\HistoryAppReject;
-
-use App\Models\KonfirmasiLhp;
-use App\Models\LhpsLingCustom;
-use App\Models\LhpsLingHeader;
-use App\Models\LhpsLingDetail;
-
-use App\Models\LhpsLingHeaderHistory;
-use App\Models\LhpsLingDetailHistory;
-
-use App\Models\MasterRegulasi;
-use App\Models\MasterSubKategori;
-use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\MasterKaryawan;
-use App\Models\PengesahanLhp;
-use App\Models\QrDocument;
-
-use App\Models\Subkontrak;
-use App\Models\LingkunganHeader;
-use App\Models\PartikulatHeader;
-use App\Models\DirectLainHeader;
-use App\Models\ErgonomiHeader;
-use App\Models\SinarUvHeader;
-use App\Models\MedanLmHeader;
-use App\Models\MicrobioHeader;
-use App\Models\DebuPersonalHeader;
-
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Services\LhpTemplate;
-use App\Services\GenerateQrDocumentLhp;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
+use App\Models\GenerateLink;
+use App\Models\HistoryAppReject;
+use App\Models\KonfirmasiLhp;
+use App\Models\LhpsLingCustom;
+use App\Models\LhpsLingDetail;
+use App\Models\LhpsLingDetailHistory;
+use App\Models\LhpsLingHeader;
+use App\Models\LhpsLingHeaderHistory;
 use App\Models\LinkLhp;
-use App\Models\WsValueLingkungan;
-use App\Models\WsValueUdara;
+use App\Models\MasterBakumutu;
+use App\Models\MasterKaryawan;
+use App\Models\MasterRegulasi;
+use App\Models\MasterSubKategori;
+use App\Models\MetodeSampling;
+use App\Models\OrderDetail;
+use App\Models\Parameter;
+use App\Models\PengesahanLhp;
+use App\Models\QrDocument;
+use App\Services\GenerateQrDocumentLhp;
+use App\Services\LhpTemplate;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
 class DraftUlkController extends Controller
@@ -55,7 +38,7 @@ class DraftUlkController extends Controller
         $data = OrderDetail::with([
             'lhps_ling',
             'allDetailLingkunganKerja',
-            'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling'
+            'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
             ->where([
                 ['is_approve', 0],
@@ -75,7 +58,9 @@ class DraftUlkController extends Controller
 
         $data->transform(function ($item) {
             // Tentukan data lapangan
-            $lapangan = $item->allDetailLingkunganKerja;
+            $lapangan                             = $item->allDetailLingkunganKerja;
+            $lhps                                 = $item->lhps_ling;
+            $item->created_detail                 = $lapangan->max('created_at');
             $item->data_lapangan_lingkungan_kerja = $item->kategori_1 === 'S24'
                 ? ($lapangan->where('shift_pengambilan', 'L2')->take(1)->values()->isNotEmpty()
                     ? $lapangan->where('shift_pengambilan', 'L2')->take(1)->values()
@@ -83,11 +68,31 @@ class DraftUlkController extends Controller
                 : $lapangan->take(1)->values();
 
             // Decode metode_sampling jika ada
-            if (!empty($item->lhps_ling->methode_sampling)) {
+            if (! empty($item->lhps_ling->methode_sampling)) {
                 $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
+            }
+            $minDate = $lapangan->min('created_at');
+            $maxDate = $lapangan->max('created_at');
+            
+            if (empty($lhps) || (
+                empty($lhps->tanggal_sampling_awal) &&
+                empty($lhps->tanggal_sampling_akhir) &&
+                empty($lhps->tanggal_analisa_awal) &&
+                empty($lhps->tanggal_analisa_akhir)
+            )) {
+                $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
+                $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+                $item->tanggal_analisa_awal   = $item->tanggal_terima;
+                $item->tanggal_analisa_akhir  = Carbon::now()->format('Y-m-d');
+            } else {
+                $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
+                $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
+                $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
+                $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
             }
 
             return $item;
+
         });
 
         return Datatables::of($data)->make(true);
@@ -102,7 +107,7 @@ class DraftUlkController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $kategori,
+            'data'    => $kategori,
             'message' => 'Available data category retrieved successfully',
         ], 201);
     }
@@ -131,13 +136,13 @@ class DraftUlkController extends Controller
 
                         $missing = array_diff($headerMetode, $valueMetode);
 
-                        if (!empty($missing)) {
+                        if (! empty($missing)) {
                             foreach ($missing as $miss) {
                                 $result[] = [
-                                    'id' => null,
+                                    'id'              => null,
                                     'metode_sampling' => $miss,
-                                    'kategori' => $value->kategori,
-                                    'sub_kategori' => $value->sub_kategori,
+                                    'kategori'        => $value->kategori,
+                                    'sub_kategori'    => $value->sub_kategori,
                                 ];
                             }
                         }
@@ -146,15 +151,15 @@ class DraftUlkController extends Controller
             }
 
             return response()->json([
-                'status' => true,
-                'message' => !empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
-                'data' => $result,
+                'status'  => true,
+                'message' => ! empty($result) ? 'Available data retrieved successfully' : 'Belum ada method',
+                'data'    => $result,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine(),
+                'line'    => $e->getLine(),
             ], 500);
         }
     }
@@ -184,7 +189,7 @@ class DraftUlkController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
-                    'status' => false
+                    'status'  => false,
                 ], 400);
             }
 
@@ -192,48 +197,52 @@ class DraftUlkController extends Controller
                 ->orderByDesc('berlaku_mulai')
                 ->first();
 
-            $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $nama_perilis    = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 
             // === 3. Persiapan data header ===
-            $parameter_uji = !empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
-            $keterangan = array_values(array_filter($request->keterangan ?? []));
+            $parameter_uji = ! empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
+            $keterangan    = array_values(array_filter($request->keterangan ?? []));
 
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                 return ['page' => (int) $page, 'regulasi' => $item];
             })->values()->toArray();
             // === 4. Simpan / update header ===
             $header->fill([
-                'no_order' => $request->no_order ?: null,
-                'no_sampel' => $request->no_sampel ?: null,
-                'no_lhp' => $request->no_lhp ?: null,
-                'no_qt' => $request->no_penawaran ?: null,
-                'status_sampling' => $request->type_sampling ?: null,
-                'tanggal_terima' => $request->tanggal_terima ?: null,
-                'tanggal_sampling' => $request->tanggal_tugas ?: null,
-                'parameter_uji' => json_encode($parameter_uji),
-                'nama_pelanggan' => $request->nama_perusahaan ?: null,
-                'alamat_sampling' => $request->alamat_sampling ?: null,
-                'sub_kategori' => $request->jenis_sampel ?: null,
-                'id_kategori_2' => 4,
-                'id_kategori_3' => 27,
-                'deskripsi_titik' => $request->penamaan_titik ?: null,
-                'methode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
-                'titik_koordinat' => $request->titik_koordinat ?: null,
-                'tanggal_sampling' => $request->tanggal_terima ?: null,
-                'nama_karyawan' => $nama_perilis,
-                'jabatan_karyawan' => $jabatan_perilis,
-                'regulasi' => $request->regulasi ? json_encode($request->regulasi) : null,
-                'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
-                'keterangan' => $keterangan ? json_encode($keterangan) : null,
-                'tanggal_lhp' => $request->tanggal_lhp ?: null,
-                'created_by' => $this->karyawan,
-                'created_at' => Carbon::now(),
-                'keterangan' => json_encode($request->keterangan) ?: null,
-                'suhu' => $request->suhu_lingkungan,
-                'tekanan_udara' => $request->tekanan_udara,
-                'kelembapan' => $request->kelembapan,
-                'periode_analisa' => $request->periode_analisa ?: null
+                'no_order'               => $request->no_order ?: null,
+                'no_sampel'              => $request->no_sampel ?: null,
+                'no_lhp'                 => $request->no_lhp ?: null,
+                'no_qt'                  => $request->no_penawaran ?: null,
+                'status_sampling'        => $request->type_sampling ?: null,
+                'tanggal_terima'         => $request->tanggal_terima ?: null,
+                'tanggal_sampling'       => $request->tanggal_tugas ?: null,
+                'parameter_uji'          => json_encode($parameter_uji),
+                'nama_pelanggan'         => $request->nama_perusahaan ?: null,
+                'alamat_sampling'        => $request->alamat_sampling ?: null,
+                'sub_kategori'           => $request->jenis_sampel ?: null,
+                'id_kategori_2'          => 4,
+                'id_kategori_3'          => 27,
+                'deskripsi_titik'        => $request->penamaan_titik ?: null,
+                'methode_sampling'       => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
+                'titik_koordinat'        => $request->titik_koordinat ?: null,
+                'tanggal_sampling'       => $request->tanggal_terima ?: null,
+                'nama_karyawan'          => $nama_perilis,
+                'jabatan_karyawan'       => $jabatan_perilis,
+                'regulasi'               => $request->regulasi ? json_encode($request->regulasi) : null,
+                'regulasi_custom'        => $regulasi_custom ? json_encode($regulasi_custom) : null,
+                'keterangan'             => $keterangan ? json_encode($keterangan) : null,
+                'tanggal_lhp'            => $request->tanggal_lhp ?: null,
+                'created_by'             => $this->karyawan,
+                'created_at'             => Carbon::now(),
+                'keterangan'             => json_encode($request->keterangan) ?: null,
+                'suhu'                   => $request->suhu_lingkungan,
+                'tekanan_udara'          => $request->tekanan_udara,
+                'kelembapan'             => $request->kelembapan,
+                'periode_analisa'        => $request->periode_analisa ?: null,
+                'tanggal_sampling_awal'  => $request->tanggal_sampling_awal ?? null,
+                'tanggal_sampling_akhir' => $request->tanggal_sampling_akhir ?? null,
+                'tanggal_analisa_awal'   => $request->tanggal_analisa_awal ?? null,
+                'tanggal_analisa_akhir'  => $request->tanggal_analisa_akhir ?? null,
             ]);
             $header->save();
 
@@ -252,25 +261,25 @@ class DraftUlkController extends Controller
             foreach (($request->parameter ?? []) as $key => $val) {
                 $bakumutu = null;
                 if (isset($request->nab[$key])) {
-                    $bakumutu = $request->nab[$key];
+                    $bakumutu   = $request->nab[$key];
                     $namaheader = 'NAB';
                 }
                 if (isset($request->psd_ktd[$key])) {
-                    $bakumutu = $request->psd_ktd[$key];
+                    $bakumutu   = $request->psd_ktd[$key];
                     $namaheader = 'PSD/KTD';
                 }
                 LhpsLingDetail::create([
-                    'id_header' => $header->id,
-                    'akr' => $request->akr[$key] ?? '',
+                    'id_header'     => $header->id,
+                    'akr'           => $request->akr[$key] ?? '',
                     'parameter_lab' => str_replace("'", '', $key),
-                    'parameter' => $val,
-                    'hasil_uji' => $request->hasil_uji[$key] ?? '',
-                    'attr' => $request->attr[$key] ?? '',
-                    'baku_mutu' => $request->nilai_persyaratan[$key] ?? '',
-                    'nama_header' => $request->jenis_persyaratan[$key] ?? '',
-                    'satuan' => $request->satuan[$key] ?? '',
-                    'durasi' => $request->durasi[$key] ?? '',
-                    'methode' => $request->methode[$key] ?? '',
+                    'parameter'     => $val,
+                    'hasil_uji'     => $request->hasil_uji[$key] ?? '',
+                    'attr'          => $request->attr[$key] ?? '',
+                    'baku_mutu'     => $request->nilai_persyaratan[$key] ?? '',
+                    'nama_header'   => $request->jenis_persyaratan[$key] ?? '',
+                    'satuan'        => $request->satuan[$key] ?? '',
+                    'durasi'        => $request->durasi[$key] ?? '',
+                    'methode'       => $request->methode[$key] ?? '',
                 ]);
             }
 
@@ -282,33 +291,33 @@ class DraftUlkController extends Controller
                     foreach ($params as $param => $hasil) {
                         $bakumutu = null;
                         if (isset($request->custom_nab[$key]) && $request->custom_nab[$key] != '-') {
-                            $bakumutu = $request->custom_nab[$key];
+                            $bakumutu   = $request->custom_nab[$key];
                             $namaheader = 'NAB';
                         }
                         if (isset($request->custom_psd_ktd[$key]) && $request->custom_psd_ktd[$key] != '-') {
-                            $bakumutu = $request->custom_psd_ktd[$key];
+                            $bakumutu   = $request->custom_psd_ktd[$key];
                             $namaheader = 'PSD/KTD';
                         }
                         LhpsLingCustom::create([
-                            'id_header' => $header->id,
-                            'page' => $page,
+                            'id_header'     => $header->id,
+                            'page'          => $page,
                             'parameter_lab' => $request->custom_parameter[$page][$param] ?? '',
-                            'akr' => $request->custom_akr[$page][$param] ?? '',
-                            'parameter' => $request->custom_parameter_lab[$page][$param],
-                            'hasil_uji' => $hasil,
-                            'attr' => $request->custom_attr[$page][$param] ?? '',
-                            'baku_mutu' => $bakumutu,
-                            'nama_header' => $namaheader,
-                            'satuan' => $request->custom_satuan[$page][$param] ?? '',
-                            'durasi' => $request->custom_durasi[$page][$param] ?? '',
-                            'methode' => $request->custom_methode[$page][$param] ?? '',
+                            'akr'           => $request->custom_akr[$page][$param] ?? '',
+                            'parameter'     => $request->custom_parameter_lab[$page][$param],
+                            'hasil_uji'     => $hasil,
+                            'attr'          => $request->custom_attr[$page][$param] ?? '',
+                            'baku_mutu'     => $bakumutu,
+                            'nama_header'   => $namaheader,
+                            'satuan'        => $request->custom_satuan[$page][$param] ?? '',
+                            'durasi'        => $request->custom_durasi[$page][$param] ?? '',
+                            'methode'       => $request->custom_methode[$page][$param] ?? '',
                         ]);
                     }
                 }
             }
 
             // === 7. Generate QR & File ===
-            if (!$header->file_qr) {
+            if (! $header->file_qr) {
                 $file_qr = new GenerateQrDocumentLhp();
                 if ($path = $file_qr->insert('LHP_LINGKUNGAN_HIDUP', $header, $this->karyawan)) {
                     $header->file_qr = $path;
@@ -341,19 +350,18 @@ class DraftUlkController extends Controller
             DB::commit();
             return response()->json([
                 'message' => "Data draft Lingkungan Kerja no LHP $request->no_lhp berhasil disimpan",
-                'status' => true
+                'status'  => true,
             ], 201);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false,
+                'status'  => false,
                 'getLine' => $th->getLine(),
                 'getFile' => $th->getFile(),
             ], 500);
         }
     }
-
 
     public function handleDatadetail(Request $request)
     {
@@ -369,26 +377,26 @@ class DraftUlkController extends Controller
             // CASE 1: Jika ada cek_lhp
             // ==============================
             if ($cek_lhp) {
-                $data_entry = [];
-                $data_custom = [];
+                $data_entry   = [];
+                $data_custom  = [];
                 $cek_regulasi = [];
 
                 // Ambil data detail dari LHP (existing entry)
                 foreach ($cek_lhp->lhpsLingDetail as $val) {
                     // if($val->no_sampel == 'AARG012503/024')dd($val);
                     $data_entry[] = [
-                        'id' => $val->id,
-                        'parameter_lab' => $val->parameter_lab,
-                        'no_sampel' => $request->no_sampel,
-                        'akr' => $val->akr,
-                        'parameter' => $val->parameter,
-                        'satuan' => $val->satuan,
+                        'id'                => $val->id,
+                        'parameter_lab'     => $val->parameter_lab,
+                        'no_sampel'         => $request->no_sampel,
+                        'akr'               => $val->akr,
+                        'parameter'         => $val->parameter,
+                        'satuan'            => $val->satuan,
                         'nilai_persyaratan' => ($val->nama_header == 'NAB' ? $val->baku_mutu : ($val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-')),
                         'jenis_persyaratan' => $val->nama_header ?? '-',
-                        'hasil_uji' => $val->hasil_uji,
-                        'methode' => $val->methode,
-                        'durasi' => $val->durasi,
-                        'status' => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
+                        'hasil_uji'         => $val->hasil_uji,
+                        'methode'           => $val->methode,
+                        'durasi'            => $val->durasi,
+                        'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
                     ];
                 }
 
@@ -401,11 +409,11 @@ class DraftUlkController extends Controller
                 }
 
                 // Proses regulasi custom dari LHP
-                if (!empty($cek_lhp->lhpsLingDetail) && !empty($cek_lhp->regulasi_custom)) {
+                if (! empty($cek_lhp->lhpsLingDetail) && ! empty($cek_lhp->regulasi_custom)) {
                     $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
                     // Mapping regulasi id
-                    if (!empty($cek_regulasi)) {
+                    if (! empty($cek_regulasi)) {
                         $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
 
                         $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
@@ -415,7 +423,7 @@ class DraftUlkController extends Controller
                             } else {
                                 $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
                                 if ($db) {
-                                    $item['id'] = $db->id;
+                                    $item['id']                   = $db->id;
                                     $mapRegulasi[$regulasi_clean] = $db->id;
                                 }
                             }
@@ -434,27 +442,29 @@ class DraftUlkController extends Controller
 
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['page']))
+                        if (empty($item['page'])) {
                             continue;
+                        }
+
                         // $id_regulasi = "id_" . $item['id'];
                         $id_regulasi = (string) "id_" . explode('-', $item['regulasi'])[0];
-                        $page = $item['page'];
+                        $page        = $item['page'];
 
-                        if (!empty($groupedCustom[$page])) {
+                        if (! empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
                                 $data_custom[$id_regulasi][] = [
-                                    'id' => $val->id,
-                                    'parameter_lab' => $val->parameter_lab,
-                                    'no_sampel' => $request->no_sampel,
-                                    'akr' => $val->akr,
-                                    'parameter' => $val->parameter,
+                                    'id'                => $val->id,
+                                    'parameter_lab'     => $val->parameter_lab,
+                                    'no_sampel'         => $request->no_sampel,
+                                    'akr'               => $val->akr,
+                                    'parameter'         => $val->parameter,
                                     'nilai_persyaratan' => ($val->nama_header == 'NAB' ? $val->baku_mutu : ($val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-')),
                                     'jenis_persyaratan' => $val->nama_header ?? '-',
-                                    'satuan' => $val->satuan,
-                                    'hasil_uji' => $val->hasil_uji,
-                                    'methode' => $val->methode,
-                                    'durasi' => $val->durasi,
-                                    'status' => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
+                                    'satuan'            => $val->satuan,
+                                    'hasil_uji'         => $val->hasil_uji,
+                                    'methode'           => $val->methode,
+                                    'durasi'            => $val->durasi,
+                                    'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
                                 ];
                             }
                         }
@@ -469,23 +479,21 @@ class DraftUlkController extends Controller
                     ->values()
                     ->toArray();
 
-
-
                 return response()->json([
-                    'status' => true,
-                    'data' => $data_entry,
-                    'next_page' => $data_custom,
+                    'status'             => true,
+                    'data'               => $data_entry,
+                    'next_page'          => $data_custom,
                     'spesifikasi_method' => $defaultMethods,
-                    'keterangan' => [
+                    'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                        'ẍ Parameter belum terakreditasi.'
-                    ]
+                        'ẍ Parameter belum terakreditasi.',
+                    ],
                 ], 201);
             } else {
-                $mainData = [];
+                $mainData         = [];
                 $otherRegulations = [];
-                $methodsUsed = [];
+                $methodsUsed      = [];
                 // $isMain = true;
                 // $validasi = WsValueUdara::with([
                 //     'lingkungan',
@@ -548,50 +556,48 @@ class DraftUlkController extends Controller
                 //     ];
                 // })->toArray();
 
-
-                 $validasi = OrderDetail::with([
+                $validasi = OrderDetail::with([
                     'udaraLingkungan',
                     'udaraMicrobio',
                     'udaraSubKontrak',
                     'udaraDirect',
-                    'udaraPartikulat'
+                    'udaraPartikulat',
                 ])
-                ->where('no_sampel', $request->no_sampel)
-                ->first();
+                    ->where('no_sampel', $request->no_sampel)
+                    ->first();
 
                 $lingkungan = $validasi->udaraLingkungan;
-                $microbio = $validasi->udaraMicrobio;
+                $microbio   = $validasi->udaraMicrobio;
                 $subKontrak = $validasi->udaraSubKontrak;
-                $direct = $validasi->udaraDirect;
+                $direct     = $validasi->udaraDirect;
                 $partikulat = $validasi->udaraPartikulat;
-                
-                $detail= collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat);
 
+                $detail = collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat);
 
                 $validasi = $detail->map(function ($item) {
                     $newQuery = Parameter::where('nama_lab', $item->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
-                    $durasi = $item->ws_value_linkungan->durasi ?? null;
+                    $durasi   = $item->ws_value_linkungan->durasi ?? null;
                     return [
-                            'id' => $item->id,
-                            'parameter' => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
-                            'nama_lab' => $item->parameter,
-                            'satuan' => $newQuery->satuan,
-                            'method' => $newQuery->method,
-                            'status' => $newQuery->status,
-                            'no_sampel' => $item->no_sampel,
-                            'durasi' => $durasi,
-                            'ws_udara' => collect($item->ws_udara)->toArray(),
-                            'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray()
-                        ];
+                        'id'            => $item->id,
+                        'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
+                        'nama_lab'      => $item->parameter,
+                        'satuan'        => $newQuery->satuan,
+                        'method'        => $newQuery->method,
+                        'status'        => $newQuery->status,
+                        'no_sampel'     => $item->no_sampel,
+                        'durasi'        => $durasi,
+                        'ws_udara'      => collect($item->ws_udara)->toArray(),
+                        'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
+                    ];
                 });
 
                 foreach ($validasi as $item) {
-                    $entry = $this->formatEntry((object)$item, $request->regulasi, $methodsUsed);
+                    $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
                         foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object)$item, $id_regulasi);
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi);
                         }
                     }
                 }
@@ -601,30 +607,30 @@ class DraftUlkController extends Controller
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
                 }
-                $methodsUsed = array_values(array_unique($methodsUsed));
+                $methodsUsed    = array_values(array_unique($methodsUsed));
                 $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
 
                 return response()->json([
-                    'status' => true,
-                    'data' => $mainData,
-                    'next_page' => $otherRegulations,
+                    'status'             => true,
+                    'data'               => $mainData,
+                    'next_page'          => $otherRegulations,
                     'spesifikasi_method' => $resultMethods,
-                    'keterangan' => [
+                    'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                        'ẍ Parameter belum terakreditasi.'
-                    ]
+                        'ẍ Parameter belum terakreditasi.',
+                    ],
                 ], 201);
             }
         } catch (\Throwable $e) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
@@ -636,31 +642,29 @@ class DraftUlkController extends Controller
             ->first();
 
         $parameter = $val->parameter;
-        $entry = [
-            'id' => $val->id,
-            'parameter_lab' => $val->nama_lab,
-            'no_sampel' => $val->no_sampel,
-            'akr' => (
-                !empty($bakumutu)
-                ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
-                : 'ẍ'
+        $entry     = [
+            'id'                => $val->id,
+            'parameter_lab'     => $val->nama_lab,
+            'no_sampel'         => $val->no_sampel,
+            'akr'               => (
+                ! empty($bakumutu)
+                    ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                    : 'ẍ'
             ),
-            'parameter' => $parameter,
+            'parameter'         => $parameter,
             // 'satuan' => $param->satuan,
             'jenis_persyaratan' => $bakumutu ? $bakumutu->nama_header : '-',
             'nilai_persyaratan' => $bakumutu ? $bakumutu->baku_mutu : '-',
             // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
-            'satuan' => (!empty($bakumutu->satuan))
+            'satuan'            => (! empty($bakumutu->satuan))
                 ? $bakumutu->satuan
-                : (!empty($val->satuan) ? $val->satuan : 'µg/Nm³'),
-            'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->durasi) ? $val->durasi : '-'),
-            'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($val->method) ? $val->method : '-'),
-            'status' => $val->status
+                : (! empty($val->satuan) ? $val->satuan : 'µg/Nm³'),
+            'durasi'            => ! empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (! empty($val->durasi) ? $val->durasi : '-'),
+            'methode'           => ! empty($bakumutu->method) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+            'status'            => $val->status,
         ];
 
         $getSatuan = new HelperSatuan;
-
-
 
         $index = $getSatuan->udara($bakumutu->satuan ?? 1);
 
@@ -669,37 +673,33 @@ class DraftUlkController extends Controller
         $ws_value_lingkungan = (object) $val->ws_lingkungan;
 
         $fKoreksiKey = "f_koreksi_$index";
-        $hasilKey = "hasil$index";
+        $hasilKey    = "hasil$index";
 
-        $entry['hasil_uji'] = $ws_udara->$fKoreksiKey
-            ?? $ws_udara->$hasilKey
-            ?? $ws_value_lingkungan->f_koreksi_c
-            ?? $ws_value_lingkungan->C
-            ?? '-';
+        $entry['hasil_uji'] = $ws_udara->$fKoreksiKey ?? $ws_udara->$hasilKey ?? $ws_value_lingkungan->f_koreksi_c ?? $ws_value_lingkungan->C ?? '-';
 
         if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi2 = $ws_udara->f_koreksi_2 ?? null;
-            $hasil2 = $ws_udara->hasil2 ?? null;
+            $fKoreksi2          = $ws_udara->f_koreksi_2 ?? null;
+            $hasil2             = $ws_udara->hasil2 ?? null;
             $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && in_array($bakumutu->satuan, ["BDS", "bds"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi3 = $ws_udara->f_koreksi_3 ?? null;
-            $hasil3 = $ws_udara->hasil3 ?? null;
+            $fKoreksi3          = $ws_udara->f_koreksi_3 ?? null;
+            $hasil3             = $ws_udara->hasil3 ?? null;
             $entry['hasil_uji'] = $fKoreksi3 ?? $hasil3 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && in_array($bakumutu->satuan, ["µg/m³", "µg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi1 = $ws_udara->f_koreksi_1 ?? null;
-            $hasil1 = $ws_udara->hasil1 ?? null;
+            $fKoreksi1          = $ws_udara->f_koreksi_1 ?? null;
+            $hasil1             = $ws_udara->hasil1 ?? null;
             $entry['hasil_uji'] = $fKoreksi1 ?? $hasil1 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && $bakumutu->method) {
-            $entry['satuan'] = $bakumutu->satuan;
-            $entry['methode'] = $bakumutu->method;
+            $entry['satuan']       = $bakumutu->satuan;
+            $entry['methode']      = $bakumutu->method;
             $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
-            $methodsUsed[] = $bakumutu->method;
+            $methodsUsed[]         = $bakumutu->method;
         }
 
         return $entry;
@@ -711,8 +711,8 @@ class DraftUlkController extends Controller
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->no_lhp)->first();
 
-                if (!$konfirmasiLhp) {
-                    $konfirmasiLhp = new KonfirmasiLhp();
+                if (! $konfirmasiLhp) {
+                    $konfirmasiLhp             = new KonfirmasiLhp();
                     $konfirmasiLhp->created_by = $this->karyawan;
                     $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 } else {
@@ -720,14 +720,14 @@ class DraftUlkController extends Controller
                     $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                 }
 
-                $konfirmasiLhp->no_lhp = $request->no_lhp;
-                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->no_lhp                      = $request->no_lhp;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai   = $request->nama_perusahaan_sesuai;
                 $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
-                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
-                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
-                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
-                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
-                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai         = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai            = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai          = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai     = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai     = $request->tanggal_rilis_sesuai;
 
                 $konfirmasiLhp->save();
             }
@@ -748,12 +748,11 @@ class DraftUlkController extends Controller
                     ->whereIn('no_sampel', $noSampel)
                     ->where('is_active', true)
                     ->update([
-                        'is_approve' => 1,
-                        'status' => 3,
+                        'is_approve'  => 1,
+                        'status'      => 3,
                         'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'approved_by' => $this->karyawan
+                        'approved_by' => $this->karyawan,
                     ]);
-
 
                 $data->is_approved = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -766,21 +765,21 @@ class DraftUlkController extends Controller
 
                 $data->save();
                 HistoryAppReject::insert([
-                    'no_lhp' => $request->no_lhp,
-                    'no_sampel' => $request->noSampel,
-                    'kategori_2' => $data->id_kategori_2,
-                    'kategori_3' => $data->id_kategori_3,
-                    'menu' => 'Draft Udara',
-                    'status' => 'approved',
+                    'no_lhp'      => $request->no_lhp,
+                    'no_sampel'   => $request->noSampel,
+                    'kategori_2'  => $data->id_kategori_2,
+                    'kategori_3'  => $data->id_kategori_3,
+                    'menu'        => 'Draft Udara',
+                    'status'      => 'approved',
                     'approved_at' => Carbon::now(),
-                    'approved_by' => $this->karyawan
+                    'approved_by' => $this->karyawan,
                 ]);
                 if ($qr != null) {
-                    $dataQr = json_decode($qr->data);
+                    $dataQr                     = json_decode($qr->data);
                     $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataQr->Disahkan_Oleh = $data->nama_karyawan;
-                    $dataQr->Jabatan = $data->jabatan_karyawan;
-                    $qr->data = json_encode($dataQr);
+                    $dataQr->Disahkan_Oleh      = $data->nama_karyawan;
+                    $dataQr->Jabatan            = $data->jabatan_karyawan;
+                    $qr->data                   = json_encode($dataQr);
                     $qr->save();
                 }
 
@@ -795,22 +794,22 @@ class DraftUlkController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' tidak ditemukan',
-                    'status' => false
+                    'status'  => false,
                 ], 404);
             }
 
             DB::commit();
             return response()->json([
-                'data' => $data,
-                'status' => true,
-                'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil diapprove'
+                'data'    => $data,
+                'status'  => true,
+                'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil diapprove',
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
             dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status' => false
+                'status'  => false,
             ], 500);
         }
     }
@@ -834,7 +833,7 @@ class DraftUlkController extends Controller
                     }
                 }
                 $id_kategori = explode('-', $data->kategori_3);
-                $lhps = LhpsLingHeader::where('no_lhp', $data->cfr)
+                $lhps        = LhpsLingHeader::where('no_lhp', $data->cfr)
                     ->where('no_order', $data->no_order)
                     ->where('id_kategori_3', $id_kategori[0])
                     ->where('is_active', true)
@@ -870,16 +869,16 @@ class DraftUlkController extends Controller
             $data->save();
             DB::commit();
             return response()->json([
-                'status' => 'success',
-                'message' => 'Data draft Udara Ambient no LHP ' . $data->no_sampel . ' berhasil direject'
+                'status'  => 'success',
+                'message' => 'Data draft Udara Ambient no LHP ' . $data->no_sampel . ' berhasil direject',
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Terjadi kesalahan ' . $th->getMessage(),
-                'line' => $th->getLine(),
-                'getFile' => $th->getFile()
+                'line'    => $th->getLine(),
+                'getFile' => $th->getFile(),
             ]);
         }
     }
@@ -891,35 +890,35 @@ class DraftUlkController extends Controller
         try {
             $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
-                // ->where('id', $request->id)
+            // ->where('id', $request->id)
                 ->first();
 
             if ($header != null) {
-                $key = $header->no_lhp . str_replace('.', '', microtime(true));
-                $gen = MD5($key);
+                $key       = $header->no_lhp . str_replace('.', '', microtime(true));
+                $gen       = MD5($key);
                 $gen_tahun = self::encrypt(DATE('Y-m-d'));
-                $token = self::encrypt($gen . '|' . $gen_tahun);
+                $token     = self::encrypt($gen . '|' . $gen_tahun);
 
                 $cek = GenerateLink::where('fileName_pdf', $header->file_lhp)->first();
                 if ($cek) {
                     $cek->id_quotation = $header->id;
-                    $cek->expired = Carbon::now()->addYear()->format('Y-m-d');
-                    $cek->created_by = $this->karyawan;
-                    $cek->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $cek->expired      = Carbon::now()->addYear()->format('Y-m-d');
+                    $cek->created_by   = $this->karyawan;
+                    $cek->created_at   = Carbon::now()->format('Y-m-d H:i:s');
                     $cek->save();
 
                     $header->id_token = $cek->id;
                 } else {
                     $insertData = [
-                        'token' => $token,
-                        'key' => $gen,
-                        'id_quotation' => $header->id,
+                        'token'            => $token,
+                        'key'              => $gen,
+                        'id_quotation'     => $header->id,
                         'quotation_status' => 'draft_ambient',
-                        'type' => 'draft',
-                        'expired' => Carbon::now()->addYear()->format('Y-m-d'),
-                        'fileName_pdf' => $header->file_lhp,
-                        'created_by' => $this->karyawan,
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s')
+                        'type'             => 'draft',
+                        'expired'          => Carbon::now()->addYear()->format('Y-m-d'),
+                        'fileName_pdf'     => $header->file_lhp,
+                        'created_by'       => $this->karyawan,
+                        'created_at'       => Carbon::now()->format('Y-m-d H:i:s'),
                     ];
 
                     $insert = GenerateLink::insertGetId($insertData);
@@ -930,7 +929,7 @@ class DraftUlkController extends Controller
                 $header->is_generated = true;
                 $header->generated_by = $this->karyawan;
                 $header->generated_at = Carbon::now()->format('Y-m-d H:i:s');
-                $header->expired = Carbon::now()->addYear()->format('Y-m-d');
+                $header->expired      = Carbon::now()->addYear()->format('Y-m-d');
                 $header->save();
             }
             DB::commit();
@@ -941,8 +940,8 @@ class DraftUlkController extends Controller
             DB::rollBack();
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'status' => false
+                'line'    => $e->getLine(),
+                'status'  => false,
             ], 500);
         }
     }
@@ -954,7 +953,7 @@ class DraftUlkController extends Controller
     {
         try {
             $link = GenerateLink::where(['id_quotation' => $request->id, 'quotation_status' => 'draft_ambient', 'type' => 'draft'])->first();
-            if (!$link) {
+            if (! $link) {
                 return response()->json(['message' => 'Link not found'], 404);
             }
             return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
@@ -1003,13 +1002,13 @@ class DraftUlkController extends Controller
             $data = MasterKaryawan::where('id_department', 17)->select('jabatan', 'nama_lengkap')->get();
             return response()->json([
                 'status' => true,
-                'data' => $data
+                'data'   => $data,
             ], 200);
         } catch (\Throwable $th) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'line' => $th->getLine(),
+                'line'    => $th->getLine(),
                 'getFile' => $th->getFile(),
 
             ], 500);
@@ -1019,24 +1018,24 @@ class DraftUlkController extends Controller
     // Amang
     public function encrypt($data)
     {
-        $ENCRYPTION_KEY = 'intilab_jaya';
+        $ENCRYPTION_KEY       = 'intilab_jaya';
         $ENCRYPTION_ALGORITHM = 'AES-256-CBC';
-        $EncryptionKey = base64_decode($ENCRYPTION_KEY);
+        $EncryptionKey        = base64_decode($ENCRYPTION_KEY);
         $InitializationVector = openssl_random_pseudo_bytes(openssl_cipher_iv_length($ENCRYPTION_ALGORITHM));
-        $EncryptedText = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
-        $return = base64_encode($EncryptedText . '::' . $InitializationVector);
+        $EncryptedText        = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
+        $return               = base64_encode($EncryptedText . '::' . $InitializationVector);
         return $return;
     }
 
     // Amang
     public function decrypt($data = null)
     {
-        $ENCRYPTION_KEY = 'intilab_jaya';
-        $ENCRYPTION_ALGORITHM = 'AES-256-CBC';
-        $EncryptionKey = base64_decode($ENCRYPTION_KEY);
+        $ENCRYPTION_KEY                              = 'intilab_jaya';
+        $ENCRYPTION_ALGORITHM                        = 'AES-256-CBC';
+        $EncryptionKey                               = base64_decode($ENCRYPTION_KEY);
         list($Encrypted_Data, $InitializationVector) = array_pad(explode('::', base64_decode($data), 2), 2, null);
-        $data = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
-        $extand = explode("|", $data);
+        $data                                        = openssl_decrypt($Encrypted_Data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
+        $extand                                      = explode("|", $data);
         return $extand;
     }
 
@@ -1046,10 +1045,10 @@ class DraftUlkController extends Controller
         try {
             $dataHeader = LhpsLingHeader::find($request->id);
 
-            if (!$dataHeader) {
+            if (! $dataHeader) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'Data tidak ditemukan'
+                    'status'  => false,
+                    'message' => 'Data tidak ditemukan',
                 ], 404);
             }
 
@@ -1060,17 +1059,17 @@ class DraftUlkController extends Controller
                 ->orderByDesc('berlaku_mulai')
                 ->first();
 
-            $dataHeader->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $dataHeader->nama_karyawan    = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $dataHeader->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 
             // Update QR Document jika ada
             $qr = QrDocument::where('file', $dataHeader->file_qr)->first();
             if ($qr) {
-                $dataQr = json_decode($qr->data, true);
+                $dataQr                       = json_decode($qr->data, true);
                 $dataQr['Tanggal_Pengesahan'] = Carbon::parse($request->value)->locale('id')->isoFormat('DD MMMM YYYY');
-                $dataQr['Disahkan_Oleh'] = $dataHeader->nama_karyawan;
-                $dataQr['Jabatan'] = $dataHeader->jabatan_karyawan;
-                $qr->data = json_encode($dataQr);
+                $dataQr['Disahkan_Oleh']      = $dataHeader->nama_karyawan;
+                $dataQr['Jabatan']            = $dataHeader->jabatan_karyawan;
+                $qr->data                     = json_encode($dataQr);
                 $qr->save();
             }
 
@@ -1080,7 +1079,7 @@ class DraftUlkController extends Controller
 
             $groupedByPage = [];
             foreach ($custom as $item) {
-                $page = $item->page;
+                $page                   = $item->page;
                 $groupedByPage[$page][] = $item->toArray();
             }
 
@@ -1100,15 +1099,15 @@ class DraftUlkController extends Controller
 
             DB::commit();
             return response()->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Tanggal LHP berhasil diubah',
-                'data' => $dataHeader
+                'data'    => $dataHeader,
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage()
+                'status'  => false,
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
             ], 500);
         }
     }
