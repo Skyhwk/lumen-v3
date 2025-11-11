@@ -4286,7 +4286,6 @@ class InputParameterController extends Controller
                     }
                 }
 
-                dd('masuk');
 				DB::commit();
 				return (object)[
 					'message'=> 'Value Parameter berhasil disimpan.!',
