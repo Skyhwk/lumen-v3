@@ -757,11 +757,11 @@ class DraftUdaraAmbientController extends Controller
                     $durasi   = $item->ws_value_linkungan->durasi ?? null;
                     return [
                         'id'            => $item->id,
-                        'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
+                        'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi ?? $item->parameter,
                         'nama_lab'      => $item->parameter,
-                        'satuan'        => $newQuery->satuan,
-                        'method'        => $newQuery->method,
-                        'status'        => $newQuery->status,
+                        'satuan'        => $newQuery->satuan ?? null,
+                        'method'        => $newQuery->method ?? null,
+                        'status'        => $newQuery->status ?? null,
                         'no_sampel'     => $item->no_sampel,
                         'durasi'        => $durasi,
                         'ws_udara'      => collect($item->ws_udara)->toArray(),
