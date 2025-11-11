@@ -114,6 +114,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
         DB::beginTransaction();
         try {
             $check = DataLapanganIsokinetikHasil::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $method2 = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
             if ($check) {
                 return response()->json([
                     'message' => 'No sample ' . strtoupper(trim($request->no_sample)) . ' Sudah Terinput Pada Method 6.!'
@@ -122,7 +123,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
                 $data = new DataLapanganIsokinetikHasil();
 
                 if ($request->id_lapangan != '')
-                    $data->id_lapangan = $request->id_lapangan;
+                    $data->id_lapangan = $method2->id_lapangan;
                 if (strtoupper(trim($request->no_sample)) != '')
                     $data->no_sampel = strtoupper(trim($request->no_sample));
                 if ($request->impinger1 != '')

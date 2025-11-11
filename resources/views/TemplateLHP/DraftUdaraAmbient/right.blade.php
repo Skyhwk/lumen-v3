@@ -9,17 +9,15 @@
     if($header->status_sampling == 'S24'){
         $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        // $tanggalAwal = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->min('created_at');
         $tanggalAwal = $header->tanggal_sampling;
 
-        $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
+        $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
 
         $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
-        $tanggalAkhir = Carbon::parse($tanggalAkhir)->format('Y-m-d');
 
         if ($tanggalAwal || $tanggalAkhir) {
             if ($tanggalAwal == $tanggalAkhir) {
-            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
             } else {
                 $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
             }
@@ -44,7 +42,7 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="33%">No. LHP <sup><u>a</u></sup></td>
+                        <td class="custom" width="33%">No. LHP {!! $showKan ? '<sup><u>a</u></sup>' : '' !!}</td>
                         <td class="custom" width="33%">No. SAMPEL</td>
                         <td class="custom" width="33%">JENIS SAMPEL</td>
                     </tr>

@@ -3446,10 +3446,6 @@ class InputParameterController extends Controller
                     $formatted_data_analis['k_sampel'] = $value;
                 } elseif ($key === 'kb') {
                     $formatted_data_analis['k_blanko'] = $value;
-                } else if($key === 'w1'){
-                    $formatted_data_analis['berat_filter_awal'] = $value;
-                } else if($key === 'w2'){
-                    $formatted_data_analis['berat_filter_akhir'] = $value;
                 } elseif ($key === 'vs') {
                     $formatted_data_analis['volume_sampel'] = $value;
                 } elseif ($key === 'vtp') {
@@ -3612,10 +3608,10 @@ class InputParameterController extends Controller
 			];
 		}
 
-		if ($fdl) { // Periksa apakah $fdl tidak null
+		if (count($fdl) > 0 || !is_null($swab)) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				if($fdl){
+				if($fdl->count() >= 0){
 					$suhu = [];
 					$tekanan = [];
 					$kelembaban = [];
@@ -3627,9 +3623,11 @@ class InputParameterController extends Controller
 						$tekanan[] = $data->tekanan_udara ?? $swab->tekanan_udara;
 						$kelembaban[] = $data->kelembapan ?? $swab->kelembapan;
 						$pengukuran = json_decode($data->pengukuran);
-						$flowRate[] = (float) ($pengukuran->{"Flow Rate"} ?? null);
-						$durasi[] = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
-						$volume[] = ($flowRate * $durasi) / 1000;
+                        $flow = (float) ($pengukuran->{"Flow Rate"} ?? null);
+						$flowRate[] = $flow;
+                        $durasi_value = (float) preg_replace('/\D/', '', $pengukuran->Durasi) ?? null;
+						$durasi[] = $durasi_value;
+						$volume[] = ($flow * $durasi_value) / 1000;
 					}
 				}else{
 					$suhu = $swab->suhu ?? 0;
@@ -3747,7 +3745,7 @@ class InputParameterController extends Controller
 			}
 		} else {
 			return (object)[
-				'message' => 'Data tidak ditemukan untuk sample yang diberikan.',
+				'message' => 'Data lapangan tidak ditemukan untuk sample yang diberikan.',
 				'status' => 404
 			];
 		}
@@ -4101,7 +4099,7 @@ class InputParameterController extends Controller
 				}
 
 				$data 						= new Subkontrak;
-				$data->no_sampel 			= $request->no_sample;
+				$data->no_sampel 			= trim($request->no_sample);
 				$data->category_id 			= 1;
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
@@ -4117,8 +4115,62 @@ class InputParameterController extends Controller
 				$data->save();
 
 				$data_kalkulasi['id_subkontrak'] = $data->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$kalkulasi1 = WsValueAir::create($data_kalkulasi);
+				$data_kalkulasi['no_sampel'] = trim($request->no_sample);
+				if($stp->sample->nama_kategori = 'Air'){
+                    $kalkulasi1 = WsValueAir::create($data_kalkulasi);
+                }else if($stp->sample->nama_kategori = 'Udara'){
+                    $existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01')) {
+                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
+                        $data_udara->id_subkontrak  = $data->id;
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara->{$key})) {
+                                $data_udara->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_udara = [];
+                        $data_udara['id_subkontrak'] = $data->id;
+                        $data_udara['no_sampel'] = trim($request->no_sample);
+                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_' . $i;
+                            if (isset($data_udara[$key])) {
+                                $data_udara[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_udara);
+                    }
+                }else if($stp->sample->nama_kategori = 'Emisi'){
+                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
+                        ->where('parameter', $request->parameter)
+                        ->where('is_active', true)
+                        ->first();
+                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+                        $data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+                        $data_emisi->id_subkontrak  = $data->id;
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi->{$key})) {
+                                $data_emisi->{$key} = $data_kalkulasi['hasil'];
+                            }
+                        }
+                    }else{
+                        $data_emisi = [];
+                        $data_emisi['id_subkontrak'] = $data->id;
+                        $data_emisi['no_sampel'] = trim($request->no_sample);
+                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            if (isset($data_emisi[$key])) {
+                                $data_emisi[$key] = $data_kalkulasi['hasil'];
+                            }
+                        }
+                        $kalkulasi1 = WsValueUdara::create($data_emisi);
+                    }
+                }
 
 				DB::commit();
 				return (object)[

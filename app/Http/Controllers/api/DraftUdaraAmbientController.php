@@ -714,44 +714,87 @@ class DraftUdaraAmbientController extends Controller
                 $otherRegulations = [];
                 $methodsUsed = [];
 
-                $validasi = WsValueUdara::with([
-                    'lingkungan',
-                    'partikulat',
-                    'direct_lain',
-                    'subkontrak',
+                $validasi = OrderDetail::with([
+                    'udaraLingkungan',
+                    'udaraMicrobio',
+                    'udaraSubKontrak',
+                    'udaraDirect',
+                    'udaraPartikulat'
+                ])
+                ->where('no_sampel', $request->no_sampel)
+                ->first();
 
-                ])->where(function ($q) {
-                    $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
-                        ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
-                        ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
-                        ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true));
-                })
-                    ->where('no_sampel', $request->no_sampel)
-                    ->get()
-                    ->map(function ($item) {
-                        $detail = $item->subkontrak ?? $item->direct_lain ?? $item->partikulat ?? $item->lingkungan;
-                        $newQuery = Parameter::where('nama_lab', $detail->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
-                        $subQuery = WsValueLingkungan::with(['lingkungan', 'subkontrak', 'directlain', 'partikulat'])->where('no_sampel', $item->no_sampel)
-                            ->where(function ($q) use ($detail) {
-                                $q->whereHas('lingkungan', fn($r) => $r->where('parameter', $detail->parameter))
-                                    ->orWhereHas('subkontrak', fn($r) => $r->where('parameter', $detail->parameter))
-                                    ->orWhereHas('directlain', fn($r) => $r->where('parameter', $detail->parameter))
-                                    ->orWhereHas('partikulat', fn($r) => $r->where('parameter', $detail->parameter));
-                            })->where('is_active', true)->first();
+                $lingkungan = $validasi->udaraLingkungan;
+                $microbio = $validasi->udaraMicrobio;
+                $subKontrak = $validasi->udaraSubKontrak;
+                $direct = $validasi->udaraDirect;
+                $partikulat = $validasi->udaraPartikulat;
+                
+                $detail= collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat);
 
-                        return [
+               $validasi =  $detail->map(function ($item) {
+                    $newQuery = Parameter::where('nama_lab', $item->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
+                    $durasi = $item->ws_value_linkungan->durasi ?? null;
+                    return [
                             'id' => $item->id,
                             'parameter' => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
-                            'nama_lab' => $detail->parameter,
+                            'nama_lab' => $item->parameter,
                             'satuan' => $newQuery->satuan,
                             'method' => $newQuery->method,
                             'status' => $newQuery->status,
                             'no_sampel' => $item->no_sampel,
-                            'durasi' => $subQuery->durasi ?? null,
-                            'ws_udara' => $item->toArray(),
-                            'ws_lingkungan' => $subQuery ? (array) $subQuery : null
+                            'durasi' => $durasi,
+                            'ws_udara' => collect($item->ws_udara)->toArray(),
+                            'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray()
                         ];
-                    })->toArray();
+                });
+
+                // dd($test);
+
+
+                // dd($validasi->udaraLingkungan, $validasi->udaraMicrobio, $validasi->udaraSubKontrak, $validasi->udaraDirect, $validasi->udaraPartikulat);
+
+                // $validasi = WsValueUdara::with([
+                //     'lingkungan',
+                //     'partikulat',
+                //     'direct_lain',
+                //     'subkontrak',
+
+                // ])
+                // ->where(function ($q) {
+                //     $q->whereHas('lingkungan', fn($r) => $r->where('lingkungan_header.is_approved', true))
+                //         ->orWhereHas('partikulat', fn($r) => $r->where('partikulat_header.is_approve', true))
+                //         ->orWhereHas('direct_lain', fn($r) => $r->where('directlain_header.is_approve', true))
+                //         ->orWhereHas('subkontrak', fn($r) => $r->where('subkontrak.is_approve', true));
+                // })
+                //     ->where('no_sampel', $request->no_sampel)
+                //     ->get();
+                //     dd($validasi);
+
+                //     $validasi->map(function ($item) {
+                //         $detail = $item->subkontrak ?? $item->direct_lain ?? $item->partikulat ?? $item->lingkungan;
+                //         $newQuery = Parameter::where('nama_lab', $detail->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
+                //         $subQuery = WsValueLingkungan::with(['lingkungan', 'subkontrak', 'directlain', 'partikulat'])->where('no_sampel', $item->no_sampel)
+                //             ->where(function ($q) use ($detail) {
+                //                 $q->whereHas('lingkungan', fn($r) => $r->where('parameter', $detail->parameter))
+                //                     ->orWhereHas('subkontrak', fn($r) => $r->where('parameter', $detail->parameter))
+                //                     ->orWhereHas('directlain', fn($r) => $r->where('parameter', $detail->parameter))
+                //                     ->orWhereHas('partikulat', fn($r) => $r->where('parameter', $detail->parameter));
+                //             })->where('is_active', true)->first();
+
+                //         return [
+                //             'id' => $item->id,
+                //             'parameter' => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
+                //             'nama_lab' => $detail->parameter,
+                //             'satuan' => $newQuery->satuan,
+                //             'method' => $newQuery->method,
+                //             'status' => $newQuery->status,
+                //             'no_sampel' => $item->no_sampel,
+                //             'durasi' => $subQuery->durasi ?? null,
+                //             'ws_udara' => $item->toArray(),
+                //             'ws_lingkungan' => $subQuery ? (array) $subQuery : null
+                //         ];
+                //     })->toArray();
 
                 foreach ($validasi as $item) {
                     $entry = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);

@@ -157,7 +157,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->where('is_approve', 1)
 				->where('status', 0)
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-				->addSelect(DB::raw("'direct' as data_type"))
+				->addSelect(DB::raw("'partikulat' as data_type"))
 				->get();
 
 			$lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
@@ -591,7 +591,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					}
 				} else if ($request->data_type == 'direct') {
 					$data = DirectLainHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
-					// dd($data);
 					if ($data) {
 						$cek = DirectLainHeader::where('id', $data->id)->first();
 						$cek->lhps = 0;
@@ -625,6 +624,28 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						], 201);
 					} else {
 						$dat = MedanLmHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
+				} else if ($request->data_type == 'microbio') {
+					$data = MicrobioHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+					// dd($data);
+					if ($data) {
+						$cek = MicrobioHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = MicrobioHeader::where('id', $request->id)->first();
 						$dat->lhps = 1;
 						$dat->save();
 						return response()->json([
