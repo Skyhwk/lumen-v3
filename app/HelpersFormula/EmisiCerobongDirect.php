@@ -88,22 +88,19 @@ class EmisiCerobongDirect {
             $c7 = $data->T_Flue < 0.1 ? '<0.1' : round($data->T_Flue, 2);
             $satuan = '°C';
         } elseif (in_array($id_parameter, $paramVelocity)) {
-
-            // Ambil semua angka desimal dari string velocity
-            preg_match_all('/\d+(\.\d+)?/', $data->velocity, $matches);
-
-            // Ambil hasil angka dalam array
-            $angka = $matches[0];
-
-            if (!empty($angka)) {
-                // Hitung rata-rata
+           // Ambil hanya angka setelah tanda ":" (bukan angka pada Data-1)
+            preg_match_all('/:\s*(\d+(?:\.\d+)?)/', $data->velocity, $matches);
+            // Ambil hanya group angka
+            $angka = array_map('floatval', $matches[1]); // group 1 = angka setelah ':'
+            if (count($angka) > 0) {
                 $c10 = array_sum($angka) / count($angka);
-                $c10 = $c10 < 0.1 ? '<0.1' : round($c10, 2);
+                $c10 = $c10 < 0.1 ? '<0.1' : number_format($c10, 4, '.', '');
                 $satuan = 'm/s';
             } else {
-                $c10 = null; // atau 0 tergantung kebutuhan
+                $c10 = null;
                 $satuan = null;
             }
+
         } else if (in_array($id_parameter, $paramNO2)) {
             $c3 = $data->NO2;
             $c2 = round((($c3 * 46) / 24.45), 4);
