@@ -881,9 +881,9 @@ class DraftUdaraAmbientController extends Controller
                     : 'ẍ'
             ),
             'parameter'     => $parameter,
-            'satuan'        => (! empty($bakumutu->satuan))
+           'satuan'            => (! empty($bakumutu->satuan))
                 ? $bakumutu->satuan
-                : (! empty($val->satuan) ? $val->satuan : 'µg/Nm³'),
+                : 'µg/Nm³',
             'durasi'        => ! empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (! empty($val->durasi) ? $val->durasi : '-'),
             'methode'       => ! empty($bakumutu->method) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
             'status'        => $val->status,
@@ -891,40 +891,47 @@ class DraftUdaraAmbientController extends Controller
 
         $getSatuan = new HelperSatuan;
 
-        $index = $getSatuan->udara($bakumutu->satuan ?? 1);
-
+        $index    = $getSatuan->udara($bakumutu->satuan ?? 1);
         $ws_udara = (object) $val->ws_udara;
 
-        $ws_value_linkungan = (object) $val->ws_lingkungan;
-
-        $fKoreksiKey = "f_koreksi_$index";
-        $hasilKey    = "hasil$index";
-
-        $entry['hasil_uji'] = $ws_udara->$fKoreksiKey ?? $ws_udara->$hasilKey ?? $ws_value_linkungan->f_koreksi_c ?? $ws_value_linkungan->C ?? '-';
-
-        if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi2          = $ws_udara->f_koreksi_2 ?? null;
-            $hasil2             = $ws_udara->hasil2 ?? null;
-            $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        $ws_value_lingkungan = (object) $val->ws_lingkungan;
+        $ws          = null;
+        if ($ws_udara != null) {
+            $fKoreksiKey = "f_koreksi_$index";
+            $hasilKey    = "hasil$index";
+            $ws = $ws_udara;
+        } else {
+            $i           = ($index - 1);
+            $i           = ($i == 0) ? '' : $i;
+            $fKoreksiKey = "f_koreksi_c{$i}";
+            $hasilKey    = "C{$i}";
+            $ws = $ws_value_lingkungan;
         }
 
+
+        $entry['hasil_uji'] = $ws->$fKoreksiKey ?? $ws->$hasilKey ?? null;
+        if ($bakumutu && in_array($bakumutu->satuan, ["mg/m³", "mg/m³", "mg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi2          = $ws->f_koreksi_2 ?? null;
+            $hasil2             = $ws->hasil2 ?? null;
+            $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        }
         if ($bakumutu && in_array($bakumutu->satuan, ["BDS", "bds"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi3          = $ws_udara->f_koreksi_3 ?? null;
-            $hasil3             = $ws_udara->hasil3 ?? null;
+            $fKoreksi3          = $ws->f_koreksi_3 ?? null;
+            $hasil3             = $ws->hasil3 ?? null;
             $entry['hasil_uji'] = $fKoreksi3 ?? $hasil3 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && in_array($bakumutu->satuan, ["µg/m³", "µg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
-            $fKoreksi1          = $ws_udara->f_koreksi_1 ?? null;
-            $hasil1             = $ws_udara->hasil1 ?? null;
+            $fKoreksi1          = $ws->f_koreksi_1 ?? null;
+            $hasil1             = $ws->hasil1 ?? null;
             $entry['hasil_uji'] = $fKoreksi1 ?? $hasil1 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && $bakumutu->method) {
-            $entry['satuan']    = $bakumutu->satuan;
-            $entry['methode']   = $bakumutu->method;
-            $entry['baku_mutu'] = $bakumutu->baku_mutu;
-            $methodsUsed[]      = $bakumutu->method;
+            $entry['satuan']       = $bakumutu->satuan;
+            $entry['methode']      = $bakumutu->method;
+            $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
+            $methodsUsed[]         = $bakumutu->method;
         }
 
         return $entry;
