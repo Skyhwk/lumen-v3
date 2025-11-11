@@ -136,12 +136,12 @@
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ ucwords($dataLapangan->keterangan) }}</td>
+                        <td class="custom5">{{ ucwords($header->deskripsi_titik) }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Titik Koordinat</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ $dataLapangan->titik_koordinat }}</td>
+                        <td class="custom5">{{ $header->titik_koordinat }}</td>
                     </tr>
                     @if ($laju_velocity != '-')
                         <tr>
