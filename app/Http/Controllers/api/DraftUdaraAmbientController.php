@@ -868,7 +868,7 @@ class DraftUdaraAmbientController extends Controller
         $getSatuan = new HelperSatuan;
 
 
-        $index = $getSatuan->udara($bakumutu->satuan ?? null);
+        $index = $getSatuan->udara($bakumutu->satuan ?? 1);
 
         $ws_udara = (object) $val->ws_udara;
 
@@ -888,6 +888,18 @@ class DraftUdaraAmbientController extends Controller
             $fKoreksi2 = $ws_udara->f_koreksi_2 ?? null;
             $hasil2 = $ws_udara->hasil2 ?? null;
             $entry['hasil_uji'] = $fKoreksi2 ?? $hasil2 ?? $entry['hasil_uji'];
+        }
+
+        if ($bakumutu && in_array($bakumutu->satuan, ["BDS", "bds"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi3 = $ws_udara->f_koreksi_3 ?? null;
+            $hasil3 = $ws_udara->hasil3 ?? null;
+            $entry['hasil_uji'] = $fKoreksi3 ?? $hasil3 ?? $entry['hasil_uji'];
+        }
+
+        if ($bakumutu && in_array($bakumutu->satuan, ["µg/m³", "µg/m3"]) && ($entry['hasil_uji'] === null || $entry['hasil_uji'] === '-')) {
+            $fKoreksi1 = $ws_udara->f_koreksi_1 ?? null;
+            $hasil1 = $ws_udara->hasil1 ?? null;
+            $entry['hasil_uji'] = $fKoreksi1 ?? $hasil1 ?? $entry['hasil_uji'];
         }
 
         if ($bakumutu && $bakumutu->method) {
