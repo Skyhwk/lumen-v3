@@ -652,7 +652,7 @@ class DraftUlkController extends Controller
             // 'hasil_uji' => $val->ws_value_linkungan->C ?? null,
             'satuan' => (!empty($bakumutu->satuan))
                 ? $bakumutu->satuan
-                : (!empty($val->satuan) ? $val->satuan : '-'),
+                : (!empty($val->satuan) ? $val->satuan : 'µg/Nm³'),
             'durasi' => !empty($bakumutu->durasi_pengukuran) ? $bakumutu->durasi_pengukuran : (!empty($val->durasi) ? $val->durasi : '-'),
             'methode' => !empty($bakumutu->method) ? $bakumutu->method : (!empty($val->method) ? $val->method : '-'),
             'status' => $val->status
