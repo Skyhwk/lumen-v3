@@ -60,10 +60,14 @@ class DraftUdaraAmbientController extends Controller
                 }
 
                 // Tentukan data_lapangan_lingkungan_hidup
-                $item->data_lapangan_lingkungan_hidup = collect($item->allDetailLingkunganHidup)
-                    ->when($item->kategori_1 == 'S24', fn($q) => $q->where('shift_pengambilan', 'L2'))
-                    ->take(1)
-                    ->values();
+                // $item->data_lapangan_lingkungan_hidup = collect($item->allDetailLingkunganHidup)
+                //     ->when($item->kategori_1 == 'S24', fn($q) => $q->where('shift_pengambilan', 'L2'))
+                //     ->take(1)
+                //     ->values();
+                $all = collect($item->allDetailLingkunganHidup);
+                $item->data_lapangan_lingkungan_hidup = $all->where('shift_pengambilan', 'L2')->take(1)->values()->isNotEmpty()
+                    ? $all->where('shift_pengambilan', 'L2')->take(1)->values()
+                    : $all->take(1)->values();
 
                 $minDate = $lapangan->min('created_at');
                 $maxDate = $lapangan->max('created_at');
