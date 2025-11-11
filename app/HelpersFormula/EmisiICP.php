@@ -82,7 +82,7 @@ class EmisiICP
                 }
                 break;
             case 'Co':
-                $C2 = number_format(24.45 * ($C1 / 28.01), 4, ".", "");  // ppm
+                $C2 = number_format(24.45 * ($C1 / 58.93), 4, ".", "");  // ppm
                 #MDL
                 if ($C4 < 0.0075) {
                     $C4 = "<0.0075";
