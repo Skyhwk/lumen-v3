@@ -1051,9 +1051,16 @@ class FdlPartikulatIsokinetikController extends Controller
                         ->where('is_approve', true)
                         ->first();
 
-                    // Validasi awal
-                    if (!$data || $method3->isEmpty() || !$method4) {
-                        return response()->json(['message' => 'Data tidak lengkap untuk diproses.'], 400);
+                    $notApproved = [];
+                    if (!$method3)
+                        $notApproved[] = 'Berat Molekul';
+                    if (!$method4)
+                        $notApproved[] = 'Kadar Air';
+
+                    if (count($notApproved)) {
+                        return response()->json([
+                            'message' => 'Data berikut belum dilakukan approved: ' . implode(', ', $notApproved)
+                        ], 400);
                     }
 
 
