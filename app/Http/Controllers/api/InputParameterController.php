@@ -2721,19 +2721,19 @@ class InputParameterController extends Controller
 						];
 					}
 
-					// $data_kalkulasi['lingkungan_header_id'] = $header->id;
-					// $data_kalkulasi['no_sampel'] = $request->no_sample;
-					// $data_kalkulasi['created_by'] = $this->karyawan;
-					// $satuan = $data_kalkulasi['satuan'];
-					// unset($data_kalkulasi['satuan']);
-					// WsValueLingkungan::create($data_kalkulasi);
+					$data_kalkulasi['lingkungan_header_id'] = $header->id;
+					$data_kalkulasi['no_sampel'] = $request->no_sample;
+					$data_kalkulasi['created_by'] = $this->karyawan;
+					$satuan = $data_kalkulasi['satuan'];
+					unset($data_kalkulasi['satuan']);
+					WsValueLingkungan::create($data_kalkulasi);
 
 					$data_udara = array();
 					$data_udara['id_lingkungan_header'] = $header->id;
 					$data_udara['no_sampel'] = $request->no_sample;
 					$data_udara['hasil16'] = $data_kalkulasi['C15'];
 					$data_udara['hasil17'] = $data_kalkulasi['C16'];
-					$data_udara['satuan'] = $data_kalkulasi['satuan'];
+					$data_udara['satuan'] = $satuan;
 					WsValueUdara::create($data_udara);
 
 					DB::commit();

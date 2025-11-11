@@ -24,7 +24,7 @@ class DebuPersonalHeader extends Sector{
 
     public function ws_udara()
     {
-        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_lingkungan_header');
+        return $this->belongsTo('App\Models\WsValueUdara', 'no_sampel', 'no_sampel');
     }
 
     public function order_detail()
