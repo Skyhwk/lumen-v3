@@ -175,6 +175,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                     $hasil = $hasil->toArray();
                     $index = $getSatuan->udara($item->satuan);
                     $nilai = null;
+
                     if ($index == null) {
                         for ($i = 0; $i <= 16; $i++) {
                             $key = $i === 0 ? 'f_koreksi_c' : "f_koreksi_c$i";
@@ -212,13 +213,35 @@ class TqcUdaraLingkunganHidupController extends Controller
                                 }
                             }
                         }
+                        
                     } else {
                         $fKoreksiKey = "f_koreksi_c$index";
                         $hasilKey    = "C$index";
                         $fKoreksiHasil = "f_koreksi_$index";
                         $fhasil = "hasil$index";
+                        $nilai = null;
 
-                        $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? '-';
+                        if($index == 17) {
+                            $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
+                            if($nilai == null) {
+                                $nilai = $hasil['f_koreksi_c2'] ?? $hasil['C2'] ??  $hasil['f_koreksi_2'] ??  $hasil['hasil2'] ?? '-';
+                            }
+                        } else if ($index == 16) {
+                            $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
+                            if($nilai == null) {
+                                $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
+                            }
+                        } else if ($index == 15) {
+                            $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
+                            if($nilai == null) {
+                                $nilai = $hasil['f_koreksi_c3'] ?? $hasil['C3'] ??  $hasil['f_koreksi_3'] ??  $hasil['hasil3'] ?? '-';
+                            }
+                        } else {
+                            $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
+                            if($nilai == null) {
+                                $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
+                            }
+                        }
                     }
 
                     $item->nilai_uji = $nilai;
