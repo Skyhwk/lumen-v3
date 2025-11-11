@@ -1056,6 +1056,7 @@ class FdlPartikulatIsokinetikController extends Controller
                         return response()->json(['message' => 'Data tidak lengkap untuk diproses.'], 400);
                     }
 
+
                     // rata-rata dari method 3
                     $avgO2Mole = sprintf("%.7f", $method3->avg('O2Mole'));
                     $avgCO2Mole = sprintf("%.7f", $method3->avg('CO2Mole'));
@@ -1069,10 +1070,12 @@ class FdlPartikulatIsokinetikController extends Controller
                     // Perhitungan
                     $n2Mole = sprintf("%.7f", $avgO2Mole + $avgCO2Mole + $avgCOMole);
                     $md = sprintf("%.7f", (44 * $avgCO2Mole) + (28 * $avgCOMole) + (32 * $avgO2Mole) + (28 * $n2Mole));
-
+                    
                     $nCO2 = sprintf("%.7f", ($avgCO2 * 10000 * 44 * 1000) / 21500);
-
-                    $combustion = sprintf("%.7f", (($nCO2 / ($nCO2 + $avgCO)) * 100) / 100);
+                    
+                    $combustion = ($nCO2 + $avgCO) == 0 
+                                ? 0 
+                                : sprintf("%.7f", ($nCO2 / ($nCO2 + $avgCO)) * 100);
 
                     // Asumsi mdMole sama dengan $md (kalau memang kamu ada variabel mdMole sebelumnya, bisa ganti)
                     $mdMole = (float) $md;
@@ -1104,7 +1107,9 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $lastValue = end($nilaiDGM[$lastHole]);
 
-                    $gas_vol = number_format($lastValue / 1000, 4, '.', ',');
+                    $hitung = $lastValue - $data->dgmAwal;
+
+                    $gas_vol = number_format($hitung / 1000, 4, '.', ',');
                     
                     $method6->gas_vol = $gas_vol;
                     $method6->save();
