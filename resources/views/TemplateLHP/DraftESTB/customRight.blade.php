@@ -37,7 +37,7 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
+                        <td class="custom" width="120">No. LHP {!! $showKan ? '<sup><u>a</u></sup>' : '' !!}</td>
                         <td class="custom" width="120">No. SAMPEL</td>
                         <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
