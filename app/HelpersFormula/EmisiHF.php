@@ -52,6 +52,7 @@ class EmisiHF
         $C2 = number_format($C2, 4, '.','');
         $C3 = number_format($C3, 4, '.','');
         $C4 = number_format($C4, 5, '.','');
+        $Vs = number_format($Vs, 4, '.','');
 
         $satuan = 'mg/Nm3';
         $data = [
