@@ -25,7 +25,7 @@
     
     $laju_velocity = '-';
     if ($emisiCerobongHeader) {
-        $laju_velocity = round($emisiCerobongHeader->ws_value->C9, 1);
+        $laju_velocity = round($emisiCerobongHeader->ws_value->C9, 2);
     }
     
 
