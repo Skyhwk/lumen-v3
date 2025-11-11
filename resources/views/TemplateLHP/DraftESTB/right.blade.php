@@ -3,11 +3,14 @@
     use App\Models\MasterRegulasi;
     use App\Models\DataLapanganEmisiCerobong;
     use App\Models\WsValueEmisiCerobong;
+    use App\Models\EmisiCerobongHeader;
     use Carbon\Carbon;
     use Illuminate\Support\Str;
 
     $wsvalue = WsValueEmisiCerobong::where('no_sampel', $header->no_sampel)->get();
     $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $header->no_sampel)->first();
+    $emisiCerobongHeader = EmisiCerobongHeader::with('ws_value')->where('no_sampel', $header->no_sampel)->where('parameter', 'Velocity')->first();
+    
 
     $keterangan_koreksi = [];
     foreach ($wsvalue as $k => $v) {
@@ -21,26 +24,10 @@
     }
     
     $laju_velocity = '-';
-    if ($dataLapangan != null) {
-        if (!empty($dataLapangan->velocity)) {
-            $decoded = json_decode($dataLapangan->velocity, true);
-            $str = is_array($decoded) ? $decoded[0] : $decoded;
-
-            // Ambil angka setelah tanda ':' (bisa desimal)
-            preg_match_all('/:\s*([\d.]+)/', $str, $matches);
-
-            $values = array_map('floatval', $matches[1]); // hasil angka setelah ':'
-
-            if (count($values) === 0) {
-                $rata2 = 0;
-                $total = 0;
-            } else {
-                $total = array_sum($values);
-                $rata2 = round($total / count($values), 1);
-            }
-            $laju_velocity = $rata2;
-        }
+    if ($emisiCerobongHeader) {
+        $laju_velocity = round($emisiCerobongHeader->ws_value->C9, 1);
     }
+    
 
 @endphp
 
