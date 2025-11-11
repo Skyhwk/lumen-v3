@@ -73,7 +73,7 @@ class DraftUlkController extends Controller
             }
             $minDate = $lapangan->min('created_at');
             $maxDate = $lapangan->max('created_at');
-            
+
             if (empty($lhps) || (
                 empty($lhps->tanggal_sampling_awal) &&
                 empty($lhps->tanggal_sampling_akhir) &&
@@ -239,10 +239,10 @@ class DraftUlkController extends Controller
                 'tekanan_udara'          => $request->tekanan_udara,
                 'kelembapan'             => $request->kelembapan,
                 'periode_analisa'        => $request->periode_analisa ?: null,
-                'tanggal_sampling_awal'  => $request->tanggal_sampling_awal ?? null,
-                'tanggal_sampling_akhir' => $request->tanggal_sampling_akhir ?? null,
-                'tanggal_analisa_awal'   => $request->tanggal_analisa_awal ?? null,
-                'tanggal_analisa_akhir'  => $request->tanggal_analisa_akhir ?? null,
+                'tanggal_sampling_awal'  => $request->tanggal_sampling_awal ?: null,
+                'tanggal_sampling_akhir' => $request->tanggal_sampling_akhir ?: null,
+                'tanggal_analisa_awal'   => $request->tanggal_analisa_awal ?: null,
+                'tanggal_analisa_akhir'  => $request->tanggal_analisa_akhir ?: null,
             ]);
             $header->save();
 
