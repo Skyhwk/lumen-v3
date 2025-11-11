@@ -4,27 +4,27 @@
     use App\Models\DetailLingkunganHidup;
     use \Carbon\Carbon;
 
-    $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
-    $tanggal_sampling = '';
-    if($header->status_sampling == 'S24'){
-        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
+    // $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
+    // $tanggal_sampling = '';
+    // if($header->status_sampling == 'S24'){
+    //     $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
 
-        $tanggalAwal = $header->tanggal_sampling;
+    //     $tanggalAwal = $header->tanggal_sampling;
 
-        $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
+    //     $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
 
-        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
+    //     $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
 
-        if ($tanggalAwal || $tanggalAkhir) {
-            if ($tanggalAwal == $tanggalAkhir) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
-            }
-        } else {
-            $tanggal_sampling = '-';
-        }
-    } else {
+    //     if ($tanggalAwal || $tanggalAkhir) {
+    //         if ($tanggalAwal == $tanggalAkhir) {
+    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
+    //         } else {
+    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
+    //         }
+    //     } else {
+    //         $tanggal_sampling = '-';
+    //     }
+    // } else {
         if ($header->tanggal_sampling || $header->tanggal_terima) {
             if ($header->tanggal_sampling == $header->tanggal_terima) {
                 $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
@@ -34,7 +34,7 @@
         } else {
             $tanggal_sampling = '-';
         }
-    }   
+    // }   
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
