@@ -9,18 +9,20 @@ use App\Models\WsValueAir;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\QuotationKontrakH;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class HoldHpController extends Controller
 {
-    public function index(Request $request){
-        if($request->type == 'Hold'){
+    public function index(Request $request)
+    {
+        if ($request->type == 'Hold') {
             $data = HoldHp::with('orderHeader', 'orderHeader.quotationKontrakH', 'orderHeader.quotationNonKontrak')->where('is_hold', 1)->orderBy('hold_at', 'desc')->get();
-        }else {
+        } else {
             $data = HoldHp::with('orderHeader', 'orderHeader.quotationKontrakH', 'orderHeader.quotationNonKontrak')->where('is_hold', 0)->orderBy('hold_at', 'desc')->get();
         }
-        
+
         return Datatables::of($data)->make(true);
     }
 
@@ -51,7 +53,25 @@ class HoldHpController extends Controller
     {
         $data = OrderHeader::where('no_order', $request->no_order)
             ->first();
-        
+
+        if (!$data) {
+            return response()->json(['message' => 'Tidak ada data order Tersebut', 'status' => '404'], 404);
+        } else {
+            $is_kontrak = explode('/', $data->no_document)[1] == 'QTC';
+
+            $periode = [];
+            if ($is_kontrak) {
+                $quotation = QuotationKontrakH::with('detail')
+                    ->where('no_document', $data->no_document)
+                    ->first();
+
+                $periode = $quotation
+                    ? $quotation->detail->pluck('periode_kontrak')->unique()->toArray()
+                    : [];
+            }
+        }
+
+        $data->periode = $periode;
         $data->quotation_final = $data->quotation_final;
 
         return response()->json($data, 200);
@@ -61,23 +81,25 @@ class HoldHpController extends Controller
     {
         $data = OrderHeader::where('no_order', $request->order)->first();
 
-        if(!$data) {
+        if (!$data) {
             return response()->json(['message' => 'Tidak ada data order Tersebut', 'status' => '404'], 404);
         }
         HoldHp::updateOrCreate(
-            ['no_order' => $request->order], 
+            ['no_order' => $request->order],
             [
                 'keterangan' => $request->keterangan,
                 'is_hold' => 1,
+                'periode' => $request->periode ?? null,
                 'hold_by' => $this->karyawan,
                 'hold_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]
         );
-        
+
         return response()->json(['message' => 'Data berhasil disimpan', 'status' => '200'], 200);
     }
 
-    public function hold(Request $request) {
+    public function hold(Request $request)
+    {
         $data = HoldHp::find($request->id);
         $data->is_hold = 1;
         $data->keterangan = $request->keterangan ?? null;
@@ -87,7 +109,8 @@ class HoldHpController extends Controller
         return response()->json(['message' => "Data hasil pengujian $data->no_order Berhasil di hold ", 'status' => '200'], 200);
     }
 
-    public function unhold(Request $request) {
+    public function unhold(Request $request)
+    {
         $data = HoldHp::find($request->id);
         $data->is_hold = 0;
         $data->keterangan_unhold = $request->keterangan ?? null;
