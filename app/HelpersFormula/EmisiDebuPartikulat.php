@@ -36,11 +36,7 @@ class EmisiDebuPartikulat
         }
 
         // Vstd (Nm3) = (Rerata Laju Alir TSP (Liter) x t) x (298/760) x (Pa/Ta) / 1000
-        $Vstd = str_replace(",", "", number_format(
-            ($data->flow * $data->durasi_dry) * (298 / 760) * ($data->tekanan / (273 + $data->suhu)) / 1000,
-            4
-        ));
-
+        $Vstd = ($data->flow * $data->durasi_dry) * (298 / 760) * ($data->tekanan / (273 + $data->suhu)) / 1000;
 
         // $raCwC = ((floatval($data->w2) - floatval($data->w1)) * 10 ** 6) / floatval($Vstd);
         $C = ((floatval($data->w2) - floatval($data->w1)) * 10 ** 6) / floatval($Vstd);
@@ -51,6 +47,11 @@ class EmisiDebuPartikulat
         $w1 = $data->w1;
         $w2 = $data->w2;
 
+        $C = number_format($C, 4, '.', '');
+        $C1 = number_format($C1, 4, '.', '');
+        $C3 = number_format($C3, 4, '.', '');
+        $C4 = number_format($C4, 4, '.', '');
+        $Vstd = number_format($Vstd, 4, '.', '');
         // dd($C, $C1);
 
         $satuan = 'ug/Nm3';
