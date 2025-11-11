@@ -52,9 +52,8 @@ class DraftUdaraAmbientController extends Controller
             ])
             ->get()
             ->map(function ($item) {
-
                 // Decode methode_sampling sekali saja
-                $lapangan = $item->allDetailLingkunganKerja;
+                $lapangan = $item->allDetailLingkunganHidup;
                 $lhps     = $item->lhps_ling;
                 if (! empty($item->lhps_ling->methode_sampling)) {
                     $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
