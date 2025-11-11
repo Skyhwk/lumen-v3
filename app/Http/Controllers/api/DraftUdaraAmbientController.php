@@ -234,7 +234,11 @@ class DraftUdaraAmbientController extends Controller
                 'arah_angin' => $request->arah_angin,
                 'suhu' => $request->suhu_lingkungan,
                 'tekanan_udara' => $request->tekanan_udara,
-                'kelembapan' => $request->kelembapan
+                'kelembapan' => $request->kelembapan,
+                'tanggal_sampling_awal' => $request->tanggal_sampling_awal ?? null,
+                'tanggal_sampling_akhir' => $request->tanggal_sampling_akhir ?? null,
+                'tanggal_analisa_awal' => $request->tanggal_analisa_awal ?? null,
+                'tanggal_analisa_akhir' => $request->tanggal_analisa_akhir ?? null
             ]);
             $header->save();
 
