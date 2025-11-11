@@ -28,6 +28,8 @@
     if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
         if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } elseif ($header->tanggal_sampling_akhir == null) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
         } else {
             $tanggal_sampling =
                 \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
@@ -113,8 +115,16 @@
                             $periode1 = $header->tanggal_analisa_awal ?? '';
                             $periode2 = $header->tanggal_analisa_akhir ?? '';
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
-                            {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">
+                            @if ($periode2)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                            @elseif ($periode1)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                            @else
+                                -
+                            @endif
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
