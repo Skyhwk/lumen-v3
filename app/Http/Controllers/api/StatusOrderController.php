@@ -8,6 +8,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Models\QuotationKontrakD;
 use Illuminate\Http\Request;
 use Datatables;
 use Exception;
@@ -17,9 +18,11 @@ class StatusOrderController extends Controller
     public function index(Request $request)
     {
         try {
+            $mode = $request->mode;
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with([
                     'sales',
+                    'link_lhp',
                     'sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
                     },
@@ -34,22 +37,26 @@ class StatusOrderController extends Controller
                     ->whereYear('tanggal_penawaran', $request->year)
                     ->orderBy('tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
-                $data = QuotationKontrakH::with([
-                    'sales',
-                    'detail',
-                    'sampling' => function ($q) {
+                $data = QuotationKontrakD::with([
+                    'header',
+                    'header.sales',
+                    'header.link_lhp',
+                    'header.sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
                     },
-                    'orderHeader.invoices'
+                    'header.orderHeader.invoices'
                 ])
-                    ->where('id_cabang', $request->cabang)
-                    ->whereHas('orderHeader')
-                    // ->where('flag_status', '!=', 'ordered')
-                    // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                    ->select('request_quotation_kontrak_D.*')
+                    ->whereHas('header', function ($q) use ($request) {
+                        $q->where('id_cabang', $request->cabang)
+                            ->where('is_approved', true)
+                            ->where('is_emailed', true)
+                            ->where('is_active', true)
+                            ->whereYear('tanggal_penawaran', $request->year)
+                            ->whereHas('orderHeader')
+                            ->orderBy('tanggal_penawaran', 'desc');
+                    })
+                    ->orderBy('request_quotation_kontrak_D.id', 'desc');
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
@@ -67,18 +74,60 @@ class StatusOrderController extends Controller
                         return $sampling->jadwal->count();
                     }) : 0;
                 })
-                ->addColumn('count_detail', function ($row) {
-                    return $row->detail ? $row->detail->count() : 0;
+                ->filterColumn('no_document', function ($query, $keyword) use ($mode) {
+                    if ($mode == 'non_kontrak') {
+                        $query->where('no_document', 'like', "%{$keyword}%");
+                    } elseif ($mode == 'kontrak') {
+                        $query->whereHas('header', function ($q) use ($keyword) {
+                            $q->where('no_document', 'like', "%{$keyword}%");
+                        });
+                    }
                 })
-                ->addColumn('total_invoice', function ($row) {
-                    if (!$row->orderHeader) return 0;
-                    return $row->orderHeader->invoices->count();
+                ->addColumn('total_invoice', function ($row) use ($mode) {
+                    if ($mode == 'non_kontrak') {
+                        if (!$row->orderHeader) return 0;
+                        return $row->orderHeader->invoices->count();
+                    } else if ($mode == 'kontrak') {
+                        if (!$row->header->orderHeader) return 0;
+                        $filtered = $row->header->orderHeader->invoices
+                            ->where('periode', $row->periode_kontrak);
+                        if ($filtered->isEmpty()) {
+                            $filtered = $row->header->orderHeader->invoices
+                                ->where('periode', 'all');
+                        };
+                        return $filtered->count();
+                    };
                 })
-                ->addColumn('nilai_pelunasan', function ($row) {
-                    if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
-                    $totalPelunasan = $row->orderHeader->invoices->sum('nilai_pelunasan');
+                ->editColumn('link_lhp', function ($row) use ($mode) {
+                    if ($mode == 'kontrak') {
+                        if (!$row->header || !$row->header->link_lhp) return null;
 
-                    return $totalPelunasan;
+                        // Filter link_lhp berdasarkan periode_kontrak
+                        $filtered = $row->header->link_lhp->where('periode', $row->periode_kontrak)->first();
+
+                        return json_decode($filtered, true);
+                    } else {
+                        return json_decode($row->link_lhp, true);
+                    }
+                })
+                ->addColumn('nilai_pelunasan', function ($row) use ($mode) {
+                    if ($mode == 'non_kontrak') {
+                        if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
+                        $totalPelunasan = $row->orderHeader->invoices->sum('nilai_pelunasan');
+
+                        return $totalPelunasan;
+                    } else if ($mode == 'kontrak') {
+                        if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
+                        $filtered = $row->header->orderHeader->invoices
+                            ->where('periode', $row->periode_kontrak);
+                        if ($filtered->isEmpty()) {
+                            $filtered = $row->header->orderHeader->invoices
+                                ->where('periode', 'all');
+                        };
+                        $totalPelunasan = $filtered->sum('nilai_pelunasan');
+
+                        return $totalPelunasan;
+                    };
                 })
                 ->make(true);
         } catch (Exception $e) {
@@ -115,7 +164,7 @@ class StatusOrderController extends Controller
         return $search === false ? 5 : $search;
     }
 
-    private function getGroupedCFRs($orderHeader)
+    private function getGroupedCFRs($orderHeader, $periode)
     {
         try {
             $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
@@ -138,7 +187,7 @@ class StatusOrderController extends Controller
                     'is_active' => true
                 ])->get();
 
-            $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
+            $groupedData = $orderDetails->where('periode', $periode)->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
             $periodGroups->map(function ($itemGroup) use ($orderHeader) {
                 $mappedDetails = $itemGroup->map(function ($item) use ($orderHeader) {
                     $steps = $this->initializeSteps($orderHeader->tanggal_order);
@@ -232,7 +281,7 @@ class StatusOrderController extends Controller
     {
         $orderHeader = OrderHeader::find($request->id_order_header);
 
-        $groupedData = $this->getGroupedCFRs($orderHeader);
+        $groupedData = $this->getGroupedCFRs($orderHeader, $request->periode);
 
         return response()->json(['groupedCFRs' => $groupedData], 200);
     }

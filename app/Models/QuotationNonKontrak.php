@@ -124,4 +124,9 @@ class QuotationNonKontrak extends Sector
     {
         return $this->hasOne(AlasanVoidQt::class, 'no_quotation', 'no_document');
     }
+
+    public function link_lhp()
+    {
+        return $this->hasOne(LinkLhp::class, 'no_quotation', 'no_document');
+    }
 }
