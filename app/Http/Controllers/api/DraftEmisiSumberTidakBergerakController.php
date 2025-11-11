@@ -104,6 +104,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $header->nama_karyawan = 'Abidah Walfathiyyah';
                 $header->jabatan_karyawan = 'Technical Control Supervisor';
                 $header->keterangan = $request->keterangan ? json_encode($request->keterangan) : NULL;
+                $header->deskripsi_titik = $request->penamaan_titik ?: NULL;
                 //     $header->nama_karyawan = 'Dwi Meisya Batari';
                 //     $header->jabatan_karyawan = 'Technical Control Manager';
                 $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
