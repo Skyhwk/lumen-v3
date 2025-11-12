@@ -459,7 +459,7 @@ class InputParameterTotalController extends Controller
                 'N-Organik',
                 'N-Organik (NA)'
             ];
-            if (in_array($request->parameter_child, $n_total) && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)) {
+            if ((in_array($request->parameter_child, $n_total) || $request->parameter == 'TKN') && (in_array('N-Total', $filteredParameter)) || in_array('N-Total (NA)', $filteredParameter)) {
                 $hitung_otomatis = AutomatedFormula::where('parameter', $request->parameter)
                     ->where('required_parameter', $n_total)
                     ->where('no_sampel', $request->no_sample)
@@ -474,7 +474,7 @@ class InputParameterTotalController extends Controller
                 'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
                 'N-Organik', 'N-Organik (NA)'
             ];
-            if(in_array($request->parameter, $tkn_parameter) && in_array('TKN', $filteredParameter)){
+            if((in_array($request->parameter, $tkn_parameter) || $request->parameter === 'N-Total') && in_array('TKN', $filteredParameter)){
                 $hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
                     ->where('required_parameter', $tkn_parameter)
                     ->where('no_sampel', $request->no_sample)
