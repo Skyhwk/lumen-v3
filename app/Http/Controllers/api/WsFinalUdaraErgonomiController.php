@@ -467,4 +467,131 @@ class WsFinalUdaraErgonomiController extends Controller
 			//throw $th;
 		}
 	}
+
+	public function KoreksiMethod4 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$template = array(
+				"penyesuaian" => array(
+					"mouse" => "",
+					"monitor" => "",
+					"telepon" => "",
+					"keyboard" => "",
+				),
+				"skor_mouse" => "",
+				"skor_monitor" => "",
+				"skor_telepon" => "",
+				"nilai_table_a" => "",
+				"skor_keyboard" => "",
+				"final_skor_rosa" => "",
+				"total_section_a" => "",
+				"total_section_b" => "",
+				"total_section_c" => "",
+				"total_section_d" => "",
+				"skor_lebar_kursi" => "",
+				"total_skor_mouse" => "",
+				"skor_tinggi_kursi" => "",
+				"total_skor_monitor" => "",
+				"total_skor_telepon" => "",
+				"total_skor_keyboard" => "",
+				"skor_sandaran_lengan" => "",
+				"skor_sandaran_punggung" => "",
+				"skor_durasi_kerja_mouse" => "",
+				"skor_durasi_kerja_monitor" => "",
+				"skor_durasi_kerja_telepon" => "",
+				"skor_durasi_kerja_keyboard" => "",
+				"skor_durasi_kerja_bagian_kursi" => "",
+				"skor_total_sandaran_lengan_dan_punggung" => "",
+				"skor_total_tinggi_kursi_dan_lebar_dudukan" => ""
+			);
+			$dataRequest = $request->all();
+			$result =$template;
+			foreach ($dataRequest as $key => $value) {
+				// jika key mengandung "tambah_"
+				if (strpos($key, 'tambah_') === 0) {
+
+					/**
+					 * Contoh key:
+					 *  - tambah_leher_memuntir        => leher
+					 *  - tambah_lengan_bahu_diangkat  => lengan_atas
+					 *  - tambah_pergelangan_memuntir  => pergelangan_tangan
+					 */
+
+					// mapping otomatis nama bagian utama berdasarkan kata kunci
+					$bagian = null;
+					if (strpos($key, 'mouse') !== false) {
+						$bagian = 'mouse';
+					} elseif (strpos($key, 'monitor') !== false) {
+						$bagian = 'monitor';
+					} elseif (strpos($key, 'telepon') !== false) {
+						$bagian = 'telepon';
+					} elseif (strpos($key, 'keyboard') !== false) {
+						$bagian = 'keyboard';
+					}
+
+					if ($bagian && array_key_exists($bagian, $result['penyesuaian'])) {
+						// jika bagian belum diisi apa pun, buat array dulu
+						if (!is_array($result['penyesuaian'][$bagian])) {
+							$result['penyesuaian'][$bagian] = [];
+						}
+
+						// masukkan key tambahan ke dalam array bagian terkait
+						$result['penyesuaian'][$bagian][$key] = (int) $value;
+					}
+
+				} elseif (array_key_exists($key, $result)) {
+					// isi nilai langsung jika ada di template utama
+					$result[$key] = is_numeric($value) ? (int) $value : $value;
+				}
+			}
+
+			// optional: ubah string kosong di penyesuaian jadi 0 (agar konsisten)
+			foreach ($result['penyesuaian'] as $k => $v) {
+				if ($v === "") {
+					$result['penyesuaian'][$k] = 0;
+				}
+			}
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 2;
+					$new->pengukuran = json_encode($result);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod3 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			dd($request->all());
+		} catch (\Throwable $th) {
+			//throw $th;
+			DB::rollback();
+		}
+	}
 }
