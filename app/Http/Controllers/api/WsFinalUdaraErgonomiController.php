@@ -303,7 +303,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new = new WsValueErgonomi();
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
-					$new->nmethod = 1;
+					$new->method = 1;
 					$new->sebelum_kerja = json_encode(json_decode($request->sebelum_kerja));
 					$new->setelah_kerja = json_encode(json_decode($request->setelah_kerja));
 					$new->pengukuran = json_encode(json_decode($request->pengukuran));
@@ -333,6 +333,138 @@ class WsFinalUdaraErgonomiController extends Controller
 				'success' => false,
 				'status' => 500,
 			], 500);
+		}
+	}
+
+	public function KoreksiMethod2 (Request $request) 
+	{
+		try {
+			
+			DB::beginTransaction();
+			
+			$template = array(
+				"penyesuaian" => array(
+					"leher" => "",
+					"kaki" =>"",
+					"badan" =>"",
+					"beban" =>"",
+					"lengan_atas" =>"",
+					"pergelangan_tangan" =>"",
+					"lengan_atas" =>"",
+				),
+				"skor_kaki" => "",
+				"skor_badan" => "",
+				"skor_beban" => "",
+				"skor_leher" => "",
+				"total_skor_a" => "",
+				"total_skor_b" => "",
+				"nilai_tabel_a" => "",
+				"nilai_tabel_b" => "",
+				"nilai_tabel_c" => "",
+				"skor_pegangan" => "",
+				"final_skor_reba" => "",
+				"skor_lengan_atas" => "",
+				"skor_lengan_bawah" => "",
+				"skor_aktivitas_otot" => "",
+				"skor_otot_statis" => "",
+				"skor_otot_berulang" => "",
+				"skor_otot_tidak_stabil" => "",
+				"skor_pergelangan_tangan" => ""
+			);
+			$dataRequest = $request->all();
+			$result =$template;
+			foreach ($dataRequest as $key => $value) {
+				// jika key mengandung "tambah_"
+				if (strpos($key, 'tambah_') === 0) {
+
+					/**
+					 * Contoh key:
+					 *  - tambah_leher_memuntir        => leher
+					 *  - tambah_lengan_bahu_diangkat  => lengan_atas
+					 *  - tambah_pergelangan_memuntir  => pergelangan_tangan
+					 */
+
+					// mapping otomatis nama bagian utama berdasarkan kata kunci
+					$bagian = null;
+					if (strpos($key, 'leher') !== false) {
+						$bagian = 'leher';
+					} elseif (strpos($key, 'kaki') !== false) {
+						$bagian = 'kaki';
+					} elseif (strpos($key, 'badan') !== false) {
+						$bagian = 'badan';
+					} elseif (strpos($key, 'beban') !== false) {
+						$bagian = 'beban';
+					} elseif (strpos($key, 'lengan') !== false) {
+						$bagian = 'lengan_atas';
+					} elseif (strpos($key, 'pergelangan') !== false) {
+						$bagian = 'pergelangan_tangan';
+					}
+
+					if ($bagian && array_key_exists($bagian, $result['penyesuaian'])) {
+						// jika bagian belum diisi apa pun, buat array dulu
+						if (!is_array($result['penyesuaian'][$bagian])) {
+							$result['penyesuaian'][$bagian] = [];
+						}
+
+						// masukkan key tambahan ke dalam array bagian terkait
+						$result['penyesuaian'][$bagian][$key] = (int) $value;
+					}
+
+				} elseif (array_key_exists($key, $result)) {
+					// isi nilai langsung jika ada di template utama
+					$result[$key] = is_numeric($value) ? (int) $value : $value;
+				}
+			}
+
+			// optional: ubah string kosong di penyesuaian jadi 0 (agar konsisten)
+			foreach ($result['penyesuaian'] as $k => $v) {
+				if ($v === "") {
+					$result['penyesuaian'][$k] = 0;
+				}
+			}
+			if( !$request->has('id_datalapangan') && $request->id_datalapangan === '')
+			{
+				return response()->json([
+					'message' => 'Data tidak ditemukan',
+					'success' => false,
+					'status' => 404,
+				], 404);
+			}
+
+			/* lakukan pengecekan */
+			
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 2;
+					$new->pengukuran = json_encode($result);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			DB::rollback();
+			return response()->json([
+				'message' => $ex->getMessage(),
+				'file' => $ex->getFile(),
+				'line' => $ex->getLine(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+			//throw $th;
 		}
 	}
 }
