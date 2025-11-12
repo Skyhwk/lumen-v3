@@ -42,8 +42,8 @@ class MikrobiologiUdaraController extends Controller
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
-            ->editColumn('volume_pershift', function ($data) {
-                return $data->volume_pershift ? json_decode($data->volume_pershift, true) : null;
+            ->editColumn('volume_shift', function ($data) {
+                return $data->volume_shift ? json_decode($data->volume_shift, true) : null;
             })
             ->editColumn('data_shift', function ($data) {
                 return $data->data_shift ? json_decode($data->data_shift, true) : null;
