@@ -25,13 +25,13 @@ class GravimetriUdaraController extends Controller
 
     // 20-03-2025
     public function index(Request $request){
-        $dataLingkungan = LingkunganHeader::with('ws_value', 'order_detail')
+        $dataLingkungan = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
-        $dataDebu = DebuPersonalHeader::with('ws_value', 'order_detail')
+        $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('debu_personal_header.is_active', true)
             ->where('template_stp', $request->template_stp)
@@ -41,6 +41,9 @@ class GravimetriUdaraController extends Controller
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
+            })
+            ->editColumn('data_shift', function ($data) {
+                return $data->data_shift ? json_decode($data->data_shift, true) : null;
             })
             // ->orderColumn('tanggal_terima', function ($query, $order) {
             //     $query->orderBy('tanggal_terima', $order);

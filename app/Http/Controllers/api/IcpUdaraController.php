@@ -24,7 +24,7 @@ class IcpUdaraController extends Controller
 
     // 20-03-2025
     public function index(Request $request){
-        $data = LingkunganHeader::with('ws_value', 'order_detail', 'ws_udara')
+        $data = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
             ->where('lingkungan_header.is_active', true)
             ->where('template_stp', $request->template_stp);
@@ -41,6 +41,9 @@ class IcpUdaraController extends Controller
             })
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
+            })
+            ->editColumn('data_shift', function ($data) {
+                return $data->data_shift ? json_decode($data->data_shift, true) : null;
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {

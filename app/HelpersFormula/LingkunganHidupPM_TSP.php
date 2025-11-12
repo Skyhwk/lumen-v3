@@ -88,6 +88,8 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
+
+            $satuan = 'mg/m3';
         }
 
         $w1 = $data->w1;
