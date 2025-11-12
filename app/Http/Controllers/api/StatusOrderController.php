@@ -9,6 +9,7 @@ use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
+use App\Services\GetBawahan;
 use Illuminate\Http\Request;
 use Datatables;
 use Exception;
@@ -63,7 +64,7 @@ class StatusOrderController extends Controller
             if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
                 $data->where('sales_id', $this->user_id);
             } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
-                $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
                 array_push($bawahan, $this->user_id);
                 $data->whereIn('sales_id', $bawahan);
             }
