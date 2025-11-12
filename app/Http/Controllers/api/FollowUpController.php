@@ -660,7 +660,17 @@ class FollowUpController extends Controller
     {
         DB::beginTransaction();
         try {
-            DFUS::where('id', $request->id)->update(['keterangan' => $request->status]);
+            $dfus = DFUS::where('id', $request->id)->first();
+            $dfus->keterangan = $request->status;
+            $dfus->save();
+
+            if($request->status == 'NI'){
+                $request->id = MasterPelanggan::where('id_pelanggan', $dfus->id_pelanggan)->first()->id;
+                $request->alasan = 'DFUS NI';
+                $mpController = new MasterPelangganController($request);
+
+                $mpController->blacklist($request);
+            }
             DB::commit();
             return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status . '', 'success' => true], 200);
         } catch (\Exception $th) {
