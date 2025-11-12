@@ -3820,6 +3820,9 @@ class InputParameterController extends Controller
 					$data_shift = json_encode($request->jumlah_coloni);
                     $volume_shift = json_encode($volume);
 				}
+                if(count($request->jumlah_coloni) > 1){
+
+                }
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
@@ -4246,15 +4249,14 @@ class InputParameterController extends Controller
                                 $data_udara->{$key} = $data_kalkulasi['hasil'];
                             }
                         }
+                        $data_udara->save();
                     }else{
                         $data_udara = [];
                         $data_udara['id_subkontrak'] = $data->id;
                         $data_udara['no_sampel'] = trim($request->no_sample);
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_' . $i;
-                            if (isset($data_udara[$key])) {
-                                $data_udara[$key] = $data_kalkulasi['hasil'];
-                            }
+                            $data_udara[$key] = $data_kalkulasi['hasil'];
                         }
                         $kalkulasi1 = WsValueUdara::create($data_udara);
                     }
@@ -4278,9 +4280,7 @@ class InputParameterController extends Controller
                         $data_emisi['no_sampel'] = trim($request->no_sample);
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
-                            if (isset($data_emisi[$key])) {
-                                $data_emisi[$key] = $data_kalkulasi['hasil'];
-                            }
+                            $data_emisi[$key] = $data_kalkulasi['hasil'];
                         }
                         $kalkulasi1 = WsValueUdara::create($data_emisi);
                     }
