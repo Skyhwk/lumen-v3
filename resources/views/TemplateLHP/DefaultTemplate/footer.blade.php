@@ -29,7 +29,7 @@
         </td>
         <td width="60%" style="vertical-align: bottom; text-align:center; padding-left:44px; margin:0; position:relative; min-height:100px; font-family: roboto; font-weight: bold;">
             @if($mode == 'downloadLHP')
-                @if($header->count_print > 1)
+                @if($header->count_print > 0)
                     <strong>Cetakan ke-{{$header->count_print}}</strong><br/>
                 @endif
             @endif
