@@ -2552,20 +2552,20 @@ class InputParameterController extends Controller
 				// 		->calculate();
 				// }
 
-				$tkn_parameter = [
-					'NO2-N', 'NO2-N (NA)',
-					'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
-					'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
-					'N-Organik', 'N-Organik (NA)'
-				];
-				if(in_array($request->parameter, $tkn_parameter) && in_array('TKN', $filteredParameter)){
-					$hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
-						->where('required_parameter', $tkn_parameter)
-						->where('no_sampel', $request->no_sample)
-						->where('class_calculate', 'TKN')
-						->where('tanggal_terima', $tgl_terima)
-						->calculate();
-				}
+				// $tkn_parameter = [
+				// 	'NO2-N', 'NO2-N (NA)',
+				// 	'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
+				// 	'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
+				// 	'N-Organik', 'N-Organik (NA)'
+				// ];
+				// if(in_array($request->parameter, $tkn_parameter) && in_array('TKN', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
+				// 		->where('required_parameter', $tkn_parameter)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'TKN')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
 
 				$total_coliform = [
                     "BOD","BOD (B-23-NA)","BOD (B-23)",
