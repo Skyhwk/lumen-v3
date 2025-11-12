@@ -3821,7 +3821,7 @@ class InputParameterController extends Controller
                     $volume_shift = json_encode($volume);
 				}
                 if(count($request->jumlah_coloni) > 1){
-
+                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
