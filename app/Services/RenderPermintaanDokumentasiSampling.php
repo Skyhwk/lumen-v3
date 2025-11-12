@@ -16,7 +16,8 @@ class RenderPermintaanDokumentasiSampling
 {
     private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
     {
-        // // DIRECT TO PRODUCTION
+        // Log::info("Memproses gambar: $originalFileName");
+        // // // DIRECT TO PRODUCTION
         // $url = "https://apps.intilab.com/v3/public/dokumentasi/sampling/$originalFileName";
 
         // if (!$originalFileName) {
@@ -125,6 +126,7 @@ class RenderPermintaanDokumentasiSampling
             $finalImg->save($outputPath, $quality, $supportsWebp ? 'webp' : 'jpg');
 
             unlink($tempCompressed);
+            // Log::info("✅ Watermark berhasil dibuat: " . $outputPath);
             return true;
         } catch (\Exception $e) {
             Log::error("❌ Gagal membuat watermark: " . $e->getMessage() . " on line: " . $e->getLine());
