@@ -4,7 +4,7 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center; width: 100%;">
                     <tr>
-                        <td class="custom" width="50%">No. LHP</td>
+                        <td class="custom" width="50%">No. LHP {!! $showKan ? '<sup><u>a</u></sup>' : '' !!}</td>
                         <td class="custom" width="50%">JENIS SAMPEL</td>
                     </tr>
                     <tr>
@@ -58,27 +58,38 @@
                         <td class="custom5">:</td>
                         <td class="custom5">{{ $parame }}</td>
                     </tr> -->
-                    @if (count($methode_sampling) > 0)
-                        @php $i = 1; @endphp
-                        @foreach ($methode_sampling as $key => $value)
-                            @php
-                                $akre = explode(';', $value)[0] == 'AKREDITASI' ? ' <sup style="border-bottom: 1px solid;">a</sup>' : '';
-                                $metode = implode(' - ', array_slice(explode(';', $value), 1, 2));
-                            @endphp
-                            <tr>
-                                <td class="custom5" width="120">{{ $key == 0 ? 'Metode Sampling' : '' }}</td>
-                                <td class="custom5" width="12">{{ $key == 0 ? ':' : '' }}</td>
-                                <td class="custom5">{{ $i . '. ' . $metode . $akre }}</td>
-                            </tr>
-                            @php $i++; @endphp
-                        @endforeach
-                    @else
-                        <tr>
-                            <td class="custom5" width="120">Metode Sampling</td>
-                            <td class="custom5" width="12">:</td>
-                            <td class="custom5">-</td>
-                        </tr>
-                    @endif
+                    @php
+                        if ($header->metode_sampling != null) {
+                            $methode_sampling = '';
+                            $dataArray = json_decode($header->metode_sampling ?? []);
+
+                            $result = array_map(function ($item) {
+                                if (strpos($item, ';') !== false) {
+                                    $parts = explode(';', $item);
+                                    $accreditation = strpos($parts[0], 'AKREDITASI') !== false;
+                                    $sni = $parts[1] ?? '-';
+                                    return $accreditation ? "{$sni} <sup style=\"border-bottom: 1px solid;\">a</sup>" : $sni;
+                                } else {
+                                    // Jika tidak ada ';', langsung tampilkan itemnya saja
+                                    return $item;
+                                }
+                            }, $dataArray);
+                            foreach ($result as $index => $item) {
+                                if (trim($item) == '-' || trim($item) == '******') {
+                                    $methode_sampling .= "<span><span>" . $item . "</span></span><br>";
+                                } else {
+                                    $methode_sampling .= "<span><span>" . ($index + 1) . ". " . $item . "</span></span><br>";
+                                }
+                            }
+                        } else {
+                            $methode_sampling = '-';
+                        }
+                    @endphp
+                    <tr>
+                        <td class="custom5">Metode Sampling</td>
+                        <td class="custom5">:</td>
+                        <td class="custom5">{!! $methode_sampling !!}</td>
+                    </tr>
                     <!-- <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
                         <td class="custom5" width="12">:</td>

@@ -92,6 +92,10 @@ class DraftEmisiSumberBergerakController extends Controller
                     ], 400);
                 }
 
+                $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+                
                 try {
                     $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
                         return ['page' => (int) $page, 'regulasi' => $item];
@@ -109,18 +113,17 @@ class DraftEmisiSumberBergerakController extends Controller
                     $header->sub_kategori = $request->sub_kategori ?: NULL;
                     $header->type_sampling = $request->kategori_1 ?: NULL;
                     $header->metode_sampling = isset($request->metode_sampling) ? json_encode($request->metode_sampling) : NULL;
-                    $header->tgl_lhp = $request->tanggal_terima;
-                    // $header->tanggal_sampling = $request->tanggal_tugas ?: NULL;
+                    $header->tanggal_lhp = $request->tanggal_lhp;
+                    $header->tgl_tugas = $request->tanggal_terima ?: NULL;
+                    $header->tanggal_sampling = $request->tanggal_terima ?: NULL;
                     $header->periode_analisa = $request->periode_analisa ?: NULL;
                     $header->konsultan = $request->konsultan != '' ? $request->konsultan : NULL;
                     $header->nama_pic = $request->nama_pic ?: NULL;
                     $header->jabatan_pic = $request->jabatan_pic ?: NULL;
                     $header->no_pic = $request->no_pic ?: NULL;
                     $header->email_pic = $request->email_pic ?: NULL;
-                    $header->nama_karyawan = 'Abidah Walfathiyyah';
-                    $header->jabatan_karyawan = 'Technical Control Supervisor';
-                    // $header->nama_karyawan = 'Dwi Meisya Batari';
-                    // $header->jabatan_karyawan = 'Technical Control Manager';
+                    $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+                    $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
                     $header->regulasi = isset($request->regulasi) ? json_encode($request->regulasi) : NULL;
                     $header->regulasi_custom = isset($regulasi_custom) ? json_encode($regulasi_custom) : NULL;
                     $header->save();
@@ -371,7 +374,7 @@ class DraftEmisiSumberBergerakController extends Controller
             }
 
             // Update tanggal LHP dan data pengesahan
-            $dataHeader->tgl_lhp = $request->value;
+            $dataHeader->tanggal_lhp = $request->value;
 
             $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->value)
                 ->orderByDesc('berlaku_mulai')
@@ -556,7 +559,7 @@ class DraftEmisiSumberBergerakController extends Controller
             $no_sampel = $order_details->pluck('no_sampel')->toArray();
 
 
-            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
+            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan','detail')
                 ->whereIn('no_sampel', $no_sampel)
                 ->get();
             if ($lapangan->isNotEmpty()) {
@@ -580,7 +583,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                     $mainData[] = [
                         'no_sampel' => $lapangan->no_sampel,
-                        'nama_kendaraan' => $kendaraan->merk_kendaraan ?? '-',
+                        'nama_kendaraan' => $lapangan->detail->keterangan_1 ?? $kendaraan->merk_kendaraan ?? '-',
                         'bobot' => $kendaraan->bobot_kendaraan ?? '-',
                         'tahun' => $kendaraan->tahun_pembuatan ?? '-',
                         'hasil_co' => $lapangan->co,

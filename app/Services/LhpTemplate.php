@@ -371,7 +371,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori === 4 && $sub_kategori === 27 || $sub_kategori === 11) {
+            } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11)) {
                 $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
                 
@@ -382,7 +382,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori === 5) {
+            } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
                 $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
                 

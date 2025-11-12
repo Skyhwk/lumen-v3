@@ -16,13 +16,16 @@
             <td style="width: 33.33%; text-align: center; vertical-align: middle;">
                 <span style="font-weight: bold; border-bottom: 1px solid #000;">LAPORAN HASIL PENGUJIAN</span>
             </td>
-            <td style="width: 33.33%; text-align: right; padding-right: 50px;">
-                @if ($showKan)
-                <img src="{{ public_path('img/logo_kan.png') }}" alt="KAN" style="height: 50px;">
-                @endif
-            </td>
+            @if ($showKan)
+                <td style="width: 33.33%; text-align: right; padding-right: 50px; height: 50px;">
+                    <img src="{{ public_path('img/logo_kan.png') }}" alt="KAN" style="height: 50px;">
+                </td>
+            @else 
+                <td style="width: 33.33%; text-align: right; padding-right: 50px; height: 55px;">
+                </td>
+            @endif
         </tr>
     @endif
 </table>
 
-@include($view . '.customRight', ['header' => $header, 'detail' => $detail, 'page' => $page, 'mode' => $mode])
+@include($view . '.customRight', ['header' => $header, 'detail' => $detail, 'page' => $page, 'mode' => $mode, 'showKan' => $showKan])

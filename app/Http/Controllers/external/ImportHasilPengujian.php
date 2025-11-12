@@ -10,6 +10,7 @@ use App\Models\Subkontrak;
 use App\Models\OrderDetail;
 use App\Models\WsValueEmisiCerobong;
 use App\Models\WsValueUdara;
+use App\Models\Parameter;
 
 class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 {
@@ -39,62 +40,156 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 
             $noSampel = $this->getNilaiAkhirSel($worksheet, "Q6");
 
-            $jenisSampel = $this->getNilaiAkhirSel($worksheet, "T6");
-            if ($jenisSampel !== 'Udara Ambient') return response()->json(['message' => 'Ini bener file udara ambient?'], 400);
+            // $jenisSampel = $this->getNilaiAkhirSel($worksheet, "T6");
+            // if ($jenisSampel !== 'Udara Ambient') return response()->json(['message' => 'Ini bener file udara ambient?'], 400);
 
             $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
             if (!$orderDetail) return response()->json(['message' => 'Order Detail ga ada'], 400);
+            
+            $parameters = [];
+            $idHeader = [];
+
+            $parameterUji = json_decode($orderDetail->parameter, TRUE);
+
+            $parameterUji = array_map(function ($item) {
+                return \explode(';', $item)[1];
+            }, $parameterUji);
 
             for ($row = $startRow; $row <= $highestRow; $row += 2) { // += 2 karna dimerge
+                $durasi = $this->getNilaiAkhirSel($worksheet, "E{$row}") ?? null;
                 $parameter = $this->getNilaiAkhirSel($worksheet, "D{$row}");
-                $hasilUji = $this->getNilaiAkhirSel($worksheet, "F{$row}");
 
+                if($parameter == 'PM ₁₀' && $durasi != '1 Jam') $parameter = "PM 10 ({$durasi})";
+                if($parameter == 'PM ₁₀' && $durasi == '1 Jam') $parameter = "PM 10";
+
+                if($parameter == 'PM ₂,₅' && $durasi != '1 Jam') $parameter = "PM 2.5 ({$durasi})";
+                if($parameter == 'PM ₂,₅' && $durasi == '1 Jam') $parameter = "PM 2.5";
+
+                if($parameter == 'Hidrogen Sulfida (H₂S)' && $durasi == '1 Jam') $parameter = 'Sulfur (H₂S)';
+                if($parameter == 'Hidrogen Sulfida (H₂S)' && $durasi != '1 Jam') $parameter = "H2S ({$durasi})";
+
+                if($parameter == 'Amoniak (NH₃)' && $durasi != '1 Jam') $parameter = 'NH3 ({$durasi})';
+                if($parameter == 'Amoniak (NH₃)' && $durasi == '1 Jam') $parameter = 'NH3';
+
+                if($parameter == 'Total Partikulat' && $durasi != '1 Jam') $parameter = "TSP ({$durasi})";
+                if($parameter == 'Total Partikulat' && $durasi == '1 Jam') $parameter = "TSP";
+
+                if($parameter == 'Timah Hitam (Pb)' && $durasi == '1 Jam') $parameter = "Pb";
+                if($parameter == 'Timah Hitam (Pb)' && $durasi != '1 Jam') $parameter = "Pb ({$durasi})";
+
+                if($parameter == 'Hidrokarbon Non Metana (NMHC)' && $durasi != '1 Jam') $parameter = "HCNM ({$durasi})";
+                if($parameter == 'Hidrokarbon Non Metana (NMHC)' && $durasi == '1 Jam') $parameter = "HCNM";
+                if($parameter == 'Hidrokarbon (HC) - Non-Methane') $parameter = "HCNM";
+                
+                if($parameter == 'Karbon Monoksida (CO)' && $durasi != '1 Jam') $parameter = "CO ({$durasi})";
+                if($parameter == 'Karbon Monoksida (CO)' && $durasi == '1 Jam') $parameter = "C O";
+                
+                if($parameter == 'Karbon Dioksida (CO₂)' && $durasi != '1 Jam') $parameter = "CO2 ({$durasi})";
+                if($parameter == 'Karbon Dioksida (CO₂)' && $durasi == '1 Jam') $parameter = "CO2";
+                
+                if($parameter == 'Sulfur Dioksida (SO₂)' && $durasi != '1 Jam') $parameter = "SO2 ({$durasi})";
+                if($parameter == 'Sulfur Dioksida (SO₂)' && $durasi == '1 Jam') $parameter = "SO2";
+                
+                if($parameter == 'Nitrogen Dioksida (NO₂)' && $durasi != '1 Jam') $parameter = "NO2 ({$durasi})";
+                if($parameter == 'Nitrogen Dioksida (NO₂)' && $durasi == '1 Jam') $parameter = "NO2";
+
+                if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)' && $durasi != '1 Jam') $parameter = "O3 ({$durasi})";
+                if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)' && $durasi == '1 Jam') $parameter = "O3";
+                
+                if($parameter == 'Ozon (O₃)' && $durasi != '1 Jam') $parameter = "O3 ({$durasi})";
+                if($parameter == 'Ozon (O₃)' && $durasi == '1 Jam') $parameter = "O3";
+
+                $hasilUji = $this->getNilaiAkhirSel($worksheet, "F{$row}");
+                
                 if (!$parameter) break;
 
-                $subkontrak = Subkontrak::where('no_sampel', $noSampel)->where('parameter', $parameter)->exists();
-                if ($subkontrak) return response()->json(['message' => 'Subkontrak udah ada'], 400);
-
-                $subkontrak = new Subkontrak();
-                $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
-                $subkontrak->no_sampel = $noSampel;
-                $subkontrak->parameter = $parameter;
-                $subkontrak->jenis_pengujian = 'sample';
-                $subkontrak->lhps = 0;
-                // $subkontrak->is_approve = 1;
-                // $subkontrak->approved_by = 'System';
-                // $subkontrak->approved_at = date('Y-m-d H:i:s');
-                $subkontrak->created_by = 'System';
-                $subkontrak->created_at = date('Y-m-d H:i:s');
-                $subkontrak->save();
+                $cekParameter = Parameter::where('nama_regulasi', $parameter)
+                ->whereIn('nama_lab', $parameterUji)
+                ->where('id_kategori', 4)
+                ->first();               
+                
+                $parameter = $cekParameter->nama_lab ?? $parameter;
+                $id_subkontrak = null;
+                $validasi = WsValueUdara::with([
+                            'lingkungan',
+                            'partikulat',
+                            'direct_lain',
+                            'subkontrak'
+                        ])->where('no_sampel', $noSampel)
+                        ->where(function ($query) use ($parameter) {
+                            $query->whereHas('lingkungan',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('partikulat',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('direct_lain',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('subkontrak',fn($r) => $r->where('parameter', $parameter));
+                        })
+                        ->first();
+                
+                if($validasi == null) {
+                    $subkontrak = new Subkontrak();
+                    $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
+                    $subkontrak->no_sampel = $noSampel;
+                    $subkontrak->parameter = $parameter;
+                    $subkontrak->jenis_pengujian = 'sample';
+                    $subkontrak->lhps = 0;
+                    $subkontrak->is_approve = 1;
+                    $subkontrak->created_by = 'System';
+                    $subkontrak->created_at = date('Y-m-d H:i:s');
+                    $subkontrak->save();
+                    $id_subkontrak = $subkontrak->id;
+                }
 
                 $hasilUji = str_replace(',', '.', $hasilUji);
 
-                $wsValueUdara = new WsValueUdara();
-                $wsValueUdara->id_subkontrak = $subkontrak->id;
-                $wsValueUdara->id_po = $orderDetail->id;
-                $wsValueUdara->no_sampel = $noSampel;
-                $wsValueUdara->f_koreksi_1 = $hasilUji;
-                $wsValueUdara->f_koreksi_2 = $hasilUji;
-                $wsValueUdara->f_koreksi_3 = $hasilUji;
-                $wsValueUdara->f_koreksi_4 = $hasilUji;
-                $wsValueUdara->f_koreksi_5 = $hasilUji;
-                $wsValueUdara->f_koreksi_6 = $hasilUji;
-                $wsValueUdara->f_koreksi_7 = $hasilUji;
-                $wsValueUdara->f_koreksi_8 = $hasilUji;
-                $wsValueUdara->f_koreksi_9 = $hasilUji;
-                $wsValueUdara->f_koreksi_10 = $hasilUji;
-                $wsValueUdara->f_koreksi_11 = $hasilUji;
-                $wsValueUdara->f_koreksi_12 = $hasilUji;
-                $wsValueUdara->f_koreksi_13 = $hasilUji;
-                $wsValueUdara->f_koreksi_14 = $hasilUji;
-                $wsValueUdara->f_koreksi_15 = $hasilUji;
-                $wsValueUdara->f_koreksi_16 = $hasilUji;
-                $wsValueUdara->f_koreksi_17 = $hasilUji;
-                $wsValueUdara->save();
+                if($id_subkontrak == null){
+                    $wsValueUdara = WsValueUdara::where('id', $validasi->id)->first();
+                    $wsValueUdara->f_koreksi_1 = $hasilUji;
+                    $wsValueUdara->f_koreksi_2 = $hasilUji;
+                    $wsValueUdara->f_koreksi_3 = $hasilUji;
+                    $wsValueUdara->f_koreksi_4 = $hasilUji;
+                    $wsValueUdara->f_koreksi_5 = $hasilUji;
+                    $wsValueUdara->f_koreksi_6 = $hasilUji;
+                    $wsValueUdara->f_koreksi_7 = $hasilUji;
+                    $wsValueUdara->f_koreksi_8 = $hasilUji;
+                    $wsValueUdara->f_koreksi_9 = $hasilUji;
+                    $wsValueUdara->f_koreksi_10 = $hasilUji;
+                    $wsValueUdara->f_koreksi_11 = $hasilUji;
+                    $wsValueUdara->f_koreksi_12 = $hasilUji;
+                    $wsValueUdara->f_koreksi_13 = $hasilUji;
+                    $wsValueUdara->f_koreksi_14 = $hasilUji;
+                    $wsValueUdara->f_koreksi_15 = $hasilUji;
+                    $wsValueUdara->f_koreksi_16 = $hasilUji;
+                    $wsValueUdara->f_koreksi_17 = $hasilUji;
+                    $wsValueUdara->save();
+                } else {
+                    $wsValueUdara = new WsValueUdara();
+                    $wsValueUdara->id_subkontrak = $id_subkontrak;
+                    $wsValueUdara->id_po = $orderDetail->id;
+                    $wsValueUdara->no_sampel = $noSampel;
+                    $wsValueUdara->f_koreksi_1 = $hasilUji;
+                    $wsValueUdara->f_koreksi_2 = $hasilUji;
+                    $wsValueUdara->f_koreksi_3 = $hasilUji;
+                    $wsValueUdara->f_koreksi_4 = $hasilUji;
+                    $wsValueUdara->f_koreksi_5 = $hasilUji;
+                    $wsValueUdara->f_koreksi_6 = $hasilUji;
+                    $wsValueUdara->f_koreksi_7 = $hasilUji;
+                    $wsValueUdara->f_koreksi_8 = $hasilUji;
+                    $wsValueUdara->f_koreksi_9 = $hasilUji;
+                    $wsValueUdara->f_koreksi_10 = $hasilUji;
+                    $wsValueUdara->f_koreksi_11 = $hasilUji;
+                    $wsValueUdara->f_koreksi_12 = $hasilUji;
+                    $wsValueUdara->f_koreksi_13 = $hasilUji;
+                    $wsValueUdara->f_koreksi_14 = $hasilUji;
+                    $wsValueUdara->f_koreksi_15 = $hasilUji;
+                    $wsValueUdara->f_koreksi_16 = $hasilUji;
+                    $wsValueUdara->f_koreksi_17 = $hasilUji;
+                    $wsValueUdara->save();
+                }
+                $parameters[] = $parameter;
+                $idHeader[] = $wsValueUdara->id;
             }
 
             DB::commit();
-            return response()->json(['message' => 'dah kelar'], 200);
+            return response()->json(['message' => 'dah kelar', 'parameters' => $parameters, 'idHeader' => $idHeader], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             dd($th);
@@ -118,69 +213,217 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 
             $startRow = 7;
             $maxCol = 'I';
+            $isDuration = false;
             $highestRow = $worksheet->getHighestDataRow($maxCol);
-
             $noSampel = $this->getNilaiAkhirSel($worksheet, "P6");
 
-            $jenisSampel = $this->getNilaiAkhirSel($worksheet, "S6");
-            if ($jenisSampel !== 'Lingkungan Kerja') return response()->json(['message' => 'Ini bener file udara lingkungan kerja?'], 400);
+            if($noSampel == ''){
+                $noSampel = $this->getNilaiAkhirSel($worksheet, "Q6");
+                $isDuration = true;
+            }
 
+            $noSampel = trim($noSampel);
+            // $jenisSampel = $this->getNilaiAkhirSel($worksheet, "S6");
+            // if ($jenisSampel !== 'Lingkungan Kerja') return response()->json(['message' => 'Ini bener file udara lingkungan kerja?'], 400);
+            if($noSampel == '' || $noSampel == "Lingkungan Kerja") return response()->json(['message' => 'Format Excel tidak dapat di import'], 400);
             $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
-            if (!$orderDetail) return response()->json(['message' => 'Order Detail ga ada'], 400);
+            if ($orderDetail == null) return response()->json(['message' => "{$noSampel} nomor tidak dapat ditemukan atau ada perbedaan karakter."], 400);
+
+            $parameters = [];
+            $idHeader = [];
+            
+            $parameterUji = json_decode($orderDetail->parameter, TRUE);
+
+            $parameterUji = array_map(function ($item) {
+                return \explode(';', $item)[1];
+            }, $parameterUji);
 
             for ($row = $startRow; $row <= $highestRow; $row += 2) { // += 2 karna dimerge
                 $parameter = $this->getNilaiAkhirSel($worksheet, "D{$row}");
-                $hasilUji = $this->getNilaiAkhirSel($worksheet, "E{$row}");
+                
+
+                if($isDuration){
+                    $hasilUji = $this->getNilaiAkhirSel($worksheet, "F{$row}");
+                    $durasi = $this->getNilaiAkhirSel($worksheet, "E{$row}") ?? null;
+
+                    if($parameter == 'PM ₁₀' && $durasi != '1 Jam') $parameter = "PM 10 ({$durasi})";
+                    if($parameter == 'PM ₁₀' && $durasi == '1 Jam') $parameter = "PM 10";
+
+                    if($parameter == 'PM ₂,₅' && $durasi != '1 Jam') $parameter = "PM 2.5 ({$durasi})";
+                    if($parameter == 'PM ₂,₅' && $durasi == '1 Jam') $parameter = "PM 2.5";
+
+                    if($parameter == 'Hidrogen Sulfida (H₂S)' && $durasi == '1 Jam') $parameter = 'Sulfur (H₂S)';
+                    if($parameter == 'Hidrogen Sulfida (H₂S)' && $durasi != '1 Jam') $parameter = "H2S ({$durasi})";
+
+                    if($parameter == 'Amoniak (NH₃)' && $durasi != '1 Jam') $parameter = 'NH3 ({$durasi})';
+                    if($parameter == 'Amoniak (NH₃)' && $durasi == '1 Jam') $parameter = 'NH3';
+
+                    if($parameter == 'Total Partikulat' && $durasi != '1 Jam') $parameter = "TSP ({$durasi})";
+                    if($parameter == 'Total Partikulat' && $durasi == '1 Jam') $parameter = "TSP";
+
+                    if($parameter == 'Timah Hitam (Pb)' && $durasi == '1 Jam') $parameter = "Pb";
+                    if($parameter == 'Timah Hitam (Pb)' && $durasi != '1 Jam') $parameter = "Pb ({$durasi})";
+
+                    if($parameter == 'Hidrokarbon Non Metana (NMHC)' && $durasi != '1 Jam') $parameter = "HCNM ({$durasi})";
+                    if($parameter == 'Hidrokarbon Non Metana (NMHC)' && $durasi == '1 Jam') $parameter = "HCNM";
+                    if($parameter == 'Hidrokarbon (HC) - Non-Methane') $parameter = "HCNM";
+                    
+                    if($parameter == 'Karbon Monoksida (CO)' && $durasi != '1 Jam') $parameter = "CO ({$durasi})";
+                    if($parameter == 'Karbon Monoksida (CO)' && $durasi == '1 Jam') $parameter = "C O";
+                    
+                    if($parameter == 'Karbon Dioksida (CO₂)' && $durasi != '1 Jam') $parameter = "CO2 ({$durasi})";
+                    if($parameter == 'Karbon Dioksida (CO₂)' && $durasi == '1 Jam') $parameter = "CO2";
+                    
+                    if($parameter == 'Sulfur Dioksida (SO₂)' && $durasi != '1 Jam') $parameter = "SO2 ({$durasi})";
+                    if($parameter == 'Sulfur Dioksida (SO₂)' && $durasi == '1 Jam') $parameter = "SO2";
+                    
+                    if($parameter == 'Nitrogen Dioksida (NO₂)' && $durasi != '1 Jam') $parameter = "NO2 ({$durasi})";
+                    if($parameter == 'Nitrogen Dioksida (NO₂)' && $durasi == '1 Jam') $parameter = "NO2";
+
+                    if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)' && $durasi != '1 Jam') $parameter = "O3 ({$durasi})";
+                    if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)' && $durasi == '1 Jam') $parameter = "O3";
+                    
+                    if($parameter == 'Ozon (O₃)' && $durasi != '1 Jam') $parameter = "O3 ({$durasi})";
+                    if($parameter == 'Ozon (O₃)' && $durasi == '1 Jam') $parameter = "O3";
+
+                    if($parameter == 'Benzena (C₆H₆)' && $durasi != '1 Jam') $parameter = "Benzene ({$durasi})";
+                    if($parameter == 'Benzena (C₆H₆)' && $durasi == '1 Jam') $parameter = "Benzene";
+
+                    if($parameter == 'Toluena (C₇H₈)' && $durasi != '1 Jam') $parameter = "Toluene ({$durasi})";
+                    if($parameter == 'Toluena (C₇H₈)' && $durasi == '1 Jam') $parameter = "Toluene";
+
+                    if($parameter == 'Xylena (C₈H₁₀)' && $durasi != '1 Jam') $parameter = "Xylene ({$durasi})";
+                    if($parameter == 'Xylena (C₈H₁₀)' && $durasi == '1 Jam') $parameter = "Xylene";
+                
+                } else {
+                    $hasilUji = $this->getNilaiAkhirSel($worksheet, "E{$row}");
+
+                    if($parameter == 'PM ₁₀') $parameter = "PM 10";
+                    if($parameter == 'PM ₂,₅') $parameter = "PM 2.5";
+
+                    if($parameter == 'Hidrogen Sulfida (H₂S)') $parameter = 'Sulfur (H₂S)';
+
+                    if($parameter == 'Amoniak (NH₃)') $parameter = 'NH3';
+
+                    if($parameter == 'Total Partikulat') $parameter = "TSP";
+
+                    if($parameter == 'Timah Hitam (Pb)') $parameter = "Pb";
+
+                    if($parameter == 'Hidrokarbon Non Metana (NMHC)') $parameter = "HCNM";
+                    
+                    if($parameter == 'Karbon Monoksida (CO)') $parameter = "C O";
+                    
+                    if($parameter == 'Karbon Dioksida (CO₂)') $parameter = "CO2";
+                    
+                    if($parameter == 'Sulfur Dioksida (SO₂)') $parameter = "SO2";
+                    
+                    if($parameter == 'Nitrogen Dioksida (NO₂)') $parameter = "NO2";
+
+                    if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)') $parameter = "O3";
+                    
+                    if($parameter == 'Ozon (O₃)') $parameter = "O3";
+
+                    if($parameter == 'Benzena (C₆H₆)') $parameter = "Benzene";
+
+                    if($parameter == 'Toluena (C₇H₈)') $parameter = "Toluene";
+
+                    if($parameter == 'Xylena (C₈H₁₀)') $parameter = "Xylene";
+                    
+                }
 
                 if (!$parameter) break;
-
-                $subkontrak = Subkontrak::where('no_sampel', $noSampel)->where('parameter', $parameter)->exists();
-                if ($subkontrak) return response()->json(['message' => 'Subkontrak udah ada'], 400);
-
-                $subkontrak = new Subkontrak();
-                $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
-                $subkontrak->no_sampel = $noSampel;
-                $subkontrak->parameter = $parameter;
-                $subkontrak->jenis_pengujian = 'sample';
-                $subkontrak->lhps = 0;
-                // $subkontrak->is_approve = 1;
-                // $subkontrak->approved_by = 'System';
-                // $subkontrak->approved_at = date('Y-m-d H:i:s');
-                $subkontrak->created_by = 'System';
-                $subkontrak->created_at = date('Y-m-d H:i:s');
-                $subkontrak->save();
+                
+                $cekParameter = Parameter::where('nama_regulasi', $parameter)
+                ->whereIn('nama_lab', $parameterUji)
+                ->where('id_kategori', 4)
+                ->first();               
+                
+                $parameter = $cekParameter->nama_lab ?? $parameter;
+                $id_subkontrak = null;
+                $validasi = WsValueUdara::with([
+                            'lingkungan',
+                            'partikulat',
+                            'direct_lain',
+                            'subkontrak',
+                            'microbiologi'
+                        ])->where('no_sampel', $noSampel)
+                        ->where(function ($query) use ($parameter) {
+                            $query->whereHas('lingkungan',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('partikulat',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('direct_lain',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('subkontrak',fn($r) => $r->where('parameter', $parameter))
+                                ->orWhereHas('microbiologi',fn($r) => $r->where('parameter', $parameter));
+                        })
+                        ->first();
+                if($validasi == null) {
+                    $subkontrak = new Subkontrak();
+                    $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
+                    $subkontrak->no_sampel = $noSampel;
+                    $subkontrak->parameter = $parameter;
+                    $subkontrak->jenis_pengujian = 'sample';
+                    $subkontrak->lhps = 0;
+                    $subkontrak->is_approve = 1;
+                    $subkontrak->created_by = 'System';
+                    $subkontrak->created_at = date('Y-m-d H:i:s');
+                    $subkontrak->save();
+                    $id_subkontrak = $subkontrak->id;
+                }
 
                 $hasilUji = str_replace(',', '.', $hasilUji);
 
-                $wsValueUdara = new WsValueUdara();
-                $wsValueUdara->id_subkontrak = $subkontrak->id;
-                $wsValueUdara->id_po = $orderDetail->id;
-                $wsValueUdara->no_sampel = $noSampel;
-                $wsValueUdara->f_koreksi_1 = $hasilUji;
-                $wsValueUdara->f_koreksi_2 = $hasilUji;
-                $wsValueUdara->f_koreksi_3 = $hasilUji;
-                $wsValueUdara->f_koreksi_4 = $hasilUji;
-                $wsValueUdara->f_koreksi_5 = $hasilUji;
-                $wsValueUdara->f_koreksi_6 = $hasilUji;
-                $wsValueUdara->f_koreksi_7 = $hasilUji;
-                $wsValueUdara->f_koreksi_8 = $hasilUji;
-                $wsValueUdara->f_koreksi_9 = $hasilUji;
-                $wsValueUdara->f_koreksi_10 = $hasilUji;
-                $wsValueUdara->f_koreksi_11 = $hasilUji;
-                $wsValueUdara->f_koreksi_12 = $hasilUji;
-                $wsValueUdara->f_koreksi_13 = $hasilUji;
-                $wsValueUdara->f_koreksi_14 = $hasilUji;
-                $wsValueUdara->f_koreksi_15 = $hasilUji;
-                $wsValueUdara->f_koreksi_16 = $hasilUji;
-                $wsValueUdara->f_koreksi_17 = $hasilUji;
-                $wsValueUdara->save();
+                if($id_subkontrak == null){
+                    $wsValueUdara = WsValueUdara::where('id', $validasi->id)->first();
+                    $wsValueUdara->f_koreksi_1 = $hasilUji;
+                    $wsValueUdara->f_koreksi_2 = $hasilUji;
+                    $wsValueUdara->f_koreksi_3 = $hasilUji;
+                    $wsValueUdara->f_koreksi_4 = $hasilUji;
+                    $wsValueUdara->f_koreksi_5 = $hasilUji;
+                    $wsValueUdara->f_koreksi_6 = $hasilUji;
+                    $wsValueUdara->f_koreksi_7 = $hasilUji;
+                    $wsValueUdara->f_koreksi_8 = $hasilUji;
+                    $wsValueUdara->f_koreksi_9 = $hasilUji;
+                    $wsValueUdara->f_koreksi_10 = $hasilUji;
+                    $wsValueUdara->f_koreksi_11 = $hasilUji;
+                    $wsValueUdara->f_koreksi_12 = $hasilUji;
+                    $wsValueUdara->f_koreksi_13 = $hasilUji;
+                    $wsValueUdara->f_koreksi_14 = $hasilUji;
+                    $wsValueUdara->f_koreksi_15 = $hasilUji;
+                    $wsValueUdara->f_koreksi_16 = $hasilUji;
+                    $wsValueUdara->f_koreksi_17 = $hasilUji;
+                    $wsValueUdara->save();
+                } else {
+                    $wsValueUdara = new WsValueUdara();
+                    $wsValueUdara->id_subkontrak = $id_subkontrak;
+                    $wsValueUdara->id_po = $orderDetail->id;
+                    $wsValueUdara->no_sampel = $noSampel;
+                    $wsValueUdara->f_koreksi_1 = $hasilUji;
+                    $wsValueUdara->f_koreksi_2 = $hasilUji;
+                    $wsValueUdara->f_koreksi_3 = $hasilUji;
+                    $wsValueUdara->f_koreksi_4 = $hasilUji;
+                    $wsValueUdara->f_koreksi_5 = $hasilUji;
+                    $wsValueUdara->f_koreksi_6 = $hasilUji;
+                    $wsValueUdara->f_koreksi_7 = $hasilUji;
+                    $wsValueUdara->f_koreksi_8 = $hasilUji;
+                    $wsValueUdara->f_koreksi_9 = $hasilUji;
+                    $wsValueUdara->f_koreksi_10 = $hasilUji;
+                    $wsValueUdara->f_koreksi_11 = $hasilUji;
+                    $wsValueUdara->f_koreksi_12 = $hasilUji;
+                    $wsValueUdara->f_koreksi_13 = $hasilUji;
+                    $wsValueUdara->f_koreksi_14 = $hasilUji;
+                    $wsValueUdara->f_koreksi_15 = $hasilUji;
+                    $wsValueUdara->f_koreksi_16 = $hasilUji;
+                    $wsValueUdara->f_koreksi_17 = $hasilUji;
+                    $wsValueUdara->save();
+                }
+                $parameters[] = $parameter;
+                $idHeader[] = $wsValueUdara->id;
             }
 
             DB::commit();
-            return response()->json(['message' => 'dah kelar'], 200);
+            return response()->json(['message' => 'Done', 'parameters' => $parameters, 'idHeader' => $idHeader], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
+            return response()->json(['message' => $th->getMessage() . ' ' . $th->getLine()], 400);
         }
     }
 

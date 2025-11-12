@@ -3894,4 +3894,13 @@ class TestingController extends Controller
             'file_type' => $fileType
         ];
     }
+
+    public function recoverInvoice(Request $request) {
+        $invoices = Invoice::where(function ($query) {
+            $query->where('updated_at', '>=', Carbon::now()->startOfDay());
+        })->get()->pluck('no_invoice')->toArray();
+
+        return response()->json($invoices);
+    
+    }
 }

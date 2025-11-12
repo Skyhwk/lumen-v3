@@ -1465,6 +1465,17 @@ class ReadyOrderController extends Controller
                             $param_map[$param->nama_parameter] = $param;
                         }
 
+                        $invalid = collect($param_map)->filter(function($p){
+                            return in_array($p->regen, ['-', '', null], true);
+                        });
+
+                        if ($invalid->isNotEmpty()) {
+                            $names = $invalid->pluck('nama_parameter')->implode(', ');
+                            return response()->json([
+                                'message' => 'Regen belum diset untuk parameter ' . $names . ' silahkan hubungi teknis.!'
+                            ], 400);
+                        }
+
                         $botol_volumes = [];
                         foreach ($value->parameter as $parameter) {
                             $param_name = explode(';', $parameter)[1];

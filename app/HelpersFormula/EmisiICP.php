@@ -56,9 +56,11 @@ class EmisiICP
         $C1 = number_format($C / 1000, 4, ".", "");
 
         // C (ug/m3) = (((Ct - Cb)*Vt*S/St) / (Rerata Laju Alir * t))
-        $C3 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
+        // $C3 = number_format(((floatval($ks) - floatval($kb)) * floatval($data->vs) * floatval($data->st) / (($data->flow * $data->durasi_dry))), 4, ".", "");
+        $C3 = $C;
 
-        $C4 = number_format($C3 / 1000, 4, ".", "");
+        // $C4 = number_format($C3 / 1000, 4, ".", "");
+        $C4 = $C1;
 
 
         switch ($data->parameter) {
@@ -80,7 +82,7 @@ class EmisiICP
                 }
                 break;
             case 'Co':
-                $C2 = number_format(24.45 * ($C1 / 28.01), 4, ".", "");  // ppm
+                $C2 = number_format(24.45 * ($C1 / 58.93), 4, ".", "");  // ppm
                 #MDL
                 if ($C4 < 0.0075) {
                     $C4 = "<0.0075";

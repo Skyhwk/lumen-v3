@@ -161,14 +161,13 @@ class FdlEmisiCerobongController extends Controller
             }
             $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 
                 'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx', 'Effisiensi Pembakaran', 'Eff. Pembakaran', 
-                'CO', 'C O', 'SO2 (P)', 'CO (P)', 'O2 (P)'
+                'CO', 'C O', 'SO2 (P)', 'CO (P)', 'O2 (P)', "Tekanan Udara"
             ];
                         // ambil nama parameter dari order
             $orderedParameters = array_column($parameterList, 'nama');
 
             // filter, hanya parameter yang ada di whitelist
             $parameters = array_values(array_intersect($orderedParameters, $paramList));
-            
 
             foreach ($parameters as $key => $value) {
                 $parameter = Parameter::where('nama_lab', $value)
@@ -185,15 +184,15 @@ class FdlEmisiCerobongController extends Controller
                     $function = $functionObj->function;
                 }
 
-                if($value == 'NO2' || $value == 'NOx' || $value == 'NO' || $value == 'SO2'){
+                if (in_array($value, $paramList)) {
                     $function = 'EmisiCerobongDirect';
                 }
                 
                 $data_kalkulasi = AnalystFormula::where('function', $function)
-                ->where('data', $data)
-                ->where('id_parameter', $parameter->nama_lab)
-                ->process();
-                
+                    ->where('data', $data)
+                    ->where('id_parameter', $parameter->nama_lab)
+                    ->process();
+
                 $header = EmisiCerobongHeader::firstOrNew([
                     'no_sampel' => $data->no_sampel,
                     'id_parameter' => $parameter->id,
@@ -247,8 +246,6 @@ class FdlEmisiCerobongController extends Controller
                 $valueEmisi->save();
 
             }
-
-
             $data->is_approve = 1;
             $data->approved_by = $this->karyawan;
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');

@@ -4,13 +4,13 @@
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
-                    <th width="25" class="pd-5-solid-top-center" >NO</th>
-                    <th width="200" class="pd-5-solid-top-center" >PARAMETER</th>
-                    <th width="60" class="pd-5-solid-top-center" >DURASI</th>
-                    <th width="60" class="pd-5-solid-top-center" >HASIL UJI</th>
-                    <th width="50" class="pd-5-solid-top-center" >BAKU MUTU</th>
-                    <th width="60" class="pd-5-solid-top-center" >SATUAN</th>
-                    <th width="220" class="pd-5-solid-top-center" >SPESIFIKASI METODE</th>
+                    <th width="25" class="pd-5-solid-top-center" style="white-space: nowrap;" >NO</th>
+                    <th width="200" class="pd-5-solid-top-center"style="white-space: nowrap;" >PARAMETER</th>
+                    <th width="60" class="pd-5-solid-top-center" style="white-space: nowrap;">DURASI</th>
+                    <th width="60" class="pd-5-solid-top-center" style="white-space: nowrap;">HASIL UJI</th>
+                    <th width="50" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>
+                    <th width="60" class="pd-5-solid-top-center" style="white-space: nowrap;">SATUAN</th>
+                    <th width="220" class="pd-5-solid-top-center" style="white-space: nowrap;">SPESIFIKASI METODE</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,7 +29,7 @@
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ str_replace('.', ',', $v['hasil_uji']) }}&nbsp;{{ $v['attr'] }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $bakuMutu }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $satuan }}</td>
-                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{{ $v['methode'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}" style="white-space: nowrap;">{{ $v['methode'] }}</td>
                     </tr>
                 @endforeach
             </tbody>

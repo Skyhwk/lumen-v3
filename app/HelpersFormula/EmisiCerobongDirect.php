@@ -17,17 +17,18 @@ class EmisiCerobongDirect {
         // set NULL
         $c1 = $c2 = $c3 = $c4 = $c5 = $c6 = $c7 = $c8 = $c9 = $c10 = $c11 = NULL;
 
-
         // Daftar parameter
         $paramCO2 = ["CO2", "CO2 (ESTB)"];
         $paramO2 = ["O2", "O2 (ESTB)"];
         $paramOpasitas = ["Opasitas", "Opasitas (ESTB)"];
         $paramSuhu = ["Suhu"];
         $paramVelocity = ["Velocity"];
-        $paramNO2 = ["NO2","NOx", "NO-NO2", "NOx-NO2"];
+        $paramNO2 = ["NO2", "NO-NO2"];
+        $paramNOX = ["NOx", "NOx-NO2"];
         $paramNO = ["NO"];
         $paramSO2 = ["SO2"];
         $paramCO = ["CO", "C O"];
+        $paramTekananUdara = ["Tekanan Udara"];
         $paramEffisiensiPembakaran = ["Effisiensi Pembakaran","Eff. Pembakaran"];
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
@@ -62,10 +63,10 @@ class EmisiCerobongDirect {
 
         // Hanya proses kalau jumlah data valid
         if (in_array($id_parameter, $paramCO2)) {
-            $c6 = $data->CO2 < 0.1 ? '<0.1' : round($data->CO2, 1);
+            $c6 = $data->CO2 < 0.1 ? '<0.1' : round($data->CO2, 2);
             $satuan = '%';
         } elseif (in_array($id_parameter, $paramO2)) {
-            $c6 = $data->O2 < 0.1 ? '<0.1' : round($data->O2, 1);
+            $c6 = $data->O2 < 0.1 ? '<0.1' : round($data->O2, 2);
             $satuan = '%';
         } elseif (in_array($id_parameter, $paramOpasitas)) {
             // Ubah string JSON jadi array angka
@@ -76,7 +77,7 @@ class EmisiCerobongDirect {
                 $rataRata = array_sum($values) / count($values);
 
                 // Jika hasil kurang dari 0.83, tampilkan "<0.83", kalau tidak tampilkan angka dibulatkan 1 desimal
-                $c6 = $rataRata < 0.83 ? '<0.83' : round($rataRata, 1);
+                $c6 = $rataRata < 0.83 ? '<0.83' : round($rataRata, 2);
                 $satuan = '%';
             } else {
                 // Kalau datanya kosong
@@ -84,70 +85,85 @@ class EmisiCerobongDirect {
                 $satuan = null;
             }
         } elseif (in_array($id_parameter, $paramSuhu)) {
-            $c7 = $data->T_Flue < 0.1 ? '<0.1' : round($data->T_Flue, 1);
+            $c7 = $data->T_Flue < 0.1 ? '<0.1' : round($data->T_Flue, 2);
             $satuan = '°C';
         } elseif (in_array($id_parameter, $paramVelocity)) {
-
-            // Ambil semua angka desimal dari string velocity
-            preg_match_all('/\d+(\.\d+)?/', $data->velocity, $matches);
-
-            // Ambil hasil angka dalam array
-            $angka = $matches[0];
-
-            if (!empty($angka)) {
-                // Hitung rata-rata
+           // Ambil hanya angka setelah tanda ":" (bukan angka pada Data-1)
+            preg_match_all('/:\s*(\d+(?:\.\d+)?)/', $data->velocity, $matches);
+            // Ambil hanya group angka
+            $angka = array_map('floatval', $matches[1]); // group 1 = angka setelah ':'
+            if (count($angka) > 0) {
                 $c10 = array_sum($angka) / count($angka);
-                $c10 = $c10 < 0.1 ? '<0.1' : round($c10, 1);
+                $c10 = $c10 < 0.1 ? '<0.1' : number_format($c10, 4, '.', '');
                 $satuan = 'm/s';
             } else {
-                $c10 = null; // atau 0 tergantung kebutuhan
+                $c10 = null;
                 $satuan = null;
             }
+
         } else if (in_array($id_parameter, $paramNO2)) {
-            $c3 = round($data->NO2, 1);
-            $c5 = round(($c3 / 46) * 24.45, 1);
-            $c4 = round($c5 * 1000, 1);
-            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
+            $c3 = $data->NO2;
+            $c2 = round((($c3 * 46) / 24.45), 4);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan
+            $c4 = $c1;
+            $c5 = $c2;
+
             $c3 = $c3 < 1 ? '<1' : $c3;
+            if($id_parameter == "NO-NO2"){
+                $satuan = 'mg/Nm³';
+            }else{
+                $satuan = 'ppm';
+            }
+        } else if (in_array($id_parameter, $paramNOX)) {
+            $c3 = $data->NOx;
+            $c2 = round((($c3 * 46) / 24.45), 4);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan;
+            $c4 = $c1;
+            $c5 = $c2;
+            $c3 = $c3 < 1 ? '<1' : $c3;
+
             $satuan = 'mg/Nm³';
         } else if (in_array($id_parameter, $paramSO2)) {
 
             $c3 = round($data->SO2, 1);
-            $c5 = round(($c3 / 64.066) * 24.45, 1);
-            $c4 = round($c5 * 1000, 1);
-            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
+            $c2 = round(($c3 * 64.066) / 24.45,1);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan;
+            $c4 = $c1;
+            $c5 = $c2;
 
             $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'ppm';
         } else if(in_array($id_parameter, $paramEffisiensiPembakaran)){
             $co2 = $data->CO2;
-            $nCO2 = round(($co2 * 10000 * 44 * 1000) / 21500, 1);
-            $c6 = ($nCO2 / ($nCO2 + $data->CO)) * 100/100;
+            $co = $data->CO / 10000;
+            $c6 = round(($co2 / ($co2 + $co)) * (100/100), 4);
             $satuan = '%';
         } else if(in_array($id_parameter, $paramNO)){
             $c3 = round($data->NO, 1);
-            $c2 = round((($c3 / 30) * 24.45) * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
+            $c2 = round((($c3 * 30.01) / 24.45) ,1);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan;
+            $c4 = $c1;
+            $c5 = $c2;
             $c3 = $c3 < 0.1 ? '<0.1' : $c3;
             $satuan = 'ppm';
         } else if(in_array($id_parameter, $paramCO)){
-            $c3 = round($data->CO, 1); //ppm
-            $c5 = round(($c3 / 28.01) * 24.45, 1); // mg/m3
-            $c4 = round($c5 * 1000, 1); // ug/m3
-            $c2 = round($c5 * ($pa / $ta) * (298/760), 1); // mg/Nm3
-            $c1 = round($c2 * 1000, 1); // ug/Nm3
-            $c1 = $c1 < 0.02 ? '<0.02' : $c1;
+            $c3 = $data->CO; //ppm
+            $c2 = round((($c3 * 28.01) / 24.45) ,4);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan
+            $c4 = $c1;
+            $c5 = $c2;
+            $c3 = $c3 < 0.1 ? '<0.1' : $c3;
             $satuan = 'ppm';
         } else if (in_array($id_parameter, $paramSO2P)) {
             
             if ($avg_so2p !== null) {
                 $c3 = round($avg_so2p, 1);
-                $c5 = round(($c3 / 64.066) * 24.45, 1);
-                $c4 = round($c5 * 1000, 1);
-                $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
-                $c1 = round($c2 * 1000, 1);
+                $c2 = round(($c3 * 64.066) / 24.45, 4);
+                $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan;
+                $c4 = $c1;
+                $c5 = $c2;
+
+                $c1 = $c1 < 1 ? '<1' : $c1;
                 $satuan = 'ppm';
             } else {
                 $c1 = $c2 = $c3 = $c4 = $c3 = null;
@@ -158,10 +174,12 @@ class EmisiCerobongDirect {
 
             if ($avg_cop !== null) {
                 $c3 = round($avg_cop, 1);
-                $c5= round(($c3 / 28.01) * 24.45, 1);
-                $c4 = round($c5* 1000, 1);
-                $c2 = round($c5* ($pa / $ta) * (298/760), 1);
-                $c1 = round($c2 * 1000, 1);
+                $c2= round(($c3 * 28.01) / 24.45, 4);
+                $c1 = intval($c2 * 1000);
+                $c4 = $c1;
+                $c5 = $c2;
+
+                $c3 = $c3 < 0.02 ? '<0.02' : $c1;
                 $satuan = 'ppm';
             } else {
                 $c1 = $c2 = $c3 = $c4 = $c3 = null;
@@ -171,21 +189,27 @@ class EmisiCerobongDirect {
         } else if (in_array($id_parameter, $paramO2P)) {
 
             if ($avg_no2p !== null) {
-                $c6 = round($avg_no2p, 1);
+                $c6 = round($avg_no2p, 2);
+                $c6 = $c6 < 0.1 ? '<0.1' : $c6;
                 $satuan = '%';
             } else {
                 $c6 = null;
                 $satuan = null;
             }
         } else if(in_array($id_parameter, $paramNO2_NOxP)){
-            $c3 = round($avg_nox_p, 1);
-            $c5 = round(($c3 / 46) * 24.45, 1);
-            $c4 = round($c5 * 1000, 1);
-            $c2 = round($c5 * ($pa / $ta) * (298/760), 1);
-            $c1 = round($c2 * 1000, 1);
+            $c3 = $avg_nox_p;
+            $c2 = round(($c3 * 46) / 24.45, 4);
+            $c1 = intval($c2 * 1000);     // paksa jadi integer tanpa pembulatan;
+            $c4 = $c1;
+            $c5 = $c2;
+
             $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'mg/Nm³';
         }
+        // else if (in_array($id_parameter, $paramTekananUdara)) {
+            
+        //     $satuan = "mmHg";
+        // }
 
         
         return [

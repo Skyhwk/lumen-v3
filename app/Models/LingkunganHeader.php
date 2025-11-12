@@ -12,10 +12,6 @@ class LingkunganHeader extends Sector
     public $timestamps = false;
     protected $guarded = [];
 
-    protected $casts = [
-        'data_pershift' => 'object'
-    ];
-
     public function order_detail()
     {
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->where('is_active', true);

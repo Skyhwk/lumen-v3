@@ -34,6 +34,8 @@ use App\Models\MedanLmHeader;
 use App\Models\MicrobioHeader;
 use App\Models\DebuPersonalHeader;
 
+use App\Helpers\HelperSatuan;
+
 class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 {
 	private $categoryLingkunganKerja = [11, 27];
@@ -137,12 +139,11 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				foreach ($data as $item) {
 					$regulasi = json_decode($item->orderDetail->regulasi);
 					$item->method = $regulasi ? explode('-', $regulasi[0])[1] : null;
-
 				}
 
 				return Datatables::of($data)->make(true);
-
 			}
+
 			$directData = DirectLainHeader::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
@@ -150,13 +151,13 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
-			
+
 			$partikulat = PartikulatHeader::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->where('status', 0)
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-				->addSelect(DB::raw("'direct' as data_type"))
+				->addSelect(DB::raw("'partikulat' as data_type"))
 				->get();
 
 			$lingkunganData = LingkunganHeader::with('ws_udara', 'ws_value_linkungan')
@@ -167,7 +168,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
 
-			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
+			$subkontrak = Subkontrak::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
@@ -229,67 +230,134 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
 				$item->method = $bakuMutu->method ?? null;
 				$item->nama_header = $bakuMutu->nama_header ?? null;
-
 			}
 
-			return Datatables::of($processedData)
-				->addColumn('nilai_uji', function ($item) {
-					$satuanIndexMap = [
-						"µg/m³" => 16,
-						"µg/m3" => 16,
-						"mg/m³" => 17,
-						"mg/m3" => 17,
-						"BDS" => 15,
-						"CFU/M²" => 14,
-						"CFU/M2" => 14,
-						"CFU/25cm²" => 13,
-						"CFU/25cm2" => 13,
-						"°C" => 12,
-						"CFU/100 cm²" => 11,
-						"CFU/100 cm2" => 11,
-						"CFU/m²" => 10,
-						"CFU/m2" => 10,
-						"CFU/m³" => 9,
-						"CFU/m3" => 9,
-						"CFU/mᶟ" => 9,
-						"m/s" => 8,
-						"m/detik" => 8,
-						"f/cc" => 7,
-						"Ton/km²/Bulan" => 6,
-						"Ton/km2/Bulan" => 6,
-						"%" => 5,
-						"ppb" => 4,
-						"ppm" => 3,
-						"mg/nm³" => 2,
-						"mg/nm3" => 2,
-						"μg/Nm³" => 1,
-						"μg/Nm3" => 1
-					];
-				
-					$index = $satuanIndexMap[$item->satuan] ?? 1;
-				
-					if (!$item->ws_udara) {
-						return $item->ws_value_linkungan->f_koreksi_c ?? $item->ws_value_linkungan->C ?? '-';
-					}
-				
-					$fKoreksiKey = "f_koreksi_$index";
-					$hasilKey = "hasil$index";
-				
-					$nilai = $item->ws_udara->$fKoreksiKey
-						?? $item->ws_udara->$hasilKey
-						?? $item->ws_value_linkungan->f_koreksi_c
-						?? null;
+			$getSatuan = new HelperSatuan;
 
-					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
-						$fKoreksi2 = $item->ws_udara->f_koreksi_2 ?? null;
-						$hasil2 = $item->ws_udara->hasil2 ?? null;
-						$nilai = $fKoreksi2 ?? $hasil2 ?? $nilai;
+			return Datatables::of($processedData)
+				->addColumn('nilai_uji', function ($item) use ($getSatuan) {
+					// ambil satuan dan index (boleh null)
+					$satuan = $item->satuan ?? null;
+					$index  = $getSatuan->udara($satuan);
+
+					// pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
+					$source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+					if (!$source) return 'noWs';
+
+					// pastikan array
+					$hasil = is_array($source) ? $source : $source->toArray();
+					// helper kecil: cek tersedia dan tidak kosong
+					$has = function ($key) use ($hasil) {
+						return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+					};
+
+					// jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
+					if ($index === null) {
+						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+						if ($has('f_koreksi_c')) return $hasil['f_koreksi_c'];
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "f_koreksi_c{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+
+						// 2) C (tanpa nomor) lalu C1..C16
+						if ($has('C')) return $hasil['C'];
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "C{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// 3) f_koreksi_1..f_koreksi_17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "f_koreksi_{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// 4) hasil1..hasil17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "hasil{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// kalau semua gagal
+						return '-';
 					}
-				
-					return $nilai ?? '-';
+
+					// bila index diketahui, cek urutan preferensi khusus index itu
+					$keysToTry = [
+						"f_koreksi_{$index}",
+						"hasil{$index}",
+						"f_koreksi_c{$index}",
+						"C{$index}"
+					];
+
+					if ($index == 17) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 15) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 16) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} else {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					}
+
+
+					return '-';
 				})
-			
-                ->make(true);
+				->make(true);
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
@@ -517,7 +585,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
-		dd($request->all());
 		if ($request->id) {
 			if (in_array($request->kategori, $this->categoryLingkunganKerja)) {
 				if ($request->data_type == 'lingkungan') {
@@ -568,7 +635,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 					}
 				} else if ($request->data_type == 'direct') {
 					$data = DirectLainHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
-					// dd($data);
 					if ($data) {
 						$cek = DirectLainHeader::where('id', $data->id)->first();
 						$cek->lhps = 0;
@@ -602,6 +668,28 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 						], 201);
 					} else {
 						$dat = MedanLmHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
+				} else if ($request->data_type == 'microbio') {
+					$data = MicrobioHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+					// dd($data);
+					if ($data) {
+						$cek = MicrobioHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = MicrobioHeader::where('id', $request->id)->first();
 						$dat->lhps = 1;
 						$dat->save();
 						return response()->json([
@@ -846,22 +934,22 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 			}
 
 			function applyFormula($value, float $factor)
-				{
-					$cleaned = removeSpecialChars($value);
-					if ($cleaned === null || $cleaned === '') return null;
+			{
+				$cleaned = removeSpecialChars($value);
+				if ($cleaned === null || $cleaned === '') return null;
 
-					$num = floatval($cleaned);
-					if (is_nan($num)) return null;
+				$num = floatval($cleaned);
+				if (is_nan($num)) return null;
 
-					if (cekSpecialChar($value)) {
-						$result = (($num / 0.3856) * ($factor / 100)) + ($num / 0.3856);
-					} else {
-						$result = ($num * ($factor / 100)) + $num;
-					}
-
-					// kalau hasil 0.0, ubah jadi null
-					return ($result == 0.0 ? null : $result);
+				if (cekSpecialChar($value)) {
+					$result = (($num / 0.3856) * ($factor / 100)) + ($num / 0.3856);
+				} else {
+					$result = ($num * ($factor / 100)) + $num;
 				}
+
+				// kalau hasil 0.0, ubah jadi null
+				return ($result == 0.0 ? null : $result);
+			}
 
 
 			// Hitung hasil untuk semua C
@@ -1009,390 +1097,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 		}
 	}
 
-
-	// public function KalkulasiKoreksi(Request $request)
-	// {
-	// 	dd($request->all());
-	// 	try {
-	// 		$type_koreksi = $request->type;
-
-	// 		$id = $request->id;
-	// 		$no_sampel = $request->no_sampel;
-	// 		$parameter = $request->parameter;
-
-	// 		$faktor_koreksi = (float) $request->faktor_koreksi;
-	// 		$hasilujic = html_entity_decode($request->hasil_c);
-	// 		$hasilujic1 = html_entity_decode($request->hasil_c1);
-	// 		$hasilujic2 = html_entity_decode($request->hasil_c2);
-	// 		// dd($request->all());
-
-	// 		$hasil = $this->hitungKoreksi($request, $type_koreksi, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2);
-
-	// 		// Format hasil menjadi 4 angka di belakang koma jika numerik
-	// 		if (is_numeric($hasil)) {
-	// 			$hasil = number_format((float) $hasil, 4, '.', '');
-	// 		}
-
-	// 		return response()->json(['hasil' => $hasil]);
-	// 	} catch (\Exception $e) {
-	// 		dd($e);
-	// 		\Log::error('Error dalam KalkulasiKoreksi: ' . $e->getMessage());
-	// 		return response()->json(['error' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
-	// 	}
-	// }
-
-	// private function hitungKoreksi($request, $id, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
-	// {
-	// 	try {
-	// 		$hasil = 0;
-	// 		$hasil = $this->rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2);
-	// 		return $hasil;
-	// 	} catch (\Exception $e) {
-	// 		dd($e);
-	// 		\Log::error('Error dalam hitungKoreksi: ' . $e->getMessage());
-	// 		throw $e;
-	// 	}
-	// }
-
-	// public function rumusUdara($request, $no_sampel, $faktor_koreksi, $parameter, $hasilujic, $hasilujic1, $hasilujic2)
-	// {
-
-	// 	$po = OrderDetail::where('no_sampel', $no_sampel)
-	// 		->where('is_active', 1)
-	// 		->where('parameter', 'like', '%' . $parameter . '%') // Menambahkan kondisi where dengan like
-	// 		->first();
-	// 	try {
-	// 		// Fungsi untuk menghapus karakter spesial dari nilai
-	// 		function removeSpecialChars($value)
-	// 		{
-	// 			return is_string($value) ? str_replace('<', '', $value) : $value;
-	// 		}
-
-	// 		// Fungsi untuk memeriksa apakah nilai mengandung karakter spesial '<'
-	// 		function cekSpecialChar($value)
-	// 		{
-	// 			return is_string($value) && strpos($value, '<') !== false;
-	// 		}
-
-	// 		// Fungsi untuk menerapkan rumus dengan cek terhadap nilai null
-	// 		function applyFormula($value, float $factor, $parameter)
-	// 		{
-	// 			$cleanedValue = removeSpecialChars($value); // Hapus karakter spesial saat perhitungan
-	// 			if ($cleanedValue == null || $cleanedValue === '') {
-	// 				return '';
-	// 			}
-	// 			$hasil = '';
-	// 			$MDL = floatval($cleanedValue);
-	// 			if (!is_nan($MDL)) {
-	// 				if (cekSpecialChar($value)) { // Cek karakter spesial sebelum perhitungan
-	// 					$hasil = (($MDL / 0.3856) * ($factor / 100)) + ($MDL / 0.3856);
-	// 					return $hasil; // Tambahkan karakter spesial di depan hasil
-	// 				} else {
-	// 					$hasil = ($MDL * ($factor / 100)) + $MDL;
-	// 					return $hasil;
-	// 				}
-	// 			}
-	// 			return '';
-	// 		}
-
-	// 		$hasil = ['hasilc' => '', 'hasilc1' => '', 'hasilc2' => '']; // Default hasil
-
-	// 		$cases = [
-	// 			'SO2',
-	// 			"SO2 (6 Jam)",
-	// 			"SO2 (8 Jam)",
-	// 			"SO2 (24 Jam)",
-	// 			'NO2',
-	// 			"NO2 (6 Jam)",
-	// 			"NO2 (8 Jam)",
-	// 			"NO2 (24 Jam)",
-	// 			'O3',
-	// 			"O3 (8 Jam)",
-	// 			'TSP',
-	// 			"TSP (6 Jam)",
-	// 			"TSP (8 Jam)",
-	// 			"TSP (24 Jam)",
-	// 			'PM 2.5',
-	// 			"PM 2.5 (8 Jam)",
-	// 			"PM 2.5 (24 Jam)",
-	// 			'PM 10',
-	// 			"PM 10 (8 Jam)",
-	// 			"PM 10 (24 Jam)",
-	// 		];
-
-	// 		foreach ($cases as $case) {
-	// 			// Cek apakah $case ada di dalam $parameter, memastikan perbandingan yang lebih spesifik
-	// 			if ($case == $parameter) {
-	// 				// Jika ditemukan, lakukan perhitungan
-	// 				$hasil['hasilc'] = (empty($hasilujic)) ? null : applyFormula($hasilujic, $faktor_koreksi, $parameter);
-	// 				$hasil['hasilc1'] = (empty($hasilujic1)) ? null : applyFormula($hasilujic1, $faktor_koreksi, $parameter);
-	// 				$hasil['hasilc2'] = (empty($hasilujic2)) ? null : applyFormula($hasilujic2, $faktor_koreksi, $parameter);
-
-	// 				break;
-	// 			}
-
-	// 			// if ($parameter == 'NO2' || $parameter == 'NO2 (24 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (6 Jam)') {
-	// 			// 	if ($hasil['hasilc'] < 0.4623) {
-	// 			// 		$hasil['hasilc'] = '<0.4623';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc1'] < 0.00046) {
-	// 			// 		$hasil['hasilc1'] = '<0.00046';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc2'] < 0.00025) {
-	// 			// 		$hasil['hasilc2'] = '<0.00025';
-	// 			// 	}
-	// 			// }
-
-	// 			// if ($parameter == 'SO2' || $parameter == 'SO2 (24 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (6 Jam)') {
-	// 			// 	// Pastikan hasil dari rumusUdara valid
-
-	// 			// 	if ($hasil['hasilc'] < 2.1531) {
-	// 			// 		$hasil['hasilc'] = '<2.1531';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc1'] < 0.0022) {
-	// 			// 		$hasil['hasilc1'] = '<0.0022';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc2'] < 0.00082) {
-	// 			// 		$hasil['hasilc2'] = '<0.00082';
-	// 			// 	}
-	// 			// }
-
-	// 			if ($parameter == 'O3' || $parameter == 'O3 (8 Jam)') {
-	// 				// Pastikan hasil dari rumusUdara valid
-
-	// 				if ($hasil['hasilc'] < 0.1419) {
-	// 					$hasil['hasilc'] = '<0.1419';
-	// 				}
-
-	// 				if ($hasil['hasilc1'] < 0.00014) {
-	// 					$hasil['hasilc1'] = '<0.00014';
-	// 				}
-
-	// 				if ($hasil['hasilc2'] < 0.00007) {
-	// 					$hasil['hasilc2'] = '<0.00007';
-	// 				}
-	// 			}
-
-	// 			// if ($po->kategori_3 == 27) {
-	// 			// 	if ($parameter == 'TSP') {
-	// 			// 		// Pastikan hasil dari rumusUdara valid
-	// 			// 		if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
-	// 			// 			return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
-	// 			// 		}
-	// 			// 		// if($hasil['hasilc'] < 16.7){
-	// 			// 		//     $hasil['hasilc'] = '<16.7';
-	// 			// 		// }
-
-	// 			// 		// if($hasil['hasilc1'] < 0.0167){
-	// 			// 		//     $hasil['hasilc1'] = '<0.0167';
-	// 			// 		// }
-	// 			// 		if ($hasil['hasilc'] < 0.001) {
-	// 			// 			$hasil['hasilc'] = '<0.001';
-	// 			// 		}
-
-	// 			// 		if ($hasil['hasilc1'] < 0.001) {
-	// 			// 			$hasil['hasilc1'] = '<0.001';
-	// 			// 		}
-
-	// 			// 		$hasil['hasilc2'] = null;
-	// 			// 	} else if ($parameter == 'TSP (8 Jam)') {
-	// 			// 		if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
-	// 			// 			return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
-	// 			// 		}
-	// 			// 		// if($hasil['hasilc'] < 0.0021){
-	// 			// 		//     $hasil['hasilc'] = '<0.0021';
-	// 			// 		// }
-
-	// 			// 		// if($hasil['hasilc1'] < 2.1000){
-	// 			// 		//     $hasil['hasilc1'] = '<2.1000';
-	// 			// 		// }
-	// 			// 		if ($hasil['hasilc'] < 0.001) {
-	// 			// 			$hasil['hasilc'] = '<0.001';
-	// 			// 		}
-
-	// 			// 		if ($hasil['hasilc1'] < 0.001) {
-	// 			// 			$hasil['hasilc1'] = '<0.001';
-	// 			// 		}
-
-	// 			// 		$hasil['hasilc2'] = null;
-	// 			// 	}
-	// 			// } else if ($po->kategori_3 == 11) {
-	// 			// 	if ($parameter == 'TSP') {
-	// 			// 		// Pastikan hasil dari rumusUdara valid
-	// 			// 		if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
-	// 			// 			return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
-	// 			// 		}
-	// 			// 		if ($hasil['hasilc'] < 1.5151) {
-	// 			// 			$hasil['hasilc'] = '<1.5151';
-	// 			// 		}
-
-	// 			// 		if ($hasil['hasilc1'] < 0.0015) {
-	// 			// 			$hasil['hasilc1'] = '<0.0015';
-	// 			// 		}
-	// 			// 		if ($hasil['hasilc2'] == 0.0) {
-	// 			// 			$hasil['hasilc2'] = '';
-	// 			// 		}
-	// 			// 	}
-
-	// 			// 	if ($parameter == 'TSP (24 Jam)') {
-	// 			// 		// Pastikan hasil dari rumusUdara valid
-	// 			// 		if (!isset($hasil['hasilc'], $hasil['hasilc1'], $hasil['hasilc2'])) {
-	// 			// 			return response()->json(['message' => 'Hasil dari rumus tidak valid.'], 400);
-	// 			// 		}
-	// 			// 		if ($hasil['hasilc'] < 0.0631) {
-	// 			// 			$hasil['hasilc'] = '<0.0631';
-	// 			// 		}
-
-	// 			// 		if ($hasil['hasilc1'] < 0.000063) {
-	// 			// 			$hasil['hasilc1'] = '<0.000063';
-	// 			// 		}
-	// 			// 		if ($hasil['hasilc2'] == 0.0) {
-	// 			// 			$hasil['hasilc2'] = '';
-	// 			// 		}
-	// 			// 	}
-	// 			// }
-
-	// 			// if ($parameter == 'PM 10' || $parameter == 'PM 10 (8 Jam)' || $parameter == 'PM 10 (24 Jam)') {
-	// 			// 	if ($hasil['hasilc'] < 0.56) {
-	// 			// 		$hasil['hasilc'] = '<0.56';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc1'] < 0.00056) {
-	// 			// 		$hasil['hasilc1'] = '<0.00056';
-	// 			// 	}
-	// 			// 	if ($hasil['hasilc2'] == 0.0) {
-	// 			// 		$hasil['hasilc2'] = '';
-	// 			// 	}
-	// 			// }
-
-	// 			// if ($parameter == 'PM 2.5' || $parameter == 'PM 2.5 (8 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
-
-	// 			// 	if ($hasil['hasilc'] < 0.58) {
-	// 			// 		$hasil['hasilc'] = '<0.58';
-	// 			// 	}
-
-	// 			// 	if ($hasil['hasilc1'] < 0.00058) {
-	// 			// 		$hasil['hasilc1'] = '<0.00058';
-	// 			// 	}
-	// 			// 	if ($hasil['hasilc2'] == 0.0) {
-	// 			// 		$hasil['hasilc2'] = '';
-	// 			// 	}
-	// 			// }
-	// 		}
-	// 		return $hasil; // Mengembalikan array hasil
-	// 	} catch (\Exception $e) {
-	// 		// Log error atau lakukan penanganan kesalahan yang sesuai
-	// 		\Log::error('Error in rumusUdara: ' . $e->getMessage());
-	// 		return ['error' => 'Terjadi kesalahan saat memproses data'];
-	// 	}
-	// }
-
-	// public function saveData(Request $request)
-	// {
-	// 	$kategori_koreksi = $request->kategori;
-
-	// 	$id = $request->id;
-	// 	$no_sampel = $request->no_sampel;
-	// 	$parameter = $request->parameter;
-
-	// 	$faktor_koreksi = (float) $request->faktor_koreksi;
-	// 	$hasil_c = $request->hasil_c;
-	// 	$hasil_c1 = $request->hasil_c1;
-	// 	$hasil_c2 = $request->hasil_c2;
-
-	// 	if ($kategori_koreksi) {
-	// 		switch ($kategori_koreksi) {
-	// 			//AIR
-	// 			case '11':
-	// 				$udara = LingkunganHeader::with('ws_value_linkungan')
-	// 					->where('no_sampel', $request->no_sampel)
-	// 					->where('is_active', 1)->first();
-
-	// 				return $this->handleLingkungan($request, $no_sampel, $parameter, $hasil_c, $hasil_c1, $hasil_c2, $udara, $faktor_koreksi);
-	// 			case '27':
-	// 				$udara = LingkunganHeader::with('ws_value_linkungan')
-	// 					->where('no_sampel', $request->no_sampel)
-	// 					->where('is_active', 1)->first();
-
-	// 				return $this->handleLingkungan($request, $no_sampel, $parameter, $hasil_c, $hasil_c1, $hasil_c2, $udara, $faktor_koreksi);
-
-	// 			default:
-	// 				return response()->json(['message' => 'Type koreksi tidak valid.'], 400);
-	// 		}
-	// 	} else {
-	// 		return response()->json(['message' => 'Type koreksi harus diisi.'], 400);
-	// 	}
-	// }
-
-	// private function handleLingkungan($request, $no_sampel, $parameter, $hasil_c, $hasil_c1, $hasil_c2, $udara, $faktor_koreksi)
-	// {
-	// 	try {
-	// 		// dd($faktor_koreksi, $udara);
-	// 		DB::beginTransaction();
-	// 		$po = OrderDetail::where('no_sampel', $no_sampel)
-	// 			->where('is_active', 1)
-	// 			->where('parameter', 'like', '%' . $parameter . '%')
-	// 			->first();
-	// 		if ($po) {
-	// 			$lingkungan = LingkunganHeader::where('no_sampel', $no_sampel)
-	// 				->where('parameter', $parameter)
-	// 				->where('is_active', 1)
-	// 				->first();
-
-	// 			if ($lingkungan) {
-	// 				$valuews = WsValueLingkungan::where('no_sampel', $no_sampel)
-	// 					->where('lingkungan_header_id', $lingkungan->id)
-	// 					->where('is_active', 1)
-	// 					->first();
-
-	// 				if ($lingkungan->tipe_koreksi == null) {
-	// 					$nomor = 1;
-	// 				} else {
-	// 					if ($lingkungan->tipe_koreksi < 3) {
-	// 						$nomor = $lingkungan->tipe_koreksi + 1;
-	// 					} else {
-	// 						return response()->json(['message' => 'Koreksi tidak bisa dilakukan lagi.'], 400);
-	// 					}
-	// 				}
-	// 				$lingkungan->tipe_koreksi = $nomor;
-	// 				$lingkungan->save();
-
-	// 				if (!str_contains((string) $hasil_c, '<')) {
-	// 					$hasil_c = number_format((float) $hasil_c, 4, '.', '');
-	// 				}
-	// 				if (!str_contains((string) $hasil_c1, '<')) {
-	// 					$hasil_c1 = number_format((float) $hasil_c1, 4, '.', '');
-	// 				}
-	// 				if (!str_contains((string) $hasil_c2, '<')) {
-	// 					$hasil_c2 = number_format((float) $hasil_c2, 4, '.', '');
-	// 				}
-
-	// 				if ($valuews) {
-	// 					$valuews->f_koreksi_c = $hasil_c;
-	// 					$valuews->f_koreksi_c1 = $hasil_c1;
-	// 					$valuews->f_koreksi_c2 = $hasil_c2;
-	// 					$valuews->input_koreksi = $faktor_koreksi;
-	// 					$valuews->save();
-	// 				} else {
-	// 					return response()->json(['message' => 'Data Valuews tidak ditemukan.'], 404);
-	// 				}
-
-	// 				DB::commit();
-	// 				return response()->json(['message' => 'Data berhasil diupdate.', 'status' => 200, "success" => true], 200);
-	// 			}
-	// 		} else {
-	// 			return response()->json(['message' => 'Data tidak ditemukan di kategori AIR.'], 404);
-	// 		}
-	// 	} catch (\Exception $ex) {
-	// 		DB::rollBack();
-	// 		return response()->json(['message' => 'Terjadi kesalahan: ' . $ex->getMessage()], 500);
-	// 	}
-	// }
-
 	public function getKaryawan(Request $request)
 	{
 		return MasterKaryawan::where('is_active', true)->get();
@@ -1460,7 +1164,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 			], 401);
 		}
 	}
-		public function getRegulasi(Request $request)
+	public function getRegulasi(Request $request)
 	{
 		$data = MasterRegulasi::where('id_kategori', $request->id_kategori)
 			->where('is_active', '1')->get();
@@ -1487,6 +1191,5 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 			DB::rollback();
 			throw $th;
 		}
-
 	}
 }

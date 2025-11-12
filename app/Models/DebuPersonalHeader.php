@@ -22,6 +22,11 @@ class DebuPersonalHeader extends Sector{
         return $this->belongsTo('App\Models\WsValueLingkungan', 'no_sampel', 'no_sampel');
     }
 
+    public function ws_udara()
+    {
+        return $this->belongsTo('App\Models\WsValueUdara', 'no_sampel', 'no_sampel');
+    }
+
     public function order_detail()
     {
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
