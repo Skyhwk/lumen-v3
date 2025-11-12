@@ -3816,6 +3816,7 @@ class InputParameterController extends Controller
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
                 $volume_shift = null;
+                $data_pershift = null;
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
                     $volume_shift = json_encode($volume);
@@ -3825,6 +3826,7 @@ class InputParameterController extends Controller
                 }
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
+                $header->data_pershift = $data_pershift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->save();
