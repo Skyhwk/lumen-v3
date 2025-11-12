@@ -4278,28 +4278,31 @@ class InputParameterController extends Controller
                         $kalkulasi1 = WsValueUdara::create($data_udara);
                     }
                 }else if($stp->sample->nama_kategori == 'Emisi'){
-                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
-                        ->where('parameter', $request->parameter)
-                        ->where('is_active', true)
-                        ->first();
-                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
-                        $data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+					$existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
+						->where('parameter', $request->parameter)
+						->where('is_active', true)
+						->first();
+					if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
                         $data_emisi->id_subkontrak  = $data->id;
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            $key = 'f_koreksi_c';
+							$key .= $i == 0 ? '' : $i;
                             if (isset($data_emisi->{$key})) {
-                                $data_emisi->{$key} = $data_kalkulasi['hasil'];
+								$data_emisi->{$key} = $data_kalkulasi['hasil'];
                             }
                         }
+						$data_emisi->save();
                     }else{
-                        $data_emisi = [];
+						$data_emisi = [];
                         $data_emisi['id_subkontrak'] = $data->id;
                         $data_emisi['no_sampel'] = trim($request->no_sample);
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            $key = 'f_koreksi_c';
+							$key .= $i == 0 ? '' : $i;
                             $data_emisi[$key] = $data_kalkulasi['hasil'];
                         }
-                        $kalkulasi1 = WsValueUdara::create($data_emisi);
+                        $kalkulasi1 = WsValueEmisiCerobong::create($data_emisi);
                     }
                 }
 
