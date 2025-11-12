@@ -32,7 +32,7 @@ class MicrobiologiUdara
             // hitung hasil rata-rata
             $hasil = $count > 0 ? $total / $count : 0;
 
-            $processed['hasil'] = round($hasil, 4);
+            $processed['hasil'] = round($hasil, 0);
             $processed['data_pershift'] = $data_pershift;
 
             return $processed;
