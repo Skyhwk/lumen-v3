@@ -151,7 +151,7 @@ class LhpULKController extends Controller
         }
 
         $servicePrint = new PrintLhp();
-        $servicePrint->print($request->no_sampel);
+        $servicePrint->printByFilename($header->file_lhp, $detail);
         
         if (!$servicePrint) {
             DB::rollBack();

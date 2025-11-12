@@ -8,9 +8,10 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 use App\Models\Subkontrak;
 use App\Models\OrderDetail;
-use App\Models\WsValueEmisiCerobong;
 use App\Models\WsValueUdara;
 use App\Models\Parameter;
+use App\Models\EmisiCerobongHeader;
+use App\Models\WsValueEmisiCerobong;
 
 class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 {
@@ -448,13 +449,22 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 
             $noSampel = $this->getNilaiAkhirSel($worksheet, "P6");
             if (!$noSampel) $noSampel = $this->getNilaiAkhirSel($worksheet, "Q6"); // emisi genset di q6
-
             $jenisSampel = $this->getNilaiAkhirSel($worksheet, "R6");
             if (!$jenisSampel) $jenisSampel = $this->getNilaiAkhirSel($worksheet, "S6"); // emisi genset di s6
             if ($jenisSampel !== 'Emisi Sumber Tidak Bergerak') return response()->json(['message' => 'Ini bener file estb?'], 400);
+            $noSampel = str_replace(' ', '', trim($noSampel));
 
             $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
-            if (!$orderDetail) return response()->json(['message' => 'Order Detail ga ada'], 400);
+            if ($orderDetail == null) return response()->json(['message' => "{$noSampel} nomor tidak dapat ditemukan atau ada perbedaan karakter."], 400);
+
+            $parameters = [];
+            $idHeader = [];
+            
+            $parameterUji = json_decode($orderDetail->parameter, TRUE);
+
+            $parameterUji = array_map(function ($item) {
+                return \explode(';', $item)[1];
+            }, $parameterUji);
 
             for ($row = $startRow; $row <= $highestRow; $row += 2) { // += 2 karna dimerge
                 $parameter = $this->getNilaiAkhirSel($worksheet, "D{$row}");
@@ -463,43 +473,111 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
 
                 if (!$parameter) break;
 
-                $subkontrak = Subkontrak::where('no_sampel', $noSampel)->where('parameter', $parameter)->exists();
-                if ($subkontrak) return response()->json(['message' => 'Subkontrak udah ada'], 400);
+                if($parameter == 'PM ₁₀') $parameter = "PM 10";
 
-                $subkontrak = new Subkontrak();
-                $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
-                $subkontrak->no_sampel = $noSampel;
-                $subkontrak->parameter = $parameter;
-                $subkontrak->jenis_pengujian = 'sample';
-                $subkontrak->lhps = 0;
-                // $subkontrak->is_approve = 1;
-                // $subkontrak->approved_by = 'System';
-                // $subkontrak->approved_at = date('Y-m-d H:i:s');
-                $subkontrak->created_by = 'System';
-                $subkontrak->created_at = date('Y-m-d H:i:s');
-                $subkontrak->save();
+                if($parameter == 'PM ₂,₅') $parameter = "PM 2.5";
+
+                if($parameter == 'Hidrogen Sulfida (H₂S)') $parameter = 'Sulfur (H₂S)';
+
+                if($parameter == 'Amoniak (NH₃)') $parameter = 'NH3';
+
+                if($parameter == 'Total Partikulat') $parameter = "TSP";
+
+                if($parameter == 'Timah Hitam (Pb)') $parameter = "Pb";
+
+                if($parameter == 'Hidrokarbon Non Metana (NMHC)') $parameter = "HCNM";
+                
+                if($parameter == 'Karbon Monoksida (CO)') $parameter = "C O";
+                
+                if($parameter == 'Karbon Dioksida (CO₂)') $parameter = "CO2";
+                
+                if($parameter == 'Sulfur Dioksida (SO₂)') $parameter = "SO2";
+                
+                if($parameter == 'Nitrogen Dioksida (NO₂)') $parameter = "NO2";
+
+                if($parameter == 'Oksidan Fotokimia (Oᵪ) sebagai Ozon (O₃)') $parameter = "O3";
+                
+                if($parameter == 'Ozon (O₃)') $parameter = "O3";
+
+                if($parameter == 'Benzena (C₆H₆)') $parameter = "Benzene";
+
+                if($parameter == 'Toluena (C₇H₈)') $parameter = "Toluene";
+
+                if($parameter == 'Xylena (C₈H₁₀)') $parameter = "Xylene";
+
+                if($parameter == 'Nitrogen Oksida (NOₓ) sebagai NO₂ + NO') $parameter = "NOx";
+
+                if($parameter == 'Opasitas') $parameter = "Opasitas (Solar)";
+
+                $cekParameter = Parameter::where('nama_regulasi', $parameter)
+                ->whereIn('nama_lab', $parameterUji)
+                ->where('id_kategori', 4)
+                ->first();               
+                
+                $parameter = $cekParameter->nama_lab ?? $parameter;
+                $id_subkontrak = null;
+
+                $cekData = WsValueEmisiCerobong::with(['emisi_cerobong_header', 'emisi_isokinetik'])
+                ->where('no_sampel', $noSampel)
+                ->where(function ($query) use ($parameter) {
+                    $query->whereHas('emisi_cerobong_header', fn($r) => $r->where('parameter', $parameter));
+                        // ->orWhereHas('emisi_isokinetik', fn($r) => $r->where('parameter', $parameter));
+                })->first();
+
+                if($cekData == null){
+                    $subkontrak = new Subkontrak();
+                    $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
+                    $subkontrak->no_sampel = $noSampel;
+                    $subkontrak->parameter = $parameter;
+                    $subkontrak->jenis_pengujian = 'sample';
+                    $subkontrak->lhps = 0;
+                    $subkontrak->is_approve = 1;
+                    $subkontrak->created_by = 'System';
+                    $subkontrak->created_at = date('Y-m-d H:i:s');
+                    $subkontrak->save();
+
+                    $id_subkontrak = $subkontrak->id;
+                } 
 
                 $hasilUji = str_replace(',', '.', $hasilUji);
-
-                $wsValueEmisiCerobong = new WsValueEmisiCerobong();
-                $wsValueEmisiCerobong->id_subkontrak = $subkontrak->id;
-                // $wsValueEmisiCerobong->id_po = $orderDetail->id;
-                $wsValueEmisiCerobong->tanggal_terima = $orderDetail->tanggal_terima;
-                $wsValueEmisiCerobong->no_sampel = $noSampel;
-                $wsValueEmisiCerobong->f_koreksi_c = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c1 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c2 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c3 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c4 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c5 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c6 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c7 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c8 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c9 = $hasilUji;
-                $wsValueEmisiCerobong->f_koreksi_c10 = $hasilUji;
-                $wsValueEmisiCerobong->created_by = 'System';
-                $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
-                $wsValueEmisiCerobong->save();
+                // dd($noSampel);
+                if($id_subkontrak == null){
+                    $wsValueEmisiCerobong = WsValueEmisiCerobong::where('id', $cekData->id)->first();
+                    $wsValueEmisiCerobong->no_sampel = $noSampel;
+                    $wsValueEmisiCerobong->f_koreksi_c = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c1 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c2 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c3 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c4 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c5 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c6 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c7 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c8 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c9 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c10 = $hasilUji;
+                    $wsValueEmisiCerobong->created_by = 'System';
+                    $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                    $wsValueEmisiCerobong->save();
+                } else {
+                    $wsValueEmisiCerobong = new WsValueEmisiCerobong();
+                    $wsValueEmisiCerobong->id_subkontrak = $subkontrak->id;
+                    $wsValueEmisiCerobong->tanggal_terima = $orderDetail->tanggal_terima;
+                    $wsValueEmisiCerobong->no_sampel = $noSampel;
+                    $wsValueEmisiCerobong->f_koreksi_c = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c1 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c2 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c3 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c4 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c5 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c6 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c7 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c8 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c9 = $hasilUji;
+                    $wsValueEmisiCerobong->f_koreksi_c10 = $hasilUji;
+                    $wsValueEmisiCerobong->created_by = 'System';
+                    $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                    $wsValueEmisiCerobong->save();
+                }
             }
 
             DB::commit();

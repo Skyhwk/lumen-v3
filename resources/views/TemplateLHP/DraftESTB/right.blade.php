@@ -136,7 +136,7 @@
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ ucwords($header->deskripsi_titik) }}</td>
+                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Titik Koordinat</td>

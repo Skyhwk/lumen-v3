@@ -909,10 +909,10 @@ class DraftAirController extends Controller
                 // $header->nama_karyawan = $nama_perilis ?? 'Abidah Walfathiyyah';
                 // $header->jabatan_karyawan = $jabatan_perilis ?? 'Technical Control Supervisor';
 
-                if ($header->count_print < 1) {
-                    $header->is_printed = 1;
-                    $header->count_print = $header->count_print + 1;
-                }
+                // if ($header->count_print < 1) {
+                //     $header->is_printed = 1;
+                //     $header->count_print = $header->count_print + 1;
+                // }
                 $header->save();
 
                 HistoryAppReject::insert([
