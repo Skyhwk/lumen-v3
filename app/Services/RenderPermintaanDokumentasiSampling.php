@@ -16,6 +16,29 @@ class RenderPermintaanDokumentasiSampling
 {
     private function processAndWatermarkImage($originalFileName, $outputPath, array $watermarkData)
     {
+        // // DIRECT TO PRODUCTION
+        // $url = "https://apps.intilab.com/v3/public/dokumentasi/sampling/$originalFileName";
+
+        // if (!$originalFileName) {
+        //     Log::warning("Nama file kosong");
+        //     return false;
+        // }
+
+        // try {
+        //     $response = Http::get($url);
+
+        //     if (!$response->successful()) {
+        //         Log::warning("Gagal ambil gambar dari URL: $url");
+        //         return false;
+        //     }
+
+        //     // Simpen dulu ke temporary file
+        //     $tempPath = storage_path('app/temp_' . uniqid() . '.jpg');
+        //     file_put_contents($tempPath, $response->body());
+
+        //     $img = Image::make($tempPath);
+
+        // LOCAL
         $originalPath = public_path('dokumentasi/sampling/' . $originalFileName);
 
         if (!$originalFileName || !File::exists($originalPath)) {
@@ -31,26 +54,31 @@ class RenderPermintaanDokumentasiSampling
                 $constraint->upsize();
             });
 
-            $tempCompressed = tempnam(sys_get_temp_dir(), 'cmp');
+            $tempCompressed = tempnam(sys_get_temp_dir(), 'cmp_');
+            $tempCompressedJpg = $tempCompressed . '.jpg';
+            $tempCompressedWebp = $tempCompressed . '.webp';
             $quality = 80;
             $maxSizeKB = 500;
             $supportsWebp = imagetypes() & IMG_WEBP;
 
             if ($supportsWebp) {
                 do {
-                    $img->encode('webp', $quality)->save($tempCompressed);
-                    $sizeKB = filesize($tempCompressed) / 1024;
+                    $img->encode('webp', $quality)->save($tempCompressedWebp);
+                    $sizeKB = filesize($tempCompressedWebp) / 1024;
                     $quality -= 10;
                 } while ($sizeKB > $maxSizeKB && $quality > 30);
+                $finalImg = Image::make($tempCompressedWebp);
+                unlink($tempCompressedWebp);
             } else {
                 do {
-                    $img->encode('jpg', $quality)->save($tempCompressed);
-                    $sizeKB = filesize($tempCompressed) / 1024;
+                    $img->encode('jpg', $quality)->save($tempCompressedJpg);
+                    $sizeKB = filesize($tempCompressedJpg) / 1024;
                     $quality -= 10;
                 } while ($sizeKB > $maxSizeKB && $quality > 30);
+                $finalImg = Image::make($tempCompressedJpg);
+                unlink($tempCompressedJpg);
             }
 
-            $finalImg = Image::make($tempCompressed);
             $width = $finalImg->width();
             $height = $finalImg->height();
 
@@ -59,7 +87,7 @@ class RenderPermintaanDokumentasiSampling
 
             // Batasi supaya tidak terlalu kecil atau besar
             $baseFontSize = max(18, min($baseFontSize, 48));
-            
+
             // --- WATERMARK HEADER ---
             if (!empty($watermarkData['header'])) {
                 $finalImg->text($watermarkData['header'], 20, 40, function ($font) use ($baseFontSize) {
@@ -99,7 +127,7 @@ class RenderPermintaanDokumentasiSampling
             unlink($tempCompressed);
             return true;
         } catch (\Exception $e) {
-            Log::error("❌ Gagal membuat watermark: " . $e->getMessage());
+            Log::error("❌ Gagal membuat watermark: " . $e->getMessage() . " on line: " . $e->getLine());
             return false;
         }
     }
