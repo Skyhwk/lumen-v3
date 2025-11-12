@@ -655,4 +655,17 @@ class FollowUpController extends Controller
             return  response()->json(['error' => $th], 400);
         }
     }
+
+    public function updateStatusCalling(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            DFUS::where('id', $request->id)->update(['keterangan' => $request->status]);
+            DB::commit();
+            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status . '', 'success' => true], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            return  response()->json(['error' => $th], 400);
+        }
+    }
 }
