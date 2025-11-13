@@ -670,7 +670,7 @@ class FollowUpController extends Controller
                 $mpController->blacklist($request);
             }
             DB::commit();
-            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status . '', 'success' => true], 200);
+            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status .  ($request->status == 'NI' ? ', serta menambahkan ke blacklist.' : ''), 'success' => true], 200);
         } catch (\Exception $th) {
             DB::rollBack();
             return  response()->json(['error' => $th], 400);
