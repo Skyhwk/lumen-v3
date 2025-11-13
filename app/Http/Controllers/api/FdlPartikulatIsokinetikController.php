@@ -979,7 +979,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'traverse_poin_kecepatan_linier' => $method1->kecepatan_linier,
                                         'diameter_cerobong' => $diameterCerobong,
                                         'ukuran_lubang_sampling' => $ukuranLubang,
-                                        'jumlah_lubang_sampling' => $method1->jumah_lubang_sampling,
+                                        'jumlah_lubang_sampling' => $method1->jumlah_lubang_sampling,
                                         'luas_penampang_cerobong' => $method1->luas_penampang,
                                         'jarak_upstream' => $method1->jarak_upstream,
                                         'jarak_downstream' => $method1->jarak_downstream,
