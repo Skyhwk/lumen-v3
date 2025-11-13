@@ -3842,6 +3842,11 @@ class InputParameterController extends Controller
                 if(isset($request->jumlah_coloni) && count($request->jumlah_coloni) > 1){
                     $data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
+				if(!is_null($swab)){
+					$header->luas = $luas;
+					$header->jumlah_mikroba = $request->jumlah_mikroba;
+					$header->fp = $request->jumlah_pengencer;
+				}
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
