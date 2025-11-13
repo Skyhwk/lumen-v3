@@ -191,7 +191,7 @@
                                 $bagian_kering = 'dalam keadaan kering';
                             } elseif (Str::contains(strtolower($v), 'parameter')) {
                                 $bagian_semua = 'untuk semua parameter';
-                            } elseif (Str::contains($lower, 'angka')) {
+                            } elseif (Str::contains(strtolower($v), 'angka')) {
                                 // Cari angka persen (misalnya 6%, 15%, dst)
                                 if (preg_match('/(\d+(?:[\.,]\d+)?)\s*%/', $v, $matches)) {
                                     $bagian_angka = 'sebesar ' . $matches[1] . '%';
@@ -199,7 +199,7 @@
                                     // fallback jika tidak ada angka
                                     $bagian_angka = 'sebesar 15%';
                                 }
-                            } elseif (Str::contains($lower, 'partikulat')) {
+                            } elseif (Str::contains(strtolower($v), 'partikulat')) {
                                 // Tambahan: khusus untuk partikulat
                                 $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
                             }
