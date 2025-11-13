@@ -191,23 +191,30 @@
                                 $bagian_kering = 'dalam keadaan kering';
                             } elseif (Str::contains(strtolower($v), 'parameter')) {
                                 $bagian_semua = 'untuk semua parameter';
-                            } elseif (Str::contains(strtolower($v), 'angka') || Str::contains(strtolower($v), '15')) {
-                                $bagian_angka = 'sebesar 15%';
+                            } elseif (Str::contains($lower, 'angka')) {
+                                // Cari angka persen (misalnya 6%, 15%, dst)
+                                if (preg_match('/(\d+(?:[\.,]\d+)?)\s*%/', $v, $matches)) {
+                                    $bagian_angka = 'sebesar ' . $matches[1] . '%';
+                                } else {
+                                    // fallback jika tidak ada angka
+                                    $bagian_angka = 'sebesar 15%';
+                                }
+                            } elseif (Str::contains($lower, 'partikulat')) {
+                                // Tambahan: khusus untuk partikulat
+                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
                             }
                         }
 
                         // Gabungkan secara berurutan
                         $gabungKeterangan = trim(
-                            implode(
-                                ' ',
-                                array_filter([
-                                    $bagian_standar,
-                                    $bagian_o2,
-                                    $bagian_angka,
-                                    $bagian_kering,
-                                    $bagian_semua,
-                                ]),
-                            ),
+                            implode(' ', array_filter([
+                                $bagian_standar,
+                                $bagian_o2,
+                                $bagian_angka,
+                                $bagian_kering,
+                                $bagian_semua,
+                                $bagian_khusus, // diletakkan paling akhir
+                            ]))
                         );
 
                         // Tambahkan titik di akhir jika belum ada
