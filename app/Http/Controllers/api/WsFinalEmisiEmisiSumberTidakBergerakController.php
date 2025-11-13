@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\api;
 
+use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganEmisiCerobong;
 use App\Models\EmisiCerobongHeader;
@@ -23,6 +24,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         $data = OrderDetail::with(['dataLapanganEmisiKendaraan', 'dataLapanganEmisiCerobong'])->where('is_active', $request->is_active)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
+        // ->where('parameter', 'not like', '%Iso-%')
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
             ->whereMonth('tanggal_terima', explode('-', $request->date)[1])
@@ -45,11 +47,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             return trim(end($parts));
         }, $parameterArray);
 
-        $data1 = IsokinetikHeader::with(['method1', 'method2', 'method3', 'method4', 'method5', 'method6'])
-            ->where('is_approve', 1)
+        $data1 = IsokinetikHeader::with(['ws_value'])
+            ->where('is_approved', 1)
             ->where('is_active', 1)
             ->where('parameter', '!=', 'Iso-ResTime')
-			->whereIn('parameter', $parameterNames)
+            ->whereIn('parameter', $parameterNames)
             ->where('no_sampel', $request->no_sampel)
             ->get()->map(function ($item) {
             $item['data_type'] = 'isokinetik_header';
@@ -59,7 +61,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         $data2 = EmisiCerobongHeader::with(['ws_value_cerobong', 'data_lapangan'])
             ->where('no_sampel', $request->no_sampel)
             ->where('is_approved', 1)
-			->whereIn('parameter', $parameterNames)
+            ->whereIn('parameter', $parameterNames)
             ->where('is_active', 1)
             ->get()
             ->map(function ($item) {
@@ -133,10 +135,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 }
             }
         }
+        $getSatuan = new HelperSatuan;
 
         // , %, -, m/s, mg/Mm³, mg/m³, mg/Nm3, mg/Nm³, ppm, °C
         return Datatables::of($data)
-            ->addColumn('nilai_uji', function ($item) {
+            ->addColumn('nilai_uji', function ($item) use ($getSatuan) {
                 // $satuanIndexMap = [
                 // 	"ug/nm3" => 1,
                 // 	"mg/Nm3" => 2,
@@ -150,34 +153,34 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 // 	"mg/m³" => 10,
 
                 // ];
-                $satuanIndexMap = [
-                    "μg/Nm³"   => "",
-                    "μg/Nm3"   => "",
+                // $satuanIndexMap = [
+                //     "μg/Nm³"   => "",
+                //     "μg/Nm3"   => "",
 
-                    "mg/nm³"   => 1,
-                    "mg/nm3"   => 1,
-                    "mg/Mm³"   => 1,
-                    "mg/Nm3"   => 1,
-                    "mg/Nm³"   => 1,
-                    "mg/Nm³"   => 1,
+                //     "mg/nm³"   => 1,
+                //     "mg/nm3"   => 1,
+                //     "mg/Mm³"   => 1,
+                //     "mg/Nm3"   => 1,
+                //     "mg/Nm³"   => 1,
+                //     "mg/Nm³"   => 1,
 
-                    "ppm"      => 2,
-                    "PPM"      => 2,
+                //     "ppm"      => 2,
+                //     "PPM"      => 2,
 
-                    "ug/m3"    => 3,
-                    "ug/m³"    => 3,
+                //     "ug/m3"    => 3,
+                //     "ug/m³"    => 3,
 
-                    "mg/m3"    => 4,
-                    "mg/m³"    => 4,
-                    "mg/m³"    => 4,
+                //     "mg/m3"    => 4,
+                //     "mg/m³"    => 4,
+                //     "mg/m³"    => 4,
 
-                    "%"        => 5,
-                    "°C"       => 6,
-                    "g/gmol"   => 7,
-                    "m3/s"     => 8,
-                    "m/s"      => 9,
-                    "kg/tahun" => 10,
-                ];
+                //     "%"        => 5,
+                //     "°C"       => 6,
+                //     "g/gmol"   => 7,
+                //     "m3/s"     => 8,
+                //     "m/s"      => 9,
+                //     "kg/tahun" => 10,
+                // ];
 
                 $satuan = $item['satuan'] ?? '-';
 
@@ -194,7 +197,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 // // buang spasi
                 // $satuan = str_replace(' ', '', $satuan);
 
-                $index = $satuanIndexMap[$satuan] ?? null;
+                $index = $getSatuan->emisi($satuan);
 
                 $ws = $item['ws_value_cerobong'] ?? null;
                 if (! $ws) {
@@ -467,6 +470,33 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             ]);
 
             if ($data) {
+                return response()->json([
+                    'message' => 'Data has ben Approved',
+                    'success' => true,
+                    'status'  => 200,
+                ], 200);
+            }
+        } else if ($request->type == "isokinetik_header") {
+            $data = IsokinetikHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+            // dd($data);
+            if ($data) {
+                $cek       = IsokinetikHeader::where('id', $data->id)->first();
+                $cek->lhps = 0;
+                $cek->save();
+
+                $has       = IsokinetikHeader::where('id', $request->id)->first();
+                $has->lhps = 0;
+                $has->save();
+
+                return response()->json([
+                    'message' => 'Data has ben Rejected',
+                    'success' => true,
+                    'status'  => 200,
+                ], 201);
+            } else {
+                $dat       = IsokinetikHeader::where('id', $request->id)->first();
+                $dat->lhps = 1;
+                $dat->save();
                 return response()->json([
                     'message' => 'Data has ben Approved',
                     'success' => true,
