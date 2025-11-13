@@ -499,9 +499,9 @@ class InputParameterTotalController extends Controller
                         
                         // Format hasil
                         if ($hasil_tkn < 0.5715) {
-                            $hasil = '<0,5715';
+                            $hasil = '<0.5715';
                         } else {
-                            $hasil = number_format($hasil_tkn, 4, ',', '');
+                            $hasil = number_format($hasil_tkn, 4, '.', '');
                         }
                         
                         // Insert TKN

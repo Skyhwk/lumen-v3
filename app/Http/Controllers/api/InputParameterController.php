@@ -3736,10 +3736,10 @@ class InputParameterController extends Controller
 			];
 		}
 
-		if (count($fdl) > 0 || !is_null($swab)) { // Periksa apakah $fdl tidak null
+		if (($fdl && count($fdl) > 0) || !is_null($swab)) { // Periksa apakah $fdl tidak null
 			try {
 				// Ambil data suhu, tekanan, dan kelembaban
-				if($fdl->count() >= 0){
+				if(count($fdl) > 0){
 					$suhu = [];
 					$tekanan = [];
 					$kelembaban = [];
@@ -3762,6 +3762,9 @@ class InputParameterController extends Controller
 					$tekanan = $swab->tekanan_udara ?? 0;
 					$kelembaban = $swab->kelembapan ?? 0;
 					$luas = $swab->luas_area_swab ?? 0;
+					$volume = $request->volume ?? 0;
+					$durasi = [];
+					$flowRate = [];
 				}
 
 				// Decode JSON di dalam pengukuran
@@ -3801,9 +3804,10 @@ class InputParameterController extends Controller
 				$data_parsing->suhu = $suhu;
 				$data_parsing->tekanan = $tekanan;
 				$data_parsing->kelembaban = $kelembaban;
-				$data_parsing->flow_rate = $flowRate;
-				$data_parsing->durasi = $durasi;
-				$data_parsing->volume = $volume;
+				$data_parsing->luas = $luas ?? null;
+				$data_parsing->flow_rate = $flowRate ?? [];
+				$data_parsing->durasi = $durasi ?? [];
+				$data_parsing->volume = $volume ?? [];
 				$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 				$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3826,22 +3830,20 @@ class InputParameterController extends Controller
 				$header->id_parameter = $data_parameter->id;
 				$header->note = $request->note;
 				$header->tanggal_terima = $order_detail->tanggal_terima;
-				$header->volume = count($volume) > 0 ? array_sum($volume) / count($volume) : null;
+				$header->volume = is_array($volume) ? (count($volume) > 0 ? array_sum($volume) / count($volume) : null) : $volume;
 				$header->flow = count($flowRate) > 0 ? array_sum($flowRate) / count($flowRate) : null;
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
                 $volume_shift = null;
-                $data_pershift = null;
 				if(count($fdl) > 1){
-					$volume_shift = json_encode($volume);
+					$data_shift = json_encode($request->jumlah_coloni);
+                    $volume_shift = json_encode($volume);
 				}
-                if(count($request->jumlah_coloni) > 1){
-					$data_pershift = json_encode($data_kalkulasi['data_pershift']);
+                if(isset($request->jumlah_coloni) && count($request->jumlah_coloni) > 1){
+                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
-				$data_shift = json_encode($request->jumlah_coloni);
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
-                $header->data_pershift = $data_pershift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->save();
@@ -3873,7 +3875,9 @@ class InputParameterController extends Controller
 
 				return (object)[
 					'message' => 'Error: ' . $e->getMessage(),
-					'status' => 500
+					'status' => 500,
+					'line' => $e->getLine(),
+					'file' => $e->getFile()
 				];
 			}
 		} else {

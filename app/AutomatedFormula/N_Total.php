@@ -73,9 +73,9 @@ class N_Total
             
             // Format hasil
             if($total < 0.0009){
-                $hasil = '<0,0009';
+                $hasil = '<0.0009';
             } else {
-                $hasil = number_format($total, 4, ',', '');
+                $hasil = number_format($total, 4, '.', '');
             }
             
             // Jangan insert TKN di sini
