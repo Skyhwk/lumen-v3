@@ -179,6 +179,7 @@
                         $bagian_kering = '';
                         $bagian_semua = '';
                         $bagian_angka = '';
+                        $bagian_khusus = '';
 
                         // Deteksi bagian berdasarkan isi teks
                         foreach ($items as $v) {
