@@ -17,6 +17,8 @@ use App\Models\MasterKaryawan;
 use App\Models\WsValueErgonomi;
 use App\Models\ErgonomiHeader;
 
+use App\Services\{RosaFormatter,RebaFormatter};
+
 class WsFinalUdaraErgonomiController extends Controller
 {
 	public function index(Request $request)
@@ -341,87 +343,9 @@ class WsFinalUdaraErgonomiController extends Controller
 		try {
 			
 			DB::beginTransaction();
-			
-			$template = array(
-				"penyesuaian" => array(
-					"leher" => "",
-					"kaki" =>"",
-					"badan" =>"",
-					"beban" =>"",
-					"lengan_atas" =>"",
-					"pergelangan_tangan" =>"",
-					"lengan_atas" =>"",
-				),
-				"skor_kaki" => "",
-				"skor_badan" => "",
-				"skor_beban" => "",
-				"skor_leher" => "",
-				"total_skor_a" => "",
-				"total_skor_b" => "",
-				"nilai_tabel_a" => "",
-				"nilai_tabel_b" => "",
-				"nilai_tabel_c" => "",
-				"skor_pegangan" => "",
-				"final_skor_reba" => "",
-				"skor_lengan_atas" => "",
-				"skor_lengan_bawah" => "",
-				"skor_aktivitas_otot" => "",
-				"skor_otot_statis" => "",
-				"skor_otot_berulang" => "",
-				"skor_otot_tidak_stabil" => "",
-				"skor_pergelangan_tangan" => ""
-			);
 			$dataRequest = $request->all();
-			$result =$template;
-			foreach ($dataRequest as $key => $value) {
-				// jika key mengandung "tambah_"
-				if (strpos($key, 'tambah_') === 0) {
+			$rebaFormatter = RebaFormatter::formatRebaData($dataRequest);
 
-					/**
-					 * Contoh key:
-					 *  - tambah_leher_memuntir        => leher
-					 *  - tambah_lengan_bahu_diangkat  => lengan_atas
-					 *  - tambah_pergelangan_memuntir  => pergelangan_tangan
-					 */
-
-					// mapping otomatis nama bagian utama berdasarkan kata kunci
-					$bagian = null;
-					if (strpos($key, 'leher') !== false) {
-						$bagian = 'leher';
-					} elseif (strpos($key, 'kaki') !== false) {
-						$bagian = 'kaki';
-					} elseif (strpos($key, 'badan') !== false) {
-						$bagian = 'badan';
-					} elseif (strpos($key, 'beban') !== false) {
-						$bagian = 'beban';
-					} elseif (strpos($key, 'lengan') !== false) {
-						$bagian = 'lengan_atas';
-					} elseif (strpos($key, 'pergelangan') !== false) {
-						$bagian = 'pergelangan_tangan';
-					}
-
-					if ($bagian && array_key_exists($bagian, $result['penyesuaian'])) {
-						// jika bagian belum diisi apa pun, buat array dulu
-						if (!is_array($result['penyesuaian'][$bagian])) {
-							$result['penyesuaian'][$bagian] = [];
-						}
-
-						// masukkan key tambahan ke dalam array bagian terkait
-						$result['penyesuaian'][$bagian][$key] = (int) $value;
-					}
-
-				} elseif (array_key_exists($key, $result)) {
-					// isi nilai langsung jika ada di template utama
-					$result[$key] = is_numeric($value) ? (int) $value : $value;
-				}
-			}
-
-			// optional: ubah string kosong di penyesuaian jadi 0 (agar konsisten)
-			foreach ($result['penyesuaian'] as $k => $v) {
-				if ($v === "") {
-					$result['penyesuaian'][$k] = 0;
-				}
-			}
 			if( !$request->has('id_datalapangan') && $request->id_datalapangan === '')
 			{
 				return response()->json([
@@ -470,103 +394,28 @@ class WsFinalUdaraErgonomiController extends Controller
 
 	public function KoreksiMethod4 (Request $request)
 	{
+		
 		try {
 			DB::beginTransaction();
-			$template = array(
-				"penyesuaian" => array(
-					"mouse" => "",
-					"monitor" => "",
-					"telepon" => "",
-					"keyboard" => "",
-				),
-				"skor_mouse" => "",
-				"skor_monitor" => "",
-				"skor_telepon" => "",
-				"nilai_table_a" => "",
-				"skor_keyboard" => "",
-				"final_skor_rosa" => "",
-				"total_section_a" => "",
-				"total_section_b" => "",
-				"total_section_c" => "",
-				"total_section_d" => "",
-				"skor_lebar_kursi" => "",
-				"total_skor_mouse" => "",
-				"skor_tinggi_kursi" => "",
-				"total_skor_monitor" => "",
-				"total_skor_telepon" => "",
-				"total_skor_keyboard" => "",
-				"skor_sandaran_lengan" => "",
-				"skor_sandaran_punggung" => "",
-				"skor_durasi_kerja_mouse" => "",
-				"skor_durasi_kerja_monitor" => "",
-				"skor_durasi_kerja_telepon" => "",
-				"skor_durasi_kerja_keyboard" => "",
-				"skor_durasi_kerja_bagian_kursi" => "",
-				"skor_total_sandaran_lengan_dan_punggung" => "",
-				"skor_total_tinggi_kursi_dan_lebar_dudukan" => ""
-			);
 			$dataRequest = $request->all();
-			$result =$template;
-			foreach ($dataRequest as $key => $value) {
-				// jika key mengandung "tambah_"
-				if (strpos($key, 'tambah_') === 0) {
-
-					/**
-					 * Contoh key:
-					 *  - tambah_leher_memuntir        => leher
-					 *  - tambah_lengan_bahu_diangkat  => lengan_atas
-					 *  - tambah_pergelangan_memuntir  => pergelangan_tangan
-					 */
-
-					// mapping otomatis nama bagian utama berdasarkan kata kunci
-					$bagian = null;
-					if (strpos($key, 'mouse') !== false) {
-						$bagian = 'mouse';
-					} elseif (strpos($key, 'monitor') !== false) {
-						$bagian = 'monitor';
-					} elseif (strpos($key, 'telepon') !== false) {
-						$bagian = 'telepon';
-					} elseif (strpos($key, 'keyboard') !== false) {
-						$bagian = 'keyboard';
-					}
-
-					if ($bagian && array_key_exists($bagian, $result['penyesuaian'])) {
-						// jika bagian belum diisi apa pun, buat array dulu
-						if (!is_array($result['penyesuaian'][$bagian])) {
-							$result['penyesuaian'][$bagian] = [];
-						}
-
-						// masukkan key tambahan ke dalam array bagian terkait
-						$result['penyesuaian'][$bagian][$key] = (int) $value;
-					}
-
-				} elseif (array_key_exists($key, $result)) {
-					// isi nilai langsung jika ada di template utama
-					$result[$key] = is_numeric($value) ? (int) $value : $value;
-				}
-			}
-
-			// optional: ubah string kosong di penyesuaian jadi 0 (agar konsisten)
-			foreach ($result['penyesuaian'] as $k => $v) {
-				if ($v === "") {
-					$result['penyesuaian'][$k] = 0;
-				}
-			}
+			
+			$formatted = RosaFormatter::formatRosaData($dataRequest);
+			
 			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
 			if($cekWsValue != null){
-				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->pengukuran = json_encode($formatted);
 				$cekWsValue->updated_at = Carbon::now();
 				$cekWsValue->updated_by = $this->karyawan;
 				$cekWsValue->save();
 			}else{
 				$new = new WsValueErgonomi();
-					$new->id_data_lapangan = $request->id_datalapangan;
-					$new->no_sampel = $request->no_sampel;
-					$new->method = 2;
-					$new->pengukuran = json_encode($result);
-					$new->created_at = Carbon::now();
-					$new->created_by = $this->karyawan;
-					$new->save();
+				$new->id_data_lapangan = $request->id_datalapangan;
+				$new->no_sampel = $request->no_sampel;
+				$new->method = 4;
+				$new->pengukuran = json_encode($formatted);
+				$new->created_at = Carbon::now();
+				$new->created_by = $this->karyawan;
+				$new->save();
 			}
 			DB::commit();
 			return response()->json([
@@ -588,10 +437,198 @@ class WsFinalUdaraErgonomiController extends Controller
 	{
 		try {
 			DB::beginTransaction();
-			dd($request->all());
-		} catch (\Throwable $th) {
+			$dataRequest = $request->all();
+
+			$template = [
+				"tambahan" => [
+					"lengan_atas" => [],
+					"lengan_bawah" => [],
+					"pergelangan_tangan" => [],
+					"leher" => [],
+					"badan" => [],
+					"kaki" => [],
+				],
+				"kaki" => 0,
+				"badan" => 0,
+				"leher" => 0,
+				"lengan_atas" => 0,
+				"lengan_bawah" => 0,
+				"beban_A" => 0,
+				"beban_B" => 0,
+				"total_skor_A" => 0,
+				"total_skor_B" => 0,
+				"nilai_tabel_A" => 0,
+				"nilai_tabel_B" => 0,
+				"nilai_tabel_C" => 0,
+				"tangan_memuntir" => 0,
+				"aktivitas_otot_A" => 0,
+				"aktivitas_otot_B" => 0,
+				"pergelangan_tangan" => 0,
+				"skor_rula" => 0,
+				"kesimpulan" => "",
+				"kesimpulan_kategori" => "",
+				"kesimpulan_tindakan" => "",
+			];
+
+			// salin dulu supaya tidak mutasi langsung
+			$result = $template;
+
+			foreach ($dataRequest as $key => $value) {
+
+				if (strpos($key, 'tambah_') === 0) {
+					// deteksi bagian tubuh berdasarkan kata kunci
+					$bagian = null;
+					if (strpos($key, 'lengan_bawah') !== false) {
+						$bagian = 'lengan_bawah';
+					} elseif (strpos($key, 'lengan') !== false || strpos($key, 'bahu') !== false) {
+						$bagian = 'lengan_atas';
+					} elseif (strpos($key, 'pergelangan') !== false) {
+						$bagian = 'pergelangan_tangan';
+					} elseif (strpos($key, 'leher') !== false) {
+						$bagian = 'leher';
+					} elseif (strpos($key, 'badan') !== false) {
+						$bagian = 'badan';
+					} elseif (strpos($key, 'kaki') !== false) {
+						$bagian = 'kaki';
+					}
+
+					// jika bagian ditemukan dan ada di template tambahan
+					if ($bagian && array_key_exists($bagian, $result['tambahan'])) {
+						$result['tambahan'][$bagian][$key] = (int) $value;
+					}
+
+				} elseif (array_key_exists($key, $result)) {
+					// isi nilai utama langsung
+					$result[$key] = is_numeric($value) ? (int) $value : $value;
+				}
+			}
+
+			// Pastikan nilai kosong di `tambahan` diganti 0 agar konsisten
+			foreach ($result['tambahan'] as $bagian => $arr) {
+				if (empty($arr)) {
+					$result['tambahan'][$bagian] = [];
+				}
+			}
+			$result['kaki'] = $request->skor_kaki;
+			$result['badan'] = $request->skor_badan;
+			$result['leher'] = $request->skor_leher;
+			$result['lengan_atas'] = $request->skor_lengan_atas;
+			$result['lengan_bawah'] = $request->skor_lengan_bawah;
+			$result['beban_A'] = $request->skor_beban_A;
+			$result['beban_B'] = $request->skor_beban_B;
+			$result['total_skor_A'] = $request->total_skor_A;
+			$result['total_skor_B'] = $request->total_skor_B;
+			$result['nilai_tabel_A'] = $request->nilai_tabel_A;
+			$result['nilai_tabel_B'] = $request->nilai_tabel_B;
+			$result['nilai_tabel_C'] = $request->nilai_tabel_C;
+			$result['tangan_memuntir'] = $request->skor_pergelangan_tangan_memuntir;
+			$result['pergelangan_tangan'] = $request->skor_pergelangan_tangan;
+			$result['skor_rula'] = $request->final_skor_rula;
+
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 3;
+					$new->pengukuran = json_encode($result);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
 			//throw $th;
 			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod5 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 5;
+					$new->pengukuran = json_encode($request->all());
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			//throw $th;
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod7 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($request->all());
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 7;
+					$new->pengukuran = json_encode($request->all());
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			//throw $th;
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
 		}
 	}
 }
