@@ -26,8 +26,12 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 	{
 		$data = OrderDetail::with(['dataLapanganEmisiKendaraan', 'dataLapanganEmisiCerobong'])->where('is_active', $request->is_active)
 			->where('kategori_2', '5-Emisi')
-			->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
+			->whereIn('kategori_3', [
+				'34-Emisi Sumber Tidak Bergerak',
+				'119-Emisi Isokinetik'
+			])
 			->where('status', 0)
+			->where('parameter', 'like', '%Iso-%')
 			->whereNotNull('tanggal_terima')
 			->whereMonth('tanggal_terima', explode('-', $request->date)[1])
 			->whereYear('tanggal_terima', explode('-', $request->date)[0]);
@@ -36,13 +40,10 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 	}
 	public function detail(Request $request)
 	{
-		// $paramOrder = $request->paramOrder;
-		// dd($paramOrder);
-		$data1 = IsokinetikHeader::with(['method1', 'method2', 'method3', 'method4', 'method5', 'method6'])
+		$data1 = IsokinetikHeader::with(['ws_value'])
 			->where('is_approve', 1)
 			->where('is_active', 1)
-			->where('parameter', '!=', 'Iso-ResTime')
-			// ->whereIn('parameter', $paramOrder)
+			// ->where('parameter', '!=', 'Iso-ResTime')
 			->where('no_sampel', $request->no_sampel)
 			->get()->map(function ($item) {
 				$item['data_type'] = 'isokinetik_header';
@@ -89,6 +90,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				return $item;
 			});;
 
+		
 		$data3 = Subkontrak::with(['ws_value_cerobong'])
 			->where('no_sampel', $request->no_sampel)
 			->where('is_approve', 1)
@@ -105,7 +107,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 		$data3Arr = $data3->toArray();
 
 		$data = array_merge($data1Arr, $data2Arr, $data3Arr);
-		// dd($data, $data1Arr, $data2Arr, $data3Arr);
 
 		foreach ($data as &$item) {
 			$item['method'] = null;
@@ -260,28 +261,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			->make(true);
 	}
 
-
-	public function detailLapangan(Request $request)
-	{
-		try {
-
-			$data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)
-				->get();
-
-			return response()->json([
-				'data' => $data,
-				'success' => true,
-				'status' => 200
-			]);
-		} catch (\Exception $ex) {
-			return response()->json([
-				'message' => $ex->getMessage(),
-				'success' => false,
-				'status' => 400
-			]);
-		}
-	}
-
 	public function koreksiO2(Request $request)
 	{
 		// dd('masuk');
@@ -361,6 +340,27 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 		}
 	}
 
+	public function detailLapangan(Request $request)
+	{
+		try {
+
+			$data = DataLapanganEmisiCerobong::where('no_sampel', $request->no_sampel)
+				->get();
+
+			return response()->json([
+				'data' => $data,
+				'success' => true,
+				'status' => 200
+			]);
+		} catch (\Exception $ex) {
+			return response()->json([
+				'message' => $ex->getMessage(),
+				'success' => false,
+				'status' => 400
+			]);
+		}
+	}
+
 	public function rejectAnalys(Request $request)
 	{
 		try {
@@ -391,7 +391,20 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				} else {
 					return response()->json(['message' => 'Gagal']);
 				}
-			} else {
+			} else if($request->type == 'isokinetik_header'){
+				$data = IsokinetikHeader::where('id', $request->id)->update([
+					'is_approved' => 0,
+					'notes_reject' => $request->note,
+					'rejected_by' => $this->karyawan,
+					'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+				]);
+
+				if ($data) {
+					return response()->json(['message' => 'Berhasil, Silahkan Cek di Analys!', 'success' => true, 'status' => 200]);
+				} else {
+					return response()->json(['message' => 'Gagal']);
+				}
+			}else {
 				return response()->json([
 					'message' => 'Data Tidak Ditemukan'
 				], 401);
@@ -472,11 +485,96 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					'status' => 200,
 				], 200);
 			}
-		} else {
+		} else if($request->type == "isokinetik_header") {
+			$cek = IsokinetikHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+
+			if ($cek) {
+				$cek = IsokinetikHeader::where([
+					'id' => $cek->id
+				])->update([
+					'lhps' => 0,
+					'is_reject' => 1,
+					'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+					'rejected_by' => $this->karyawan
+				]);
+				$cek = IsokinetikHeader::where([
+					'id' => $request->id
+				])->update([
+					'lhps' => 0,
+					'is_reject' => 1,
+					'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+					'rejected_by' => $this->karyawan
+				]);
+
+				return response()->json([
+					'message' => 'Data has ben Rejected',
+					'success' => true,
+					'status' => 200,
+				], 201);
+			}
+
+			$data = IsokinetikHeader::where([
+				'id' => $request->id
+			])->update([
+				'lhps' => 1
+			]);
+
+			if ($data) {
+				return response()->json([
+					'message' => 'Data has ben Approved',
+					'success' => true,
+					'status' => 200,
+				], 200);
+			}
+		}else {
 			return response()->json([
 				'message' => 'Gagal Approve',
 				'success' => false,
 				'status' => 401,
+			], 401);
+		}
+	}
+
+	public function validasiApproveWSApi(Request $request)
+	{
+		// dd($request->all());
+		DB::beginTransaction();
+		try {
+			if ($request->id) {
+				$data = OrderDetail::where('id', $request->id)->first();
+				$data->status = 1;
+				$data->keterangan_1 = $request->keterangan_1;
+				$data->save();
+
+				HistoryAppReject::insert([
+					'no_lhp' => $data->cfr,
+					'no_sampel' => $data->no_sampel,
+					'kategori_2' => $data->kategori_2,
+					'kategori_3' => $data->kategori_3,
+					'menu' => 'WS Final Emisi',
+					'status' => 'approve',
+					'approved_at' => Carbon::now(),
+					'approved_by' => $this->karyawan
+				]);
+
+				DB::commit();
+				$this->resultx = 'Data hasbeen Approved.!';
+				return response()->json([
+					'message' => $this->resultx,
+					'status' => 200,
+					'success' => true,
+				], 200);
+			} else {
+				return response()->json([
+					'message' => 'Data Not Found.!',
+					'status' => 401,
+					'success' => false,
+				], 401);
+			}
+		} catch (Exception $e) {
+			DB::rollback();
+			return response()->json([
+				'message' => $e->getMessage()
 			], 401);
 		}
 	}
@@ -661,7 +759,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 		}
 	}
 
-
 	public function saveData(Request $request)
 	{
 		$type_koreksi = $request->type;
@@ -689,51 +786,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			return response()->json(['message' => 'Type koreksi harus diisi.'], 400);
 		}
 	}
-
-	public function validasiApproveWSApi(Request $request)
-	{
-		// dd($request->all());
-		DB::beginTransaction();
-		try {
-			if ($request->id) {
-				$data = OrderDetail::where('id', $request->id)->first();
-				$data->status = 1;
-				$data->keterangan_1 = $request->keterangan_1;
-				$data->save();
-
-				HistoryAppReject::insert([
-					'no_lhp' => $data->cfr,
-					'no_sampel' => $data->no_sampel,
-					'kategori_2' => $data->kategori_2,
-					'kategori_3' => $data->kategori_3,
-					'menu' => 'WS Final Emisi',
-					'status' => 'approve',
-					'approved_at' => Carbon::now(),
-					'approved_by' => $this->karyawan
-				]);
-
-				DB::commit();
-				$this->resultx = 'Data hasbeen Approved.!';
-				return response()->json([
-					'message' => $this->resultx,
-					'status' => 200,
-					'success' => true,
-				], 200);
-			} else {
-				return response()->json([
-					'message' => 'Data Not Found.!',
-					'status' => 401,
-					'success' => false,
-				], 401);
-			}
-		} catch (Exception $e) {
-			DB::rollback();
-			return response()->json([
-				'message' => $e->getMessage()
-			], 401);
-		}
-	}
-
 
 	public function addValue(Request $request)
 	{
