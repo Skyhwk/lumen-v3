@@ -955,6 +955,8 @@ class FdlPartikulatIsokinetikController extends Controller
                                     $header->Konstanta_1 = $selisih;
 
                                     $hasilIso = [
+                                        'koefisien_dry_gas' => $method2->kp,
+                                        'delta_h_calibrate' => $method2->cp,
                                         'konstanta_1' => $selisih,
                                         'konstanta_2' => $method2->tekanan_udara,
                                         'konstanta_4' => $konstanta4,
