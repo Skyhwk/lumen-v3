@@ -25,12 +25,12 @@ class SwabTest
 					$rumus = '<1';
 				} else {
 					// Format hasil perhitungan ke 2 desimal
-					$rumus = number_format($rumus, 4);
+					$rumus = number_format($rumus, 2, '.', '');
 				}
 			}
-            $hasil2 = number_format($hasil2, 0);
-            $hasil3 = number_format($hasil3, 0);
-            $hasil4 = number_format($hasil4, 0);
+            $hasil2 = number_format($hasil2, 2, '.', '');
+            $hasil3 = number_format($hasil3, 2, '.', '');
+            $hasil4 = number_format($hasil4, 2, '.', '');
 
             $satuan = 'CFU/cm2';
 

@@ -902,7 +902,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                 $header->parameter = $nama_param;
                                 $header->template_stp = 55;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
                                 $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
@@ -910,7 +910,7 @@ class FdlPartikulatIsokinetikController extends Controller
                             } else {
                                 $header->id_lapangan = $data->id_lapangan;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
                                 $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
@@ -955,6 +955,8 @@ class FdlPartikulatIsokinetikController extends Controller
                                     $header->Konstanta_1 = $selisih;
 
                                     $hasilIso = [
+                                        'koefisien_dry_gas' => $method2->kp,
+                                        'delta_h_calibrate' => $method2->cp,
                                         'konstanta_1' => $selisih,
                                         'konstanta_2' => $method2->tekanan_udara,
                                         'konstanta_4' => $konstanta4,
@@ -977,7 +979,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'traverse_poin_kecepatan_linier' => $method1->kecepatan_linier,
                                         'diameter_cerobong' => $diameterCerobong,
                                         'ukuran_lubang_sampling' => $ukuranLubang,
-                                        'jumlah_lubang_sampling' => $method1->jumah_lubang_sampling,
+                                        'jumlah_lubang_sampling' => $method1->jumlah_lubang_sampling,
                                         'luas_penampang_cerobong' => $method1->luas_penampang,
                                         'jarak_upstream' => $method1->jarak_upstream,
                                         'jarak_downstream' => $method1->jarak_downstream,

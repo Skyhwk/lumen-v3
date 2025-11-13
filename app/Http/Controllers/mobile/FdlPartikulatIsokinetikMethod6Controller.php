@@ -122,8 +122,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
             } else {
                 $data = new DataLapanganIsokinetikHasil();
 
-                if ($request->id_lapangan != '')
-                    $data->id_lapangan = $method2->id_lapangan;
+                $data->id_lapangan = $method2->id_lapangan;
                 if (strtoupper(trim($request->no_sample)) != '')
                     $data->no_sampel = strtoupper(trim($request->no_sample));
                 if ($request->impinger1 != '')
