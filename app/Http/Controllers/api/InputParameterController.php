@@ -4274,7 +4274,7 @@ class InputParameterController extends Controller
                         ->where('is_active', true)
                         ->first();
                     if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
-                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
+                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
                         $data_udara->id_subkontrak  = $data->id;
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_' . $i;
@@ -4299,7 +4299,7 @@ class InputParameterController extends Controller
 						->where('is_active', true)
 						->first();
 					if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
-						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id)->orderBy('id', 'desc')->first();
                         $data_emisi->id_subkontrak  = $data->id;
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_c';
