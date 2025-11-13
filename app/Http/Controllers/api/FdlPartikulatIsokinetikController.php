@@ -902,7 +902,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                 $header->parameter = $nama_param;
                                 $header->template_stp = 55;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
                                 $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
@@ -910,7 +910,7 @@ class FdlPartikulatIsokinetikController extends Controller
                             } else {
                                 $header->id_lapangan = $data->id_lapangan;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
                                 $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
