@@ -2,8 +2,8 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\RenderKontrakCopy;
-use App\Jobs\RenderNonKontrakCopy;
+use App\Services\RenderNonKontrakCopy;
+use App\Services\RenderKontrakCopy;
 use App\Jobs\RenderPdfPenawaran;
 use App\Models\ExpiredLink;
 use App\Models\JobTask;
