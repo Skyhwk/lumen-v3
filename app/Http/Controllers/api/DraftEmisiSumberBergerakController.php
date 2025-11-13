@@ -311,12 +311,16 @@ class DraftEmisiSumberBergerakController extends Controller
             $data = Parameter::where('id_kategori', '5')
                 ->where('id', $param)
                 ->get();
-            $resultx = $data->toArray();
+
+            $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
+                ->where('is_active', true)
+                ->get();
+            $resultx = $bakumutu->toArray();
             foreach ($resultx as $key => $value) {
-                $result[$key]['id'] = $value['id'];
+                // $result[$key]['id'] = $value['id'];
                 $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                $result[$key]['kategori'] = $value['nama_kategori'];
-                $result[$key]['sub_kategori'] = $subKategori[1];
+                // $result[$key]['kategori'] = $value['nama_kategori'];
+                // $result[$key]['sub_kategori'] = $subKategori[1];
             }
 
             // $result = $resultx;
@@ -335,16 +339,18 @@ class DraftEmisiSumberBergerakController extends Controller
                         if (!empty($missing)) {
                             foreach ($missing as $miss) {
                                 $result[] = [
-                                    'id' => null,
+                                    // 'id' => null,
                                     'metode_sampling' => $miss ?? '',
-                                    'kategori' => $value->kategori,
-                                    'sub_kategori' => $value->sub_kategori,
+                                    // 'kategori' => $value->kategori,
+                                    // 'sub_kategori' => $value->sub_kategori,
                                 ];
                             }
                         }
                     }
                 }
             }
+
+            $result = array_values(array_unique($result, SORT_REGULAR));
 
             return response()->json([
                 'status' => true,
