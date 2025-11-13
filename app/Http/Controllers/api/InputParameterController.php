@@ -2552,6 +2552,21 @@ class InputParameterController extends Controller
 				// 		->calculate();
 				// }
 
+				// $tkn_parameter = [
+				// 	'NO2-N', 'NO2-N (NA)',
+				// 	'NO3-N', 'NO3-N (APHA-E-23)', 'NO3-N (IKM-SP)', 'NO3-N (SNI-7-03)',
+				// 	'NH3-N', 'NH3-N (3-03-NA)', 'NH3-N (3-03)', 'NH3-N (30-25-NA)', 'NH3-N (30-25)',
+				// 	'N-Organik', 'N-Organik (NA)'
+				// ];
+				// if(in_array($request->parameter, $tkn_parameter) && in_array('TKN', $filteredParameter)){
+				// 	$hitung_otomatis = AutomatedFormula::where('parameter', 'TKN')
+				// 		->where('required_parameter', $tkn_parameter)
+				// 		->where('no_sampel', $request->no_sample)
+				// 		->where('class_calculate', 'TKN')
+				// 		->where('tanggal_terima', $tgl_terima)
+				// 		->calculate();
+				// }
+
 				$total_coliform = [
                     "BOD","BOD (B-23-NA)","BOD (B-23)",
                     "TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)",
@@ -3816,12 +3831,17 @@ class InputParameterController extends Controller
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
                 $volume_shift = null;
+                $data_pershift = null;
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
                     $volume_shift = json_encode($volume);
 				}
+                if(count($request->jumlah_coloni) > 1){
+                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
+                }
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
+                $header->data_pershift = $data_pershift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
 				$header->save();
@@ -4246,47 +4266,46 @@ class InputParameterController extends Controller
                                 $data_udara->{$key} = $data_kalkulasi['hasil'];
                             }
                         }
+                        $data_udara->save();
                     }else{
                         $data_udara = [];
                         $data_udara['id_subkontrak'] = $data->id;
                         $data_udara['no_sampel'] = trim($request->no_sample);
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_' . $i;
-                            if (isset($data_udara[$key])) {
-                                $data_udara[$key] = $data_kalkulasi['hasil'];
-                            }
+                            $data_udara[$key] = $data_kalkulasi['hasil'];
                         }
                         $kalkulasi1 = WsValueUdara::create($data_udara);
                     }
                 }else if($stp->sample->nama_kategori == 'Emisi'){
-                    $existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
-                        ->where('parameter', $request->parameter)
-                        ->where('is_active', true)
-                        ->first();
-                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
-                        $data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+					$existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
+						->where('parameter', $request->parameter)
+						->where('is_active', true)
+						->first();
+					if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
                         $data_emisi->id_subkontrak  = $data->id;
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
+                            $key = 'f_koreksi_c';
+							$key .= $i == 0 ? '' : $i;
                             if (isset($data_emisi->{$key})) {
-                                $data_emisi->{$key} = $data_kalkulasi['hasil'];
+								$data_emisi->{$key} = $data_kalkulasi['hasil'];
                             }
                         }
+						$data_emisi->save();
                     }else{
-                        $data_emisi = [];
+						$data_emisi = [];
                         $data_emisi['id_subkontrak'] = $data->id;
                         $data_emisi['no_sampel'] = trim($request->no_sample);
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c' . $i == 0 ? '' : $i;
-                            if (isset($data_emisi[$key])) {
-                                $data_emisi[$key] = $data_kalkulasi['hasil'];
-                            }
+                            $key = 'f_koreksi_c';
+							$key .= $i == 0 ? '' : $i;
+                            $data_emisi[$key] = $data_kalkulasi['hasil'];
                         }
-                        $kalkulasi1 = WsValueUdara::create($data_emisi);
+                        $kalkulasi1 = WsValueEmisiCerobong::create($data_emisi);
                     }
                 }
 
-                dd('masuk');
 				DB::commit();
 				return (object)[
 					'message'=> 'Value Parameter berhasil disimpan.!',

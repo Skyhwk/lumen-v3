@@ -630,10 +630,10 @@ class DraftUlkSinarUvController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 $data->save();
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,

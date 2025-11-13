@@ -21,7 +21,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 {
     public function index(Request $request)
     {
-        $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
+        $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'lhps_emisi_c','dataLapanganEmisiCerobong')
             // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
             ->where('is_approve', 0)
             ->where('is_active', true)
@@ -104,6 +104,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $header->nama_karyawan = 'Abidah Walfathiyyah';
                 $header->jabatan_karyawan = 'Technical Control Supervisor';
                 $header->keterangan = $request->keterangan ? json_encode($request->keterangan) : NULL;
+                $header->deskripsi_titik = $request->penamaan_titik ?: NULL;
+                $header->titik_koordinat = $request->titik_koordinat ?: NULL;
                 //     $header->nama_karyawan = 'Dwi Meisya Batari';
                 //     $header->jabatan_karyawan = 'Technical Control Manager';
                 $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
@@ -915,10 +917,10 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 // dd($data->id_kategori_2);
 
                 HistoryAppReject::insert([

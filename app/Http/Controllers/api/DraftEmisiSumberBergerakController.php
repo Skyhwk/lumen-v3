@@ -559,7 +559,7 @@ class DraftEmisiSumberBergerakController extends Controller
             $no_sampel = $order_details->pluck('no_sampel')->toArray();
 
 
-            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
+            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan','detail')
                 ->whereIn('no_sampel', $no_sampel)
                 ->get();
             if ($lapangan->isNotEmpty()) {
@@ -583,7 +583,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                     $mainData[] = [
                         'no_sampel' => $lapangan->no_sampel,
-                        'nama_kendaraan' => $kendaraan->merk_kendaraan ?? '-',
+                        'nama_kendaraan' => $lapangan->detail->keterangan_1 ?? $kendaraan->merk_kendaraan ?? '-',
                         'bobot' => $kendaraan->bobot_kendaraan ?? '-',
                         'tahun' => $kendaraan->tahun_pembuatan ?? '-',
                         'hasil_co' => $lapangan->co,
@@ -869,10 +869,10 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 // dd($data->id_kategori_2);
 
                 HistoryAppReject::insert([
