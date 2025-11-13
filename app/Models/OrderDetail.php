@@ -523,7 +523,7 @@ class OrderDetail extends Sector
 
     public function isoHeader()
     {
-        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6')->where('is_approve', true);
+        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
     }
 
     // barangkali kepakai
