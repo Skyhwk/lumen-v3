@@ -666,7 +666,7 @@ class DraftUlkController extends Controller
 
         $getSatuan = new HelperSatuan;
 
-        $index    = $getSatuan->udara($bakumutu->satuan ?? 1);
+        $index    = $getSatuan->udara($bakumutu->satuan ?? null) ?? 1;
         $ws_udara = (object) $val->ws_udara;
 
         $ws_value_lingkungan = (object) $val->ws_lingkungan;
