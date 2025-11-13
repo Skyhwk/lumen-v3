@@ -157,7 +157,7 @@ class PrintLhp
             return false;
         }
 
-        if ($total / $parameterAkreditasi >= 0.6) {
+        if (($parameterAkreditasi / $total) >= 0.6) {
             return true;
         } else {
             return false;
