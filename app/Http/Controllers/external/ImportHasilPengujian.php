@@ -465,11 +465,15 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
             $parameterUji = array_map(function ($item) {
                 return \explode(';', $item)[1];
             }, $parameterUji);
-
+            
+            $parameters = [];
+            $idHeader = [];
             for ($row = $startRow; $row <= $highestRow; $row += 2) { // += 2 karna dimerge
                 $parameter = $this->getNilaiAkhirSel($worksheet, "D{$row}");
-                $hasilUjiCell = $this->getNilaiAkhirSel($worksheet, "F6") == 'TERKOREKSI' ? "F{$row}" : "E{$row}"; // emisi genset di f7
-                $hasilUji = $this->getNilaiAkhirSel($worksheet, $hasilUjiCell);
+                // $hasilUjiCell = $this->getNilaiAkhirSel($worksheet, "F6") == 'TERKOREKSI' ? "F{$row}" : "E{$row}"; // emisi genset di f7
+                // $hasilUji = $this->getNilaiAkhirSel($worksheet, $hasilUjiCell);
+                $hasilUji = $this->getNilaiAkhirSel($worksheet, "E{$row}");
+                $hasilTerkoreksi = $this->getNilaiAkhirSel($worksheet, "F6") == 'TERKOREKSI' ? $this->getNilaiAkhirSel($worksheet, "F{$row}") : null;
 
                 if (!$parameter) break;
 
@@ -523,7 +527,6 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
                     $query->whereHas('emisi_cerobong_header', fn($r) => $r->where('parameter', $parameter));
                         // ->orWhereHas('emisi_isokinetik', fn($r) => $r->where('parameter', $parameter));
                 })->first();
-
                 if($cekData == null){
                     $subkontrak = new Subkontrak();
                     $subkontrak->category_id = explode('-', $orderDetail->kategori_2)[0];
@@ -540,48 +543,117 @@ class ImportHasilPengujian extends \Laravel\Lumen\Routing\Controller
                 } 
 
                 $hasilUji = str_replace(',', '.', $hasilUji);
-                // dd($noSampel);
-                if($id_subkontrak == null){
-                    $wsValueEmisiCerobong = WsValueEmisiCerobong::where('id', $cekData->id)->first();
-                    $wsValueEmisiCerobong->no_sampel = $noSampel;
-                    $wsValueEmisiCerobong->f_koreksi_c = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c1 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c2 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c3 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c4 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c5 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c6 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c7 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c8 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c9 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c10 = $hasilUji;
-                    $wsValueEmisiCerobong->created_by = 'System';
-                    $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
-                    $wsValueEmisiCerobong->save();
+                $hasilTerkoreksi = str_replace(',', '.', $hasilTerkoreksi);
+                
+                if($hasilTerkoreksi != '' && $hasilTerkoreksi != null && $hasilTerkoreksi != '-') {
+                    // dd('masuk atur');
+                    if($id_subkontrak == null){
+                        $wsValueEmisiCerobong = WsValueEmisiCerobong::where('id', $cekData->id)->first();
+                        $wsValueEmisiCerobong->no_sampel = $noSampel;
+                        $wsValueEmisiCerobong->C = $hasilUji;
+                        $wsValueEmisiCerobong->C1 = $hasilUji;
+                        $wsValueEmisiCerobong->C2 = $hasilUji;
+                        $wsValueEmisiCerobong->C3 = $hasilUji;
+                        $wsValueEmisiCerobong->C4 = $hasilUji;
+                        $wsValueEmisiCerobong->C5 = $hasilUji;
+                        $wsValueEmisiCerobong->C6 = $hasilUji;
+                        $wsValueEmisiCerobong->C7 = $hasilUji;
+                        $wsValueEmisiCerobong->C8 = $hasilUji;
+                        $wsValueEmisiCerobong->C9 = $hasilUji;
+                        $wsValueEmisiCerobong->C10 = $hasilUji;
+                        $wsValueEmisiCerobong->f_koreksi_c = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c1 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c2 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c3 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c4 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c5 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c6 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c7 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c8 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c9 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c10 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->created_by = 'System';
+                        $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                        $wsValueEmisiCerobong->save();
+                    } else {
+                        $wsValueEmisiCerobong = new WsValueEmisiCerobong();
+                        $wsValueEmisiCerobong->id_subkontrak = $subkontrak->id;
+                        $wsValueEmisiCerobong->tanggal_terima = $orderDetail->tanggal_terima;
+                        $wsValueEmisiCerobong->no_sampel = $noSampel;
+                        $wsValueEmisiCerobong->C = $hasilUji;
+                        $wsValueEmisiCerobong->C1 = $hasilUji;
+                        $wsValueEmisiCerobong->C2 = $hasilUji;
+                        $wsValueEmisiCerobong->C3 = $hasilUji;
+                        $wsValueEmisiCerobong->C4 = $hasilUji;
+                        $wsValueEmisiCerobong->C5 = $hasilUji;
+                        $wsValueEmisiCerobong->C6 = $hasilUji;
+                        $wsValueEmisiCerobong->C7 = $hasilUji;
+                        $wsValueEmisiCerobong->C8 = $hasilUji;
+                        $wsValueEmisiCerobong->C9 = $hasilUji;
+                        $wsValueEmisiCerobong->C10 = $hasilUji;
+                        $wsValueEmisiCerobong->f_koreksi_c = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c1 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c2 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c3 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c4 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c5 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c6 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c7 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c8 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c9 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->f_koreksi_c10 = $hasilTerkoreksi;
+                        $wsValueEmisiCerobong->created_by = 'System';
+                        $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                        $wsValueEmisiCerobong->save();
+                    }
                 } else {
-                    $wsValueEmisiCerobong = new WsValueEmisiCerobong();
-                    $wsValueEmisiCerobong->id_subkontrak = $subkontrak->id;
-                    $wsValueEmisiCerobong->tanggal_terima = $orderDetail->tanggal_terima;
-                    $wsValueEmisiCerobong->no_sampel = $noSampel;
-                    $wsValueEmisiCerobong->f_koreksi_c = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c1 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c2 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c3 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c4 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c5 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c6 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c7 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c8 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c9 = $hasilUji;
-                    $wsValueEmisiCerobong->f_koreksi_c10 = $hasilUji;
-                    $wsValueEmisiCerobong->created_by = 'System';
-                    $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
-                    $wsValueEmisiCerobong->save();
+                    // dd('masuk sini');
+                    if($id_subkontrak == null){
+                        $wsValueEmisiCerobong = WsValueEmisiCerobong::where('id', $cekData->id)->first();
+                        $wsValueEmisiCerobong->no_sampel = $noSampel;
+                        $wsValueEmisiCerobong->C = $hasilUji;
+                        $wsValueEmisiCerobong->C1 = $hasilUji;
+                        $wsValueEmisiCerobong->C2 = $hasilUji;
+                        $wsValueEmisiCerobong->C3 = $hasilUji;
+                        $wsValueEmisiCerobong->C4 = $hasilUji;
+                        $wsValueEmisiCerobong->C5 = $hasilUji;
+                        $wsValueEmisiCerobong->C6 = $hasilUji;
+                        $wsValueEmisiCerobong->C7 = $hasilUji;
+                        $wsValueEmisiCerobong->C8 = $hasilUji;
+                        $wsValueEmisiCerobong->C9 = $hasilUji;
+                        $wsValueEmisiCerobong->C10 = $hasilUji;
+                        $wsValueEmisiCerobong->created_by = 'System';
+                        $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                        $wsValueEmisiCerobong->save();
+                    } else {
+                        $wsValueEmisiCerobong = new WsValueEmisiCerobong();
+                        $wsValueEmisiCerobong->id_subkontrak = $subkontrak->id;
+                        $wsValueEmisiCerobong->tanggal_terima = $orderDetail->tanggal_terima;
+                        $wsValueEmisiCerobong->no_sampel = $noSampel;
+                        $wsValueEmisiCerobong->C = $hasilUji;
+                        $wsValueEmisiCerobong->C1 = $hasilUji;
+                        $wsValueEmisiCerobong->C2 = $hasilUji;
+                        $wsValueEmisiCerobong->C3 = $hasilUji;
+                        $wsValueEmisiCerobong->C4 = $hasilUji;
+                        $wsValueEmisiCerobong->C5 = $hasilUji;
+                        $wsValueEmisiCerobong->C6 = $hasilUji;
+                        $wsValueEmisiCerobong->C7 = $hasilUji;
+                        $wsValueEmisiCerobong->C8 = $hasilUji;
+                        $wsValueEmisiCerobong->C9 = $hasilUji;
+                        $wsValueEmisiCerobong->C10 = $hasilUji;
+                        $wsValueEmisiCerobong->created_by = 'System';
+                        $wsValueEmisiCerobong->created_at = date('Y-m-d H:i:s');
+                        $wsValueEmisiCerobong->save();
+                    }
                 }
+                // dd($noSampel);
+                
+                $parameters[] = $parameter;
+                $idHeader[] = $wsValueEmisiCerobong->id;
             }
 
             DB::commit();
-            return response()->json(['message' => 'dah kelar'], 200);
+            return response()->json(['message' => 'Done', 'parameters' => $parameters, 'idHeader' => $idHeader], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             dd($th);
