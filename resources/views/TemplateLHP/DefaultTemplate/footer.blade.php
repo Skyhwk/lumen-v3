@@ -29,7 +29,7 @@
         </td>
         <td width="60%" style="vertical-align: bottom; text-align:center; padding-left:44px; margin:0; position:relative; min-height:100px; font-family: roboto; font-weight: bold;">
             @if($mode == 'downloadLHP')
-                @if($header->count_print > 0)
+                @if($header->count_print > 1)
                     <strong>Cetakan ke-{{$header->count_print}}</strong><br/>
                 @endif
             @endif
@@ -43,7 +43,7 @@
         <!-- signature -->
         <td width="22%" style="position: relative; padding: 0; text-align: right;">
             @if (isset($last) && $last)
-                @if($mode == 'downloadLHP')
+                {{-- @if($mode == 'downloadLHP')
                     <table
                         style="position: absolute; bottom: 0; left: 0; text-align: center; font-size: 9px;"
                         width="260"
@@ -53,7 +53,8 @@
                         <tr><td><strong>(<u>{{$header->nama_karyawan}}</u>)</strong></td></tr>
                         <tr><td>{{$header->jabatan_karyawan}}</td></tr>
                     </table>
-                @elseif($mode == 'downloadLHPFinal')
+                @else --}}
+                @if($mode == 'downloadLHPFinal' || $mode == 'downloadLHP')
                     <table
                         style="position: absolute; bottom: 0; left: 0; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
@@ -65,7 +66,7 @@
                     </table>
                 @endif
             @else
-                @if($mode == 'downloadLHPFinal')
+                @if($mode == 'downloadLHPFinal' || $mode == 'downloadLHP')
                     <table
                         style="position: absolute; bottom: 0; left: 0; text-align: center; font-family: Helvetica, sans-serif; font-size: 9px;"
                         width="260"
@@ -80,11 +81,11 @@
             <table 
                 style="position: absolute; bottom: 0; right: 0; font-family: Helvetica, sans-serif; font-size: 7px; text-align: right;"
             >   
-            @if($mode == 'downloadLHP')
+            {{-- @if($mode == 'downloadLHP')
                 <tr>
                     <td><img src="{{$file_qr}}" width="40px" height="40px"></td>
                 </tr>
-            @endif   
+            @endif    --}}
             <tr><td style="font-family: roboto; font-weight: bold;">{{$pangging}}</td></tr>  
             </table>
         </td>
