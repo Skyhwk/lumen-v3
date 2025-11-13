@@ -3833,12 +3833,12 @@ class InputParameterController extends Controller
                 $volume_shift = null;
                 $data_pershift = null;
 				if(count($fdl) > 1){
-					$data_shift = json_encode($request->jumlah_coloni);
-                    $volume_shift = json_encode($volume);
+					$volume_shift = json_encode($volume);
 				}
                 if(count($request->jumlah_coloni) > 1){
-                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
+					$data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
+				$data_shift = json_encode($request->jumlah_coloni);
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
                 $header->data_pershift = $data_pershift;
