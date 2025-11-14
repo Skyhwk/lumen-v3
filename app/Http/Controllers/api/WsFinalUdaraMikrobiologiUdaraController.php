@@ -10,13 +10,21 @@ use Illuminate\Support\Facades\DB;
 use Datatables;
 use Carbon\Carbon;
 
+use App\Models\Parameter;
+use App\Models\DetailMicrobiologi;
+use App\Models\MasterBakumutu;
+
 use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
+use App\Models\MasterRegulasi;
 use App\Models\MicrobioHeader;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 use App\Models\LingkunganHeader;
+
+use App\Helpers\HelperSatuan;
 
 class WsFinalUdaraMikrobiologiUdaraController extends Controller
 {
@@ -24,17 +32,60 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ['33-Mikrobiologi Udara', "12-Udara Angka Kuman", "46-Udara Swab Test"])
+			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
-			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
 
 		return Datatables::of($data)->make(true);
+
+		// $data = OrderDetail::where('is_active', $request->is_active)
+		// 	->where('kategori_2', '4-Udara')
+		// 	->whereIn('kategori_3', ['33-Mikrobiologi Udara', "12-Udara Angka Kuman"])
+		// 	->where('status', 0)
+		// 	->whereNotNull('tanggal_terima')
+		// 	->whereJsonDoesntContain('parameter', ["318;Psikologi"])
+		// 	->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+		// 	->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+		// 	->orderBy('id', "desc");
+
+		// return Datatables::of($data)->make(true);
+	}
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::with(['detailMicrobiologi','udaraMicrobio'])->where('cfr', $request->cfr)
+			->where('status', 0)
+			->orderByDesc('id')
+			->get()	
+			->map(function ($item) {
+                $item->getAnyHeaderUdara();
+                return $item;
+            })->values()
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			});
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
 	}
 
 	public function convertHourToMinute($hour)
@@ -77,8 +128,30 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 			if (in_array($request->kategori, $this->categoryMicrobio)) {
 				$data = MicrobioHeader::with(['ws_value'])->where('no_sampel', $request->no_sampel)
 					->where('is_approved', 1)
-					->where('status', 0);
-				return Datatables::of($data)->make(true);
+					->where('is_active', 1)
+					->where('status', 0)->get();
+				$idRegulasi = $request->regulasi;
+				foreach ($data as $item) {
+					
+					$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+						->where('id_regulasi', $idRegulasi)
+						->where('is_active', 1)
+						->select('baku_mutu', 'satuan', 'method', 'nama_header')
+						->first();
+					$item->satuan = $bakuMutu->satuan ?? null;
+					$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
+					$item->method = $bakuMutu->method ?? null;
+					$item->nama_header = $bakuMutu->nama_header ?? null;
+				}
+				$getSatuan = new HelperSatuan;
+				return Datatables::of($data)
+				->addColumn('nilai_uji', function ($item) use ($getSatuan) {
+					if ($item->ws_value) {
+						return $item->ws_value->hasil9;
+					}
+					return '-';
+				})
+				->make(true);
 			} else {
 				return response()->json([
 					'message' => 'Kategori tidak sesuai',
@@ -94,18 +167,40 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 
 	public function detailLapangan(Request $request)
 	{
-		$parameterNames = [];
+		if (in_array($request->kategori, $this->categoryMicrobio)) {
+			$getNoOrder = explode('/', $request->no_sampel)[0] ?? null;
 
-		if (is_array($request->parameter)) {
-			foreach ($request->parameter as $param) {
-				$paramParts = explode(";", $param);
-				if (isset($paramParts[1])) {
-					$parameterNames[] = trim($paramParts[1]);
+			$orderDetail = OrderDetail::where('no_order', $getNoOrder)->get();
+
+			$getNoSampel = $orderDetail->map(function ($item) {
+				return $item->no_sampel;
+			})->unique()->sortBy(function ($item) {
+				return (int) explode('/', $item)[1];
+			})->values();
+
+			$totLapangan = $getNoSampel->count();
+
+			try {
+				$data = [];
+				$model = DetailMicrobiologi::class;
+
+				$data = $model::where('no_sampel', $request->no_sampel)->first();
+				if (!$data) return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);
+
+				$urutan = $getNoSampel->search($data->no_sampel);
+				$urutanDisplay = $urutan + 1;
+				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
+				
+
+				if ($data) {
+					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
 				}
+			} catch (\Exception $ex) {
+				dd($ex);
 			}
+		} else {
+			$data = [];
 		}
-		
-		$data = [];
 	}
 
 	public function rejectAnalys(Request $request)
@@ -675,5 +770,26 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 				'status' => 401
 			], 401);
 		}
+	}
+
+	public function getRegulasi(Request $request)
+	{
+		$data = MasterRegulasi::where('id_kategori', 4)
+			->where('is_active', true)
+			->get();
+		return response()->json([
+			'data' => $data
+		], 200);
+	}
+
+	public function getTableRegulasi(Request $request)
+	{
+		$data = DB::table('tabel_regulasi')
+			->whereJsonContains('id_regulasi', (string)$request->id)
+			->first();
+
+		return response()->json([
+			'data' => $data
+		], 200);
 	}
 }
