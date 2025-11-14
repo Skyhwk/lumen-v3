@@ -328,6 +328,17 @@ class OrderDetail extends Sector
         return $this->belongsTo(KebisinganHeader::class, 'no_sampel', 'no_sampel');
     }
 
+    public function swabTesHeader()
+    {
+        return $this->belongsTo(SwabTestHeader::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function swabOnMicrobio()
+    {
+        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%");
+    }
+
+
     public function getAnyHeaderUdara()
     {
         if ($this->pencahayaanHeader()->exists()) {
@@ -338,6 +349,12 @@ class OrderDetail extends Sector
         }
         if ($this->kebisinganHeader()->exists()) {
             return $this->KebisinganHeader;
+        }
+        if ($this->swabTesHeader()->exists()) {
+            return $this->SwabTesHeader;
+        }
+        if ($this->swabOnMicrobio()->exists()) {
+            return $this->swabOnMicrobio;
         }
         return null;
     }
