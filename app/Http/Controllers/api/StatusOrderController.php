@@ -61,12 +61,22 @@ class StatusOrderController extends Controller
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-            if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
-                $data->where('sales_id', $this->user_id);
-            } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
-                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
-                array_push($bawahan, $this->user_id);
-                $data->whereIn('sales_id', $bawahan);
+            if($mode == 'non_kontrak') {
+                if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
+                    $data->where('sales_id', $this->user_id);
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('sales_id', $bawahan);
+                }
+            }else if($mode == 'kontrak') {
+                if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
+                    $data->where('header.sales_id', $this->user_id);
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('header.sales_id', $bawahan);
+                }
             }
 
             return DataTables::of($data)
