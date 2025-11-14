@@ -17,7 +17,7 @@ use App\Models\MasterKaryawan;
 use App\Models\WsValueErgonomi;
 use App\Models\ErgonomiHeader;
 
-use App\Services\{RosaFormatter,RebaFormatter};
+use App\Services\{RosaFormatter,RebaFormatter,RulaFormatter,RlwFormatter};
 
 class WsFinalUdaraErgonomiController extends Controller
 {
@@ -359,7 +359,7 @@ class WsFinalUdaraErgonomiController extends Controller
 			
 			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
 			if($cekWsValue != null){
-				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->pengukuran = json_encode($rebaFormatter);
 				$cekWsValue->updated_at = Carbon::now();
 				$cekWsValue->updated_by = $this->karyawan;
 				$cekWsValue->save();
@@ -368,7 +368,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
 					$new->method = 2;
-					$new->pengukuran = json_encode($result);
+					$new->pengukuran = json_encode($rebaFormatter);
 					$new->created_at = Carbon::now();
 					$new->created_by = $this->karyawan;
 					$new->save();
@@ -439,95 +439,12 @@ class WsFinalUdaraErgonomiController extends Controller
 			DB::beginTransaction();
 			$dataRequest = $request->all();
 
-			$template = [
-				"tambahan" => [
-					"lengan_atas" => [],
-					"lengan_bawah" => [],
-					"pergelangan_tangan" => [],
-					"leher" => [],
-					"badan" => [],
-					"kaki" => [],
-				],
-				"kaki" => 0,
-				"badan" => 0,
-				"leher" => 0,
-				"lengan_atas" => 0,
-				"lengan_bawah" => 0,
-				"beban_A" => 0,
-				"beban_B" => 0,
-				"total_skor_A" => 0,
-				"total_skor_B" => 0,
-				"nilai_tabel_A" => 0,
-				"nilai_tabel_B" => 0,
-				"nilai_tabel_C" => 0,
-				"tangan_memuntir" => 0,
-				"aktivitas_otot_A" => 0,
-				"aktivitas_otot_B" => 0,
-				"pergelangan_tangan" => 0,
-				"skor_rula" => 0,
-				"kesimpulan" => "",
-				"kesimpulan_kategori" => "",
-				"kesimpulan_tindakan" => "",
-			];
-
-			// salin dulu supaya tidak mutasi langsung
-			$result = $template;
-
-			foreach ($dataRequest as $key => $value) {
-
-				if (strpos($key, 'tambah_') === 0) {
-					// deteksi bagian tubuh berdasarkan kata kunci
-					$bagian = null;
-					if (strpos($key, 'lengan_bawah') !== false) {
-						$bagian = 'lengan_bawah';
-					} elseif (strpos($key, 'lengan') !== false || strpos($key, 'bahu') !== false) {
-						$bagian = 'lengan_atas';
-					} elseif (strpos($key, 'pergelangan') !== false) {
-						$bagian = 'pergelangan_tangan';
-					} elseif (strpos($key, 'leher') !== false) {
-						$bagian = 'leher';
-					} elseif (strpos($key, 'badan') !== false) {
-						$bagian = 'badan';
-					} elseif (strpos($key, 'kaki') !== false) {
-						$bagian = 'kaki';
-					}
-
-					// jika bagian ditemukan dan ada di template tambahan
-					if ($bagian && array_key_exists($bagian, $result['tambahan'])) {
-						$result['tambahan'][$bagian][$key] = (int) $value;
-					}
-
-				} elseif (array_key_exists($key, $result)) {
-					// isi nilai utama langsung
-					$result[$key] = is_numeric($value) ? (int) $value : $value;
-				}
-			}
-
-			// Pastikan nilai kosong di `tambahan` diganti 0 agar konsisten
-			foreach ($result['tambahan'] as $bagian => $arr) {
-				if (empty($arr)) {
-					$result['tambahan'][$bagian] = [];
-				}
-			}
-			$result['kaki'] = $request->skor_kaki;
-			$result['badan'] = $request->skor_badan;
-			$result['leher'] = $request->skor_leher;
-			$result['lengan_atas'] = $request->skor_lengan_atas;
-			$result['lengan_bawah'] = $request->skor_lengan_bawah;
-			$result['beban_A'] = $request->skor_beban_A;
-			$result['beban_B'] = $request->skor_beban_B;
-			$result['total_skor_A'] = $request->total_skor_A;
-			$result['total_skor_B'] = $request->total_skor_B;
-			$result['nilai_tabel_A'] = $request->nilai_tabel_A;
-			$result['nilai_tabel_B'] = $request->nilai_tabel_B;
-			$result['nilai_tabel_C'] = $request->nilai_tabel_C;
-			$result['tangan_memuntir'] = $request->skor_pergelangan_tangan_memuntir;
-			$result['pergelangan_tangan'] = $request->skor_pergelangan_tangan;
-			$result['skor_rula'] = $request->final_skor_rula;
-
+			$formatted = new RulaFormatter();
+			$rulaFormat = $formatted->format($dataRequest);
+			
 			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
 			if($cekWsValue != null){
-				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->pengukuran = json_encode($rulaFormat);
 				$cekWsValue->updated_at = Carbon::now();
 				$cekWsValue->updated_by = $this->karyawan;
 				$cekWsValue->save();
@@ -536,7 +453,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
 					$new->method = 3;
-					$new->pengukuran = json_encode($result);
+					$new->pengukuran = json_encode($rulaFormat);
 					$new->created_at = Carbon::now();
 					$new->created_by = $this->karyawan;
 					$new->save();
@@ -562,9 +479,15 @@ class WsFinalUdaraErgonomiController extends Controller
 	{
 		try {
 			DB::beginTransaction();
+			$formatted = RlwFormatter::format($request->all(), [
+				"id_datalapangan" => $request->id_datalapangan,
+				"no_sampel"       => $request->no_sampel,
+				"method"          => $request->method,
+			]);
+			
 			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
 			if($cekWsValue != null){
-				$cekWsValue->pengukuran = json_encode($result);
+				$cekWsValue->pengukuran = json_encode($formatted);
 				$cekWsValue->updated_at = Carbon::now();
 				$cekWsValue->updated_by = $this->karyawan;
 				$cekWsValue->save();
@@ -573,7 +496,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
 					$new->method = 5;
-					$new->pengukuran = json_encode($request->all());
+					$new->pengukuran = json_encode($formatted);
 					$new->created_at = Carbon::now();
 					$new->created_by = $this->karyawan;
 					$new->save();

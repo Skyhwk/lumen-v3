@@ -109,13 +109,38 @@ class RosaFormatter
             'total_section_c' => isset($data['total_section_c']) ? (int)$data['total_section_c'] : null,
             'total_section_d' => isset($data['total_section_d']) ? (int)$data['total_section_d'] : null,
         ];
-        
+        $penyesuaian = [
+            "mouse" => [
+                "beda_permukaan" => (int)($data['tambah_mouse_beda_permukaan'] ?? 0),
+                "menekuk" => (int)($data['tambah_mouse_menekuk'] ?? 0),
+                "ada_palmrest" => (int)($data['tambah_mouse_ada_palmrest'] ?? 0),
+            ],
+            "monitor" => [
+                "leher_putar"   => (int)($data['tambah_monitor_leher_putar'] ?? 0),
+                "pantulan"      => (int)($data['tambah_monitor_pantulan'] ?? 0),
+                "no_holder"     => (int)($data['tambah_monitor_no_holder'] ?? 0),
+                "terlalu_jauh"  => (int)($data['tambah_monitor_terlalu_jauh'] ?? 0),
+            ],
+            "telepon" => [
+                "penopang_leher" => (int)($data['tambah_telepon_penopang_leher'] ?? 0),
+                "tangan_tidak_bebas" => (int)($data['tambah_telepon_tangan_tidak_bebas'] ?? 0),
+            ],
+            "keyboard" => [
+                "deviasi"         => (int)($data['tambah_keyboard_deviasi'] ?? 0),
+                "terlalu_tinggi"  => (int)($data['tambah_keyboard_terlalu_tinggi'] ?? 0),
+                "diatas_kepala"   => (int)($data['tambah_keyboard_diatas_kepala'] ?? 0),
+                "tidak_bisa_atur" => (int)($data['tambah_keyboard_tidak_bisa_atur'] ?? 0),
+            ],
+        ];
+
+
         // gabungkan
         return array_merge(
             [
                 'section_A' => $sectionA,
                 'section_B' => $sectionB,
                 'section_C' => $sectionC,
+                'penyesuaian' => $penyesuaian
             ],
             $summary
         );
