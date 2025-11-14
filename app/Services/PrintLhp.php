@@ -133,47 +133,17 @@ class PrintLhp
         }
     }
 
-    private function cekAkreditasi($data)
-    {
-        // $dataDecode = json_decode($data);
-
-        $parameterAkreditasi = 0;
-        $parameterNonAkreditasi = 0;
-
-        // $orderDetail = OrderDetail::where('no_sampel', $no_sampel)->first();
-
-        // $kategori = explode('-', $orderDetail->kategori_2)[0];
-        foreach ($data as $key => $value) {
-            // $parameter = Parameter::where('nama_lab', $value)->where('id_kategori', $kategori)->first();
-            if ($value->akr != 'ẍ') {
-                $parameterAkreditasi++;
-            } else {
-                $parameterNonAkreditasi++;
-            }
-        }
-        $total = count($data);
-        // dd($total);
-        if ($parameterAkreditasi == 0) {
-            return false;
-        }
-
-        if (($parameterAkreditasi / $total) >= 0.6) {
-            return true;
-        } else {
-            return false;
-        }
-
-
-    }
-
-    public function printByFilename($filename, $detail){
+    public function printByFilename($filename, $detail, $kategori = null, $no_lhp = null){
         DB::beginTransaction();
         try {
-            $kan = $this->cekAkreditasi($detail);
+            if($kategori == 'Kebisingan'){
+                $kan = $this->cekAkreditasiKebisingan($no_lhp);
+            } else {
+                $kan = $this->cekAkreditasi($detail);
+            }
             $id_printer = 67; // Default printer ID
             if ($kan)
                 $id_printer = 68;
-
             $cek_printer = Printers::where('id', $id_printer)->first();
             // return $cek_printer;
             if ($kan) {
@@ -204,6 +174,72 @@ class PrintLhp
                 'status' => false,
                 'message' => 'Error printing LHP: ' . $th->getMessage()
             ], 500);
+        }
+    }
+
+    private function cekAkreditasi($data)
+    {
+        // $dataDecode = json_decode($data);
+        $parameterAkreditasi = 0;
+        $parameterNonAkreditasi = 0;
+
+        // $orderDetail = OrderDetail::where('no_sampel', $no_sampel)->first();
+
+        // $kategori = explode('-', $orderDetail->kategori_2)[0];
+        foreach ($data as $key => $value) {
+            // $parameter = Parameter::where('nama_lab', $value)->where('id_kategori', $kategori)->first();
+            if ($value->akr != 'ẍ') {
+                $parameterAkreditasi++;
+            } else {
+                $parameterNonAkreditasi++;
+            }
+        }
+        $total = count($data);
+        // dd($total);
+        if ($parameterAkreditasi == 0) {
+            return false;
+        }
+
+        if ($total / $parameterAkreditasi >= 0.6) {
+            return true;
+        } else {
+            return false;
+        }
+
+
+    }
+
+    private function cekAkreditasiKebisingan($no_lhp)
+    {
+        $parameterAkreditasi = 0;
+        $parameterNonAkreditasi = 0;
+        
+        $orderDetail = OrderDetail::where('cfr', $no_lhp)->where('is_active', 1)->get();
+        foreach ($orderDetail as  $value) {
+            $kategori = explode('-', $value->kategori_2)[0];
+            $sub_kategori = explode('-', $value->kategori_3)[0];
+            $dataDecode = json_decode($value->parameter);
+            $sub_kategori = intval(strval($sub_kategori));
+            $kategori = intval(strval($kategori));
+            
+                foreach ($dataDecode as $val) {
+                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
+                    if ($parameter->status == 'AKREDITASI') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+
+                }
+            
+        }
+        if ($parameterAkreditasi == 0) {
+            return false;
+        }
+        if(($parameterAkreditasi / ($parameterAkreditasi + $parameterNonAkreditasi)) >= 0.6) {
+            return true;
+        } else {
+            return false;
         }
     }
 }

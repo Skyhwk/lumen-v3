@@ -3842,6 +3842,11 @@ class InputParameterController extends Controller
                 if(isset($request->jumlah_coloni) && count($request->jumlah_coloni) > 1){
                     $data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
+				if(!is_null($swab)){
+					$header->luas = $luas;
+					$header->jumlah_mikroba = $request->jumlah_mikroba;
+					$header->fp = $request->jumlah_pengencer;
+				}
 				$header->data_shift = $data_shift;
                 $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
@@ -3857,7 +3862,14 @@ class InputParameterController extends Controller
 				$data_udara = array();
 				$data_udara['id_microbiologi_header'] = $header->id;
 				$data_udara['no_sampel'] = $request->no_sample;
-				$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				if(count($fdl) > 0){
+					$data_udara['hasil9'] = $data_kalkulasi['hasil'];
+				}else{
+					$data_udara['hasil10'] = $data_kalkulasi['hasil'];
+					$data_udara['hasil11'] = $data_kalkulasi['hasil2'];
+					$data_udara['hasil13'] = $data_kalkulasi['hasil3'];
+					$data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+				}
 				WsValueUdara::create($data_udara);
 
 				// Commit transaksi jika semua berhasil
@@ -4262,7 +4274,7 @@ class InputParameterController extends Controller
                         ->where('is_active', true)
                         ->first();
                     if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
-                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id);
+                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
                         $data_udara->id_subkontrak  = $data->id;
                         for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_' . $i;
@@ -4287,7 +4299,7 @@ class InputParameterController extends Controller
 						->where('is_active', true)
 						->first();
 					if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
-						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id);
+						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id)->orderBy('id', 'desc')->first();
                         $data_emisi->id_subkontrak  = $data->id;
                         for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
                             $key = 'f_koreksi_c';
