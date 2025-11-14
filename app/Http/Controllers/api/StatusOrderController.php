@@ -27,7 +27,7 @@ class StatusOrderController extends Controller
                     'sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
                     },
-                    'orderHeader.invoices'
+                    'orderHeader.invoices.recordWithdraw'
                 ])
                     ->where('id_cabang', $request->cabang)
                     ->whereHas('orderHeader')
@@ -45,7 +45,7 @@ class StatusOrderController extends Controller
                     'header.sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
                     },
-                    'header.orderHeader.invoices'
+                    'header.orderHeader.invoices.recordWithdraw'
                 ])
                     ->select('request_quotation_kontrak_D.*')
                     ->whereHas('header', function ($q) use ($request) {
@@ -61,12 +61,22 @@ class StatusOrderController extends Controller
             }
 
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-            if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
-                $data->where('sales_id', $this->user_id);
-            } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
-                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
-                array_push($bawahan, $this->user_id);
-                $data->whereIn('sales_id', $bawahan);
+            if($mode == 'non_kontrak') {
+                if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
+                    $data->where('sales_id', $this->user_id);
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('sales_id', $bawahan);
+                }
+            }else if($mode == 'kontrak') {
+                if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
+                    $data->where('header.sales_id', $this->user_id);
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('header.sales_id', $bawahan);
+                }
             }
 
             return DataTables::of($data)
@@ -81,6 +91,19 @@ class StatusOrderController extends Controller
                     } elseif ($mode == 'kontrak') {
                         $query->whereHas('header', function ($q) use ($keyword) {
                             $q->where('no_document', 'like', "%{$keyword}%");
+                        });
+                    }
+                })
+                ->filterColumn('invoice', function ($query, $keyword) use ($mode) {
+                    if ($mode == 'non_kontrak') {
+                        $query->whereHas('orderHeader.invoices', function ($q) use ($keyword) {
+                            $q->where('no_invoice', 'like', "%{$keyword}%");
+                        });
+                    }
+
+                    if ($mode == 'kontrak') {
+                        $query->whereHas('header.orderHeader.invoices', function ($q) use ($keyword) {
+                            $q->where('no_invoice', 'like', "%{$keyword}%");
                         });
                     }
                 })
@@ -111,6 +134,48 @@ class StatusOrderController extends Controller
                         return json_decode($row->link_lhp, true);
                     }
                 })
+                // ->addColumn('nilai_invoice', function ($row) use ($mode) {
+                //     if ($mode == 'non_kontrak') {
+                //         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return 0;
+                        
+                //         $filtered = $row->orderHeader->invoices
+                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->no_document);
+                //         if ($filtered->isEmpty()) {
+                //             $filtered = $row->orderHeader->invoices
+                //                 ->where('periode', 'all')->where('no_quotation', $row->no_document);
+                //         };
+                //         $nilaiInvoice = 0;
+                //         foreach ($filtered as $invoice) {
+                //             $nilaiInvoice += $invoice->nilai_pelunasan;
+                //             if($invoice->record_withdraw) {
+                //                 foreach ($invoice->record_withdraw as $withdraw) {
+                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
+                //                 }
+                //             }
+                //         }
+
+                //         return $nilaiInvoice;
+                //     } else if ($mode == 'kontrak') {
+                //         if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
+                //         $filtered = $row->header->orderHeader->invoices
+                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->header->no_document);
+                //         if ($filtered->isEmpty()) {
+                //             $filtered = $row->header->orderHeader->invoices
+                //                 ->where('periode', 'all')->where('no_quotation', $row->header->no_document);
+                //         };
+                //         $nilaiInvoice = 0;
+                //         foreach ($filtered as $invoice) {
+                //             $nilaiInvoice += $invoice->nilai_pelunasan;
+                //             if($invoice->record_withdraw) {
+                //                 foreach ($invoice->record_withdraw as $withdraw) {
+                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
+                //                 }
+                //             }
+                //         }
+
+                //         return $nilaiInvoice;
+                //     };
+                // })
                 ->addColumn('nilai_pelunasan', function ($row) use ($mode) {
                     if ($mode == 'non_kontrak') {
                         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
@@ -128,6 +193,31 @@ class StatusOrderController extends Controller
                         $totalPelunasan = $filtered->sum('nilai_pelunasan');
 
                         return $totalPelunasan;
+                    };
+                })
+                ->addColumn('invoice', function ($row) use ($mode) {
+                    if ($mode == 'non_kontrak') {
+                        if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return 0;
+                        
+                        $filtered = $row->orderHeader->invoices
+                            ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->no_document);
+                        if ($filtered->isEmpty()) {
+                            $filtered = $row->orderHeader->invoices
+                                ->where('periode', 'all')->where('no_quotation', $row->no_document);
+                        };
+
+
+                        return $filtered->values()->toArray();
+                    } else if ($mode == 'kontrak') {
+                        if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
+                        $filtered = $row->header->orderHeader->invoices
+                            ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->header->no_document);
+                        if ($filtered->isEmpty()) {
+                            $filtered = $row->header->orderHeader->invoices
+                                ->where('periode', 'all')->where('no_quotation', $row->header->no_document);
+                        };
+
+                        return $filtered->values()->toArray();
                     };
                 })
                 ->make(true);

@@ -1,13 +1,11 @@
 <?php
-
 namespace App\Models;
 
 use App\Models\Sector;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class OrderDetail extends Sector
 {
-    protected $table = "order_detail";
+    protected $table   = "order_detail";
     public $timestamps = false;
 
     public function orderHeader()
@@ -474,7 +472,7 @@ class OrderDetail extends Sector
     public function scopeWithAnyDataLapangan($query)
     {
         // pakai new static biar aman di konteks static scope
-        return $query->with((new static)->anyDataLapanganRelations);
+        return $query->with((new static )->anyDataLapanganRelations);
     }
 
     public function getAnyDataLapanganAttribute()
@@ -496,25 +494,58 @@ class OrderDetail extends Sector
         return $hasil->isNotEmpty() ? $hasil : null;
     }
 
-    public function udaraLingkungan(){
+    public function udaraLingkungan()
+    {
         return $this->hasMany(LingkunganHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approved', true);
     }
 
-    public function udaraSubKontrak(){
-        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->with('ws_value_linkungan','ws_udara')->where('is_approve', true);
+    public function udaraSubKontrak()
+    {
+        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->with('ws_value_linkungan', 'ws_udara')->where('is_approve', true);
     }
 
-    public function udaraDirect(){
-        return $this->hasMany(DirectLainHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara','ws_value_linkungan')->where('is_approve', true);
+    public function udaraDirect()
+    {
+        return $this->hasMany(DirectLainHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
     }
 
-    public function udaraPartikulat(){
+    public function udaraPartikulat()
+    {
         return $this->hasMany(PartikulatHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
     }
 
-    public function udaraMicrobio(){
+    public function udaraMicrobio()
+    {
         return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
     }
 
+    // emisi isokinetik
+
+    public function isoHeader()
+    {
+        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
+    }
+
+    // barangkali kepakai
+    // public function isoBeratMolekul()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikBeratMolekul::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoHasil()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikHasil::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoKadarAir()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikKadarAir::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoKecepatan()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikPenentuanKecepatanLinier::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoPartikulat()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikPenentuanPartikulat::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
 
 }

@@ -140,11 +140,10 @@ class DraftLhpUdaraPsikologiController extends Controller
 	public function store(Request $request)
 	{
 		// dd('This endpoint is deprecated. Please use the new endpoint f or storing LHP data.');
+		
 		DB::beginTransaction();
 		try {
-			$data = LhpUdaraPsikologiHeader::where('no_order', $request->no_order)->first();
 			$order = OrderHeader::where('no_order', $request->no_order)->first();
-
 			$alamat = '';
 
 			if (trim($request->alamat_perusahaan) == trim($order->alamat_kantor)) {
@@ -157,56 +156,59 @@ class DraftLhpUdaraPsikologiController extends Controller
 			->first();
 			
 			$waktu_pemeriksaan = $request->waktu_pemeriksaan_awal . ' - ' . $request->waktu_pemeriksaan_akhir;
-			if ($data) {
-				$data->nama_perusahaan = $request->nama_perusahaan;
-				$data->alamat_perusahaan = $alamat;
-				$data->penanggung_jawab = $request->penanggung_jawab;
-				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
-				$data->no_quotation = $request->no_quotation;
-				$data->no_cfr = $request->cfr;
-				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
-				// $data->no_dokumen = $request->no_dokumen;
-				$data->no_skp_pjk3 = $request->no_skp_pjk3;
-				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
-				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
-				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
-				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
-				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-				$data->updated_at = Carbon::now();
-				$data->updated_by = $this->karyawan;
-				$data->save();
+
+			$header = LhpUdaraPsikologiHeader::where('no_order', $request->no_order)->where('no_cfr', $request->cfr)->first();
+			
+			if ($header) {
+				$header->nama_perusahaan = $request->nama_perusahaan;
+				$header->alamat_perusahaan = $alamat;
+				$header->penanggung_jawab = $request->penanggung_jawab;
+				$header->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
+				$header->no_quotation = $request->no_quotation;
+				$header->no_cfr = $request->cfr;
+				$header->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
+				// $header->no_dokumen = $request->no_dokumen;
+				$header->no_skp_pjk3 = $request->no_skp_pjk3;
+				$header->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
+				$header->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
+				$header->waktu_pemeriksaan = $waktu_pemeriksaan;
+				$header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+				$header->updated_at = Carbon::now();
+				$header->updated_by = $this->karyawan;
+				$header->save();
 			} else {
 				// Insert jika tidak ada
-				$data = new LhpUdaraPsikologiHeader();
-				$data->no_order = $request->no_order;
-				$data->no_cfr = $request->cfr;
-				$data->nama_perusahaan = $request->nama_perusahaan;
-				$data->alamat_perusahaan = $alamat;
-				$data->penanggung_jawab = $request->penanggung_jawab;
-				$data->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
-				$data->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
-				// $data->no_dokumen = $request->no_dokumen;
-				$data->no_quotation = $request->no_quotation;
-				$data->no_skp_pjk3 = $request->no_skp_pjk3;
-				$data->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
-				$data->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
-				$data->waktu_pemeriksaan = $waktu_pemeriksaan;
-				$data->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
-				$data->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-				$data->created_at = Carbon::now();
-				$data->created_by = $this->karyawan;
-				$data->save();
+				$header = new LhpUdaraPsikologiHeader();
+				$header->no_order = $request->no_order;
+				$header->no_cfr = $request->cfr;
+				$header->nama_perusahaan = $request->nama_perusahaan;
+				$header->alamat_perusahaan = $alamat;
+				$header->penanggung_jawab = $request->penanggung_jawab;
+				$header->lokasi_pemeriksaan = $request->lokasi_pemeriksaan;
+				$header->tanggal_rilis_lhp = $request->tanggal_rilis_lhp;
+				// $header->no_dokumen = $request->no_dokumen;
+				$header->no_quotation = $request->no_quotation;
+				$header->no_skp_pjk3 = $request->no_skp_pjk3;
+				$header->no_skp_ahli_k3 = $request->no_skp_ahli_k3;
+				$header->tanggal_pemeriksaan = $request->tanggal_pemeriksaan;
+				$header->waktu_pemeriksaan = $waktu_pemeriksaan;
+				$header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+				$header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+				$header->created_at = Carbon::now();
+				$header->created_by = $this->karyawan;
+				$header->save();
 			}
-
+			
 			// Cek apakah detail untuk header ini sudah ada (asumsi hanya 1 detail per header)
-			$detail = LhpUdaraPsikologiDetail::where('id_header', $data->id)->first();
+			$detail = LhpUdaraPsikologiDetail::where('id_header', $header->id)->first();
 
 			if ($detail) {
-				LhpUdaraPsikologiDetail::where('id_header', $data->id)->delete();
+				LhpUdaraPsikologiDetail::where('id_header', $header->id)->delete();
 
 				foreach (json_decode($request->hasil) as $key => $value) {
 					$detail = new LhpUdaraPsikologiDetail();
-					$detail->id_header = $data->id;
+					$detail->id_header = $header->id;
 					$detail->no_sampel = $value[0]->no_sampel;
 					$detail->divisi = $value[0]->divisi;
 					$detail->tindakan = $value[0]->tindakan;
@@ -219,7 +221,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 				// Insert detail baru
 				foreach (json_decode($request->hasil) as $key => $value) {
 					$detail = new LhpUdaraPsikologiDetail();
-					$detail->id_header = $data->id;
+					$detail->id_header = $header->id;
 					$detail->no_sampel = $value[0]->no_sampel;
 					$detail->divisi = $value[0]->divisi;
 					$detail->tindakan = $value[0]->tindakan;
@@ -230,16 +232,12 @@ class DraftLhpUdaraPsikologiController extends Controller
 				}
 			}
 
-
-			$header = LhpUdaraPsikologiHeader::where('id', $data->id)->where('is_active', true)->first();
 			$detail = LhpUdaraPsikologiDetail::where('id_header', $header->id)->get();
 
 			if ($header != null) {
 				$qr = new GenerateQrDocumentLhpp();
 				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
-
-
-				if ($file_qr) {
+				if ($header->file_qr == null && $file_qr) {
 					$header->file_qr = $file_qr . '.svg';
 					$header->save();
 				}
@@ -251,9 +249,10 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$fileName = 'LHP-' . str_replace("/", "-", $request->cfr) . '.pdf';
 
 				// $fileName = 'LHPP-' . str_replace("/", "-", $request->cfr) . '.pdf';
-
-				$header->no_dokumen = $fileName;
-				$header->save();
+				if($header->no_dokumen == null && $fileName){
+					$header->no_dokumen = $fileName;
+					$header->save();
+				}
 			}
 
 			DB::commit();
@@ -264,7 +263,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 			], 200);
 		} catch (Exception $e) {
 			DB::rollBack();
-			// dd($e);
+			dd($e);
 			return response()->json([
 				'message' => $e->getMessage(),
 				'line' => $e->getLine(),

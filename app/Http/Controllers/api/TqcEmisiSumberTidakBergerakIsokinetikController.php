@@ -1,27 +1,31 @@
 <?php
 namespace App\Http\Controllers\api;
 
+use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Models\DataLapanganEmisiCerobong;
 use App\Models\EmisiCerobongHeader;
 use App\Models\HistoryAppReject;
+use App\Models\IsokinetikHeader;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\DataTables;
-use App\Helpers\HelperSatuan;
 
-class TqcEmisiSumberTidakBergerakController extends Controller
+class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
 {
     public function index()
     {
         $data = OrderDetail::where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '5-Emisi')
-            ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
-            // ->where('parameter', 'not like', '%Iso-%')
+            ->whereIn('kategori_3', [
+                '34-Emisi Sumber Tidak Bergerak',
+                '119-Emisi Isokinetik',
+            ])
+            ->where('parameter', 'like', '%Iso-%')
             ->orderBy('id', 'desc');
 
         return DataTables::of($data)
@@ -50,6 +54,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
     public function detail(Request $request)
     {
         try {
+
             $parameter = OrderDetail::where('no_sampel', $request->no_sampel)
                 ->where('is_active', true)
                 ->first()->parameter;
@@ -66,14 +71,21 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                 ->where('is_approved', 1)
                 ->where('status', 0)
                 ->whereIn('parameter', $parameterNames)
-                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
                 ->get();
+
+            $isokinetik = IsokinetikHeader::with(['ws_value'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('status', 0)
+                ->whereIn('parameter', $parameterNames)
+                ->get();
+            $data = $cerobong->merge($isokinetik);
 
             // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
             $id_regulasi = $request->regulasi;
             $getSatuan   = new HelperSatuan;
-            foreach ($cerobong as $item) {
 
+            foreach ($data as $item) {
                 $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
                     ->select('waktu_pengambilan')
                     ->first();
@@ -89,7 +101,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                 $item->nama_header = $bakuMutu->nama_header ?? null;
 
                 $index = $getSatuan->emisi($item->satuan);
-                $ws    = $item->ws_value_cerobong ?? null;
+                $ws    = $item->ws_value_cerobong ?? $item->ws_value ?? null;
                 if (! $ws) {
                     return "noWs";
                 }
@@ -126,6 +138,21 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                         }
                     }
 
+                    if (empty($nilai)) {
+                        $hasilIsokinetik = json_decode($ws['hasil_isokinetik'], true);
+
+                        if (is_array($hasilIsokinetik)) {
+                            $nilaiText = [];
+                            foreach ($hasilIsokinetik as $key => $value) {
+                                $label       = ucwords(str_replace('_', ' ', $key));
+                                $nilaiText[] = "{$label}: {$value}";
+                            }
+                            $nilai = implode(' | ', $nilaiText);
+                        } else {
+                            $nilai = $hasilIsokinetik;
+                        }
+                    }
+
                     $nilai = $nilai ?? '-';
                 } else {
                     $fKoreksiKey = "f_koreksi_c$index";
@@ -137,7 +164,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                 $item->nilai_uji = $nilai;
             }
 
-            return Datatables::of($cerobong)
+            return Datatables::of($data)
                 ->make(true);
         } catch (\Throwable $th) {
             return response()->json([
@@ -145,6 +172,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             ], 401);
         }
     }
+
     public function detailLapangan(Request $request)
     {
         try {
@@ -243,7 +271,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                     'no_sampel'   => $data->no_sampel,
                     'kategori_2'  => $data->kategori_2,
                     'kategori_3'  => $data->kategori_3,
-                    'menu'        => 'TQC Emisi Sumber Tidak Bergerak',
+                    'menu'        => 'TQC Emisi Isokinetik',
                     'status'      => 'approve',
                     'approved_at' => Carbon::now(),
                     'approved_by' => $this->karyawan,

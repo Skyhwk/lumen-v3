@@ -2,8 +2,7 @@
 namespace App\Http\Controllers\api;
 
 //models
-use App\Helpers\HelperSatuan;use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;
-use App\Models\EmisiCerobongHeader;
+use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;use App\Models\EmisiCerobongHeader;
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
@@ -22,26 +21,26 @@ use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
 use App\Models\MetodeSampling;
 use App\Models\OrderDetail;
+use App\Models\Parameter;
 
 // service
 
-use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
+use App\Services\LhpTemplate;
 // job
 
-use App\Services\LhpTemplate;
+use App\Services\SendEmail;
 //iluminate
 
-use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
-class DraftEmisiSumberTidakBergerakController extends Controller
+class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 {
     public function index(Request $request)
     {
@@ -51,8 +50,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             ->where('is_active', true)
             ->where('status', 2)
             ->where('kategori_2', '5-Emisi')
-            ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak']);
-            // ->where('parameter', 'not like', '%Iso-%');
+            ->whereIn('kategori_3', [
+                '34-Emisi Sumber Tidak Bergerak',
+                '119-Emisi Isokinetik',
+            ])
+            ->where('parameter', 'like', '%Iso-%');
         // ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
 
         // if ($request->kategori == 'ESTB') {
@@ -504,23 +506,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                 foreach ($models as $model) {
                     $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                    $parameter    = OrderDetail::where('no_sampel', $request->no_sampel)
-                        ->where('is_active', true)
-                        ->first()->parameter;
-
-                    $parameterArray = json_decode($parameter, true);
-
-                    $parameterNames = array_map(function ($param) {
-                        $parts = explode(';', $param);
-                        return trim(end($parts));
-                    }, $parameterArray);
-
-                    $data = $model::with('ws_value_cerobong', 'parameter_emisi')
+                    $data         = $model::with('ws_value_cerobong', 'parameter_emisi')
                         ->where('no_sampel', $request->no_sampel)
                         ->where($approveField, 1)
                         ->where('is_active', true)
                         ->where('lhps', 1)
-                        ->whereIn('parameter', $parameterNames)
                         ->get();
                     foreach ($data as $val) {
                         $entry      = $this->formatEntry($val, $request->regulasi, $methodsUsed);
@@ -606,14 +596,47 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         return $entry;
     }
 
+    private function kumpulanSatuan($satuan)
+    {
+        $satuanIndexMap = [
+            "μg/Nm³"   => "",
+            "μg/Nm3"   => "",
+
+            "mg/nm³"   => 1,
+            "mg/nm3"   => 1,
+            "mg/Mm³"   => 1,
+            "mg/Nm3"   => 1,
+            "mg/Nm³"   => 1,
+            "mg/Nm³"   => 1,
+
+            "ppm"      => 2,
+            "PPM"      => 2,
+
+            "ug/m3"    => 3,
+            "ug/m³"    => 3,
+
+            "mg/m3"    => 4,
+            "mg/m³"    => 4,
+            "mg/m³"    => 4,
+
+            "%"        => 5,
+            "°C"       => 6,
+            "g/gmol"   => 7,
+            "m3/s"     => 8,
+            "m/s"      => 9,
+            "kg/tahun" => 10,
+        ];
+
+        return $satuanIndexMap[$satuan] ?? null;
+    }
+
     private function getHasilUji($val, $satuan)
     {
 
-        $cerobong  = $val->ws_value_cerobong;
-        $ws        = $cerobong->toArray();
-        $getSatuan = new HelperSatuan;
-        $index     = $getSatuan->emisi($satuan);
-        $nilai     = null;
+        $cerobong = $val->ws_value_cerobong;
+        $ws       = $cerobong->toArray();
+        $index    = $this->kumpulanSatuan($satuan);
+        $nilai    = null;
 
         if ($index === null) {
 
@@ -646,11 +669,10 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     private function getKoreksi($val, $satuan)
     {
 
-        $cerobong  = $val->ws_value_cerobong;
-        $ws        = $cerobong->toArray();
-        $getSatuan = new HelperSatuan;
-        $index     = $getSatuan->emisi($satuan);
-        $nilai     = null;
+        $cerobong = $val->ws_value_cerobong;
+        $ws       = $cerobong->toArray();
+        $index    = $this->kumpulanSatuan($satuan);
+        $nilai    = null;
 
         if ($index === null) {
             // Cari dari f_koreksi_c...f_koreksi_c10
