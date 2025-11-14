@@ -235,9 +235,9 @@ class DraftLhpUdaraPsikologiController extends Controller
 			$detail = LhpUdaraPsikologiDetail::where('id_header', $header->id)->get();
 
 			if ($header != null) {
+				$qr = new GenerateQrDocumentLhpp();
+				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
 				if ($header->file_qr == null && $file_qr) {
-					$qr = new GenerateQrDocumentLhpp();
-					$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
 					$header->file_qr = $file_qr . '.svg';
 					$header->save();
 				}
