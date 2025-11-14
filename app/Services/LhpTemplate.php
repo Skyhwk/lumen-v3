@@ -9,6 +9,7 @@ use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
+use App\Models\MasterBakumutu;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 
@@ -359,6 +360,7 @@ class LhpTemplate
             $kategori = explode('-', $value->kategori_2)[0];
             $sub_kategori = explode('-', $value->kategori_3)[0];
             $dataDecode = json_decode($value->parameter);
+            $dataRegulasi = json_decode($value->regulasi)[0];
             $sub_kategori = intval(strval($sub_kategori));
             $kategori = intval(strval($kategori));
             if ($kategori === 1) {
@@ -396,8 +398,8 @@ class LhpTemplate
             }
             else {
                 foreach ($dataDecode as $val) {
-                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
-                    if ($parameter->status == 'AKREDITASI') {
+                    $bakumutu = MasterBakumutu::where('id_regulasi', explode("-",$dataRegulasi)[0])->where('parameter', explode(";",$val)[1])->first();
+                    if ($bakumutu && str_contains($bakumutu->akreditasi, 'AKREDITASI')) {
                         $parameterAkreditasi++;
                     } else {
                         $parameterNonAkreditasi++;
