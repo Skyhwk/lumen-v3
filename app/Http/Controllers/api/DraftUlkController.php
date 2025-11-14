@@ -204,9 +204,24 @@ class DraftUlkController extends Controller
             $parameter_uji = ! empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
             $keterangan    = array_values(array_filter($request->keterangan ?? []));
 
+            // $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
+            //     return ['page' => (int) $page, 'regulasi' => $item];
+            // })->values()->toArray();
+
             $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                return ['page' => (int) $page, 'regulasi' => $item];
+
+                [$id, $regulasi] = explode(';', $item);
+
+                // Hilangkan prefix id_ bila ada
+                $id = (int) str_replace('id_', '', $id);
+
+                return [
+                    'page'     => (int) $page,
+                    'regulasi' => trim($regulasi),
+                    'id'       => $id,
+                ];
             })->values()->toArray();
+
             // === 4. Simpan / update header ===
             $header->fill([
                 'no_order'               => $request->no_order ?: null,
@@ -411,44 +426,46 @@ class DraftUlkController extends Controller
 
                 // Proses regulasi custom dari LHP
                 if (! empty($cek_lhp->lhpsLingDetail) && ! empty($cek_lhp->regulasi_custom)) {
-                    $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
+                   $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
-                    // Mapping regulasi id
+                    // Mapping id regulasi jika ada other_regulasi
                     if (! empty($cek_regulasi)) {
+                        // Buat mapping regulasi => id
                         $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
-
+                        // Cari regulasi yang belum ada id-nya
                         $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
                             $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
                             if (isset($mapRegulasi[$regulasi_clean])) {
                                 $item['id'] = $mapRegulasi[$regulasi_clean];
                             } else {
-                                $db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
-                                if ($db) {
-                                    $item['id']                   = $db->id;
-                                    $mapRegulasi[$regulasi_clean] = $db->id;
+                                // Cari id regulasi jika belum ada di mapping
+                                $regulasi_db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
+                                if ($regulasi_db) {
+                                    $item['id']                   = $regulasi_db->id;
+                                    $mapRegulasi[$regulasi_clean] = $regulasi_db->id;
                                 }
                             }
                             return $item;
                         }, $regulasi_custom);
                     }
-
-                    // Group custom by page
+                    // Group custom berdasarkan page
                     $groupedCustom = [];
                     foreach ($cek_lhp->lhpsLingCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
-
+                    // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
-
+                    usort($regulasi_custom, function ($a, $b) {
+                        return $a['page'] <=> $b['page'];
+                    });
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
+                        // dd($item['page']);
                         if (empty($item['page'])) {
                             continue;
                         }
 
-                        // $id_regulasi = "id_" . $item['id'];
-                        $id_regulasi = (string) "id_" . explode('-', $item['regulasi'])[0];
+                        $id_regulasi = (string) "id_" . $item['id'];
                         $page        = $item['page'];
 
                         if (! empty($groupedCustom[$page])) {
