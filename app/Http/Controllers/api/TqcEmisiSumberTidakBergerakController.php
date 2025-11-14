@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\DataTables;
+use App\Helpers\HelperSatuan;
 
 class TqcEmisiSumberTidakBergerakController extends Controller
 {
@@ -20,6 +21,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             ->where('status', 1)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
+            // ->where('parameter', 'not like', '%Iso-%')
             ->orderBy('id', 'desc');
 
         return DataTables::of($data)
@@ -69,6 +71,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
 
             // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
             $id_regulasi = $request->regulasi;
+            $getSatuan   = new HelperSatuan;
             foreach ($cerobong as $item) {
 
                 $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
@@ -85,7 +88,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                 $item->method      = $bakuMutu->method ?? null;
                 $item->nama_header = $bakuMutu->nama_header ?? null;
 
-                $index = $this->kumpulanSatuan($item->satuan);
+                $index = $getSatuan->emisi($item->satuan);
                 $ws    = $item->ws_value_cerobong ?? null;
                 if (! $ws) {
                     return "noWs";
@@ -142,41 +145,6 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             ], 401);
         }
     }
-
-    private function kumpulanSatuan($satuan)
-    {
-        $satuanIndexMap = [
-            "μg/Nm³"   => "",
-            "μg/Nm3"   => "",
-
-            "mg/nm³"   => 1,
-            "mg/nm3"   => 1,
-            "mg/Mm³"   => 1,
-            "mg/Nm3"   => 1,
-            "mg/Nm³"   => 1,
-            "mg/Nm³"   => 1,
-
-            "ppm"      => 2,
-            "PPM"      => 2,
-
-            "ug/m3"    => 3,
-            "ug/m³"    => 3,
-
-            "mg/m3"    => 4,
-            "mg/m³"    => 4,
-            "mg/m³"    => 4,
-
-            "%"        => 5,
-            "°C"       => 6,
-            "g/gmol"   => 7,
-            "m3/s"     => 8,
-            "m/s"      => 9,
-            "kg/tahun" => 10,
-        ];
-
-        return $satuanIndexMap[$satuan] ?? null;
-    }
-
     public function detailLapangan(Request $request)
     {
         try {
