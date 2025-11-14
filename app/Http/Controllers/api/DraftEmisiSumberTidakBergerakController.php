@@ -2,7 +2,8 @@
 namespace App\Http\Controllers\api;
 
 //models
-use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;use App\Models\EmisiCerobongHeader;
+use App\Helpers\HelperSatuan;use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;
+use App\Models\EmisiCerobongHeader;
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
@@ -21,28 +22,24 @@ use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
 use App\Models\MetodeSampling;
 use App\Models\OrderDetail;
-use App\Models\Parameter;
 
 // service
 
+use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
-use App\Services\LhpTemplate;
 // job
 
-use App\Services\SendEmail;
+use App\Services\LhpTemplate;
 //iluminate
 
+use App\Services\SendEmail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-
-
-use App\Helpers\HelperSatuan;
- 
 
 class DraftEmisiSumberTidakBergerakController extends Controller
 {
@@ -55,6 +52,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             ->where('status', 2)
             ->where('kategori_2', '5-Emisi')
             ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak']);
+            // ->where('parameter', 'not like', '%Iso-%');
         // ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
 
         // if ($request->kategori == 'ESTB') {

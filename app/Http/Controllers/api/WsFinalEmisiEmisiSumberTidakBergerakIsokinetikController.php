@@ -41,7 +41,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 	public function detail(Request $request)
 	{
 		$data1 = IsokinetikHeader::with(['ws_value'])
-			->where('is_approve', 1)
+			->where('is_approved', 1)
 			->where('is_active', 1)
 			// ->where('parameter', '!=', 'Iso-ResTime')
 			->where('no_sampel', $request->no_sampel)
