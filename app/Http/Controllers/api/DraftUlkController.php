@@ -274,15 +274,6 @@ class DraftUlkController extends Controller
             LhpsLingDetail::where('id_header', $header->id)->delete();
 
             foreach (($request->parameter ?? []) as $key => $val) {
-                $bakumutu = null;
-                if (isset($request->nab[$key])) {
-                    $bakumutu   = $request->nab[$key];
-                    $namaheader = 'NAB';
-                }
-                if (isset($request->psd_ktd[$key])) {
-                    $bakumutu   = $request->psd_ktd[$key];
-                    $namaheader = 'PSD/KTD';
-                }
                 LhpsLingDetail::create([
                     'id_header'     => $header->id,
                     'akr'           => $request->akr[$key] ?? '',
@@ -304,16 +295,6 @@ class DraftUlkController extends Controller
             if ($request->custom_parameter) {
                 foreach ($request->custom_hasil_uji as $page => $params) {
                     foreach ($params as $param => $hasil) {
-                        $bakumutu = null;
-                        $namaheader = null;
-                        if (isset($request->custom_nab[$key]) && $request->custom_nab[$key] != '-') {
-                            $bakumutu   = $request->custom_nab[$key];
-                            $namaheader = 'NAB';
-                        }
-                        if (isset($request->custom_psd_ktd[$key]) && $request->custom_psd_ktd[$key] != '-') {
-                            $bakumutu   = $request->custom_psd_ktd[$key];
-                            $namaheader = 'PSD/KTD';
-                        }
                         LhpsLingCustom::create([
                             'id_header'     => $header->id,
                             'page'          => $page,
@@ -322,8 +303,8 @@ class DraftUlkController extends Controller
                             'parameter'     => $request->custom_parameter_lab[$page][$param],
                             'hasil_uji'     => $hasil ?? '',
                             'attr'          => $request->custom_attr[$page][$param] ?? '',
-                            'baku_mutu'     => $bakumutu ?? '',
-                            'nama_header'   => $namaheader ?? '',
+                            'baku_mutu'     => $request->custom_nilai_persyaratan[$page][$param] ?? '',
+                            'nama_header'   => $request->custom_jenis_persyaratan[$page][$param] ?? '',
                             'satuan'        => $request->custom_satuan[$page][$param] ?? '',
                             'durasi'        => $request->custom_durasi[$page][$param] ?? '',
                             'methode'       => $request->custom_methode[$page][$param] ?? '',
@@ -407,7 +388,7 @@ class DraftUlkController extends Controller
                         'akr'               => $val->akr,
                         'parameter'         => $val->parameter,
                         'satuan'            => $val->satuan,
-                        'nilai_persyaratan' => ($val->nama_header == 'NAB' ? $val->baku_mutu : ($val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-')),
+                        'nilai_persyaratan' => $val->baku_mutu ?? '-',
                         'jenis_persyaratan' => $val->nama_header ?? '-',
                         'hasil_uji'         => $val->hasil_uji,
                         'methode'           => $val->methode,
@@ -476,7 +457,7 @@ class DraftUlkController extends Controller
                                     'no_sampel'         => $request->no_sampel,
                                     'akr'               => $val->akr,
                                     'parameter'         => $val->parameter,
-                                    'nilai_persyaratan' => ($val->nama_header == 'NAB' ? $val->baku_mutu : ($val->nama_header == 'PSD/KTD' ? $val->baku_mutu : '-')),
+                                    'nilai_persyaratan' => $val->baku_mutu ?? '-',
                                     'jenis_persyaratan' => $val->nama_header ?? '-',
                                     'satuan'            => $val->satuan,
                                     'hasil_uji'         => $val->hasil_uji,
