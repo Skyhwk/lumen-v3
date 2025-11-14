@@ -236,7 +236,6 @@ class DraftLhpUdaraPsikologiController extends Controller
 
 			if ($header != null) {
 				if ($header->file_qr == null && $file_qr) {
-					dd('Generate QR Code');
 					$qr = new GenerateQrDocumentLhpp();
 					$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
 					$header->file_qr = $file_qr . '.svg';
