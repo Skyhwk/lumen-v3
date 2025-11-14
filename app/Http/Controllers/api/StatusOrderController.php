@@ -124,48 +124,48 @@ class StatusOrderController extends Controller
                         return json_decode($row->link_lhp, true);
                     }
                 })
-                ->addColumn('nilai_invoice', function ($row) use ($mode) {
-                    if ($mode == 'non_kontrak') {
-                        if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return 0;
+                // ->addColumn('nilai_invoice', function ($row) use ($mode) {
+                //     if ($mode == 'non_kontrak') {
+                //         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return 0;
                         
-                        $filtered = $row->orderHeader->invoices
-                            ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->no_document);
-                        if ($filtered->isEmpty()) {
-                            $filtered = $row->orderHeader->invoices
-                                ->where('periode', 'all')->where('no_quotation', $row->no_document);
-                        };
-                        $nilaiInvoice = 0;
-                        foreach ($filtered as $invoice) {
-                            $nilaiInvoice += $invoice->nilai_pelunasan;
-                            if($invoice->record_withdraw) {
-                                foreach ($invoice->record_withdraw as $withdraw) {
-                                    $nilaiInvoice += $withdraw->nilai_pembayaran;
-                                }
-                            }
-                        }
+                //         $filtered = $row->orderHeader->invoices
+                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->no_document);
+                //         if ($filtered->isEmpty()) {
+                //             $filtered = $row->orderHeader->invoices
+                //                 ->where('periode', 'all')->where('no_quotation', $row->no_document);
+                //         };
+                //         $nilaiInvoice = 0;
+                //         foreach ($filtered as $invoice) {
+                //             $nilaiInvoice += $invoice->nilai_pelunasan;
+                //             if($invoice->record_withdraw) {
+                //                 foreach ($invoice->record_withdraw as $withdraw) {
+                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
+                //                 }
+                //             }
+                //         }
 
-                        return $nilaiInvoice;
-                    } else if ($mode == 'kontrak') {
-                        if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
-                        $filtered = $row->header->orderHeader->invoices
-                            ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->header->no_document);
-                        if ($filtered->isEmpty()) {
-                            $filtered = $row->header->orderHeader->invoices
-                                ->where('periode', 'all')->where('no_quotation', $row->header->no_document);
-                        };
-                        $nilaiInvoice = 0;
-                        foreach ($filtered as $invoice) {
-                            $nilaiInvoice += $invoice->nilai_pelunasan;
-                            if($invoice->record_withdraw) {
-                                foreach ($invoice->record_withdraw as $withdraw) {
-                                    $nilaiInvoice += $withdraw->nilai_pembayaran;
-                                }
-                            }
-                        }
+                //         return $nilaiInvoice;
+                //     } else if ($mode == 'kontrak') {
+                //         if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
+                //         $filtered = $row->header->orderHeader->invoices
+                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->header->no_document);
+                //         if ($filtered->isEmpty()) {
+                //             $filtered = $row->header->orderHeader->invoices
+                //                 ->where('periode', 'all')->where('no_quotation', $row->header->no_document);
+                //         };
+                //         $nilaiInvoice = 0;
+                //         foreach ($filtered as $invoice) {
+                //             $nilaiInvoice += $invoice->nilai_pelunasan;
+                //             if($invoice->record_withdraw) {
+                //                 foreach ($invoice->record_withdraw as $withdraw) {
+                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
+                //                 }
+                //             }
+                //         }
 
-                        return $nilaiInvoice;
-                    };
-                })
+                //         return $nilaiInvoice;
+                //     };
+                // })
                 ->addColumn('nilai_pelunasan', function ($row) use ($mode) {
                     if ($mode == 'non_kontrak') {
                         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
