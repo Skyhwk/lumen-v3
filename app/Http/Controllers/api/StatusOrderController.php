@@ -70,12 +70,18 @@ class StatusOrderController extends Controller
                     $data->whereIn('sales_id', $bawahan);
                 }
             }else if($mode == 'kontrak') {
-                if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
-                    $data->where('header.sales_id', $this->user_id);
-                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
-                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                if ($jabatan == 24 || $jabatan == 86) { 
+                    $data->whereHas('header', function ($q) {
+                        $q->where('sales_id', $this->user_id);
+                    });
+
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
                     array_push($bawahan, $this->user_id);
-                    $data->whereIn('header.sales_id', $bawahan);
+
+                    $data->whereHas('header', function ($q) use ($bawahan) {
+                        $q->whereIn('sales_id', $bawahan);
+                    });
                 }
             }
 
