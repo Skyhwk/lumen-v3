@@ -290,6 +290,7 @@ class DraftUlkController extends Controller
                 foreach ($request->custom_hasil_uji as $page => $params) {
                     foreach ($params as $param => $hasil) {
                         $bakumutu = null;
+                        $namaheader = null;
                         if (isset($request->custom_nab[$key]) && $request->custom_nab[$key] != '-') {
                             $bakumutu   = $request->custom_nab[$key];
                             $namaheader = 'NAB';
@@ -304,10 +305,10 @@ class DraftUlkController extends Controller
                             'parameter_lab' => $request->custom_parameter[$page][$param] ?? '',
                             'akr'           => $request->custom_akr[$page][$param] ?? '',
                             'parameter'     => $request->custom_parameter_lab[$page][$param],
-                            'hasil_uji'     => $hasil,
+                            'hasil_uji'     => $hasil ?? '',
                             'attr'          => $request->custom_attr[$page][$param] ?? '',
-                            'baku_mutu'     => $bakumutu,
-                            'nama_header'   => $namaheader,
+                            'baku_mutu'     => $bakumutu ?? '',
+                            'nama_header'   => $namaheader ?? '',
                             'satuan'        => $request->custom_satuan[$page][$param] ?? '',
                             'durasi'        => $request->custom_durasi[$page][$param] ?? '',
                             'methode'       => $request->custom_methode[$page][$param] ?? '',
