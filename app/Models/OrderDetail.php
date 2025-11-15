@@ -217,6 +217,11 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsIklimHeader::class, 'cfr', 'no_lhp')->with('lhpsIklimDetail')->where('is_active', true);
     }
 
+    public function lhps_swab_udara()
+    {
+        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetailSampel', 'lhpsSwabTesDetailParameter')->where('is_active', true);
+    }
+
     public function t_fct()
     {
         return $this->belongsTo(Ftc::class, 'no_sampel', 'no_sample')->where('is_active', true);
