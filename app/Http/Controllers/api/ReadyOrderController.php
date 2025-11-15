@@ -864,6 +864,7 @@ class ReadyOrderController extends Controller
             $dataOrderHeader->is_revisi = 0;
             $dataOrderHeader->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $dataOrderHeader->created_by = $this->karyawan;
+            $dataOrderHeader->sales_id = $dataQuotation->sales_id;
             $dataOrderHeader->save();
 
             $n = 1;
@@ -1395,7 +1396,8 @@ class ReadyOrderController extends Controller
                         }
                     }
 
-                    $number_imaginer = sprintf("%03d", $n);
+                    // $number_imaginer = sprintf("%03d", $n);
+                    $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
                     if ($dataQuotation->status_sampling != 'SD') {
                         $mark[] = $number_imaginer;
@@ -1642,6 +1644,7 @@ class ReadyOrderController extends Controller
             $data->tanggal_order = Carbon::now()->format('Y-m-d');
             $data->updated_by = $this->karyawan;
             $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->sales_id = $dataQuotation->sales_id;
             $data->save();
 
             //update general order detail
@@ -1747,6 +1750,7 @@ class ReadyOrderController extends Controller
                 $dataOrderHeader->tanggal_order = Carbon::now()->format('Y-m-d');
                 $dataOrderHeader->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $dataOrderHeader->created_by = $this->karyawan;
+                $dataOrderHeader->sales_id = $dataQuotation->sales_id;
                 $dataOrderHeader->save();
 
                 $n = 1;
@@ -2527,6 +2531,7 @@ class ReadyOrderController extends Controller
             $updateHeader->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
             $updateHeader->updated_by = $this->karyawan;
             $updateHeader->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $updateHeader->sales_id = $dataQuotation->sales_id;
             $updateHeader->save();
 
             $dataQuotation->flag_status = 'ordered';

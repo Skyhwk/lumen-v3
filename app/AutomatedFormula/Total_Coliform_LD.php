@@ -86,7 +86,7 @@ class Total_Coliform_LD
             $acuanTotalColi = 3000; // E7
 
             // =if(G7>0,E7 - (G7*E7), E7+(G7*E7))
-            $temp_result = $average_turun_naik > 0 ? $acuanTotalColi - (($average_turun_naik / 100) * $acuanTotalColi) : $acuanTotalColi + (($average_turun_naik / 100) * $acuanTotalColi);
+            $temp_result = $average_turun_naik > 0 ? $acuanTotalColi - (abs($average_turun_naik * $acuanTotalColi)) : $acuanTotalColi + (abs($average_turun_naik * $acuanTotalColi));
 
             $isGreater = $temp_result >= 1600 ? true : false;
 

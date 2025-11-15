@@ -217,6 +217,11 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsIklimHeader::class, 'cfr', 'no_lhp')->with('lhpsIklimDetail')->where('is_active', true);
     }
 
+    public function lhps_swab_udara()
+    {
+        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetailSampel', 'lhpsSwabTesDetailParameter')->where('is_active', true);
+    }
+
     public function t_fct()
     {
         return $this->belongsTo(Ftc::class, 'no_sampel', 'no_sample')->where('is_active', true);
@@ -328,6 +333,17 @@ class OrderDetail extends Sector
         return $this->belongsTo(KebisinganHeader::class, 'no_sampel', 'no_sampel');
     }
 
+    public function swabTesHeader()
+    {
+        return $this->belongsTo(SwabTestHeader::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function swabOnMicrobio()
+    {
+        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%");
+    }
+
+
     public function getAnyHeaderUdara()
     {
         if ($this->pencahayaanHeader()->exists()) {
@@ -338,6 +354,12 @@ class OrderDetail extends Sector
         }
         if ($this->kebisinganHeader()->exists()) {
             return $this->KebisinganHeader;
+        }
+        if ($this->swabTesHeader()->exists()) {
+            return $this->SwabTesHeader;
+        }
+        if ($this->swabOnMicrobio()->exists()) {
+            return $this->swabOnMicrobio;
         }
         return null;
     }

@@ -42,18 +42,19 @@ class EmisiHF
         $C2 = 24.45 * (floatval($C1) / 20.01);
         $C3 = $C;
         $C4 = $C1;
-        if (floatval($C1) < 0.0003)
-            $C1 = '<0.0003';
-        if (floatval($C2) < 0.00036)
-            $C2 = '<0.00036';
-
+        
         $C = number_format($C, 4, '.','');
         $C1 = number_format($C1, 4, '.','');
         $C2 = number_format($C2, 4, '.','');
         $C3 = number_format($C3, 4, '.','');
         $C4 = number_format($C4, 5, '.','');
         $Vs = number_format($Vs, 4, '.','');
-
+        
+        if (floatval($C1) < 0.0003)
+            $C1 = '<0.0003';
+        if (floatval($C2) < 0.00036)
+            $C2 = '<0.00036';
+        
         $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
