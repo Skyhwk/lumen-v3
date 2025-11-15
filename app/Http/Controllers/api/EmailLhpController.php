@@ -11,6 +11,8 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 
+use App\Services\GetBawahan;
+
 use Datatables;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -21,7 +23,7 @@ class EmailLhpController extends Controller
 {
     public function index(Request $request)
     {   
-        $rekapOrder = OrderHeader::with(['orderDetail', 'emailLhp'])
+        $rekapOrder = OrderHeader::with(['orderDetail', 'emailLhp', 'sales'])
         ->whereYear('created_at', $request->periode)
         ->where('is_active', true);
 
@@ -29,7 +31,18 @@ class EmailLhpController extends Controller
             $rekapOrder->where('id_cabang', $request->id_cabang);
         if ($request->periode)
             $rekapOrder->whereYear('tanggal_penawaran', $request->periode);
-
+        
+        $karyawan = $request->attributes->has('user') ? $request->attributes->get('user')->karyawan : null;
+        
+        if($karyawan->id_jabatan == 24) {
+            $rekapOrder->where('sales_id', $this->user_id);
+        } else if($karyawan->id_jabatan == 21) {
+            $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+            $rekapOrder->whereIn('sales_id', $bawahan);
+        } else if($karyawan->id_jabatan == 148) {
+            $rekapOrder->where('sales_id', $this->user_id);
+        }
+        
         return Datatables::of($rekapOrder)
             ->filterColumn('jenis_kontrak', function ($query, $keyword) {
                 if($keyword == 'Kontrak') {
@@ -37,6 +50,11 @@ class EmailLhpController extends Controller
                 } else if($keyword == 'Non Kontrak') {
                     $query->where('no_document', 'like', '%QT/%');
                 }
+            })
+            ->filterColumn('sales_name', function ($query, $keyword) {
+                $query->whereHas('sales', function ($query) use ($keyword) {
+                    $query->where('nama_lengkap', 'like', '%' . $keyword . '%');
+                });
             })
             ->make(true);
     }
