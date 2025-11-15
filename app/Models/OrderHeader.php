@@ -80,7 +80,7 @@ class OrderHeader extends Sector
 
     public function quotationkontrak()
     {
-        return $this->hashOne(QuotationNonKontrak::class, 'no_document', 'no_document');
+        return $this->hashOne(QuotationKontrakH::class, 'no_document', 'no_document');
     }
 
     public function quotation()
@@ -202,4 +202,13 @@ class OrderHeader extends Sector
         return $this->quotationKontrakH ?? $this->quotationNonKontrak ?? null;
     }
 
+    public function emailLhp()
+    {
+        return $this->hasOne(EmailLhp::class, 'id_pelanggan', 'id_pelanggan');
+    }
+
+    public function sales()
+    {
+        return $this->belongsTo(MasterKaryawan::class, 'sales_id', 'id');
+    }
 }
