@@ -73,6 +73,7 @@ class EmailLhpController extends Controller
             //create
             $data = new EmailLhp();
             $data->id_pelanggan = $request->id_pelanggan;
+            $data->no_order = $request->no_order;
             $data->email_to = $request->email_to;
             $data->email_cc = $request->email_cc != '' ? $request->email_cc : null;
             $data->save();
@@ -87,20 +88,13 @@ class EmailLhpController extends Controller
 
     public function delete(Request $request)
     {
-        $data = EmailLhp::where('id_pelanggan', $request->id_pelanggan)->first();
+        $data = EmailLhp::where('id_pelanggan', $request->id_pelanggan)
+        ->where('no_order', $request->no_order)
+        ->first();
         $data->delete();
         return response()->json([
             'message' => 'Email LHP berhasil dihapus',
             'status' => true,
-        ], 200);
-    }
-
-    public function showDetail(Request $request)
-    {
-        $data = EmailLhp::with('pelanggan')->where('id_pelanggan', $request->id_pelanggan)->first();
-
-        return response()->json([
-            'data' => $data,
         ], 200);
     }
 
