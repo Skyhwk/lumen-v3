@@ -204,7 +204,7 @@ class OrderHeader extends Sector
 
     public function emailLhp()
     {
-        return $this->hasOne(EmailLhp::class, 'id_pelanggan', 'id_pelanggan');
+        return $this->hasMany(EmailLhp::class, 'id_pelanggan', 'id_pelanggan');
     }
 
     public function sales()

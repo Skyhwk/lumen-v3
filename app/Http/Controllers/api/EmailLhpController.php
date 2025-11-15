@@ -56,6 +56,10 @@ class EmailLhpController extends Controller
                     $query->where('nama_lengkap', 'like', '%' . $keyword . '%');
                 });
             })
+            ->addColumn('email_lhp', function ($row) {
+                $data = $row->emailLhp->where('no_order', $row->no_order)->first();
+                return $data ? $data->toArray() : null;
+            })
             ->make(true);
     }
 
