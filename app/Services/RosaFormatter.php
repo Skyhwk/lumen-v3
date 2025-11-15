@@ -199,7 +199,7 @@ class RosaFormatter
     }
 
     // ----------------------
-    // Contoh mapping lain (sederhana)
+    // Contoh mapping lain
     // ----------------------
     protected static function mapTinggiKursi($value)
     {
