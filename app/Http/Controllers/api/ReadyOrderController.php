@@ -1395,7 +1395,8 @@ class ReadyOrderController extends Controller
                         }
                     }
 
-                    $number_imaginer = sprintf("%03d", $n);
+                    // $number_imaginer = sprintf("%03d", $n);
+                    $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
                     if ($dataQuotation->status_sampling != 'SD') {
                         $mark[] = $number_imaginer;

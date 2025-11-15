@@ -17,6 +17,8 @@ use App\Models\MasterKaryawan;
 use App\Models\WsValueErgonomi;
 use App\Models\ErgonomiHeader;
 
+use App\Services\{RosaFormatter,RebaFormatter,RulaFormatter,RlwFormatter};
+
 class WsFinalUdaraErgonomiController extends Controller
 {
 	public function index(Request $request)
@@ -303,7 +305,7 @@ class WsFinalUdaraErgonomiController extends Controller
 					$new = new WsValueErgonomi();
 					$new->id_data_lapangan = $request->id_datalapangan;
 					$new->no_sampel = $request->no_sampel;
-					$new->nmethod = 1;
+					$new->method = 1;
 					$new->sebelum_kerja = json_encode(json_decode($request->sebelum_kerja));
 					$new->setelah_kerja = json_encode(json_decode($request->setelah_kerja));
 					$new->pengukuran = json_encode(json_decode($request->pengukuran));
@@ -333,6 +335,223 @@ class WsFinalUdaraErgonomiController extends Controller
 				'success' => false,
 				'status' => 500,
 			], 500);
+		}
+	}
+
+	public function KoreksiMethod2 (Request $request) 
+	{
+		try {
+			
+			DB::beginTransaction();
+			$dataRequest = $request->all();
+			$rebaFormatter = RebaFormatter::formatRebaData($dataRequest);
+
+			if( !$request->has('id_datalapangan') && $request->id_datalapangan === '')
+			{
+				return response()->json([
+					'message' => 'Data tidak ditemukan',
+					'success' => false,
+					'status' => 404,
+				], 404);
+			}
+
+			/* lakukan pengecekan */
+			
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($rebaFormatter);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 2;
+					$new->pengukuran = json_encode($rebaFormatter);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			DB::rollback();
+			return response()->json([
+				'message' => $ex->getMessage(),
+				'file' => $ex->getFile(),
+				'line' => $ex->getLine(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+			//throw $th;
+		}
+	}
+
+	public function KoreksiMethod4 (Request $request)
+	{
+		
+		try {
+			DB::beginTransaction();
+			$dataRequest = $request->all();
+			
+			$formatted = RosaFormatter::formatRosaData($dataRequest);
+			
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($formatted);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+				$new->id_data_lapangan = $request->id_datalapangan;
+				$new->no_sampel = $request->no_sampel;
+				$new->method = 4;
+				$new->pengukuran = json_encode($formatted);
+				$new->created_at = Carbon::now();
+				$new->created_by = $this->karyawan;
+				$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod3 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$dataRequest = $request->all();
+
+			$formatted = new RulaFormatter();
+			$rulaFormat = $formatted->format($dataRequest);
+			
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($rulaFormat);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 3;
+					$new->pengukuran = json_encode($rulaFormat);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			//throw $th;
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod5 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$formatted = RlwFormatter::format($request->all(), [
+				"id_datalapangan" => $request->id_datalapangan,
+				"no_sampel"       => $request->no_sampel,
+				"method"          => $request->method,
+			]);
+			
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($formatted);
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 5;
+					$new->pengukuran = json_encode($formatted);
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			//throw $th;
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
+		}
+	}
+
+	public function KoreksiMethod7 (Request $request)
+	{
+		try {
+			DB::beginTransaction();
+			$cekWsValue = WsValueErgonomi::where('id_data_lapangan', $request->id_datalapangan)->first();
+			if($cekWsValue != null){
+				$cekWsValue->pengukuran = json_encode($request->all());
+				$cekWsValue->updated_at = Carbon::now();
+				$cekWsValue->updated_by = $this->karyawan;
+				$cekWsValue->save();
+			}else{
+				$new = new WsValueErgonomi();
+					$new->id_data_lapangan = $request->id_datalapangan;
+					$new->no_sampel = $request->no_sampel;
+					$new->method = 7;
+					$new->pengukuran = json_encode($request->all());
+					$new->created_at = Carbon::now();
+					$new->created_by = $this->karyawan;
+					$new->save();
+			}
+			DB::commit();
+			return response()->json([
+					'message' => 'Berhasil mengupdate data',
+					'success' => true,
+					'status' => 200,
+				], 200);
+		} catch (\Exception $ex) {
+			//throw $th;
+			DB::rollback();
+			return response()->json([
+					'message' => $ex->getMessage(),
+					'success' => false,
+					'status' => 500,
+				], 500);
 		}
 	}
 }
