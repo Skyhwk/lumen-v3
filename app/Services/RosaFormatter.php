@@ -24,90 +24,59 @@ class RosaFormatter
             'tidak_bisa_atur' => (int) ($data['tambah_kursi_tidak_bisa_atur'] ?? 0),
         ];
 
+        $skor_mouse =self::mapMouse($data['skor_mouse'] ?? null);
+        $skor_monitor =self::mapMonitor($data['skor_monitor'] ?? null, []);
+        $skor_telepon =self::mapTelepon($data['skor_telepon'] ?? null, []);
+        $skor_keyboard =self::mapKeyboard($data['skor_keyboard'] ?? null, []);
+        $score_sandaran_lengan = self::mapSandaranLengan($data['skor_sandaran_lengan'] ?? null);
+        $score_sandaran_punggung = self::mapSandaranPunggung($data['skor_sandaran_punggung'] ?? null);
+        $score_tinggi_kursi = self::mapTinggiKursi($data['skor_tinggi_kursi'] ?? null);
+        $score_lebar_dudukan = self::mapLebarDudukan($data['skor_lebar_dudukan'] ?? null, []);
+        $score_durasi_kerja_kursi = self::mapDurasiKerjaBagianKursi($data['skor_durasi_kerja_kursi'] ?? null);
+        $score_durasi_kerja_monitor = self::mapDurasiKerjaMonitor($data['skor_durasi_kerja_monitor'] ?? null);
+        $score_durasi_kerja_telepon = self::mapDurasiKerjaTelepon($data['skor_durasi_kerja_telepon'] ?? null);
+        $score_durasi_kerja_mouse = self::mapDurasiKerjaMouse($data['skor_durasi_kerja_mouse'] ?? null);
+        $score_durasi_kerja_keyboard = self::mapDurasiKerjaKeyboard($data['skor_durasi_kerja_keyboard'] ?? null);
+
         // susun section A
         $sectionA = [
             'tinggi_kursi' => [
-                'skor' => self::mapTinggiKursi($data['skor_tinggi_kursi'] ?? null),
+                'skor' => $score_tinggi_kursi,
             ],
             'lebar_dudukan' => [
-                'skor' => self::mapLebarDudukan($data['skor_lebar_dudukan'] ?? null, $lebarFlags),
+                'skor' => $score_lebar_dudukan,
             ],
             'sandaran_lengan' => [
-                'skor' => self::mapSandaranLengan($data['skor_sandaran_lengan'] ?? null,
-                    [
-                        'lengan_keras' => (int) ($data['tambah_lengan_keras'] ?? 0),
-                        'lengan_lebar' => (int) ($data['tambah_lengan_lebar'] ?? 0),
-                        'tidak_bisa_atur' => (int) ($data['tambah_lengan_tidak_bisa_atur'] ?? 0),
-                    ]
-                ),
+                'skor' => $score_sandaran_lengan
             ],
             'sandaran_punggung' => [
-                'skor' => self::mapSandaranPunggung($data['skor_sandaran_punggung'] ?? null,
-                    [
-                        'meja_tinggi' => (int) ($data['tambah_punggung_meja_tinggi'] ?? 0),
-                        'tidak_bisa_atur' => (int) ($data['tambah_punggung_tidak_bisa_atur'] ?? 0),
-                    ]
-                ),
+                'skor' => $score_sandaran_punggung
             ],
-            'skor_durasi_kerja_kursi' => self::mapDurasiKerjaBagianKursi($data['skor_durasi_kerja_kursi'] ?? null),
+            'skor_durasi_kerja_kursi' => $score_durasi_kerja_kursi,
         ];
 
         // section B
         $sectionB = [
             'monitor' => [
-                'skor' => self::mapMonitor($data['skor_monitor'] ?? null, $monitorFlags),
+                'skor' =>$skor_monitor,
             ],
             'telepon' => [
-                'skor' => self::mapTelepon($data['skor_telepon'] ?? null,
-                    [
-                        'penopang_leher' => (int) ($data['tambah_telepon_penopang_leher'] ?? 0),
-                        'tangan_tidak_bebas' => (int) ($data['tambah_telepon_tangan_tidak_bebas'] ?? 0),
-                    ]
-                ),
+                'skor' =>$skor_telepon
             ],
-            'durasi_kerja_monitor' => self::mapDurasiKerjaMonitor($data['skor_durasi_kerja_monitor'] ?? null),
-            'durasi_kerja_telepon' => self::mapDurasiKerjaTelepon($data['skor_durasi_kerja_telepon'] ?? null),
+            'durasi_kerja_monitor' => $score_durasi_kerja_monitor,
+            'durasi_kerja_telepon' => $score_durasi_kerja_telepon,
         ];
 
         // section C
         $sectionC = [
             'mouse' => [
-                'skor' => self::mapMouse($data['skor_mouse'] ?? null,
-                    [
-                        'beda_permukaan' => (int) ($data['tambah_mouse_beda_permukaan'] ?? 0),
-                        'menekuk' => (int) ($data['tambah_mouse_menekuk'] ?? 0),
-                        'ada_palmrest' => (int) ($data['tambah_mouse_ada_palmrest'] ?? 0),
-                    ]
-                ),
+                'skor' => $skor_mouse
             ],
             'keyboard' => [
-                'skor' => self::mapKeyboard($data['skor_keyboard'] ?? null,
-                    [
-                        'deviasi' => (int) ($data['tambah_keyboard_deviasi'] ?? 0),
-                        'terlalu_tinggi' => (int) ($data['tambah_keyboard_terlalu_tinggi'] ?? 0),
-                        'diatas_kepala' => (int) ($data['tambah_keyboard_diatas_kepala'] ?? 0),
-                        'tidak_bisa_atur' => (int) ($data['tambah_keyboard_tidak_bisa_atur'] ?? 0),
-                    ]
-                ),
+                'skor' => $skor_keyboard
             ],
-            'durasi_kerja_mouse' => self::mapDurasiKerjaMouse($data['skor_durasi_kerja_mouse'] ?? null),
-            'durasi_kerja_keyboard' => self::mapDurasiKerjaKeyboard($data['skor_durasi_kerja_keyboard'] ?? null),
-        ];
-
-        // bagian ringkasan / nilai numerik yang mungkin juga ingin disimpan
-        $summary = [
-            'skor_mouse' => isset($data['skor_mouse']) ? (int)$data['skor_mouse'] : null,
-            'skor_monitor' => isset($data['skor_monitor']) ? (int)$data['skor_monitor'] : null,
-            'skor_telepon' => isset($data['skor_telepon']) ? (int)$data['skor_telepon'] : null,
-            'skor_keyboard' => isset($data['skor_keyboard']) ? (int)$data['skor_keyboard'] : null,
-            'final_skor_rosa' => isset($data['final_skor_rosa']) ? (int)$data['final_skor_rosa'] : null,
-            'kategori' => $data['kategori'] ?? null,
-            'tindakan' => $data['tindakan'] ?? null,
-            'kesimpulan' => $data['kesimpulan'] ?? null,
-            'total_section_a' => isset($data['total_section_a']) ? (int)$data['total_section_a'] : null,
-            'total_section_b' => isset($data['total_section_b']) ? (int)$data['total_section_b'] : null,
-            'total_section_c' => isset($data['total_section_c']) ? (int)$data['total_section_c'] : null,
-            'total_section_d' => isset($data['total_section_d']) ? (int)$data['total_section_d'] : null,
+            'durasi_kerja_mouse' => $score_durasi_kerja_mouse,
+            'durasi_kerja_keyboard' => $score_durasi_kerja_keyboard
         ];
         $penyesuaian = [
             "mouse" => [
@@ -149,7 +118,41 @@ class RosaFormatter
             ]
         ];
 
-
+        // bagian ringkasan / nilai numerik yang mungkin juga ingin disimpan
+        
+        $summary = [
+            'skor_mouse' => $skor_mouse['score'] ?? null,
+            'skor_monitor' => $skor_monitor['score'] ?? null,
+            'skor_telepon' => $skor_telepon['score'] ?? null,
+            'skor_keyboard' => $skor_keyboard['score'] ?? null,
+            'skor_tinggi_kursi' =>$score_tinggi_kursi['score'] ?? null,
+            'skor_lebar_kursi' => $score_lebar_dudukan['score'] ?? null,
+            'skor_sandaran_lengan' => $score_sandaran_lengan['score'] ?? null,
+            'skor_sandaran_punggung' => $score_sandaran_punggung['score'] ?? null,
+            'skor_monitor' => $skor_monitor['score'] ?? null,
+            'skor_telepon' => $skor_telepon['score'] ?? null,
+            'skor_keyboard' => $skor_keyboard['score'] ?? null,
+            'total_skor_monitor' => $skor_monitor['score'] + $penyesuaian['monitor']['leher_putar'] + $penyesuaian['monitor']['pantulan'] + $penyesuaian['monitor']['no_holder'] + $penyesuaian['monitor']['terlalu_jauh'],
+            'total_skor_telepon' => $skor_telepon['score'] + $penyesuaian['telepon']['penopang_leher'] + $penyesuaian['telepon']['tangan_tidak_bebas'],
+            'total_skor_keyboard' => $skor_keyboard['score'] + $penyesuaian['keyboard']['deviasi'] + $penyesuaian['keyboard']['terlalu_tinggi'] + $penyesuaian['keyboard']['diatas_kepala'] + $penyesuaian['keyboard']['tidak_bisa_atur'],
+            'total_skor_mouse' => $skor_mouse['score'] + $penyesuaian['mouse']['beda_permukaan'] + $penyesuaian['mouse']['menekuk'] + $penyesuaian['mouse']['ada_palmrest'],
+            'final_skor_rosa' => isset($data['final_skor_rosa']) ? (int)$data['final_skor_rosa'] : null,
+            'kategori' => $data['kategori'] ?? null,
+            'tindakan' => $data['tindakan'] ?? null,
+            'kesimpulan' => $data['kesimpulan'] ?? null,
+            'total_section_a' => isset($data['total_section_a']) ? (int)$data['total_section_a'] : null,
+            'total_section_b' => isset($data['total_section_b']) ? (int)$data['total_section_b'] : null,
+            'total_section_c' => isset($data['total_section_c']) ? (int)$data['total_section_c'] : null,
+            'total_section_d' => isset($data['total_section_d']) ? (int)$data['total_section_d'] : null,
+            'nilai_table_a' => isset($data['nilai_table_a']) ? (int)$data['nilai_table_a'] : null,
+            'skor_total_sandaran_lengan_dan_punggung' => $score_sandaran_lengan['score'] + $score_sandaran_punggung['score'],
+            'skor_total_tinggi_kursi_dan_lebar_dudukan' => $score_tinggi_kursi['score'] + $score_lebar_dudukan['score'],
+            'skor_durasi_kerja_bagian_kursi' => $score_durasi_kerja_kursi['score'],
+            'skor_durasi_kerja_monitor' => $score_durasi_kerja_monitor['score'],
+            'skor_durasi_kerja_telepon' => $score_durasi_kerja_telepon['score'],
+            'skor_durasi_kerja_mouse' => $score_durasi_kerja_mouse['score'],
+            'skor_durasi_kerja_keyboard' => $score_durasi_kerja_keyboard['score']
+        ];
         // gabungkan
         return array_merge(
             [
