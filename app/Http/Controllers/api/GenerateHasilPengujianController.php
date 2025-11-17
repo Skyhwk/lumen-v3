@@ -14,7 +14,7 @@ use Carbon\Carbon;
 
 Carbon::setLocale('id');
 
-use App\Models\{GenerateLink, LinkLhp, MasterKaryawan, OrderDetail, OrderHeader, QuotationKontrakH, QuotationNonKontrak};
+use App\Models\{GenerateLink, LinkLhp, MasterKaryawan, OrderDetail, OrderHeader, QuotationKontrakH, QuotationNonKontrak, EmailLhp};
 use App\Services\{GetAtasan, SendEmail};
 
 use Illuminate\Http\Client\ConnectionException;
@@ -400,11 +400,6 @@ class GenerateHasilPengujianController extends Controller
             'rudi@intilab.com',
         ];
 
-        if ($request->email_cc) {
-            $emailCC = json_encode($request->email_cc);
-            foreach (json_decode($emailCC) as $item)
-                $emails[] = $item;
-        }
         $users = GetAtasan::where('id', $request->sales_id ?: $this->user_id)->get()->pluck('email');
 
         foreach ($users as $item) {
@@ -419,8 +414,22 @@ class GenerateHasilPengujianController extends Controller
 
             $emails[] = $item;
         }
+        $emailCC = null;
+        $emailTo = null;
 
-        return response()->json($emails);
+        $emailLhp = EmailLhp::where('no_order', $request->no_order)->first();
+
+        if($emailLhp) {
+            $emailCC = explode(',', $emailLhp->email_cc);
+            $emailTo = $emailLhp->email_to;
+        }
+
+        return response()->json(
+            [
+                'email_cc' => $emailCC,
+                'email_to' => $emailTo,
+                'email_bcc' => $emails,
+            ], 200);
     }
 
     public function getUser()

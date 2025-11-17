@@ -49,7 +49,7 @@ class RosaFormatter
                     ]
                 ),
             ],
-            'durasi_kerja_bagian_kursi' => self::mapDurasiKerjaBagianKursi($data['durasi_kerja_kursi'] ?? null),
+            'skor_durasi_kerja_kursi' => self::mapDurasiKerjaBagianKursi($data['skor_durasi_kerja_kursi'] ?? null),
         ];
 
         // section B
@@ -131,6 +131,22 @@ class RosaFormatter
                 "diatas_kepala"   => (int)($data['tambah_keyboard_diatas_kepala'] ?? 0),
                 "tidak_bisa_atur" => (int)($data['tambah_keyboard_tidak_bisa_atur'] ?? 0),
             ],
+            "kursi" => [
+                "sempit" => (int)($data['tambah_kursi_sempit'] ?? 0),
+                "tidak_bisa_atur" => (int)($data['tambah_kursi_tidak_bisa_atur'] ?? 0)
+            ],
+            "dudukan" => [
+                "tidak_bisa_atur" => (int)($data['tambah_dudukan_tidak_bisa_atur'] ?? 0)
+            ],
+            "sandaran_lengan" =>[
+                "keras" => (int)($data['tambah_lengan_keras'] ?? 0),
+                "lebar" => (int)($data['tambah_lengan_lebar'] ?? 0),
+                "tidak_bisa_atur" => (int)($data['tambah_lengan_tidak_bisa_atur'] ?? 0)
+            ],
+            "sandaran_punggung" => [
+                "meja_tinggi" => (int)($data['tambah_punggung_meja_tinggi'] ?? 0),
+                "tidak_bisa_atur" => (int)($data['tambah_punggung_tidak_bisa_atur'] ?? 0)
+            ]
         ];
 
 
@@ -151,41 +167,17 @@ class RosaFormatter
      *
      * @param mixed $value
      * @param array $flags
-     * @return string
+     * @return array
      */
-    protected static function mapLebarDudukan($value, array $flags = []): string
+    protected static function mapLebarDudukan($value, array $flags = []): array
     {
         $v = (int) $value;
-        $desc = '';
-
         switch ($v) {
-            case 1:
-                $desc = '1-Jarak antara lutut dan ujung kursi sekitar 7,62 cm';
-                break;
-            case 2:
-                $desc = '2-Jarak terlalu sempit atau tidak nyaman';
-                break;
-            case 3:
-                $desc = '3-Dudukan tidak sesuai/terlalu sempit dan tidak bisa diatur';
-                break;
-            default:
-                $desc = 'Tidak diketahui';
+            case 0: return ['keterangan'=>'Jarak antara lutut dan ujung kursi sekitar 7,62 cm','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Dudukan kursi terlalu panjang ke depan','score'=>2,'index'=>1];
+            case 2: return ['keterangan'=>'Dudukan kursi terlalu sempit','score'=>2,'index'=>2];
+            default: return 'Tidak diketahui';
         }
-
-        // tambahkan detail dari flag jika ada
-        $extras = [];
-        if (!empty($flags['kursi_sempit'])) {
-            $extras[] = 'kursi sempit';
-        }
-        if (!empty($flags['tidak_bisa_atur'])) {
-            $extras[] = 'dudukan tidak bisa diatur';
-        }
-
-        if (!empty($extras)) {
-            $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        }
-
-        return $desc;
     }
 
     /**
@@ -193,141 +185,132 @@ class RosaFormatter
      *
      * @param mixed $value
      * @param array $flags
-     * @return string
+     * @return array
      */
-    protected static function mapMonitor($value, array $flags = []): string
-    {
-        $v = (int) $value;
-        $desc = '';
-
-        switch ($v) {
-            case 1:
-                $desc = '1-Jarak antara pekerja dengan monitor sepanjang lengan (40 – 75 cm), eye level';
-                break;
-            case 2:
-                $desc = '2-Monitor sedikit terlalu jauh atau posisi sedikit tidak pada eye level';
-                break;
-            case 3:
-                $desc = '3-Monitor jauh/terlalu dekat atau posisi eye level sangat tidak sesuai';
-                break;
-            default:
-                $desc = 'Tidak diketahui';
-        }
-
-        $extras = [];
-        if (!empty($flags['leher_putar'])) {
-            $extras[] = 'leher harus diputar';
-        }
-        if (!empty($flags['pantulan'])) {
-            $extras[] = 'ada pantulan';
-        }
-        if (!empty($flags['no_holder'])) {
-            $extras[] = 'monitor tanpa holder';
-        }
-        if (!empty($flags['terlalu_jauh'])) {
-            $extras[] = 'monitor terlalu jauh';
-        }
-
-        if (!empty($extras)) {
-            $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        }
-
-        return $desc;
-    }
-
-    // ----------------------
-    // Contoh mapping lain (sederhana)
-    // ----------------------
-    protected static function mapTinggiKursi($value): string
+    protected static function mapMonitor($value, array $flags = []): array
     {
         $v = (int) $value;
         switch ($v) {
-            case 1: return '1-Lutut membentuk 90ᵒ';
-            case 2: return '2-Terlalu tinggi atau rendah';
-            case 3: return '3-Tidak dapat diatur';
+            case 0: return ['keterangan'=>'Jarak antara pekerja dengan monitor sepanjang lengan (40 – 75 cm), eye level','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Monitor sedikit terlalu jauh atau posisi sedikit tidak pada eye level','score'=>2,'index'=>1];
+            case 2: return ['keterangan'=>'Monitor jauh/terlalu dekat atau posisi eye level sangat tidak sesuai','score'=>3,'index'=>2];
             default: return 'Tidak diketahui';
         }
     }
 
-    protected static function mapSandaranLengan($value, array $flags = []): string
+    // ----------------------
+    // Contoh mapping lain
+    // ----------------------
+    protected static function mapTinggiKursi($value)
     {
-        $desc = ($value === null) ? 'Tidak diketahui' : ($value . '-Deskripsi dasar sandaran lengan');
-        $extras = [];
-        if (!empty($flags['lengan_keras'])) $extras[] = 'lengan keras';
-        if (!empty($flags['lengan_lebar'])) $extras[] = 'lengan lebar';
-        if (!empty($flags['tidak_bisa_atur'])) $extras[] = 'tidak bisa diatur';
-        if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        return $desc;
-    }
-
-    protected static function mapSandaranPunggung($value, array $flags = []): string
-    {
-        $desc = ($value === null) ? 'Tidak diketahui' : ($value . '-Deskripsi sandaran punggung');
-        $extras = [];
-        if (!empty($flags['meja_tinggi'])) $extras[] = 'meja terlalu tinggi';
-        if (!empty($flags['tidak_bisa_atur'])) $extras[] = 'tidak bisa diatur';
-        if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        return $desc;
-    }
-
-    protected static function mapDurasiKerjaBagianKursi($value): string
-    {
-        // Contoh konversi: 1 -> "1->4 jam"
-        if ($value === null) return 'Tidak diketahui';
-        switch ((int)$value) {
-            case -1: return '<30 menit atau < 1 jam';
-            case 0: return '0-1 jam';
-            case 1: return '1->4 jam';
-            case 2: return '>4 jam';
-            default: return (string)$value;
+        $v = (int) $value;
+        switch ($v) {
+            case 0: return ['keterangan'=>'Lutut membentuk 90ᵒ','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Kursi terlalu rendah, Lutut membentuk sudut < 90ᵒ','score'=>2,'index'=>1];
+            case 2: return ['keterangan'=>'Kursi terlalu tinggi, Lutut membentuk sudut > 90ᵒ','score'=>2,'index'=>2];
+            case 3: return ['keterangan'=>'Kaki tidak menapak ke lantai','score'=>3,'index'=>3];
+            default: return 'Tidak diketahui';
         }
     }
 
-    protected static function mapTelepon($value, array $flags = []): string
+    protected static function mapSandaranLengan($value, array $flags = []): array
     {
-        $v = (int)$value;
-        $desc = ($v === 1) ? '1-Menelepon dengan menggunakan headset atau dengan satu tangan' : 'Tidak diketahui';
-        $extras = [];
-        if (!empty($flags['penopang_leher'])) $extras[] = 'penopang leher';
-        if (!empty($flags['tangan_tidak_bebas'])) $extras[] = 'tangan tidak bebas';
-        if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        return $desc;
+        $v = (int) $value;
+        switch($v){
+            case 0 : return ['keterangan'=>'Siku tersangga dengan baik, rileks, dan sejajar dengan bahu','score'=>1,'index'=>0];
+            case 1 : return ['keterangan'=>'Siku terlalu tinggi, bahu terangkat/terlalu turun atau tidak adanya penyangga lengan','score'=>2,'index'=>1];
+            default: return 'Tidak diketahui';
+        }
+        // $desc = ($value === null) ? 'Tidak diketahui' : ($value . '-Deskripsi dasar sandaran lengan');
+        // $extras = [];
+        // if (!empty($flags['lengan_keras'])) $extras[] = 'lengan keras';
+        // if (!empty($flags['lengan_lebar'])) $extras[] = 'lengan lebar';
+        // if (!empty($flags['tidak_bisa_atur'])) $extras[] = 'tidak bisa diatur';
+        // if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
+        // return $desc;
     }
 
-    protected static function mapMouse($value, array $flags = []): string
+    protected static function mapSandaranPunggung($value, array $flags = []): array
     {
-        $v = (int)$value;
-        $desc = ($v === 1) ? '1-Mouse sejajar bahu' : 'Tidak diketahui';
-        $extras = [];
-        if (!empty($flags['beda_permukaan'])) $extras[] = 'beda permukaan';
-        if (!empty($flags['menekuk'])) $extras[] = 'menekuk';
-        if (!empty($flags['ada_palmrest'])) $extras[] = 'ada palmrest';
-        if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        return $desc;
+        $v =(int) $value;
+        switch($v){
+            case 0 : return ['keterangan'=>'Sandaran punggung menyangga keseluruhan punggung dan tulang belakang dengan baik, sandaran punggung berkisar antara 95ᵒ dan 110ᵒ','score'=>1,'index'=>0];
+            case 1 : return ['keterangan'=>'Tidak terdapat sandaran tulang belakang, atau sandaran hanya menyangga sebagian punggung','score'=>2,'index'=>1];
+            case 2 : return ['keterangan'=>'Sandaran terlalu ke belakang(>110°) atau terlalu ke depan (<95°)','score'=>2,'index'=>2];
+            case 3 : return ['keterangan'=>'Tidak ada sandaran punggung sama sekali','score'=>2,'index'=>3];
+            default: return 'Tidak diketahui';
+        }
+        // $desc = ($value === null) ? 'Tidak diketahui' : ($value . '-Deskripsi sandaran punggung');
+        // $extras = [];
+        // if (!empty($flags['meja_tinggi'])) $extras[] = 'meja terlalu tinggi';
+        // if (!empty($flags['tidak_bisa_atur'])) $extras[] = 'tidak bisa diatur';
+        // if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
+        // return $desc;
     }
 
-    protected static function mapKeyboard($value, array $flags = []): string
+    protected static function mapDurasiKerjaBagianKursi($value): array
+    {
+        // Contoh konversi: 1 -> "1->4 jam"
+        if ($value === null) return ['keterangan'=>'Tidak diketahui','score'=>0];
+        switch ((int)$value) {
+            case 0: return ['keterangan'=>'< 1 jam','score'=>-1,'index'=>0];
+            case 1: return ['keterangan'=>'1 - 4 jam','score'=>0,'index'=>1];
+            case 2: return ['keterangan'=>'> 4 jam','score'=>1,'index'=>2];
+            default: return ['keterangan'=>'Tidak diketahui','score'=>0];
+        }
+    }
+
+    protected static function mapTelepon($value, array $flags = []): array
     {
         $v = (int)$value;
-        $desc = ($v === 1) ? '1-Pergelangan lurus, bahu rileks' : 'Tidak diketahui';
-        $extras = [];
-        if (!empty($flags['deviasi'])) $extras[] = 'deviasi';
-        if (!empty($flags['terlalu_tinggi'])) $extras[] = 'terlalu tinggi';
-        if (!empty($flags['diatas_kepala'])) $extras[] = 'di atas kepala';
-        if (!empty($flags['tidak_bisa_atur'])) $extras[] = 'tidak bisa diatur';
-        if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
-        return $desc;
+        switch($v){
+            case 0: return ['keterangan'=>'Menelepon dengan menggunakan headset atau dengan satu tangan','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Jarak telepon dengan pekerja terlalu jauh (> 30 cm)','score'=>2,'index'=>1];
+            default: return ['keterangan'=>'Tidak diketahui'];
+        }
+        // $desc = ($v === 1) ? '1-Menelepon dengan menggunakan headset atau dengan satu tangan' : 'Tidak diketahui';
+        // $extras = [];
+        // if (!empty($flags['penopang_leher'])) $extras[] = 'penopang leher';
+        // if (!empty($flags['tangan_tidak_bebas'])) $extras[] = 'tangan tidak bebas';
+        // if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
+        // return $desc;
+    }
+
+    protected static function mapMouse($value, array $flags = []): array
+    {
+        $v = (int)$value;
+        switch($v){
+            case 0: return ['keterangan'=>'Mouse sejajar bahu','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Letak mouse agak jauh','score'=>2,'index'=>1];
+            default: return ['keterangan'=>'Tidak diketahui'];
+        }
+        // $desc = ($v === 1) ? '1-Mouse sejajar bahu' : 'Tidak diketahui';
+        // $extras = [];
+        // if (!empty($flags['beda_permukaan'])) $extras[] = 'beda permukaan';
+        // if (!empty($flags['menekuk'])) $extras[] = 'menekuk';
+        // if (!empty($flags['ada_palmrest'])) $extras[] = 'ada palmrest';
+        // if ($extras) $desc .= ' - Tambahan: ' . implode(', ', $extras);
+        // return $desc;
+    }
+
+    protected static function mapKeyboard($value, array $flags = []): array
+    {
+        $v = (int)$value;
+        switch($v){
+            case 0: return ['keterangan'=>'Pergelangan lurus, bahu rileks','score'=>1,'index'=>0];
+            case 1: return ['keterangan'=>'Pergelangan terangkat <15ᵒ dan sudut keyboard terlalu miring','score'=>2,'index'=>1];
+            default: return ['keterangan'=>'Tidak diketahui'];
+        }
     }
 
     protected static function mapDurasiKerjaMonitor($value)
     {
-        if ($value === null) return 'Tidak diketahui';
+        if ($value === null) return ['keterangan'=>'Tidak diketahui','score'=>0];
         switch ((int)$value) {
-            case -1: return '<30 menit atau < 1 jam';
-            case 0: return '0-1 jam';
-            case 1: return '1->4 jam';
-            case 2: return '>4 jam';
-            default: return (string)$value;
+            case 0: return ['keterangan'=>'< 1 jam','score'=>-1,'index'=>0];
+            case 1: return ['keterangan'=>'1 - 4 jam','score'=>0,'index'=>1];
+            case 2: return ['keterangan'=>'> 4 jam','score'=>1,'index'=>2];
+            default: return ['keterangan'=>'Tidak diketahui'];
         }
     }
 
