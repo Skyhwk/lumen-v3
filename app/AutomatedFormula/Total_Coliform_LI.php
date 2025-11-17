@@ -23,37 +23,41 @@ class Total_Coliform_LI
             $bod = ["BOD", "BOD (B-23-NA)", "BOD (B-23)"];
             $tss = ["TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)"];
             $nh3 = ["NH3", "NH3-N", "NH3-N Bebas", "NH3-N (3-03-NA)", "NH3-N (3-03)", "NH3-N (30-25-NA)", "NH3-N (30-25)", "NH3-N (T)", "NH3-N (T-NA)"];
+            $tipe_data = '';
             if (in_array($value, $bod)) {
                 $data = Titrimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
-            } else if(in_array($value, $nh3)) {
+                $tipe_data = 'titrimetri';
+            } else if (in_array($value, $nh3)) {
                 $data = Colorimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
-            } else {
+                $tipe_data = 'colorimetri';
+            } else if (in_array($value, $tss)) {
                 $data = Gravimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
+                $tipe_data = 'gravimetri';
             }
 
             if ($data) {
-                $result = WsValueAir::where('id_colorimetri', $data->id)->first();
+                $result = WsValueAir::where('id_' . $tipe_data, $data->id)->first();
 
                 if (in_array($value, $bod)) {
                     $acuan['BOD'] = (object) [
                         'hasil' => $result->hasil,
                         'acuan' => 50,
                         'greater' => is_numeric($result->hasil) ? $result->hasil > 50 : false,
-                        'turun_naik' => is_numeric($result->hasil) ? number_format((50 - $result->hasil) / 50, 2) : 100
+                        'turun_naik' => is_numeric($result->hasil) ? number_format((50 - $result->hasil) / 50 * 100, 2) : 100
                     ];
                 } else if (in_array($value, $tss)) {
                     $acuan['TSS'] = (object) [
                         'hasil' => $result->hasil,
                         'acuan' => 200,
                         'greater' => is_numeric($result->hasil) ? $result->hasil > 200 : false,
-                        'turun_naik' => is_numeric($result->hasil) ? number_format((200 - $result->hasil) / 200, 2) : 100
+                        'turun_naik' => is_numeric($result->hasil) ? number_format((200 - $result->hasil) / 200 * 100, 2) : 100
                     ];
                 } else if (in_array($value, $nh3)) {
                     $acuan['NH3'] = (object) [
                         'hasil' => $result->hasil,
                         'acuan' => 5,
                         'greater' => is_numeric($result->hasil) ? $result->hasil > 5 : false,
-                        'turun_naik' => is_numeric($result->hasil) ? number_format((5 - $result->hasil) / 5, 2) : 100
+                        'turun_naik' => is_numeric($result->hasil) ? number_format((5 - $result->hasil) / 5 * 100, 2) : 100
                     ];
                 }
 
@@ -86,7 +90,9 @@ class Total_Coliform_LI
             $acuanTotalColi = 1000;
 
             // =if(G7>0,E7 - (G7*E7), E7+(G7*E7))
-            $temp_result = $average_turun_naik > 0 ? $acuanTotalColi - (abs($average_turun_naik * $acuanTotalColi)) : $acuanTotalColi + (abs($average_turun_naik * $acuanTotalColi));
+            $temp_result = $average_turun_naik > 0 ?
+                $acuanTotalColi - (abs(($average_turun_naik / 100) * $acuanTotalColi)) :
+                $acuanTotalColi + (abs(($average_turun_naik / 100) * $acuanTotalColi));
 
             $isGreater = $temp_result >= 1600 ? true : false;
 
@@ -173,7 +179,7 @@ class Total_Coliform_LI
     }
 
     private $tableReversedMPN = [
-        "1.8" => 000,
+        "1.8" => 001,
         "3.6" => 011,
         "3.7" => 020,
         "5.5" => 021,

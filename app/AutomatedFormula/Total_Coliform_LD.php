@@ -23,16 +23,20 @@ class Total_Coliform_LD
             $bod = ["BOD", "BOD (B-23-NA)", "BOD (B-23)"];
             $tss = ["TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)"];
             $nh3 = ["NH3", "NH3-N", "NH3-N Bebas", "NH3-N (3-03-NA)", "NH3-N (3-03)", "NH3-N (30-25-NA)", "NH3-N (30-25)", "NH3-N (T)", "NH3-N (T-NA)"];
+            $tipe_data = '';
             if (in_array($value, $bod)) {
                 $data = Titrimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
+                $tipe_data = 'titrimetri';
             } else if (in_array($value, $nh3)) {
                 $data = Colorimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
-            } else {
+                $tipe_data = 'colorimetri';
+            } else if (in_array($value, $tss)) {
                 $data = Gravimetri::where('parameter', $value)->where('no_sampel', $no_sampel)->where('is_active', true)->first();
+                $tipe_data = 'gravimetri';
             }
 
             if ($data) {
-                $result = WsValueAir::where('id_colorimetri', $data->id)->first();
+                $result = WsValueAir::where('id_' . $tipe_data, $data->id)->first();
 
                 if (in_array($value, $bod)) {
                     $acuan['BOD'] = (object) [
@@ -176,7 +180,7 @@ class Total_Coliform_LD
 
 
     private $tableReversedMPN = [
-        "1.8" => "000",
+        "1.8" => "001",
         "3.6" => "011",
         "3.7" => "020",
         "5.5" => "021",
