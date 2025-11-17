@@ -10,7 +10,8 @@ use App\Models\LhpsIklimHeaderHistory;
 use App\Models\LhpsIklimDetail;
 use App\Models\LhpsIklimCustom;
 use App\Models\LhpsIklimDetailHistory;
-
+use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\OrderHeader;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
@@ -777,11 +778,6 @@ class DraftUdaraIklimKerjaController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                // if ($data->count_print < 1) {
-                //     $data->is_printed = 1;
-                //     $data->count_print = $data->count_print + 1;
-                // }
-                // dd($data->id_kategori_2);
 
                 $data->save();
                 HistoryAppReject::insert([
@@ -805,21 +801,26 @@ class DraftUdaraIklimKerjaController extends Controller
 
                 $detail = LhpsIklimDetail::where('id_header', $data->id)->get();
 
-                // $servicePrint = new PrintLhp();
-                // $servicePrint->printByFilename($data->file_lhp, $detail);
-
-                // if (!$servicePrint) {
-                //     DB::rollBack();
-                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                // }
-
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
 
                 if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                ->first();
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $data->no_lhp,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
+                
             } else {
                 DB::rollBack();
                 return response()->json([
