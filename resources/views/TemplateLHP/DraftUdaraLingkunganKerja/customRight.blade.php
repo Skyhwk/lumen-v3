@@ -174,14 +174,14 @@
                 </table>
 
 
-                @if (!empty($header->regulasi))
+                @if (!empty($header->regulasi_custom))
 
-                    @foreach (json_decode($header->regulasi) as $y)
+                    @foreach (json_decode($header->regulasi_custom) as $y)
                         <table style="padding-top: 10px;" width="100%">
                             <tr>
                                 @php
                                 @endphp
-                                <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
                             </tr>
                         </table>
                     @endforeach
