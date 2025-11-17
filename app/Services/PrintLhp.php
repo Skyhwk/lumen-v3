@@ -136,8 +136,8 @@ class PrintLhp
     public function printByFilename($filename, $detail, $kategori = null, $no_lhp = null){
         DB::beginTransaction();
         try {
-            if($kategori == 'Kebisingan'){
-                $kan = $this->cekAkreditasiKebisingan($no_lhp);
+            if($kategori == 'KPGI'){
+                $kan = $this->cekAkreditasiKPGI($no_lhp);
             } else {
                 $kan = $this->cekAkreditasi($detail);
             }
@@ -209,7 +209,7 @@ class PrintLhp
 
     }
 
-    private function cekAkreditasiKebisingan($no_lhp)
+    private function cekAkreditasiKPGI($no_lhp)
     {
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
@@ -221,10 +221,11 @@ class PrintLhp
             $dataDecode = json_decode($value->parameter);
             $sub_kategori = intval(strval($sub_kategori));
             $kategori = intval(strval($kategori));
+            $dataRegulasi = json_decode($value->regulasi)[0];
             
                 foreach ($dataDecode as $val) {
-                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
-                    if ($parameter->status == 'AKREDITASI') {
+                    $bakumutu = MasterBakumutu::where('id_regulasi', explode("-",$dataRegulasi)[0])->where('parameter', explode(";",$val)[1])->first();
+                    if ($bakumutu && str_contains($bakumutu->akreditasi, 'AKREDITASI')) {
                         $parameterAkreditasi++;
                     } else {
                         $parameterNonAkreditasi++;
