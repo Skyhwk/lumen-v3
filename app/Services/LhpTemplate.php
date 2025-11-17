@@ -360,7 +360,7 @@ class LhpTemplate
             $kategori = explode('-', $value->kategori_2)[0];
             $sub_kategori = explode('-', $value->kategori_3)[0];
             $dataDecode = json_decode($value->parameter);
-            $dataRegulasi = json_decode($value->regulasi)[0];
+            $dataRegulasi = json_decode($value->regulasi, true)[0] ?? '';
             $sub_kategori = intval(strval($sub_kategori));
             $kategori = intval(strval($kategori));
             if ($kategori === 1) {
