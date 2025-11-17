@@ -21,6 +21,7 @@ use App\Models\MasterRegulasi;
 use App\Models\MasterSubKategori;
 use App\Models\MetodeSampling;
 use App\Models\OrderDetail;
+use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PartikulatHeader;
 use App\Models\PengesahanLhp;
@@ -28,6 +29,7 @@ use App\Models\QrDocument;
 use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
+use App\Helpers\EmailLhpRilisHelpers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -988,12 +990,6 @@ class DraftUdaraAmbientController extends Controller
                 $data->is_approved = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                // if ($data->count_print < 1) {
-                //     $data->is_printed = 1;
-                //     $data->count_print = $data->count_print + 1;
-                // }
-                // dd($data->id_kategori_2);
-
                 $data->save();
                 HistoryAppReject::insert([
                     'no_lhp'      => $request->no_lhp,
@@ -1014,13 +1010,25 @@ class DraftUdaraAmbientController extends Controller
                     $qr->save();
                 }
 
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
 
                 if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                ->first();
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->no_lhp,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
 
                 DB::commit();
                 return response()->json([
