@@ -28,7 +28,7 @@ use App\Helpers\HelperSatuan;
 
 class WsFinalUdaraMikrobiologiUdaraController extends Controller
 {
-	private $categoryMicrobio = [12, 46, 33];
+	private $categoryMicrobio = [12, 33, 27];
 
 	public function index(Request $request)
 	{
@@ -44,7 +44,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman"])
+			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman","27-Udara Lingkungan Kerja"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
@@ -791,5 +791,57 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 		return response()->json([
 			'data' => $data
 		], 200);
+	}
+
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			MicrobioHeader::where('no_sampel', $request->no_sampel)
+				->update([
+					'is_active' => 0,
+					'rejected_by' => $this->karyawan,
+					'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveSelected(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+		
+			MicrobioHeader::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'lhps' => 1,
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+			], 200);
+		}catch (\Throwable $th) {
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+			]);
+		}
 	}
 }
