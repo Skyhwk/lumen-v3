@@ -3640,6 +3640,257 @@ class TestingController extends Controller
         }
     }
 
+    public function recalculateTotalColiformAutomated(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            // Ambil semua no_sampel yang perlu direkalkulasi
+            $noSampelList = Colorimetri::where('parameter', 'like', '%Total Coliform%')
+                ->where('created_by', 'SYSTEM')
+                ->whereDate('created_at', $request->tanggal)
+                ->where('is_active', true)
+                ->pluck('no_sampel')
+                ->unique()
+                ->toArray();
+
+            if (empty($noSampelList)) {
+                return response()->json([
+                    'message' => 'Tidak ada data untuk direkalkulasi pada tanggal tersebut.'
+                ], 404);
+            }
+
+            // Load semua data sekaligus untuk mengurangi query
+            $orderDetails = OrderDetail::whereIn('no_sampel', $noSampelList)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $titrimetriData = Titrimetri::where('parameter', 'like', '%BOD%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $colorimetriData = Colorimetri::where('parameter', 'like', '%NH3%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $gravimetriData = Gravimetri::where('parameter', 'like', '%TSS%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            // Load WsValueAir data
+            $titrimetriIds = $titrimetriData->pluck('id')->toArray();
+            $colorimetriIds = $colorimetriData->pluck('id')->toArray();
+            $gravimetriIds = $gravimetriData->pluck('id')->toArray();
+
+            $wsValueTitri = WsValueAir::whereIn('id_titrimetri', $titrimetriIds)
+                ->get()
+                ->keyBy('id_titrimetri');
+
+            $wsValueColori = WsValueAir::whereIn('id_colorimetri', $colorimetriIds)
+                ->get()
+                ->keyBy('id_colorimetri');
+
+            $wsValueGravi = WsValueAir::whereIn('id_gravimetri', $gravimetriIds)
+                ->get()
+                ->keyBy('id_gravimetri');
+
+            // Load Total Coliform data
+            $totalColiformData = Colorimetri::where('parameter', 'like', '%Total Coliform%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->get()
+                ->keyBy('no_sampel');
+
+            // Definisi parameter sekali saja
+            $parameterDefs = [
+                'bod' => ["BOD", "BOD (B-23-NA)", "BOD (B-23)"],
+                'tss' => ["TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)"],
+                'nh3' => ["NH3", "NH3-N", "NH3-N Bebas", "NH3-N (3-03-NA)", "NH3-N (3-03)", "NH3-N (30-25-NA)", "NH3-N (30-25)", "NH3-N (T)", "NH3-N (T-NA)"]
+            ];
+
+            $successCount = 0;
+            $colorimetriUpdates = [];
+            $wsValueUpdates = [];
+
+            // Proses setiap sampel
+            foreach ($noSampelList as $no_sampel) {
+                $orderDetail = $orderDetails->get($no_sampel);
+                if (!$orderDetail) continue;
+
+                $dataTitri = $titrimetriData->get($no_sampel);
+                $dataColori = $colorimetriData->get($no_sampel);
+                $dataGravi = $gravimetriData->get($no_sampel);
+
+                if (!$dataTitri || !$dataColori || !$dataGravi) continue;
+
+                $hasilTitri = $wsValueTitri->get($dataTitri->id);
+                $hasilColori = $wsValueColori->get($dataColori->id);
+                $hasilGravi = $wsValueGravi->get($dataGravi->id);
+
+                if (!$hasilTitri || !$hasilColori || !$hasilGravi) continue;
+
+                // Hitung acuan berdasarkan kategori
+                $acuan = $this->calculateAcuan(
+                    $orderDetail,
+                    $dataTitri,
+                    $dataColori,
+                    $dataGravi,
+                    $hasilTitri,
+                    $hasilColori,
+                    $hasilGravi,
+                    $parameterDefs
+                );
+
+                if (empty($acuan)) continue;
+
+                // Hitung hasil Total Coliform
+                $hasil = $this->calculateTotalColiform($acuan, $orderDetail->kategori_3);
+
+                // Simpan untuk bulk update
+                $insert = $totalColiformData->get($no_sampel);
+                if ($insert) {
+                    $colorimetriUpdates[] = [
+                        'id' => $insert->id,
+                        'hp' => $hasil['value'],
+                        'note' => $hasil['note']
+                    ];
+
+                    $wsValueUpdates[] = [
+                        'id_colorimetri' => $insert->id,
+                        'no_sampel' => $no_sampel,
+                        'hasil' => $hasil['value']
+                    ];
+
+                    $successCount++;
+                }
+            }
+
+            // Bulk update Colorimetri
+            foreach ($colorimetriUpdates as $update) {
+                Colorimetri::where('id', $update['id'])
+                    ->update([
+                        'hp' => $update['hp'],
+                        'note' => $update['note']
+                    ]);
+            }
+
+            // Bulk upsert WsValueAir
+            foreach ($wsValueUpdates as $wsUpdate) {
+                WsValueAir::updateOrCreate(
+                    ['id_colorimetri' => $wsUpdate['id_colorimetri']],
+                    [
+                        'no_sampel' => $wsUpdate['no_sampel'],
+                        'hasil' => $wsUpdate['hasil']
+                    ]
+                );
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => "Rekalkulasi Total Coliform Berhasil untuk tanggal {$request->tanggal}",
+                'total_processed' => $successCount
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+
+    /**
+     * Hitung acuan berdasarkan kategori dan parameter
+     */
+    private function calculateAcuan($orderDetail, $dataTitri, $dataColori, $dataGravi, $hasilTitri, $hasilColori, $hasilGravi, $parameterDefs)
+    {
+        $acuan = [];
+        $isDomestik = $orderDetail->kategori_3 == '2-Air Limbah Domestik';
+
+        // BOD
+        if (in_array($dataTitri->parameter, $parameterDefs['bod'])) {
+            $acuanValue = $isDomestik ? 30 : 50;
+            $acuan['BOD'] = [
+                'hasil' => $hasilTitri->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilTitri->hasil) ? $hasilTitri->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilTitri->hasil)
+                    ? (($acuanValue - $hasilTitri->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        // TSS
+        if (in_array($dataGravi->parameter, $parameterDefs['tss'])) {
+            $acuanValue = $isDomestik ? 30 : 200;
+            $acuan['TSS'] = [
+                'hasil' => $hasilGravi->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilGravi->hasil) ? $hasilGravi->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilGravi->hasil)
+                    ? (($acuanValue - $hasilGravi->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        // NH3
+        if (in_array($dataColori->parameter, $parameterDefs['nh3'])) {
+            $acuanValue = $isDomestik ? 10 : 5;
+            $acuan['NH3'] = [
+                'hasil' => $hasilColori->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilColori->hasil) ? $hasilColori->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilColori->hasil)
+                    ? (($acuanValue - $hasilColori->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        return $acuan;
+    }
+
+    /**
+     * Hitung Total Coliform berdasarkan acuan
+     */
+    private function calculateTotalColiform($acuan, $kategori)
+    {
+        // Hitung average turun naik + 25
+        $average_turun_naik = (array_sum(array_column($acuan, 'turun_naik')) / count($acuan)) + 25;
+
+        // Tentukan acuan total coliform
+        $acuanTotalColi = $kategori == '3-Air Limbah Industri' ? 1000 : 3000;
+
+        // Hitung temp result
+        $temp_result = $average_turun_naik > 0
+            ? $acuanTotalColi - (abs(($average_turun_naik / 100) * $acuanTotalColi))
+            : $acuanTotalColi + (abs(($average_turun_naik / 100) * $acuanTotalColi));
+
+        $temp_result = $this->mround($temp_result, 10);
+
+        // Cari closest key
+        $isGreater = $temp_result >= 1600;
+        $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
+        $hasil = $closest['key'];
+
+        if ($hasil < 1) {
+            $hasil = '<1';
+        }
+
+        // Generate note
+        $split_note = str_split((string) $closest['value']);
+        $note = implode('-', $split_note);
+
+        return [
+            'value' => $hasil,
+            'note' => $note
+        ];
+    }
+
     private function getRequiredCount($parameter)
     {
         $map = [
@@ -3903,4 +4154,153 @@ class TestingController extends Controller
         return response()->json($invoices);
     
     }
+
+    private function searchClosestKey($temp_result, $isLoop = false)
+    {
+        $table = $this->tableReversedMPN;
+        $hasil = null;
+
+        // ubah semua key jadi float agar bisa dibandingkan numerik
+        $keys = array_map('floatval', array_keys($table));
+        sort($keys); // urutkan dari kecil ke besar
+
+        $closest_key = null;
+        do {
+            // cari nilai key terdekat (paling mendekati ke atas/bawah)
+            $min_diff = PHP_FLOAT_MAX;
+
+            foreach ($keys as $key) {
+                $diff = abs($key - $temp_result);
+                if ($diff < $min_diff) {
+                    $min_diff = $diff;
+                    $closest_key = $key;
+                }
+            }
+
+            // jika ketemu (selisih kecil), langsung ambil hasilnya
+            if ($closest_key !== null) {
+                $hasil = (string) $table[(string)$closest_key];
+                break;
+            }
+
+            // jika tidak ketemu dan loop diizinkan, bagi 10 lalu ulangi
+            $temp_result = $temp_result / 10;
+
+            // jika tidak loop, hentikan setelah 1 kali
+            if (!$isLoop) {
+                break;
+            }
+        } while ($temp_result > 0.000001); // batas aman agar tidak infinite loop
+
+        // fallback jika hasil belum ditemukan
+        if ($hasil === null) {
+            $hasil = '000'; // set nol
+        }
+
+        return [
+            'value' => $hasil,
+            'key' => $closest_key
+        ];
+    }
+
+    private function mround($number, $multiple)
+    {
+        return round($number / $multiple) * $multiple;
+    }
+
+
+    private $tableReversedMPN = [
+        "1.8" => "001",
+        "3.6" => "011",
+        "3.7" => "020",
+        "5.5" => "021",
+        "5.6" => "030",
+        "2" => 100,
+        "4" => 101,
+        "6" => 102,
+        "4" => 110,
+        "6.1" => 111,
+        "8.1" => 112,
+        "6.1" => 120,
+        "8.2" => 121,
+        "8.3" => 130,
+        "10" => 131,
+        "11" => 140,
+        "4.5" => 200,
+        "6.8" => 201,
+        "9.1" => 202,
+        "6.8" => 210,
+        "9.2" => 211,
+        "12" => 212,
+        "8.3" => 220,
+        "12" => 221,
+        "14" => 222,
+        "12" => 230,
+        "14" => 231,
+        "15" => 240,
+        "7.8" => 300,
+        "11" => 301,
+        "13" => 302,
+        "11" => 310,
+        "14" => 311,
+        "17" => 312,
+        "14" => 320,
+        "17" => 321,
+        "20" => 322,
+        "17" => 330,
+        "21" => 331,
+        "24" => 332,
+        "21" => 340,
+        "24" => 341,
+        "25" => 350,
+        "13" => 400,
+        "17" => 401,
+        "21" => 402,
+        "25" => 403,
+        "17" => 410,
+        "21" => 411,
+        "26" => 412,
+        "31" => 413,
+        "22" => 420,
+        "26" => 421,
+        "32" => 422,
+        "38" => 423,
+        "27" => 430,
+        "33" => 431,
+        "39" => 432,
+        "34" => 440,
+        "40" => 441,
+        "47" => 442,
+        "41" => 450,
+        "48" => 451,
+        "23" => 500,
+        "31" => 501,
+        "43" => 502,
+        "58" => 503,
+        "33" => 510,
+        "46" => 511,
+        "63" => 512,
+        "84" => 513,
+        "49" => 520,
+        "70" => 521,
+        "94" => 522,
+        "120" => 523,
+        "150" => 524,
+        "79" => 530,
+        "110" => 531,
+        "140" => 532,
+        "170" => 533,
+        "210" => 534,
+        "130" => 540,
+        "170" => 541,
+        "220" => 542,
+        "280" => 543,
+        "350" => 544,
+        "430" => 545,
+        "240" => 550,
+        "350" => 551,
+        "540" => 552,
+        "920" => 553,
+        "1600" => 554
+    ];
 }
