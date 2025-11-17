@@ -138,28 +138,28 @@ class DraftUdaraKebisinganController extends Controller
                 ->orderByDesc('berlaku_mulai')
                 ->first();
 
-            $parameter = \explode(', ', $request->parameter);
-            $header->no_order = ($request->no_order != '') ? $request->no_order : NULL;
-            $header->no_sampel = ($request->no_sampel != '') ? $request->noSampel : NULL;
-            $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL;
-            $header->id_kategori_2 = ($request->kategori_2 != '') ? explode('-', $request->kategori_2)[0] : NULL;
-            $header->id_kategori_3 = ($category != '') ? $category : NULL;
-            $header->no_qt = ($request->no_penawaran != '') ? $request->no_penawaran : NULL;
-            $header->parameter_uji = json_encode($parameter);
-            $header->nama_pelanggan = ($request->nama_perusahaan != '') ? $request->nama_perusahaan : NULL;
-            $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL;
-            $header->sub_kategori = ($request->jenis_sampel != '') ? $request->jenis_sampel : NULL;
-            $header->deskripsi_titik = ($request->keterangan_1 != '') ? $request->keterangan_1 : NULL;
-            $header->metode_sampling = ($request->metode_sampling) ? $request->metode_sampling : NULL;
-            $header->tanggal_sampling = ($request->tanggal_tugas != '') ? $request->tanggal_tugas : NULL;
-            $header->suhu = ($request->suhu != '') ? $request->suhu : NULL;
-            $header->kelembapan = ($request->kelembapan != '') ? $request->kelembapan : NULL;
-            $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
-            $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
-            $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-            $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL;
-            $header->regulasi_custom = ($request->regulasi_custom != null) ? json_encode($request->regulasi_custom) : NULL;
-            $header->tanggal_lhp = ($request->tanggal_lhp != '') ? $request->tanggal_lhp : NULL;
+            $parameter = \explode(', ', $request->parameter); //ok
+            $header->no_order = ($request->no_order != '') ? $request->no_order : NULL; //ok
+            $header->no_sampel = ($request->no_sampel != '') ? $request->noSampel : NULL; //ok
+            $header->no_lhp = ($request->no_lhp != '') ? $request->no_lhp : NULL; //ok
+            $header->id_kategori_2 = ($request->kategori_2 != '') ? explode('-', $request->kategori_2)[0] : NULL; //ok
+            $header->id_kategori_3 = ($category != '') ? $category : NULL; //ok
+            $header->no_qt = ($request->no_penawaran != '') ? $request->no_penawaran : NULL; //ok
+            $header->parameter_uji = json_encode($parameter); //ok
+            $header->nama_pelanggan = ($request->nama_perusahaan != '') ? $request->nama_perusahaan : NULL; //ok
+            $header->alamat_sampling = ($request->alamat_sampling != '') ? $request->alamat_sampling : NULL; //ok
+            $header->sub_kategori = ($request->jenis_sampel != '') ? $request->jenis_sampel : NULL; //ok
+            $header->deskripsi_titik = ($request->keterangan_1 != '') ? $request->keterangan_1 : NULL; //ok
+            $header->metode_sampling = ($request->metode_sampling) ? $request->metode_sampling : NULL; //ok
+            $header->tanggal_sampling = ($request->tanggal_terima != '') ? $request->tanggal_terima : NULL; //ok
+            // $header->suhu = ($request->suhu != '') ? $request->suhu : NULL;
+            // $header->kelembapan = ($request->kelembapan != '') ? $request->kelembapan : NULL;
+            // $header->periode_analisa = ($request->periode_analisa != '') ? $request->periode_analisa : NULL;
+            $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah'; //ok
+            $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor'; //ok
+            $header->regulasi = ($request->regulasi != null) ? json_encode($request->regulasi) : NULL; //ok
+            $header->regulasi_custom = ($request->regulasi_custom != null) ? json_encode($request->regulasi_custom) : NULL; //ok
+            $header->tanggal_lhp = ($request->tanggal_lhp != '') ? $request->tanggal_lhp : NULL; //ok
             $header->save();
 
 
@@ -259,13 +259,12 @@ class DraftUdaraKebisinganController extends Controller
                     }
                 }
             }
-            // dd($detail);
 
             $details = LhpsKebisinganDetail::where('id_header', $header->id)->get();
             $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
-            // dd($custom);
+            
             if ($header != null) {
 
                 $file_qr = new GenerateQrDocumentLhp();
@@ -278,7 +277,6 @@ class DraftUdaraKebisinganController extends Controller
                 $fileName = null;
                 if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382])) {
 
-                    // $master_regulasi = MasterRegulasi::find($id_regulasii);
                     $parameter = $details->first()->param;
                     if (strpos($parameter, '24 Jam') !== false) {
                         $is_sesaat = false;
@@ -310,17 +308,10 @@ class DraftUdaraKebisinganController extends Controller
                         ->render('downloadLHPFinal');
                 }
                 $header->file_lhp = $fileName;
-                // if ($header->is_revisi == 1) {
-                //     $header->is_revisi = 0;
-                //     $header->is_generated = 0;
-                //     $header->count_revisi++;
-                //     if ($header->count_revisi > 2) {
-                //         $this->handleApprove($request, false);
-                //     }
-                // }
+
                 $header->save();
             }
-            // dd('================');
+            
             DB::commit();
             return response()->json([
                 'message' => 'Data draft Kebisingan udara no LHP ' . $request->no_lhp . ' berhasil disimpan',
@@ -495,8 +486,7 @@ class DraftUdaraKebisinganController extends Controller
             })->values()->toArray();
 
             $jumlah_custom = count($request->regulasi) - 1;
-
-            // Jika ada LHP yang sudah tersimpan
+            
             if ($cekLhp) {
                 $detail = LhpsKebisinganDetail::where('id_header', $cekLhp->id)->get();
                 $custom = LhpsKebisinganCustom::where('id_header', $cekLhp->id)
@@ -524,8 +514,7 @@ class DraftUdaraKebisinganController extends Controller
                         $custom[$idx][] = $value;
                     }
                 }
-
-                // Jika jumlah custom kurang dari jumlah regulasi, tambahkan satu halaman lagi
+                
                 if (count($custom) < $jumlah_custom) {
                     $custom[] = $detail;
                 }
@@ -541,7 +530,6 @@ class DraftUdaraKebisinganController extends Controller
                         ->values()
                         ->toArray();
                 }
-
 
                 return response()->json([
                     'data'    => $cekLhp,

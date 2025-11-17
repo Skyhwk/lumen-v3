@@ -223,23 +223,14 @@ class LhpTemplate
         }
 
         if ($lampiran) {
-            $pdfLampiran = view($view . '.lampiran', [
+            $pdfLampiran = view($this->directoryDefault . '.lampiran', [
                 'header' => $header,
                 'custom' => false,
-                'page'   => null
+                'page'   => null,
+                'sub_kategori' => $header->sub_kategori ?? ''
             ])->render();
 
             $lampiranHeader = view($this->directoryDefault . '.lampiranHeader', compact('header', 'showKan', 'mode'))->render();
-
-            if (!empty($customs)) {
-                foreach ($customs as $page => $custom) {
-                    $pdfLampiranCustom[$page] = view($view . '.lampiran', [
-                        'header' => $header,
-                        'custom' => true,
-                        'page'   => $page
-                    ])->render();
-                }
-            }
         }
 
         $defaultConfig = (new ConfigVariables())->getDefaults();
@@ -407,8 +398,6 @@ class LhpTemplate
 
                 }
             }
-      
-            
         }
         if ($parameterAkreditasi == 0) {
             return false;
