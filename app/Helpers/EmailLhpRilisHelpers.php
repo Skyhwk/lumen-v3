@@ -42,8 +42,11 @@ class EmailLhpRilisHelpers
             
             $subject = "e-LHP_{$no_order}_{$periode}{$company}";
 
-            $cc  = $cekHistory->email_cc  ? json_decode($cekHistory->email_cc, true)  : [];
-            $bcc = $cekHistory->email_bcc ? json_decode($cekHistory->email_bcc, true) : [];
+            $cc  = $cekHistory->email_cc != null  ? json_decode($cekHistory->email_cc, true)  : [];
+            $bcc = $cekHistory->email_bcc != null ? json_decode($cekHistory->email_bcc, true) : [];
+            
+            $bcc = is_array($bcc) ? $bcc : [];
+            array_push($bcc, 'dedi@intilab.com');
 
             $email = SendEmail::where('to', $cekHistory->email_to)
                 ->where('subject', $subject)
