@@ -6,8 +6,9 @@ use \Mpdf\Mpdf as PDF;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Helpers\EmailLhpRilisHelpers;
 
-use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
+use App\Models\{HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
@@ -1573,19 +1574,26 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
-                    // if($data_order->periode != null){
-                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
-                    // }else{
-                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
-                    // }
 
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
                     
                     if($cekLink){
-                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $periode);
+                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
+
+                    $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                    EmailLhpRilisHelpers::run([
+                        'cfr'              => $data->no_lhp,
+                        'no_order'         => $data->no_order,
+                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                        'nama_perusahaan'  => $data->nama_pelanggan,
+                        'periode'          => $cekDetail->periode,
+                        'karyawan'         => $this->karyawan
+                    ]);
                     
                 }
                 DB::commit();
