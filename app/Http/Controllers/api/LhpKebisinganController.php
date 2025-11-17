@@ -147,7 +147,7 @@ class LhpKebisinganController extends Controller
             $header->save();
 
             $servicePrint = new PrintLhp();
-            $servicePrint->printByFilename($header->file_lhp, $detail, 'Kebisingan', $header->no_lhp);
+            $servicePrint->printByFilename($header->file_lhp, $detail, 'KPGI', $header->no_lhp);
             if (!$servicePrint) {
                 DB::rollBack();
                 return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
