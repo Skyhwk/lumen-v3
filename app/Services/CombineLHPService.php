@@ -48,7 +48,7 @@ class CombineLHPService
             $finalFullPath = $finalDirectoryPath . '/' . $finalFilename;
             if (!File::isDirectory($finalDirectoryPath)) {
                 File::makeDirectory($finalDirectoryPath, 0777, true);
-                Log::info("CombineLHPService: Created directory {$finalDirectoryPath}");
+                // Log::info("CombineLHPService: Created directory {$finalDirectoryPath}");
             }
 
             $httpClient = Http::asMultipart();
@@ -64,7 +64,7 @@ class CombineLHPService
                     $lhpRilis = array_unique(array_merge($lhpRilis, [$noLhp]));
                     sort($lhpRilis, SORT_NATURAL);
 
-                    Log::info("CombineLHPService: Existing LHP list for {$noOrder}", $lhpRilis);
+                    // Log::info("CombineLHPService: Existing LHP list for {$noOrder}", $lhpRilis);
 
                     foreach ($lhpRilis as $item) {
                         $existingFile = "LHP-" . str_replace('/', '-', $item) . ".pdf";
@@ -73,7 +73,7 @@ class CombineLHPService
                             if (File::exists($lhpPath)) {
                                 $httpClient->attach('pdfs[]', File::get($lhpPath), $existingFile);
                                 $fileMetadata[] = 'skyhwk12';
-                                Log::info("CombineLHPService: Attached {$existingFile}");
+                                // Log::info("CombineLHPService: Attached {$existingFile}");
                             } else {
                                 Log::warning("CombineLHPService: File not found {$lhpPath}");
                             }
@@ -82,7 +82,7 @@ class CombineLHPService
                             if (File::exists($lhpPath)) {
                                 $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
                                 $fileMetadata[] = 'skyhwk12';
-                                Log::info("CombineLHPService: Attached {$existingFile}");
+                                // Log::info("CombineLHPService: Attached {$existingFile}");
                             } else {
                                 Log::warning("CombineLHPService: File not found {$lhpPath}");
                             }
@@ -94,7 +94,7 @@ class CombineLHPService
                     if (File::exists($lhpPath)) {
                         $httpClient->attach('pdfs[]', File::get($lhpPath), $fileLhp);
                         $fileMetadata[] = 'skyhwk12';
-                        Log::info("CombineLHPService: Attached {$fileLhp}");
+                        // Log::info("CombineLHPService: Attached {$fileLhp}");
                     } else {
                         Log::warning("CombineLHPService: File not found {$lhpPath}");
                     }
@@ -103,7 +103,7 @@ class CombineLHPService
 
             $httpClient->attach('metadata', json_encode($fileMetadata));
             // $httpClient->attach('final_password', $orderHeader->id_pelanggan);
-            Log::info("CombineLHPService: Sending to PDF combiner with " . count($fileMetadata) . " files");
+            // Log::info("CombineLHPService: Sending to PDF combiner with " . count($fileMetadata) . " files");
 
             $response = $httpClient->post(env('PDF_COMBINER_SERVICE', 'http://127.0.0.1:2999') . '/merge');
 
@@ -112,7 +112,7 @@ class CombineLHPService
             }
 
             File::put($finalFullPath, $response->body());
-            Log::info("CombineLHPService: Combined PDF saved at {$finalFullPath}");
+            // Log::info("CombineLHPService: Combined PDF saved at {$finalFullPath}");
 
             $linkLhp = LinkLhp::where('no_order', $noOrder);
             if ($periode) $linkLhp = $linkLhp->where('periode', $periode);
@@ -129,7 +129,7 @@ class CombineLHPService
                     $linkLhp->jumlah_lhp_rilis = count($listLhpRilis);
 
                     $linkLhp->is_completed = $linkLhp->jumlah_lhp == count($listLhpRilis);
-                    Log::info("CombineLHPService: Updated LinkLHP list for {$noOrder}", $listLhpRilis);
+                    // Log::info("CombineLHPService: Updated LinkLHP list for {$noOrder}", $listLhpRilis);
                 }
             } else {
                 $linkLhp = new LinkLhp();
@@ -144,7 +144,7 @@ class CombineLHPService
                 $linkLhp->is_completed = $orderHeader->orderDetail->pluck('cfr')->unique()->count() == 1;
                 $linkLhp->created_by = $karyawan;
                 $linkLhp->created_at = Carbon::now();
-                Log::info("CombineLHPService: Created new LinkLHP for {$noOrder}");
+                // Log::info("CombineLHPService: Created new LinkLHP for {$noOrder}");
             }
 
             $linkLhp->filename = $finalFilename;
@@ -154,7 +154,7 @@ class CombineLHPService
 
             $linkLhp->save();
             DB::commit();
-            Log::info("CombineLHPService: Combine process completed successfully for {$noOrder}");
+            // Log::info("CombineLHPService: Combine process completed successfully for {$noOrder}");
         } catch (\Throwable $th) {
             DB::rollBack();
             Log::error("CombineLHPService: Exception for {$noOrder} - {$th->getMessage()}");
