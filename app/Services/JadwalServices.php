@@ -1965,10 +1965,23 @@ class JadwalServices
             $jadw5 = Jadwal::where('id', $dataParsial->id)->whereNotNull('parsial')->where('is_active', true)->first();
             if ($jadw) {
                 if (!$jadw4->isEmpty()) {
-                    $datcek = count($jadw4) + 1;
-                    if ((int) $dataParsial->totkateg == $datcek) {
+                    $kategori_terinput = [];
+
+                    foreach ($jadw4 as $item) {
+                        $kategori_jadwal = json_decode($item->kategori, true);
+
+                        if (!is_array($kategori_jadwal)) {
+                            $kategori_jadwal = [$kategori_jadwal];
+                        }
+
+                        $kategori_terinput = array_merge($kategori_terinput, $kategori_jadwal);
+                    }
+
+                    $kategori_terinput = array_unique($kategori_terinput);
+
+                    if (in_array($dataParsial->kategori, $kategori_terinput)) {
                         DB::rollBack();
-                        throw new Exception("Kategori sudah terinput semua.!", 401);
+                        throw new Exception("Kategori {$dataParsial->kategori} sudah pernah diinput sebelumnya!", 401);
                     }
                 }
             } else if ($jadw5) {
