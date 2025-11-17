@@ -7,6 +7,7 @@ use App\Models\LhpUdaraPsikologiHeader;
 use App\Models\OrderDetail;
 use App\Models\Parameter;
 use App\Models\Printers;
+use App\Models\MasterBakumutu;
 use App\Services\Printing;
 use Illuminate\Support\Facades\DB;
 
