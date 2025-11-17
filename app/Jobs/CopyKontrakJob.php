@@ -99,7 +99,7 @@ class CopyKontrakJob extends Job
             Log::channel('quotation')->info('CreateCopyKontrakJob:  Penawaran berhasil dibuat dengan nomor dokumen ' . $no_document);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::channel('quotation')->info('CreateKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
+            Log::channel('quotation')->info('CreateCopyKontrakJob: Terjadi kesalahan saat membuat penawaran: ' . $e->getMessage());
         }
     }
 
