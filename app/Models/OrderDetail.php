@@ -8,6 +8,8 @@ class OrderDetail extends Sector
     protected $table   = "order_detail";
     public $timestamps = false;
 
+    protected $guarded = [];
+
     public function orderHeader()
     {
         return $this->hasOne(OrderHeader::class, 'id', 'id_order_header')->with(['sampling', 'persiapanSampel']);

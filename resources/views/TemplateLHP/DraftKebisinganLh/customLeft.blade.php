@@ -11,18 +11,21 @@
                 </tr>
             </thead>
             <tbody>
+            @php $totdat = count($custom); @endphp
                 @foreach ($custom as $k => $yy)
+                    @php
+                    $i = $k + 1;
+                    @endphp
                     <tr>
-                        <td class="custom">{{ $k + 1 }}</td>
-                        <td style="text-align: right; border-right: none; vertical-align: top;" class="custom4" width="6%">
-                            <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
-                        </td>
-                        <td style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;" class="custom" width="24%">
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
+                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                             {{ $yy['lokasi_keterangan'] }}
                         </td>
-                        <td class="custom" width="10%">{{ $yy['hasil_uji'] }}</td>
-                        <td class="custom" width="30%">{{ $yy['titik_koordinat'] }}</td>
-                        <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil_uji'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">{{ $yy['titik_koordinat'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+
                     </tr>
                 @endforeach
             </tbody>
