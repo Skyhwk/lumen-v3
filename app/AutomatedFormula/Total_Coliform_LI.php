@@ -94,6 +94,8 @@ class Total_Coliform_LI
                 $acuanTotalColi - (abs(($average_turun_naik / 100) * $acuanTotalColi)) :
                 $acuanTotalColi + (abs(($average_turun_naik / 100) * $acuanTotalColi));
 
+            $temp_result = $this->mround($temp_result, 10);
+
             $isGreater = $temp_result >= 1600 ? true : false;
 
             $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
@@ -176,6 +178,11 @@ class Total_Coliform_LI
             'value' => $hasil,
             'key' => $closest_key
         ];
+    }
+
+    private function mround($number, $multiple)
+    {
+        return round($number / $multiple) * $multiple;
     }
 
     private $tableReversedMPN = [
