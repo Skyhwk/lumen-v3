@@ -6,6 +6,7 @@ use App\Models\Withdraw;
 use App\Models\Invoice;
 use App\Services\GenerateToken;
 use App\Http\Controllers\Controller;
+use App\Models\SalesInDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -108,6 +109,7 @@ class WithdrawController extends Controller
         // Subquery untuk aggregate invoice data terlebih dahulu
         $invoiceAgg = DB::table('invoice')
             ->select(
+                DB::raw('MAX(id) AS id'),
                 'no_invoice',
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
                 DB::raw('FLOOR(SUM(nilai_tagihan)) AS nilai_tagihan'),
@@ -134,6 +136,7 @@ class WithdrawController extends Controller
                 'inv.total_tagihan',
                 'inv.nilai_tagihan',
                 DB::raw('(inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0)) AS nilai_pelunasan'),
+                'w.total_pembayaran',
                 'inv.nama_pj',
                 'inv.no_po',
                 'inv.no_spk',
@@ -143,10 +146,11 @@ class WithdrawController extends Controller
                 'inv.created_by',
                 'inv.tgl_jatuh_tempo',
                 'inv.tgl_pelunasan',
-                'inv.no_orders'
+                'inv.no_orders',
+                'inv.id'
             )
             ->leftJoin('order_header as oh', 'inv.primary_no_order', '=', 'oh.no_order')
-            ->leftJoinSub($withdrawSub, 'w', function($join) {
+            ->joinSub($withdrawSub, 'w', function($join) {
                 $join->on('inv.no_invoice', '=', 'w.no_invoice');
             })
             ->whereRaw('inv.nilai_tagihan <= (inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0))')
@@ -170,6 +174,9 @@ class WithdrawController extends Controller
             })
             ->filterColumn('konsultan', function($query, $keyword) {
                 $query->where('oh.konsultan', 'like', "%{$keyword}%");
+            })
+            ->addColumn('withdraw', function($invoice) {
+                return Withdraw::where('no_invoice', $invoice->no_invoice)->orderByDesc('id')->get();
             })
             ->make(true);
 
@@ -223,4 +230,20 @@ class WithdrawController extends Controller
         }
     }
 
+    public function deleteWithdraw(Request $request) {
+        $withdraw = Withdraw::find($request->id);
+        if (!$withdraw) return response()->json(['message' => "Withdraw Not Found."], 404);
+        
+        if ($withdraw->id_sales_in_detail) {
+            $salesInDetail = SalesInDetail::find($withdraw->id_sales_in_detail);
+            if (!$salesInDetail) return response()->json(['message' => "Sales In Detail Not Found."], 404);
+
+            $salesInDetail->nilai_pengurangan = null;
+            $salesInDetail->save();
+        }
+
+        $withdraw->delete();
+
+        return response()->json(['message' => "Withdraw Has Been Deleted."]);
+    }
 }
