@@ -141,7 +141,7 @@
 </p>
 
 <!-- TANDA TANGAN -->
-<table style="width:100%; font-size:14px; margin-top:25px; text-align:center;">
+<table style="width:100%; font-size:12px; margin-top:25px; text-align:center;">
     <tr>
         <td style="width:60%;">Penerima Kerja,</td>
         <td style="width:40%;">Pemberi Kerja,</td>
@@ -160,12 +160,12 @@
             <table style="width:100%;">
                 <tr>
                     <td style="width:50%;">
-                        ( <b>{{$data->nama_tim_sales}}</b> )<br><i style="font-size:12px;">{{$data->jabatan_tim_sales}}</i>
+                        ( <b>{{$data->nama_tim_sales}}</b> )<br><i style="font-size:10px;">{{$data->jabatan_tim_sales}}</i>
                     </td style="width:50%;">
-                    <td>( <b>{{$data->nama_tim_teknis}}</b> )<br><i style="font-size:12px;">{{$data->jabatan_tim_teknis}}</i></td>
+                    <td>( <b>{{$data->nama_tim_teknis}}</b> )<br><i style="font-size:10px;">{{$data->jabatan_tim_teknis}}</i></td>
                 </tr>
             </table>
         </td>
-        <td>( <b>{{$data->nama_penanggung_jawab}}</b> )<br><i>{{$data->jabatan_penanggung_jawab}}</i></td>
+        <td>( <b>{{$data->nama_penanggung_jawab}}</b> )<br><i style="font-size:10px;">{{$data->jabatan_penanggung_jawab}}</i></td>
     </tr>
 </table>

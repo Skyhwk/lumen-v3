@@ -392,7 +392,7 @@ class WsFinalUdaraErgonomiController extends Controller
 		}
 	}
 
-	public function KoreksiMethod4 (Request $request)
+    public function KoreksiMethod4 (Request $request)
 	{
 		
 		try {

@@ -190,19 +190,20 @@ class RenderPermintaanDokumentasiSampling
             ]);
 
             $data = $permintaanDokumentasiSampling;
+            $noOrder = $data->no_order;
             $detail = OrderDetail::withAnyDataLapangan()
-                ->where('no_order', $data->no_order)
+                ->where('no_order', $noOrder)
                 ->where('is_active', true);
 
-            if ($periode) {
-                $detail = $detail->where('periode', $periode);
-            }
+            if ($periode) $detail = $detail->where('periode', $periode);
 
             $detail = $detail->get()->filter(fn($item) => $item->any_data_lapangan);
+            if ($detail->isEmpty()) {
+                throw new \Exception("No data lapangan found for Order: {$noOrder}.");
+            }
 
             foreach ($detail as $item) {
                 foreach ($item->any_data_lapangan as $dataLapangan) {
-                    $noOrder = $data->no_order;
                     $noSampelClean = str_replace('/', '_', $item->no_sampel);
                     $randomId = Str::random(8);
 
@@ -210,7 +211,7 @@ class RenderPermintaanDokumentasiSampling
                     File::makeDirectory($outputDir, 2775, true, true);
 
                     $watermarkData = [
-                        'header' => "{$data->nama_perusahaan}\nOrder ID: {$data->no_order}",
+                        'header' => "{$data->nama_perusahaan}\nOrder ID: {$noOrder}",
                         'footerLeft' => "Sampling Date: " . Carbon::parse($dataLapangan->created_at)->format('j F Y H:i') . "\nReport By: {$dataLapangan->created_by}",
                         'footerRight' => optional($dataLapangan)->titik_koordinat,
                     ];
