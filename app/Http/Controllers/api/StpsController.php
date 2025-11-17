@@ -657,10 +657,10 @@ class StpsController extends Controller
                 //  =========================================COLLECT DATA SELESAI========================================
             } else {
 
-                $dataPenawaran = QuotationNonKontrak::with(['order', 'sampling'])->where('no_document', $request->nomor_quotation)->first();
-
-
+                $dataPenawaran = QuotationNonKontrak::with(['order', 'sampling'])->where('no_document', $request->nomor_quotation)->where('is_active',true)->first();
+                
                 $dataOrder = $dataPenawaran->order;
+               
 
                 if ($dataOrder->is_revisi == 1) {
                     return response()->json([
@@ -668,7 +668,6 @@ class StpsController extends Controller
                     ], 401);
                 }
                 $dataSampling = $dataPenawaran->sampling;
-
                 $unik_kategori = $dataOrder->orderDetail()->get()->pluck('kategori_3')->unique()->toArray();
                 // dd($unik_kategori);
                 $pra_no_sample = [];
@@ -698,7 +697,7 @@ class StpsController extends Controller
                         }, $kategori_sample);
                     }
                 }
-
+                
                 $dataSampling = array_values($dataSampling->toArray())[0]['jadwal'];
                 // dd($dataSampling);
                 foreach ($dataSampling as $key => $value) {
