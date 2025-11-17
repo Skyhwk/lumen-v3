@@ -143,7 +143,7 @@ class LhpULKController extends Controller
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-                ->whereView('DraftUdaraAmbient')
+                ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHP');
 
             $header->file_lhp = $fileName;
