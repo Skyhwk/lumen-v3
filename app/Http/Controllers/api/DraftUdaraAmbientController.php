@@ -204,17 +204,17 @@ class DraftUdaraAmbientController extends Controller
             // $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
             //     return ['page' => (int) $page, 'regulasi' => $item];
             // })->values()->toArray();
-            $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
+            $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) use ($request) {
 
-                [$id, $regulasi] = explode(';', $item);
+                // [$id, $regulasi] = explode(';', $item);
 
                 // Hilangkan prefix id_ bila ada
-                $id = (int) str_replace('id_', '', $id);
+                // $id = (int) str_replace('id_', '', $id);
 
                 return [
                     'page'     => (int) $page,
-                    'regulasi' => trim($regulasi),
-                    'id'       => $id,
+                    'regulasi' => trim($item),
+                    'id'       => $request->regulasi_custom_id[$page],
                 ];
             })->values()->toArray();
 
@@ -693,7 +693,7 @@ class DraftUdaraAmbientController extends Controller
                             continue;
                         }
 
-                        $id_regulasi = (string) "id_" . $item['id'];
+                        $id_regulasi = (string) "id_" . $item['id'] . '-' . $item['page'];
                         $page        = $item['page'];
                         if (! empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
