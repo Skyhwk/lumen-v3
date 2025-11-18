@@ -3835,11 +3835,12 @@ class InputParameterController extends Controller
 				$header->durasi = count($durasi) > 0 ? array_sum($durasi) / count($durasi) : null;
 				$data_shift = null;
                 $volume_shift = null;
+				$data_pershift = null;
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
-                    $volume_shift = json_encode($volume);
+					$volume_shift = json_encode($volume);
 				}
-                if(isset($request->jumlah_coloni) && count($request->jumlah_coloni) > 1){
+                if(isset($request->jumlah_coloni)){
                     $data_pershift = json_encode($data_kalkulasi['data_pershift']);
                 }
 				if(!is_null($swab)){
@@ -3848,6 +3849,7 @@ class InputParameterController extends Controller
 					$header->fp = $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
+				$header->data_pershift = $data_pershift;
                 $header->volume_shift = $volume_shift;
 				$header->created_by = $this->karyawan;
 				$header->created_at = Carbon::now();
