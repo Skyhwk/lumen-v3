@@ -346,6 +346,7 @@ class WsFinalUdaraErgonomiController extends Controller
 			$dataRequest = $request->all();
 			$formatted = new RebaFormatter();
 			$rebaFormatter =$formatted->formatRebaData($dataRequest);
+			
 			if( !$request->has('id_datalapangan') && $request->id_datalapangan === '')
 			{
 				return response()->json([
