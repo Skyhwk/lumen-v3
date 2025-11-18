@@ -2067,7 +2067,6 @@ class JadwalServices
 
             // ========== KASUS 1: ini jadwal induk ==========
             if ($jadw) {
-                dump('masuk if');
                 // Ambil semua anak2 dari induk ini
                 $jadwalAnak = Jadwal::where('parsial', $dataParsial->id)
                     ->where('is_active', true)
@@ -2083,8 +2082,6 @@ class JadwalServices
             // ========== KASUS 2: ini jadwal anak ==========
             } elseif ($jadw5) {
                 // Ambil induknya
-
-                dump('masuk else');
                 $induk = Jadwal::where('id', $jadw5->parsial)
                     ->where('is_active', true)
                     ->first();
