@@ -160,7 +160,7 @@
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi) as $t => $y)
                             <tr>
-                                <td class="custom5" colspan="3">{{ $bintang }}{{ $y }}</td>
+                                <td class="custom5" colspan="3"><strong>{{ $bintang }}{{ $y }}</strong></td>
                             </tr>
                             @php
                                 $bintang .= '*';

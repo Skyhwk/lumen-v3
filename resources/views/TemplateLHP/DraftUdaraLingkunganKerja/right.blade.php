@@ -175,32 +175,6 @@
                 </table>
 
                 {{-- Regulasi --}}
-                <!-- @php
-                    $bintang = '**';
-                @endphp
-                @if (!empty($header->regulasi))
-<table style="padding: 10px 0px 0px 0px;" width="100%">
-                        @foreach (json_decode($header->regulasi) as $t => $y)
-<tr>
-                                <td class="custom5" colspan="3">{{ $bintang }}{{ $y }}</td>
-                            </tr>
-                            @php
-                                $bintang .= '*';
-                            @endphp
-@endforeach
-                    </table>
-@endif
-
-                {{-- Keterangan --}}
-                @if (!empty($header->keterangan))
-<table style="padding: 5px 0px 0px 10px;" width="100%">
-                        @foreach (json_decode($header->keterangan) as $t => $y)
-<tr>
-                                <td class="custom5" colspan="3">{{ $y }}</td>
-                            </tr>
-@endforeach
-                    </table>
-@endif -->
                 @if (!empty($header->regulasi))
 
                     @foreach (json_decode($header->regulasi) as $y)
@@ -211,6 +185,21 @@
                                 <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
                             </tr>
                         </table>
+
+                        @php
+                            $regulasiId = explode('-', $y)[0];
+                            $regulasiName = explode('-', $y)[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
+                        @endphp
+                        @if($table)
+                        <table style="padding-top: 5px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
+                                </tr>
+                        </table>
+                        @endif
                     @endforeach
 
                 @endif

@@ -65,7 +65,7 @@ class EmailLhpController extends Controller
 
     public function store(Request $request)
     {
-        $cek = EmailLhp::where('id_pelanggan', $request->id_pelanggan)->first();
+        $cek = EmailLhp::where('id_pelanggan', $request->id_pelanggan)->where('no_order', $request->no_order)->first();
 
         if($cek) {
             // update

@@ -335,16 +335,7 @@ class DraftUlkController extends Controller
                 ->useLampiran(true)
                 ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
-
             $header->file_lhp = $fileName;
-            // if ($header->is_revisi == 1) {
-            //     $header->is_revisi = 0;
-            //     $header->is_generated = 0;
-            //     $header->count_revisi++;
-            //     if ($header->count_revisi > 2) {
-            //         $this->handleApprove($request);
-            //     }
-            // }
             $header->save();
 
             DB::commit();
