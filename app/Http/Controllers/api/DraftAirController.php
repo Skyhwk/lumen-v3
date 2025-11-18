@@ -1029,15 +1029,12 @@ class DraftAirController extends Controller
             // ------------------------------------------------------
             // 6. Cek Link + Dispatch Combine Job
             // ------------------------------------------------------
-            $periode = $detail->periode ?? null;
-
-            if (!$periode) {
-                throw new \Exception("Periode tidak ditemukan pada OrderDetail.");
-            }
-
             $cekDetail = OrderDetail::where('cfr', $header->no_lhp)
                 ->where('is_active', true)
                 ->first();
+
+            $periode = $cekDetail->periode ?? null;
+
 
             $cekLink = LinkLhp::where('no_order', $header->no_order)
                 ->where('periode', $periode)
