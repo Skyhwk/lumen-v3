@@ -10,7 +10,11 @@ use App\Models\MicrobioHeader;
 use App\Models\MasterBakumutu;
 use App\Models\OrderDetail;
 use App\Models\ParameterFdl;
+use App\Models\WsValueUdara;
 
+use App\Models\LhpsMicrobiologiHeader;
+use App\Models\LhpsMicrobiologiDetailSampel;
+use App\Models\LhpsMicrobiologiDetailParameter;
 
 use App\Models\Subkontrak;
 use Illuminate\Http\Request;
@@ -20,9 +24,10 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
+
 class TqcUdaraMicrobiologiController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
         $parameterFdl = ParameterFdl::where('is_active', true)->where('kategori', '4-Udara')->where('nama_fdl', 'microbiologi')->select('parameters')->first();
         $parameterList = json_decode($parameterFdl->parameters);
@@ -31,8 +36,22 @@ class TqcUdaraMicrobiologiController extends Controller
             '12-Udara Angka Kuman',
             '33-Mikrobiologi Udara',
         ];
-
-        $data = OrderDetail::where('is_active', true)
+        $data = OrderDetail::select(
+            'cfr',
+            DB::raw('MAX(id) as max_id'),
+            'nama_perusahaan',
+            'no_quotation',
+            'no_order',
+            DB::raw('GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ", ") as no_sampel'),
+            DB::raw('GROUP_CONCAT(DISTINCT kategori_3 SEPARATOR ", ") as kategori_3'),
+            DB::raw('GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ", ") as tanggal_sampling'),
+            DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
+            'kategori_1',
+            'konsultan',
+            'regulasi',
+            'parameter',
+        )
+            ->where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', $kategori3List)
@@ -41,121 +60,95 @@ class TqcUdaraMicrobiologiController extends Controller
                     $query->orWhere('parameter', 'LIKE', "%;$param%");
                 }
             })
+            ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', "regulasi", "parameter")
+            ->orderBy('max_id', 'desc');
+
+        return Datatables::of($data)
+            ->filter(function ($query) {
+                foreach (request('columns', []) as $col) {
+                    $name = $col['data'] ?? null;
+                    $search = $col['search']['value'] ?? null;
+
+                    if ($search && in_array($name, [
+                        'no_sampel',
+                        'kategori_3',
+                        'tanggal_sampling',
+                        'tanggal_terima',
+                    ])) {
+                        $query->whereRaw("EXISTS (
+                            SELECT 1 FROM order_detail od
+                            WHERE od.cfr = order_detail.cfr
+                            AND od.{$name} LIKE ?
+                        )", ["%{$search}%"]);
+                    }
+                }
+            })
+            ->make(true);
+    }
+
+    public function getDetail(Request $request)
+    {
+        $orderDetails = OrderDetail::where('cfr', $request->cfr)
+            ->where('status', 1)
+            ->where('is_active', 1)
             ->get();
 
-        return Datatables::of($data)->make(true);
-    }
+        $data      = [];
+        $getSatuan = new HelperSatuan;
 
-    public function approveData(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $data = OrderDetail::where('id', $request->id)->first();
-            if ($data) {
-                $data->status = 2;
-                $data->save();
-                HistoryAppReject::insert([
-                    'no_lhp' => $data->cfr,
-                    'no_sampel' => $data->no_sampel,
-                    'kategori_2' => $data->kategori_2,
-                    'kategori_3' => $data->kategori_3,
-                    'menu' => 'TQC Udara',
-                    'status' => 'approve',
-                    'approved_at' => Carbon::now(),
-                    'approved_by' => $this->karyawan
-                ]);
-                DB::commit();
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil diapprove'
-                ]);
-            }
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage()
-            ]);
-        }
-    }
-
-    public function rejectData(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $data = OrderDetail::where('id', $request->id)->first();
-            if ($data) {
-                $data->status = 0;
-                $data->save();
-                DB::commit();
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
-                ]);
-            }
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage()
-            ]);
-        }
-    }
-
-
-    public function detail(Request $request)
-    {
-        try {
-            $microbio = MicrobioHeader::with(['ws_udara'])
-                ->where('no_sampel', $request->no_sampel)
-                ->where('is_approved', 1)
-                ->where('status', 0)
-                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-                ->addSelect(DB::raw("'microbio' as data_type"))
+        foreach ($orderDetails as $orderDetail) {
+            $header = MicrobioHeader::with('ws_value')
+                ->where('no_sampel', $orderDetail->no_sampel)
                 ->get();
 
-            // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
-            $id_regulasi = $request->regulasi;
-            $getSatuan = new HelperSatuan;
-            foreach ($microbio as $item) {
+            if ($header->isEmpty()) {
+                continue;
+            }
 
-                $dataLapangan = DetailMicrobiologi::where('no_sampel', $item->no_sampel)
-                    ->select('shift_pengambilan')
-                    ->where('parameter', $item->parameter)
-                    ->first();
+            // 2. Ambil id_regulasi dari field regulasi di OrderDetail
+            $id_regulasi = null;
 
+            if (! empty($orderDetail->regulasi)) {
+                $regArr = json_decode($orderDetail->regulasi, true);
+
+                if (is_array($regArr) && count($regArr) > 0) {
+                    $first       = $regArr[0];              // "143-Peraturan ...."
+                    $parts       = explode('-', $first, 2); // ["143", "Peraturan ...."]
+                    $id_regulasi = (int) $parts[0];
+                }
+            }
+
+            foreach ($header as $item) {
                 $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
                     ->where('id_regulasi', $id_regulasi)
                     ->where('is_active', 1)
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
                     ->first();
 
-                $item->durasi = $dataLapangan->shift_pengambilan ?? null;
-                $item->satuan = $bakuMutu->satuan ?? null;
-                $item->baku_mutu = $bakuMutu->baku_mutu ?? null;
-                $item->method = $bakuMutu->method ?? null;
-                $item->nama_header = $bakuMutu->nama_header ?? null;
+                $ws = $item->ws_udara; 
 
-                $hasil = $item->ws_udara ?? null;
-                if ($hasil != null) {
-                    $hasil = $hasil->toArray();
-                    $index = $getSatuan->udara($item->satuan);
-                    $nilai = null;
-                    if ($index == null) {
-                        if (empty($nilai)) {
-                            for ($i = 1; $i <= 17; $i++) {
-                                $key = "f_koreksi_$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
-                                    $nilai = $hasil[$key];
-                                    break;
-                                }
+                $nilai = '-';
+
+                if ($ws) {
+                    $hasil = $ws->toArray();
+
+                    $index = $getSatuan->udara($bakuMutu->satuan ?? null);
+
+                    if ($index === null) {
+                        // cari f_koreksi_1..17 dulu
+                        for ($i = 1; $i <= 17; $i++) {
+                            $key = "f_koreksi_$i";
+                            if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
+                                $nilai = $hasil[$key];
+                                break;
                             }
                         }
 
-                        if (empty($nilai)) {
+                        // kalau masih kosong, cari hasil1..17
+                        if ($nilai === '-' || $nilai === null || $nilai === '') {
                             for ($i = 1; $i <= 17; $i++) {
                                 $key = "hasil$i";
-                                if (isset($hasil[$key]) && !empty($hasil[$key])) {
+                                if (isset($hasil[$key]) && $hasil[$key] !== '' && $hasil[$key] !== null) {
                                     $nilai = $hasil[$key];
                                     break;
                                 }
@@ -163,108 +156,116 @@ class TqcUdaraMicrobiologiController extends Controller
                         }
                     } else {
                         $fKoreksiHasil = "f_koreksi_$index";
-                        $fhasil = "hasil$index";
-                        $nilai = null;
+                        $fhasil        = "hasil$index";
 
-                        if($index == 17) {
-                            $nilai =   $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
-                            if($nilai == null) {
-                                $nilai = $hasil['f_koreksi_2'] ??  $hasil['hasil2'] ?? '-';
-                            }
-                        } else if ($index == 16) {
-                            $nilai =   $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
-                            if($nilai == null) {
-                                $nilai =$hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
-                            }
-                        } else if ($index == 15) {
-                            $nilai =   $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
-                            if($nilai == null) {
-                                $nilai = $hasil['f_koreksi_3'] ??  $hasil['hasil3'] ?? '-';
-                            }
-                        } else {
-                            $nilai =   $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
-                            if($nilai == null) {
-                                $nilai = $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
-                            }
+                        if (isset($hasil[$fKoreksiHasil]) && $hasil[$fKoreksiHasil] !== '' && $hasil[$fKoreksiHasil] !== null) {
+                            $nilai = $hasil[$fKoreksiHasil];
+                        } elseif (isset($hasil[$fhasil]) && $hasil[$fhasil] !== '' && $hasil[$fhasil] !== null) {
+                            $nilai = $hasil[$fhasil];
                         }
                     }
-
-                    $item->nilai_uji = $nilai;
-                } else {
-                    $item->nilai_uji = '-';
                 }
+
+                $data[] = [
+                    'no_sampel'   => $orderDetail->no_sampel,
+                    'parameter'   => $item->parameter,
+                    'baku_mutu'   => $bakuMutu->baku_mutu ?? null,
+                    'satuan'      => $bakuMutu->satuan ?? null,
+                    'method'      => $bakuMutu->method ?? null,
+                    'nama_header' => $bakuMutu->nama_header ?? null,
+                    'nilai_uji'   => $nilai,
+                    'verifikator' => $item->approved_by ?? null,
+                ];
             }
-
-            return Datatables::of($microbio)->make(true);
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => $th->getMessage(),
-            ], 401);
         }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Berhasil mendapatkan data',
+            'data'    => $data,
+        ], 200);
+
+    }
+    // public function getDetail(Request $request)
+    // {
+    //     // Ambil semua order detail berdasarkan CFR
+    //     $orderDetails = OrderDetail::where('cfr', $request->cfr)
+    //         ->where('status', 1)
+    //         ->where('is_active', 1)
+    //         ->get();
+
+    //     // =============================
+    //     // 1. Kumpulkan ID Regulasi
+    //     // =============================
+    //     $idRegulasi = $orderDetails->flatMap(function ($detail) {
+    //         $reg = json_decode($detail->regulasi, true);
+    //         if (is_array($reg) && isset($reg[0])) {
+    //             return [ explode('-', $reg[0])[0] ];
+    //         }
+    //         return [];
+    //     })->unique()->values()->toArray();
+
+
+    //     // =============================
+    //     // 2. Persiapan data output
+    //     // =============================
+    //     $data = [];
+
+    //     foreach ($orderDetails as $orderDetail) {
+
+    //         $MicrobiologiHeader = MicrobioHeader::where('no_sampel', $orderDetail->no_sampel)->first();
+
+    //         // history sampel
+    //         $lhpsMicrobiologiDetail = LhpsMicrobiologiDetailSampel::where(
+    //             'lokasi_keterangan',
+    //             $orderDetail->keterangan_1
+    //         )
+    //         ->pluck('hasil_uji')
+    //         ->toArray();
+
+    //         // baku mutu berdasarkan parameter dan semua regulasi yang dikumpulkan
+    //         $bakuMutu = MasterBakumutu::where("id_parameter", $MicrobiologiHeader->id_parameter)
+    //             ->whereIn('id_regulasi', $idRegulasi)
+    //             ->where('is_active', 1)
+    //             ->select('baku_mutu', 'satuan', 'method', 'nama_header')
+    //             ->first();
+
+    //         $data[] = [
+    //             'no_sampel'     => $orderDetail->no_sampel,
+    //             'history'       => $lhpsMicrobiologiDetail,
+    //             'parameter'     => optional($MicrobiologiHeader)->parameter,
+    //             'hasil'         => optional(WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first())->hasil9,
+    //             'analyst'       => optional($MicrobiologiHeader)->created_by,
+    //             'approved_by'   => optional($MicrobiologiHeader)->approved_by,
+    //             'satuan'        => $bakuMutu->satuan ?? null,
+    //             'baku_mutu'     => $bakuMutu->baku_mutu ?? null,
+    //             'method'        => $bakuMutu->method ?? null,
+    //             'nama_header'   => $bakuMutu->nama_header ?? null,
+    //         ];
+    //     }
+
+    //     return response()->json([
+    //         'data' => $data,
+    //         'message' => 'Data retrieved successfully',
+    //     ], 200);
+    // }
+
+
+    public function handleApproveSelected(Request $request){
+        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 2]);
+
+        return response()->json([
+            'message' => 'Data berhasil diapprove.',
+            'success' => true,
+        ], 200);
     }
 
-    public function detailLapangan(Request $request)
-    {
-        try {
-            $data = DetailMicrobiologi::where('no_sampel', $request->no_sampel)->first();
-            if ($data) {
-                return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
-            } else {
-                return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
-            }
-        } catch (\Exception $ex) {
-            dd($ex);
-        }
-    }
+    public function handleRejectSelected(Request $request){
+        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 0]);
 
-    public function handleApproveSelected(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
-                ->update([
-                    'status' => 2,
-                ]);
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Data berhasil diapprove.',
-                'success' => true,
-                'status' => 200,
-            ], 200);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
-                'success' => false,
-                'status' => 500,
-            ], 500);
-        }
-    }
-
-    public function handleRejectSelected(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-
-            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)
-                ->update([
-                    'status' => 0,
-                ]);
-
-            DB::commit();
-            return response()->json([
-                'message' => 'Data berhasil direject.',
-                'success' => true,
-                'status' => 200,
-            ], 200);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Gagal mereject data: ' . $th->getMessage(),
-                'success' => false,
-                'status' => 500,
-            ], 500);
-        }
+        return response()->json([
+            'message' => 'Data berhasil direject.',
+            'success' => true,
+        ], 200);
     }
 }
