@@ -40,6 +40,7 @@ class DraftUlkController extends Controller
         $data = OrderDetail::with([
             'lhps_ling',
             'allDetailLingkunganKerja',
+            'dataLapanganDirectLain',
             'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
             ->where([
