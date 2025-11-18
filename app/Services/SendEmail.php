@@ -182,6 +182,8 @@ class SendEmail
         try {
             $mail = new PHPMailer(true);
             $mail->isSMTP();
+            $mail->CharSet = 'UTF-8';
+            $mail->Encoding = 'base64';
             $mail->Host = env('MAIL_HOST');
             $mail->SMTPAuth = true;
             $mail->Username = $this->emailConfig[$this->fromType]['email'];
@@ -238,7 +240,7 @@ class SendEmail
             }
 
             $mail->isHTML(true);
-            $mail->Subject = $this->subject;
+            $mail->Subject = mb_encode_mimeheader($this->subject, 'UTF-8', 'B');
             if ($this->fromType == 'promo') {
                 $body = self::replaceBase64WithUrl($this->body);
                 $mail->Body = $body;
