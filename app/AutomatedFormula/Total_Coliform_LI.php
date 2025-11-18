@@ -133,50 +133,39 @@ class Total_Coliform_LI
         }
     }
 
-    private function searchClosestKey($temp_result, $isLoop = false){
-        $table = $this->tableReversedMPN;
-        $hasil = null;
+    private function searchClosestKey($temp_result, $isLoop = false)
+    {
+        $rows = $this->tableReversedMPN;
+        $closest = null;
+        $closestDiff = PHP_FLOAT_MAX;
 
-        // ubah semua key jadi float agar bisa dibandingkan numerik
-        $keys = array_map('floatval', array_keys($table));
-        sort($keys); // urutkan dari kecil ke besar
-
-        $closest_key = null;
         do {
-            // cari nilai key terdekat (paling mendekati ke atas/bawah)
-            $min_diff = PHP_FLOAT_MAX;
+            foreach ($rows as $r) {
+                $diff = abs($r["key"] - $temp_result);
 
-            foreach ($keys as $key) {
-                $diff = abs($key - $temp_result);
-                if ($diff < $min_diff) {
-                    $min_diff = $diff;
-                    $closest_key = $key;
+                if ($diff < $closestDiff) {
+                    $closestDiff = $diff;
+                    $closest = $r;
                 }
             }
 
-            // jika ketemu (selisih kecil), langsung ambil hasilnya
-            if ($closest_key !== null) {
-                $hasil = (string) $table[(string)$closest_key];
-                break;
+            if ($closest !== null) {
+                return [
+                    "value" => $closest["value"],
+                    "key"   => $closest["key"]
+                ];
             }
 
-            // jika tidak ketemu dan loop diizinkan, bagi 10 lalu ulangi
-            $temp_result = $temp_result / 10;
+            $temp_result /= 10;
 
-            // jika tidak loop, hentikan setelah 1 kali
             if (!$isLoop) {
                 break;
             }
-        } while ($temp_result > 0.000001); // batas aman agar tidak infinite loop
-
-        // fallback jika hasil belum ditemukan
-        if ($hasil === null) {
-            $hasil = '000'; // set nol
-        }
+        } while ($temp_result > 0.000001);
 
         return [
-            'value' => $hasil,
-            'key' => $closest_key
+            "value" => "000",
+            "key"   => null
         ];
     }
 
