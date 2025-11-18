@@ -9,6 +9,7 @@ use App\Models\{
     QuotationNonKontrak,
     Jadwal,
     AnalystFormula,
+    Colorimetri,
     OrderHeader,
     OrderDetail,
     Invoice,
@@ -47,7 +48,10 @@ use App\Models\{
     DataLapanganPsikologi,
     DataLapanganEmisiKendaraan,
     DataLapanganEmisiCerobong,
-    DataLapanganIsokinetikHasil
+    DataLapanganIsokinetikHasil,
+    Gravimetri,
+    Titrimetri,
+    WsValueAir
 };
 use App\Services\{
     GetAtasan,
