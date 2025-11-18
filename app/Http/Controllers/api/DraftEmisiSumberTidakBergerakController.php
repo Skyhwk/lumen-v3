@@ -97,8 +97,12 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             //     }
             // }
             try {
-                $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                    return ['page' => (int) $page, 'regulasi' => $item];
+                $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) use ($request) {
+                    return [
+                        'page'     => (int) $page,
+                        'regulasi' => trim($item),
+                        'id'       => $request->regulasi_custom_id[$page],
+                    ];
                 })->values()->toArray();
 
                 $header->id_kategori_2    = $request->category2 ?: null;
@@ -271,6 +275,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         }
         // }
     }
+
     public function updateTanggalLhp(Request $request)
     {
         DB::beginTransaction();
@@ -373,6 +378,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             ], 500);
         }
     }
+
     public function handleDatadetail(Request $request)
     {
         try {
@@ -390,11 +396,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         'parameter'     => $val['parameter'],
                         'parameter_lab' => $val['parameter_lab'],
                         'C'             => $val['C'],
-                        // 'C1' => $val['C1'],
-                        // 'C2' => $val['C2'],
+                        'terkoreksi'    => $val['terkoreksi'],
                         'satuan'        => $val['satuan'],
                         'methode'       => $val['spesifikasi_metode'],
                         'baku_mutu'     => $val['baku_mutu'],
+                        'akr'           => $val['akr'],
                     ];
 
                     $methodUsed[] = $val['spesifikasi_metode'];
@@ -457,8 +463,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                                     'parameter'     => $val['parameter'],
                                     'parameter_lab' => $val['parameter_lab'],
                                     'C'             => $val['C'],
-                                    // 'C1' => $val['C1'],
-                                    // 'C2' => $val['C2'],
+                                    'terkoreksi'    => $val['terkoreksi'],
                                     'satuan'        => $val['satuan'],
                                     'methode'       => $val['spesifikasi_metode'],
                                     'baku_mutu'     => $val['baku_mutu'],
@@ -571,29 +576,28 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             ], 500);
         }
     }
+
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
-        $param = $val->parameter_emisi;
-
-        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
-            ->where('id_parameter', $param->id)
-            ->first();
+        $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->first();
         $satuan     = $bakumutu ? $bakumutu->satuan : null;
         $akreditasi = $bakumutu && isset($bakumutu->akreditasi) ? $bakumutu->akreditasi : '';
 
         $entry = [
             'id'            => $val->id,
             'no_sampel'     => $val->no_sampel,
-            'parameter'     => $param->nama_lhp ?? $param->nama_regulasi,
+            'parameter'     => $val->parameter_emisi->nama_lhp ?? $val->parameter_emisi->nama_regulasi,
             'parameter_lab' => $val->parameter,
             'C'             => self::getHasilUji($val, $satuan),
-            // 'C1' => $val->ws_value_cerobong->C1,
-            // 'C2' => $val->ws_value_cerobong->C2,
             'terkoreksi'    => self::getKoreksi($val, $satuan),
-            'satuan'        => $param->satuan,
-            'methode'       => $param->method,
+            'satuan'        => $satuan,
+            'methode'       => ! empty($bakumutu->method) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
             'baku_mutu'     => $val->baku_mutu->baku_mutu ?? '-',
-            'akr'           => str_contains($akreditasi, 'akreditasi') ? '' : 'ẍ',
+            'akr'           => (
+                ! empty($bakumutu)
+                    ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                    : 'ẍ'
+            ),
         ];
 
         if ($bakumutu && $bakumutu->method) {
