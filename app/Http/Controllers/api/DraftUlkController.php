@@ -332,7 +332,7 @@ class DraftUlkController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsLingDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-                ->useLampiran(false)
+                ->useLampiran(true)
                 ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
             $header->file_lhp = $fileName;
