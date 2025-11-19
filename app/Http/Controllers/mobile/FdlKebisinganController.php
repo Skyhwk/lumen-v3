@@ -184,15 +184,10 @@ class FdlKebisinganController extends Controller
 
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
-            if (!$orderDetail) {
-                return response()->json(['message' => 'No sampel tidak ditemukan'], 404);
-            }
-
-            if (empty($orderDetail->tanggal_terima)) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+            if($orderDetail->tanggal_terima == null){
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
                 $orderDetail->save();
             }
-
 
             InsertActivityFdl::by($this->user_id)->action('input')->target("Kebisingan pada nomor sampel $request->no_sample")->save();
 
