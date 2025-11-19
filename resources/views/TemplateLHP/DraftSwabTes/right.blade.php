@@ -1,34 +1,98 @@
-
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
+
+    $detailData = is_object($detail) && method_exists($detail, 'toArray') ? $detail->toArray() : (array) $detail;
+
+    $detailData = collect($detailData)->map(fn($r) => (array) $r);
+
+    $sampelUnik = $detailData->pluck('no_sampel')->filter()->unique()->values();
+    $paramUnik = $detailData->pluck('parameter')->filter()->unique()->values();
+
+    $totalSampel = $sampelUnik->count();
+    $totalParam = $paramUnik->count();
+
+    $isSingleSampel = $totalSampel === 1;
+    $isMultiSampelOneParam = $totalSampel > 1 && $totalParam === 1;
+    $isMultiSampelMultiParam = $totalSampel > 1 && $totalParam > 1;
+
+    $periodeAnalisa = $header->periode_analisa ?? null;
+
+    // Area swab: aku asumsikan dar keterangan (bisa dimodif kalau ada field khusus)
+    $areaSwabUnik = $detailData->pluck('keterangan')->filter()->unique()->values();
+
+    // Metode sampling (ambil dari header seperti sebelumnya)
+    $metodeSampling = $header->metode_sampling ? $header->metode_sampling : [];
+
+    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
+        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
+            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } elseif ($header->tanggal_sampling_akhir == null) {
+            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } else {
+            $tanggalSampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
+        }
+    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
+        if ($header->tanggal_sampling == $header->tanggal_terima) {
+            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+        } elseif ($header->tanggal_terima != null) {
+            $tanggalSampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+        } else {
+            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+        }
+    } else {
+        $tanggalSampling = '-';
+    }
+
+    $periode1 = $header->tanggal_analisa_awal ?? '';
+    $periode2 = $header->tanggal_analisa_akhir ?? '';
+
 @endphp
+
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
-<!-- <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};"></div> -->
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+        {{-- =========================================
+             BARIS ATAS: NO LHP, JENIS SAMPEL, PARAMETER UJI
+        ========================================== --}}
         <tr>
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="33%">No. LHP</td>
-                        <td class="custom" width="33%">JENIS SAMPEL</td>
-                        <td class="custom" width="33%">PARAMETER UJI</td>
+                        <td class="custom">No. LHP</td>
+                        @if ($isSingleSampel)
+                            <td class="custom" width="33%">No. SAMPEL</td>
+                        @endif
+                        <td class="custom">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Kebisingan</td>
-                        <td class="custom">Intensitas Kebisingan <sup style="font-size: 8px;"><u>a</u></sup></td>
+                        @if ($isSingleSampel)
+                            <td class="custom" width="33%">{{ $header->no_sampel }}</td>
+                        @endif
+                        <td class="custom">Swab Lingkungan</td>
                     </tr>
                 </table>
             </td>
         </tr>
 
-        {{-- Informasi Pelanggan --}}
+        {{-- =========================================
+             INFORMASI PELANGGAN (SAMA UNTUK SEMUA KONDISI)
+        ========================================== --}}
         <tr>
             <td>
                 <table style="padding-top: 20px;" width="100%">
                     <tr>
-                        <td><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>
+                        <td>
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">
+                                Informasi Pelanggan
+                            </span>
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
@@ -46,60 +110,218 @@
                     </tr>
                 </table>
 
-                {{-- Informasi Sampling --}}
+                {{-- =========================================
+                     INFORMASI SAMPLING – PER KONDISI
+                ========================================== --}}
                 <table style="padding-top: 10px;" width="100%">
                     <tr>
                         <td class="custom5" width="120" colspan="3">
-                            <span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span>
+                            <span style="font-weight: bold; border-bottom: 1px solid #000">
+                                Informasi Sampling
+                            </span>
                         </td>
                     </tr>
-                    <tr>
-                    @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
-                    @endphp
-                        <td class="custom5" width="120">Metode Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
-                                @foreach($methode_sampling as $index => $item)
-                                    <tr>
-                                        @if (count($methode_sampling) > 1)
-                                            <td class="custom5" width="20">{{ $index + 1 }}.</td>
-                                            <td class="custom5">{{ $item ?? '-' }}</td>
-                                        @else
-                                            <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
-                                        @endif
-                                    </tr>
+
+                    @if ($isSingleSampel)
+                        <tr>
+                            <td class="custom5" width="120">Tanggal Sampling</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
+                        </tr>
+
+                        {{-- keterangan (bisa gabung semua area/keterangan) --}}
+                        <tr>
+                            <td class="custom5" width="120">Keterangan</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">{{ $header->deskripsi_titik ?? '-' }}</td>
+                        </tr>
+
+                        {{-- area swab (kalau mau dipisah) --}}
+                        <tr>
+                            <td class="custom5" width="120">Area Swab</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->deskripsi_titik ?? '-' }}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="custom5" width="120">Periode Analisa</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                @if ($periode2)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                                @elseif ($periode1)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                                @else
+                                    -
+                                @endif
+                            </td>
+                        </tr>
+
+                        {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
+                    @elseif ($isMultiSampelOneParam)
+                        {{-- parameter pengujian --}}
+                        <tr>
+                            <td class="custom5" width="120">Parameter Pengujian</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">{{ $paramUnik->first() }}</td>
+                        </tr>
+
+                        {{-- spesifikasi metode (hardcode / dari header kalau ada) --}}
+                        <tr>
+                            <td class="custom5" width="120">Spesifikasi Metode</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->spesifikasi_metode ?? '-' }}
+                            </td>
+                        </tr>
+
+                        {{-- tanggal sampling --}}
+                        <tr>
+                            <td class="custom5" width="120">Tanggal Sampling</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
+                        </tr>
+
+                        {{-- periode analisa --}}
+                        <tr>
+                            <td class="custom5" width="120">Periode Analisa</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                @if ($periode2)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                                @elseif ($periode1)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                                @else
+                                    -
+                                @endif
+                            </td>
+                        </tr>
+
+                        {{-- area swab --}}
+                        <tr>
+                            <td class="custom5" width="120">Area Swab</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->deskripsi_titik ?? '-' }}
+                            </td>
+                        </tr>
+
+                        {{-- KONDISI 3: banyak no sampel, banyak parameter --}}
+                    @elseif ($isMultiSampelMultiParam)
+                        {{-- metode sampling (array) --}}
+                        <tr>
+                            <td class="custom5" width="120">Metode Sampling</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                <table width="100%"
+                                    style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                                    @forelse ($metodeSampling as $index => $item)
+                                        <tr>
+                                            @if (count($metodeSampling) > 1)
+                                                <td class="custom5" width="20">{{ $index + 1 }}.</td>
+                                                <td class="custom5">{{ $item ?? '-' }}</td>
+                                            @else
+                                                <td class="custom5" colspan="2">{{ $item ?? '-' }}</td>
+                                            @endif
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td class="custom5" colspan="2">-</td>
+                                        </tr>
+                                    @endforelse
+                                </table>
+                            </td>
+                        </tr>
+
+                        {{-- spesifikasi metode per parameter --}}
+                        <tr>
+                            <td class="custom5" width="120">Spesifikasi Metode</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{-- Kalau kamu punya mapping spesifikasi per parameter, bisa looping di sini --}}
+                                @foreach ($paramUnik as $idx => $p)
+                                    @if ($idx > 0)
+                                        <br>
+                                    @endif
+                                    {{ $p }} : {{ $header->spesifikasi_metode_per_param[$p] ?? '-' }}
                                 @endforeach
-                            </table>
-                        </td>
-                    </tr>
+                            </td>
+                        </tr>
+
+                        {{-- periode analisa --}}
+                        <tr>
+                            <td class="custom5" width="120">Periode Analisa</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                @if ($periode2)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                                @elseif ($periode1)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                                @else
+                                    -
+                                @endif
+                            </td>
+                        </tr>
+                    @endif
                 </table>
 
-                {{-- Regulasi --}}
+                {{-- =========================================
+                     REGULASI  (SAMA UNTUK SEMUA KONDISI)
+                ========================================== --}}
                 @if (!empty($header->regulasi))
-                
-                    @foreach (json_decode($header->regulasi) as $y)
-                            <table style="padding-top: 10px;" width="100%">
-                                <tr>
-                                    <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
-                                </tr>
-                            </table>
-                    @endforeach
+                    @php
+                        $regulasiList = json_decode($header->regulasi, true) ?? [];
+                    @endphp
+
+                    @foreach ($regulasiList as $regItem)
                         @php
-                            $regulasiId = explode('-', $y)[0];
-                            $regulasiName = explode('-', $y)[1] ?? '';
-                            $regulasi = MasterRegulasi::find($regulasiId);
-                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
-                            $table = $tableObj ? $tableObj->konten : '';
+                            $parts = explode('-', $regItem, 2);
+                            $regulasiId = $parts[0] ?? null;
+                            $regulasiName = $parts[1] ?? '';
                         @endphp
-                        @if($table)
-                        <table style="padding-top: 5px;" width="100%">
-                                <tr>
-                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
-                                </tr>
+
+                        <table style="padding-top: 10px;" width="100%">
+                            <tr>
+                                <td class="custom5" colspan="3">**{{ $regulasiName }}</td>
+                            </tr>
                         </table>
-                        @endif
+                    @endforeach
+                @endif
+
+                @php
+                    $temptArrayPush = [];
+                    if (!empty($detail)) {
+                        foreach ($detail as $v) {
+                            if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['akr'];
+                            }
+                            if (!empty($v['attr']) && !in_array($v['attr'], $temptArrayPush)) {
+                                $temptArrayPush[] = $v['attr'];
+                            }
+                        }
+                    }
+                @endphp
+                @if ($isSingleSampel)
+                    @if (!empty($header->keterangan))
+                        <table style="padding: 5px 0px 0px 10px;" width="100%">
+                            @foreach (json_decode($header->keterangan) as $vx)
+                                @foreach ($temptArrayPush as $symbol)
+                                    @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                        <tr>
+                                            <td class="custom5" colspan="3">{{ $vx }}</td>
+                                        </tr>
+                                        @break
+                                    @endif
+                                @endforeach
+                            @endforeach
+                        </table>
+                    @endif
+
                 @endif
             </td>
         </tr>
