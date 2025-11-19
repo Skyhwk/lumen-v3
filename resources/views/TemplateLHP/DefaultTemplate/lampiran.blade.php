@@ -2,14 +2,16 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     $custom = json_decode($header->regulasi_custom ?? '[]');
-    if(array_key_exists('page', $custom)){
-        $regulasiCustom = [];
-        foreach ($custom as $key => $value) {
-            $regulasiCustom[] = $value->id . '-' . $value->regulasi;
+    if (isset($custom[0]->page)) {
+    $regulasiCustom = [];
+
+    foreach ($custom as $value) {
+        $regulasiCustom[] = $value->id . '-' . $value->regulasi;
         }
     } else {
         $regulasiCustom = $custom;
     }
+
     $regulasi = array_merge($regulasiCustom, json_decode($header->regulasi ?? '[]'));
     $regulasi = array_unique($regulasi);
     $regulasi = array_values($regulasi);
