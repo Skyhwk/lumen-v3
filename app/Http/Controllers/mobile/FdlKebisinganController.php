@@ -189,7 +189,7 @@ class FdlKebisinganController extends Controller
             }
 
             if (empty($orderDetail->tanggal_terima)) {
-                $orderDetail->tanggal_terima = now()->format('Y-m-d');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
