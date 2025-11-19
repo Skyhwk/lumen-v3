@@ -3,8 +3,7 @@ namespace App\Services;
 
 use \Mpdf\Mpdf as PDF;
 use Illuminate\Support\Facades\View;
-use App\Models\DataLapanganErgonomi;
-use App\Models\WsValueErgonomi;
+use App\Models\{DataLapanganErgonomi,WsValueErgonomi};
 use Carbon\Carbon;
 use App\Helpers\Helper;
 
@@ -21,7 +20,7 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 5,
             ];
-            $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            $dataRula = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
             ->first();
             
@@ -93,7 +92,7 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 15,
             ];
-            $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            $dataRula = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 5)
                 ->first();
             // $pengukuran = json_decode($dataRula->pengukuran);
@@ -144,7 +143,7 @@ class TemplateLhpErgonomi
             ];
             
             // olah data:
-            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
                 ->first();
 
@@ -161,19 +160,8 @@ class TemplateLhpErgonomi
             
             $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
-            $personal = (object) [
-                "no_sampel" => $dataRwl->no_sampel,
-                "nama_pekerja" => $dataRwl->nama_pekerja,
-                "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
-                "jenis_kelamin" => $dataRwl->jenis_kelamin,
-                "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
-                "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
-                "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
-                "periode_analisis" => null,
-            ];
+            
+            
             // dd($pengukuran,$sebelumKerja,$setelahKerja,$personal);
             //total sebelum kiri/kanan
             $kiriSebelumOnly = array_sum(array_filter((array) $pengukuran->sebelum, function ($value, $key) {
@@ -198,21 +186,34 @@ class TemplateLhpErgonomi
             
             // dd($pengukuran); //kategori_risiko, tindakan_perbaikan
             foreach (['sebelum', 'setelah'] as $waktu) {
-                # code...
-                $skor = $pengukuran->$waktu->total_skor;
-                [$tingkatResiko, $kategoriResiko, $tindakan] = $this->hitungResiko($skor, 'nbm');
-                $pengukuran->$waktu->tingkat_resiko = $tingkatResiko;
-                $pengukuran->$waktu->kategori_resiko = $kategoriResiko;
-                $pengukuran->$waktu->tindakan = $tindakan;
+                // 1. Cek dulu apakah datanya ada agar tidak error
+                if (isset($pengukuran->$waktu)) {
+                    
+                    // 2. Ambil data ke variabel sementara (Temp)
+                    $dataTemp = $pengukuran->$waktu;
+
+                    // 3. Hitung resiko
+                    $skor = $dataTemp->total_skor ?? 0; // Pakai null coalescing biar aman
+                    [$tingkatResiko, $kategoriResiko, $tindakan] = $this->hitungResiko($skor, 'nbm');
+
+                    // 4. Modifikasi data di variabel sementara
+                    $dataTemp->tingkat_resiko = $tingkatResiko;
+                    $dataTemp->kategori_resiko = $kategoriResiko;
+                    $dataTemp->tindakan = $tindakan;
+
+                    // 5. PENTING: Masukkan kembali (Overwrite) ke objek utama
+                    $pengukuran->$waktu = $dataTemp;
+                }
             }
-    
+           
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
-                "nama_pekerja" => $dataRwl->nama_pekerja,
-                "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
-                "jenis_kelamin" => $dataRwl->jenis_kelamin,
-                "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
+                "nama_pekerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->nama_pekerja : '-',
+                "usia" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->usia : '-',
+                "lama_kerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->lama_kerja : '-',
+                "jenis_kelamin" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->jenis_kelamin : '-',
+                "aktivitas_ukur" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas_ukur :'-',
+                "aktivitas" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas :'-',
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
@@ -245,7 +246,7 @@ class TemplateLhpErgonomi
                 // 'margin_footer' => 5,
             ];
     
-            $dataReba = DataLapanganErgonomi::with(['detail'])
+            $dataReba = WsValueErgonomi::with(['detail','lapangan'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 2)
                 ->first();
@@ -331,7 +332,7 @@ class TemplateLhpErgonomi
                 // 'margin_footer' => 5,
             ];
     
-            $dataRosa = DataLapanganErgonomi::with(['detail'])
+            $dataRosa = WsValueErgonomi::with(['detail','lapangan'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 4)
                 ->first();
@@ -340,7 +341,6 @@ class TemplateLhpErgonomi
             $pengukuran = json_decode($dataRosa->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
             $skor = $pengukuran->final_skor_rosa;
-            $skor = 5;
             $tingkatResiko = '';
             $kategoriResiko = '';
             $tindakan = '';
@@ -361,7 +361,6 @@ class TemplateLhpErgonomi
                 $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor ROSA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
                 // $result = null;
             }
-    
             // $pengukuran->tingkat_resiko = $tingkatResiko;
             $pengukuran->kategori_resiko = $kategoriResiko;
             $pengukuran->tindakan = $tindakan;
@@ -374,13 +373,16 @@ class TemplateLhpErgonomi
                 "alamat_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->alamat_perusahaan : '-',
                 "tanggal_sampling" => isset($dataRosa->detail) ? Carbon::parse($dataRosa->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "periode_analisis" => '-',
-                "nama_pekerja" => $dataRosa->nama_pekerja,
-                "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
-                "usia" => $dataRosa->usia,
-                "lama_kerja" => json_decode($dataRosa->lama_kerja),
+                "nama_pekerja" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->nama_pekerja : '-',
+                "aktivitas_ukur" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->aktivitas_ukur : '-',
+                "usia" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->usia : '-',
+                "lama_kerja" => isset($dataRosa->lapangan->lama_kerja) 
+                    ? implode(', ', (array)json_decode($dataRosa->lapangan->lama_kerja)) 
+                    : '-',
             ];
             
             $pdf = new PDF($mpdfConfig);
+           
             $html = View::make('ergonomirosa', compact('pengukuran', 'personal','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
@@ -425,7 +427,7 @@ class TemplateLhpErgonomi
             ];
     
             $pdf = new PDF($mpdfConfig);
-            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
+            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel',$data->no_sampel)
                 ->where('method', 8)
                 ->first();
             $personal = (object) [
@@ -481,7 +483,7 @@ class TemplateLhpErgonomi
             ];
     
             $pdf = new PDF($mpdfConfig);
-            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
+            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 7)
                 ->first();
     

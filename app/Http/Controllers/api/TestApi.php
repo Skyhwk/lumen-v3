@@ -14,6 +14,7 @@ use App\Services\{
 };
 use App\Models\{
     DataLapanganErgonomi,
+    WsValueErgonomi,
     DraftErgonomiFile,
     PengesahanLhp,OrderDetail,Parameter};
 use \Mpdf\Mpdf as PDF;
@@ -51,7 +52,7 @@ class TestApi extends Controller
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
-            $dataLHP = DataLapanganErgonomi::with(['detail'])
+            $dataLHP = WsValueErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
             if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
                 $dataQr =(object)[
@@ -117,785 +118,786 @@ class TestApi extends Controller
 
             // Fungsi helper untuk membuat PDF dengan konfigurasi tertentu
             $createPDF = function($type) use ($mpdfConfig, $methodsToCombine, $noSampel, $dir,$pdfFile,$allHtmlContent) {
+                
                 $pdf = new PDF($mpdfConfig);
                 $render = new TemplateLhpErgonomi();
 
-            // CSS definitions (keeping your existing CSS)
-            $globalCssContent = '
-                * {
-                    box-sizing: border-box;
-                }
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 15px;
-                    font-size: 9px;
-                }
-                .page-container {
-                    width: 100%;
-                    text-align: center;
-                }
-                .main-header-title {
-                    text-align: center;
-                    font-weight: bold;
-                    font-size: 1.5em;
-                    margin-bottom: 15px;
-                    text-decoration: underline;
-                }
-                .two-column-layout {
-                    width: 900px;
-                    margin: 0 auto;
-                    overflow: hidden;
-                    text-align: left;
-                }
-                .column {
-                    float: left;
-                }
-                .column-left {
-                    width: 500px;
-                }
-                .column-right {
-                    width: 390px; 
-                    margin-left:6px; 
-                }
-                .section {
-                    border: 1px solid #000;
-                    padding: 6px;
-                    margin-bottom: 10px;
-                }
-                .section-title {
-                    font-weight: bold;
-                    padding: 3px 6px;
-                    margin: -6px -6px 6px -6px;
-                    border-bottom: 1px solid #000;
-                }
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 5px;
-                    table-layout: fixed;
-                }
-                th, td {
-                    border: 1px solid #000;
-                    padding: 3px;
-                    text-align: left;
-                    vertical-align: top;
-                }
-                th {
-                    font-weight: bold;
-                    text-align: center;
-                }
-                .text-input-space {
-                    width: 100%;
-                    padding: 2px;
-                    min-height: 1.5em;
-                }
-                .multi-line-input {
-                    width: 100%;
-                    border: 1px solid #000;
-                    padding: 4px;
-                    min-height: 40px;
-                }
-                .footer-text {
-                    font-size: 0.85em;
-                    margin-top: 15px;
-                    padding-top: 8px;
-                    display: flex;
-                    justify-content: space-between;
-                }
-                .signature-block {
-                    margin-top: 15px;
-                    text-align: right;
-                }
-                .signature-block .signature-name {
-                    margin-top: 30px;
-                    font-weight: bold;
-                    text-decoration: underline;
-                }
-                .interpretasi-table td { text-align: center; }
-                .interpretasi-table td:last-child { text-align: left; }
-                .uraian-tugas-table td { height: 1.8em; }
-            ';
-            $templateSpecificCss = '
-                /* Specific untuk Body Parts Analysis */
-                .image-placeholder-container {
-                    width: 100%;
-                    margin-top: 8px;
-                    display: table;
-                    table-layout: fixed;
-                    min-height: 280px;
-                }
-                
-                .image-placeholder {
-                     float: left;
-                     width: 150px;
-                     margin-right: 15px;
-                }
-                
-                .body-map {
-                    overflow: hidden;
-                }
-                
-                .body-parts-list-container {
-                    display: table-cell;
-                    vertical-align: top;
-                }
-                
-                .body-parts-list {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 7.5px;
-                    margin-bottom: 8px;
-                }
-                
-                .body-parts-list td {
-                    padding: 2px 4px;
-                    border: 1px solid #000;
-                    vertical-align: middle;
-                }
-                
-                .body-parts-list td:first-child {
-                    width: 70%;
-                    text-align: left;
-                }
-                
-                .body-parts-list td:last-child {
-                    width: 30%;
-                    text-align: center;
-                }
-                
-                .input-line {
-                    text-align: center;
-                    font-weight: bold;
-                    min-height: 12px;
-                }
-                
-                .analysis-content,
-                .conclusion-content {
-                    min-height: 60px;
-                    padding: 4px;
-                    border: 1px solid #000;
-                    font-size: 7.5px;
-                    line-height: 1.3;
-                }
-                
-                /* Info table khusus untuk column kanan */
-                .info-table th,
-                .info-table td {
-                    border: 0 !important;
-                    text-align: left;
-                    padding: 1px 0;
-                    font-size: 7.5px;
-                }
-                
-                .info-table .label-column {
-                    width: 40%;
-                    padding-right: 3px;
-                }
-                
-                .lhp-info-table th,
-                .lhp-info-table td {
-                    border: 1px solid #000 !important;
-                    text-align: center;
-                    font-size: 7px;
-                    padding: 2px;
-                }
-                .signature-section {
-                    width: 100%;
-                    margin-top: 8px;
-                    clear: both;
-                }
-
-                .signature-table {
-                    width: 100%;
-                    border: none !important;
-                    font-family: Arial, sans-serif;
-                    font-size: 8px;
-                    table-layout: fixed;
-                }
-
-                .signature-table td {
-                    border: none !important;
-                    padding: 2px;
-                    vertical-align: top;
-                }
-
-                .signature-left {
-                    width: 65%;
-                }
-
-                .signature-right {
-                    width: 35%;
-                    text-align: center;
-                }
-
-                .signature-date {
-                    margin-bottom: 8px;
-                    font-size: 8px;
-                }
-
-                .signature-qr {
-                    width: 60px;
-                    height: 60px;
-                    margin: 5px auto;
-                    display: block;
-                }
-
-                .signature-text {
-                    margin-top: 3px;
-                    font-size: 7px;
-                }
-                .header-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 10px;
-                    table-layout: fixed;
-                }
-
-                .header-table td {
-                    border: none;
-                    padding: 10px;
-                    vertical-align: middle;
-                    height: 60px;
-                }
-
-                .header-table .left-cell {
-                    width: 33.33%;
-                    text-align: left;
-                    padding-left: 20px;
-                }
-
-                .header-table .center-cell {
-                    width: 33.33%;
-                    text-align: center;
-                }
-
-                .header-table .right-cell {
-                    width: 33.33%;
-                    text-align: right;
-                    padding-right: 50px;
-                }
-                .header-logo {
-                    height: 50px;
-                    width: auto;
-                    display: block;
-                }
-                .info-table {
-                    border: 0;
-                    margin-bottom: 6px;
-                }
-
-                .info-table td {
-                    border: 0;
-                    padding: 0px 2px;
-                    font-size: 8px;
-                    vertical-align: top;
-                }
-            ';
-            $templateSpecificCssNbm='
-                /* CSS dengan font size yang konsisten - Layout Fixed */
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 0;
-                    padding: 0;
-                    font-size: 10px; /* Base font size yang konsisten */
-                    width: 100%;
-                    min-width: 800px; /* Minimum width untuk mempertahankan layout */
-                }
-
-                .header {
-                    text-align: center;
-                    margin-bottom: 5px;
-                }
-
-                .header h1 {
-                    font-size: 12px; /* Dikurangi untuk konsistensi */
-                    font-weight: bold;
-                    margin: 5px 0;
-                    text-decoration: underline;
-                }
-
-                .company-name {
-                    font-weight: bold;
-                    font-size: 10px; /* Konsisten dengan base */
-                    text-align: left;
-                    margin-bottom: 10px;
-                }
-
-                .section-title {
-                    font-weight: bold;
-                    margin: 10px 0 5px 0;
-                    font-size: 10px; /* Konsisten dengan base */
-                }
-
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 9px; /* Sedikit lebih kecil untuk tabel */
-                    margin-bottom: 10px;
-                    table-layout: fixed; /* Fixed table layout */
-                }
-
-                th,
-                td {
-                    border: 1px solid black;
-                    padding: 3px 5px;
-                    text-align: center;
-                    vertical-align: middle;
-                    font-size: 9px; /* Konsisten untuk semua sel tabel */
-                }
-
-                thead {
-                    display: table-header-group;
-                }
-
-                tbody {
-                    display: table-row-group;
-                }
-
-                .body-map {
-                    width: 80px;
-                    height: auto;
-                    margin: 5px auto;
-                    display: block;
-                }
-
-                .info-section {
-                    margin-bottom: 10px;
-                }
-
-                .info-section p {
-                    margin: 3px 0;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .info-label {
-                    font-weight: normal;
-                    width: 120px;
-                    float: left;
-                    font-size: 9px; /* Konsisten, tidak lagi 10pt */
-                }
-
-                .info-value {
-                    display: inline-block;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .customer-info,
-                .sampling-info,
-                .worker-info {
-                    margin-left: 0;
-                    margin-bottom: 10px;
-                }
-
-                .customer-info h4,
-                .sampling-info h4,
-                .worker-info h4 {
-                    margin: 5px 0 2px 0;
-                    font-size: 10px; /* Konsisten */
-                    font-weight: bold;
-                }
-
-                .risk-table {
-                    margin-top: 5px;
-                }
-
-                .left-section p {
-                    font-weight: bold;
-                    text-align: justify;
-                    margin-bottom: 5px;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .table-note {
-                    font-size: 8px; /* Tetap kecil untuk catatan */
-                    margin-top: 3px;
-                    font-style: italic;
-                }
-
-                .job-description {
-                    margin-top: 10px;
-                }
-
-                .job-description th {
-                    width: 30%;
-                    text-align: left;
-                    vertical-align: top;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .job-description td {
-                    vertical-align: top;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .conclusion-box {
-                    border: 1px solid black;
-                    padding: 5px;
-                    min-height: 30px;
-                    margin-top: 5px;
-                    margin-bottom: 10px;
-                    font-size: 9px; /* Konsisten */
-                }
-
-                .conclusion-box .section-title {
-                    margin-top: 0;
-                    margin-bottom: 5px;
-                    font-size: 10px; /* Konsisten */
-                }
-
-                /* Fixed Layout - Tidak Responsif */
-                .left-section {
-                    width: 60%;
-                    float: left;
-                    box-sizing: border-box;
-                    min-width: 60%;
-                    max-width: 60%;
-                }
-
-                .right-section {
-                    width: 39%;
-                    float: right;
-                    box-sizing: border-box;
-                    min-width: 39%;
-                    max-width: 39%;
-                }
-
-                /* Pastikan layout tetap fixed untuk print */
-                @media print {
-                    .left-section {
-                        width: 60% !important;
-                        min-width: 60% !important;
-                        max-width: 60% !important;
+                // CSS definitions (keeping your existing CSS)
+                $globalCssContent = '
+                    * {
+                        box-sizing: border-box;
+                    }
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 15px;
+                        font-size: 9px;
+                    }
+                    .page-container {
+                        width: 100%;
+                        text-align: center;
+                    }
+                    .main-header-title {
+                        text-align: center;
+                        font-weight: bold;
+                        font-size: 1.5em;
+                        margin-bottom: 15px;
+                        text-decoration: underline;
+                    }
+                    .two-column-layout {
+                        width: 900px;
+                        margin: 0 auto;
+                        overflow: hidden;
+                        text-align: left;
+                    }
+                    .column {
+                        float: left;
+                    }
+                    .column-left {
+                        width: 500px;
+                    }
+                    .column-right {
+                        width: 390px; 
+                        margin-left:6px; 
+                    }
+                    .section {
+                        border: 1px solid #000;
+                        padding: 6px;
+                        margin-bottom: 10px;
+                    }
+                    .section-title {
+                        font-weight: bold;
+                        padding: 3px 6px;
+                        margin: -6px -6px 6px -6px;
+                        border-bottom: 1px solid #000;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 5px;
+                        table-layout: fixed;
+                    }
+                    th, td {
+                        border: 1px solid #000;
+                        padding: 3px;
+                        text-align: left;
+                        vertical-align: top;
+                    }
+                    th {
+                        font-weight: bold;
+                        text-align: center;
+                    }
+                    .text-input-space {
+                        width: 100%;
+                        padding: 2px;
+                        min-height: 1.5em;
+                    }
+                    .multi-line-input {
+                        width: 100%;
+                        border: 1px solid #000;
+                        padding: 4px;
+                        min-height: 40px;
+                    }
+                    .footer-text {
+                        font-size: 0.85em;
+                        margin-top: 15px;
+                        padding-top: 8px;
+                        display: flex;
+                        justify-content: space-between;
+                    }
+                    .signature-block {
+                        margin-top: 15px;
+                        text-align: right;
+                    }
+                    .signature-block .signature-name {
+                        margin-top: 30px;
+                        font-weight: bold;
+                        text-decoration: underline;
+                    }
+                    .interpretasi-table td { text-align: center; }
+                    .interpretasi-table td:last-child { text-align: left; }
+                    .uraian-tugas-table td { height: 1.8em; }
+                ';
+                $templateSpecificCss = '
+                    /* Specific untuk Body Parts Analysis */
+                    .image-placeholder-container {
+                        width: 100%;
+                        margin-top: 8px;
+                        display: table;
+                        table-layout: fixed;
+                        min-height: 280px;
                     }
                     
-                    .right-section {
-                        width: 39% !important;
-                        min-width: 39% !important;
-                        max-width: 39% !important;
+                    .image-placeholder {
+                        float: left;
+                        width: 150px;
+                        margin-right: 15px;
                     }
-                }
+                    
+                    .body-map {
+                        overflow: hidden;
+                    }
+                    
+                    .body-parts-list-container {
+                        display: table-cell;
+                        vertical-align: top;
+                    }
+                    
+                    .body-parts-list {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 7.5px;
+                        margin-bottom: 8px;
+                    }
+                    
+                    .body-parts-list td {
+                        padding: 2px 4px;
+                        border: 1px solid #000;
+                        vertical-align: middle;
+                    }
+                    
+                    .body-parts-list td:first-child {
+                        width: 70%;
+                        text-align: left;
+                    }
+                    
+                    .body-parts-list td:last-child {
+                        width: 30%;
+                        text-align: center;
+                    }
+                    
+                    .input-line {
+                        text-align: center;
+                        font-weight: bold;
+                        min-height: 12px;
+                    }
+                    
+                    .analysis-content,
+                    .conclusion-content {
+                        min-height: 60px;
+                        padding: 4px;
+                        border: 1px solid #000;
+                        font-size: 7.5px;
+                        line-height: 1.3;
+                    }
+                    
+                    /* Info table khusus untuk column kanan */
+                    .info-table th,
+                    .info-table td {
+                        border: 0 !important;
+                        text-align: left;
+                        padding: 1px 0;
+                        font-size: 7.5px;
+                    }
+                    
+                    .info-table .label-column {
+                        width: 40%;
+                        padding-right: 3px;
+                    }
+                    
+                    .lhp-info-table th,
+                    .lhp-info-table td {
+                        border: 1px solid #000 !important;
+                        text-align: center;
+                        font-size: 7px;
+                        padding: 2px;
+                    }
+                    .signature-section {
+                        width: 100%;
+                        margin-top: 8px;
+                        clear: both;
+                    }
 
-                .result-header {
-                    text-align: center;
-                    font-weight: bold;
-                    margin: 5px 0;
-                    font-size: 9px; /* Konsisten dengan tabel */
-                }
+                    .signature-table {
+                        width: 100%;
+                        border: none !important;
+                        font-family: Arial, sans-serif;
+                        font-size: 8px;
+                        table-layout: fixed;
+                    }
 
-                /* Styling untuk tabel nested SEBELUM/SESUDAH */
-                .nested-table-container {
-                    padding: 0;
-                }
+                    .signature-table td {
+                        border: none !important;
+                        padding: 2px;
+                        vertical-align: top;
+                    }
 
-                .nested-table {
-                    width: 100%;
-                    margin: 0;
-                    border: none;
-                }
+                    .signature-left {
+                        width: 65%;
+                    }
 
-                .nested-table td {
-                    border: 1px solid black;
-                    width: 50%;
-                    text-align: center;
-                    font-weight: bold;
-                    padding: 3px;
-                    font-size: 9px; /* Konsisten */
-                }
+                    .signature-right {
+                        width: 35%;
+                        text-align: center;
+                    }
 
-                .total-score {
-                    font-weight: bold;
-                    text-align: center;
-                    margin-top: 5px;
-                    font-size: 9px; /* Konsisten */
-                }
+                    .signature-date {
+                        margin-bottom: 8px;
+                        font-size: 8px;
+                    }
 
-                .content-container {
-                    width: 100%;
-                    min-width: 800px; /* Pastikan layout minimum */
-                }
+                    .signature-qr {
+                        width: 60px;
+                        height: 60px;
+                        margin: 5px auto;
+                        display: block;
+                    }
 
-                .clearfix::after {
-                    content: "";
-                    clear: both;
-                    display: table;
-                }
-                
-                .info-header {
-                    font-weight: bold;
-                    margin-top: 8px;
-                    margin-bottom: 3px;
-                    font-size: 10px; /* Konsisten, tidak lagi 10pt */
-                    clear: both;
-                }
+                    .signature-text {
+                        margin-top: 3px;
+                        font-size: 7px;
+                    }
+                    .header-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 10px;
+                        table-layout: fixed;
+                    }
 
-                /* Styling khusus untuk informasi di sisi kanan */
-                .right-section div {
-                    font-size: 9px; /* Base untuk right section */
-                }
+                    .header-table td {
+                        border: none;
+                        padding: 10px;
+                        vertical-align: middle;
+                        height: 60px;
+                    }
 
-                .right-section span {
-                    font-size: 9px; /* Konsisten untuk semua span */
-                }
+                    .header-table .left-cell {
+                        width: 33.33%;
+                        text-align: left;
+                        padding-left: 20px;
+                    }
 
-                /* Styling untuk div dengan margin-bottom di right section */
-                .right-section div[style*="margin-bottom: 3px"] {
-                    margin-bottom: 3px;
-                    font-size: 9px; /* Konsisten, tidak lagi 10pt */
-            }';
-            $rebaSpecificCss = '
-                * { 
-                    box-sizing: border-box; 
-                    margin: 0;
-                    padding: 0;
-                }
+                    .header-table .center-cell {
+                        width: 33.33%;
+                        text-align: center;
+                    }
 
-                body {
-                    font-family: Arial, sans-serif;
-                    font-size: 8px;
-                    margin: 0;
-                    padding: 0;
-                }
+                    .header-table .right-cell {
+                        width: 33.33%;
+                        text-align: right;
+                        padding-right: 50px;
+                    }
+                    .header-logo {
+                        height: 50px;
+                        width: auto;
+                        display: block;
+                    }
+                    .info-table {
+                        border: 0;
+                        margin-bottom: 6px;
+                    }
 
-                .container {
-                    width: 100%;
-                    clear: both;
-                }
+                    .info-table td {
+                        border: 0;
+                        padding: 0px 2px;
+                        font-size: 8px;
+                        vertical-align: top;
+                    }
+                ';
+                $templateSpecificCssNbm='
+                    /* CSS dengan font size yang konsisten - Layout Fixed */
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 0;
+                        padding: 0;
+                        font-size: 10px; /* Base font size yang konsisten */
+                        width: 100%;
+                        min-width: 800px; /* Minimum width untuk mempertahankan layout */
+                    }
 
-                /* Header */
-                .main-header {
-                    text-align: center;
-                    font-weight: bold;
-                    font-size: 12px;
-                    text-decoration: underline;
-                    margin-bottom: 6px;
-                    padding: 4px 0;
-                    clear: both;
-                    width: 100%;
-                    display: block;
-                }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 5px;
+                    }
 
-                /* Main content wrapper */
-                .main-content {
-                    clear: both;
-                    overflow: hidden;
-                    margin-bottom: 6px;
-                    width: 100%;
-                }
+                    .header h1 {
+                        font-size: 12px; /* Dikurangi untuk konsistensi */
+                        font-weight: bold;
+                        margin: 5px 0;
+                        text-decoration: underline;
+                    }
 
-                /* Column layouts */
-                .column-left {
-                    float: left;
-                    width: 30%;
-                    padding-right: 2px;
-                }
+                    .company-name {
+                        font-weight: bold;
+                        font-size: 10px; /* Konsisten dengan base */
+                        text-align: left;
+                        margin-bottom: 10px;
+                    }
 
-                .column-center {
-                    float: left;
-                    width: 30%;
-                    padding: 0 1px;
-                }
+                    .section-title {
+                        font-weight: bold;
+                        margin: 10px 0 5px 0;
+                        font-size: 10px; /* Konsisten dengan base */
+                    }
 
-                .column-right {
-                    float: right;
-                    width: 40%;
-                    padding-left: 2px;
-                }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 9px; /* Sedikit lebih kecil untuk tabel */
+                        margin-bottom: 10px;
+                        table-layout: fixed; /* Fixed table layout */
+                    }
 
-                /* Bottom section */
-                .bottom-section {
-                    clear: both;
-                    overflow: hidden;
-                    margin-top: 6px;
-                    width: 100%;
-                }
+                    th,
+                    td {
+                        border: 1px solid black;
+                        padding: 3px 5px;
+                        text-align: center;
+                        vertical-align: middle;
+                        font-size: 9px; /* Konsisten untuk semua sel tabel */
+                    }
 
-                .bottom-left {
-                    float: left;
-                    width: 60%;
-                    padding-right: 2px;
-                }
+                    thead {
+                        display: table-header-group;
+                    }
 
-                .bottom-right {
-                    float: right;
-                    width: 40%;
-                    padding-left: 2px;
-                }
+                    tbody {
+                        display: table-row-group;
+                    }
 
-                /* Table styles */
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin-bottom: 4px;
-                    font-size: 8px;
-                    border-spacing: 0;
-                }
+                    .body-map {
+                        width: 80px;
+                        height: auto;
+                        margin: 5px auto;
+                        display: block;
+                    }
 
-                th, td {
-                    border: 1px solid #000;
-                    padding: 1px 2px;
-                    vertical-align: top;
-                    font-size: 8px;
-                    line-height: 1.0;
-                    margin: 0;
-                }
+                    .info-section {
+                        margin-bottom: 10px;
+                    }
 
-                th {
-                    background-color: #f2f2f2;
-                    font-weight: bold;
-                    text-align: center;
-                    padding: 2px;
-                }
+                    .info-section p {
+                        margin: 3px 0;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                .section-header {
-                    font-weight: bold;
-                    font-size: 8px;
-                    text-decoration: underline;
-                    text-align: left;
-                    margin: 2px 0 1px 0;
-                    display: block;
-                    clear: both;
-                }
+                    .info-label {
+                        font-weight: normal;
+                        width: 120px;
+                        float: left;
+                        font-size: 9px; /* Konsisten, tidak lagi 10pt */
+                    }
 
-                .info-table {
-                    border: 0;
-                    margin-bottom: 3px;
-                }
+                    .info-value {
+                        display: inline-block;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                .info-table td {
-                    border: 0;
-                    padding: 0px 1px;
-                    font-size: 8px;
-                    vertical-align: top;
-                    line-height: 1.0;
-                }
+                    .customer-info,
+                    .sampling-info,
+                    .worker-info {
+                        margin-left: 0;
+                        margin-bottom: 10px;
+                    }
 
-                .final-score {
-                    background-color: #e0e0e0;
-                    font-weight: bold;
-                }
+                    .customer-info h4,
+                    .sampling-info h4,
+                    .worker-info h4 {
+                        margin: 5px 0 2px 0;
+                        font-size: 10px; /* Konsisten */
+                        font-weight: bold;
+                    }
 
-                /* Image optimization */
-                td img {
-                    max-width: 100%;
-                    max-height: 25px;
-                    object-fit: contain;
-                    display: block;
-                    margin: 0 auto;
-                    vertical-align: middle;
-                }
+                    .risk-table {
+                        margin-top: 5px;
+                    }
 
-                /* Specific table adjustments */
-                .score-table th:first-child { width: 8%; }
-                .score-table th:nth-child(2) { width: 67%; }
-                .score-table th:last-child { width: 25%; }
+                    .left-section p {
+                        font-weight: bold;
+                        text-align: justify;
+                        margin-bottom: 5px;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                .header-info-table th { 
-                    width: 33.33%; 
-                    padding: 2px 1px;
-                    font-size: 8px;
-                }
+                    .table-note {
+                        font-size: 8px; /* Tetap kecil untuk catatan */
+                        margin-top: 3px;
+                        font-style: italic;
+                    }
 
-                .header-info-table td {
-                    padding: 2px 1px;
-                    text-align: center;
-                    font-size: 8px;
-                }
+                    .job-description {
+                        margin-top: 10px;
+                    }
 
-                .reference-table th:nth-child(1) { width: 15%; }
-                .reference-table th:nth-child(2) { width: 12%; }
-                .reference-table th:nth-child(3) { width: 23%; }
-                .reference-table th:nth-child(4) { width: 50%; }
+                    .job-description th {
+                        width: 30%;
+                        text-align: left;
+                        vertical-align: top;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                .reference-table td {
-                    font-size: 7px;
-                    padding: 1px;
-                    line-height: 1.0;
-                }
+                    .job-description td {
+                        vertical-align: top;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                /* Compact spacing */
-                .image-row td:first-child {
-                    text-align: center;
-                    vertical-align: middle;
-                    font-size: 8px;
-                }
+                    .conclusion-box {
+                        border: 1px solid black;
+                        padding: 5px;
+                        min-height: 30px;
+                        margin-top: 5px;
+                        margin-bottom: 10px;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                .image-row td:nth-child(2) {
-                    height: 25px;
-                    padding: 1px;
-                }
+                    .conclusion-box .section-title {
+                        margin-top: 0;
+                        margin-bottom: 5px;
+                        font-size: 10px; /* Konsisten */
+                    }
 
-                .image-row td:last-child {
-                    text-align: center;
-                    vertical-align: middle;
-                    font-size: 8px;
-                }
+                    /* Fixed Layout - Tidak Responsif */
+                    .left-section {
+                        width: 60%;
+                        float: left;
+                        box-sizing: border-box;
+                        min-width: 60%;
+                        max-width: 60%;
+                    }
 
-                .label-row td {
-                    text-align: center;
-                    font-size: 7px;
-                    padding: 1px;
-                    height: 12px;
-                }
+                    .right-section {
+                        width: 39%;
+                        float: right;
+                        box-sizing: border-box;
+                        min-width: 39%;
+                        max-width: 39%;
+                    }
 
-                /* Footer notes */
-                .footer-notes {
-                    border: 0;
-                    margin-top: 15px;
-                }
+                    /* Pastikan layout tetap fixed untuk print */
+                    @media print {
+                        .left-section {
+                            width: 60% !important;
+                            min-width: 60% !important;
+                            max-width: 60% !important;
+                        }
+                        
+                        .right-section {
+                            width: 39% !important;
+                            min-width: 39% !important;
+                            max-width: 39% !important;
+                        }
+                    }
 
-                .footer-notes td:first-child {
-                    width: 2%;
-                    text-align: right;
-                    vertical-align: top;
-                    font-size: 7px;
-                    border: 0;
-                    padding-right: 3px;
-                }
+                    .result-header {
+                        text-align: center;
+                        font-weight: bold;
+                        margin: 5px 0;
+                        font-size: 9px; /* Konsisten dengan tabel */
+                    }
 
-                .footer-notes td:last-child {
-                    width: 98%;
-                    text-align: left;
-                    font-size: 7px;
-                    border: 0;
-                    line-height: 1.0;
-                }
+                    /* Styling untuk tabel nested SEBELUM/SESUDAH */
+                    .nested-table-container {
+                        padding: 0;
+                    }
 
-                /* Conclusion table specific */
-                .conclusion-table td:first-child {
-                    width: 35%;
-                    text-align: center;
-                    font-weight: bold;
-                    vertical-align: middle;
-                    height: 35px;
-                    font-size: 8px;
-                }
+                    .nested-table {
+                        width: 100%;
+                        margin: 0;
+                        border: none;
+                    }
 
-                .conclusion-table td:last-child {
-                    width: 65%;
-                    text-align: justify;
-                    vertical-align: top;
-                    font-size: 8px;
-                    line-height: 1.1;
-                    padding: 3px;
-                }
+                    .nested-table td {
+                        border: 1px solid black;
+                        width: 50%;
+                        text-align: center;
+                        font-weight: bold;
+                        padding: 3px;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                /* Compact margin adjustments */
-                .compact-table {
-                    margin-bottom: 2px;
-                }
+                    .total-score {
+                        font-weight: bold;
+                        text-align: center;
+                        margin-top: 5px;
+                        font-size: 9px; /* Konsisten */
+                    }
 
-                /* Text alignment helpers */
-                .text-left { text-align: left !important; padding-left: 3px; }
-                .text-center { text-align: center !important; }
-                .text-justify { text-align: justify !important; }
+                    .content-container {
+                        width: 100%;
+                        min-width: 800px; /* Pastikan layout minimum */
+                    }
 
-                /* Clear floats helper */
-                .clearfix::after {
-                    content: "";
-                    display: table;
-                    clear: both;
-                }
-            ';
+                    .clearfix::after {
+                        content: "";
+                        clear: both;
+                        display: table;
+                    }
+                    
+                    .info-header {
+                        font-weight: bold;
+                        margin-top: 8px;
+                        margin-bottom: 3px;
+                        font-size: 10px; /* Konsisten, tidak lagi 10pt */
+                        clear: both;
+                    }
+
+                    /* Styling khusus untuk informasi di sisi kanan */
+                    .right-section div {
+                        font-size: 9px; /* Base untuk right section */
+                    }
+
+                    .right-section span {
+                        font-size: 9px; /* Konsisten untuk semua span */
+                    }
+
+                    /* Styling untuk div dengan margin-bottom di right section */
+                    .right-section div[style*="margin-bottom: 3px"] {
+                        margin-bottom: 3px;
+                        font-size: 9px; /* Konsisten, tidak lagi 10pt */
+                }';
+                $rebaSpecificCss = '
+                    * { 
+                        box-sizing: border-box; 
+                        margin: 0;
+                        padding: 0;
+                    }
+
+                    body {
+                        font-family: Arial, sans-serif;
+                        font-size: 8px;
+                        margin: 0;
+                        padding: 0;
+                    }
+
+                    .container {
+                        width: 100%;
+                        clear: both;
+                    }
+
+                    /* Header */
+                    .main-header {
+                        text-align: center;
+                        font-weight: bold;
+                        font-size: 12px;
+                        text-decoration: underline;
+                        margin-bottom: 6px;
+                        padding: 4px 0;
+                        clear: both;
+                        width: 100%;
+                        display: block;
+                    }
+
+                    /* Main content wrapper */
+                    .main-content {
+                        clear: both;
+                        overflow: hidden;
+                        margin-bottom: 6px;
+                        width: 100%;
+                    }
+
+                    /* Column layouts */
+                    .column-left {
+                        float: left;
+                        width: 30%;
+                        padding-right: 2px;
+                    }
+
+                    .column-center {
+                        float: left;
+                        width: 30%;
+                        padding: 0 1px;
+                    }
+
+                    .column-right {
+                        float: right;
+                        width: 40%;
+                        padding-left: 2px;
+                    }
+
+                    /* Bottom section */
+                    .bottom-section {
+                        clear: both;
+                        overflow: hidden;
+                        margin-top: 6px;
+                        width: 100%;
+                    }
+
+                    .bottom-left {
+                        float: left;
+                        width: 60%;
+                        padding-right: 2px;
+                    }
+
+                    .bottom-right {
+                        float: right;
+                        width: 40%;
+                        padding-left: 2px;
+                    }
+
+                    /* Table styles */
+                    table {
+                        border-collapse: collapse;
+                        width: 100%;
+                        margin-bottom: 4px;
+                        font-size: 8px;
+                        border-spacing: 0;
+                    }
+
+                    th, td {
+                        border: 1px solid #000;
+                        padding: 1px 2px;
+                        vertical-align: top;
+                        font-size: 8px;
+                        line-height: 1.0;
+                        margin: 0;
+                    }
+
+                    th {
+                        background-color: #f2f2f2;
+                        font-weight: bold;
+                        text-align: center;
+                        padding: 2px;
+                    }
+
+                    .section-header {
+                        font-weight: bold;
+                        font-size: 8px;
+                        text-decoration: underline;
+                        text-align: left;
+                        margin: 2px 0 1px 0;
+                        display: block;
+                        clear: both;
+                    }
+
+                    .info-table {
+                        border: 0;
+                        margin-bottom: 3px;
+                    }
+
+                    .info-table td {
+                        border: 0;
+                        padding: 0px 1px;
+                        font-size: 8px;
+                        vertical-align: top;
+                        line-height: 1.0;
+                    }
+
+                    .final-score {
+                        background-color: #e0e0e0;
+                        font-weight: bold;
+                    }
+
+                    /* Image optimization */
+                    td img {
+                        max-width: 100%;
+                        max-height: 25px;
+                        object-fit: contain;
+                        display: block;
+                        margin: 0 auto;
+                        vertical-align: middle;
+                    }
+
+                    /* Specific table adjustments */
+                    .score-table th:first-child { width: 8%; }
+                    .score-table th:nth-child(2) { width: 67%; }
+                    .score-table th:last-child { width: 25%; }
+
+                    .header-info-table th { 
+                        width: 33.33%; 
+                        padding: 2px 1px;
+                        font-size: 8px;
+                    }
+
+                    .header-info-table td {
+                        padding: 2px 1px;
+                        text-align: center;
+                        font-size: 8px;
+                    }
+
+                    .reference-table th:nth-child(1) { width: 15%; }
+                    .reference-table th:nth-child(2) { width: 12%; }
+                    .reference-table th:nth-child(3) { width: 23%; }
+                    .reference-table th:nth-child(4) { width: 50%; }
+
+                    .reference-table td {
+                        font-size: 7px;
+                        padding: 1px;
+                        line-height: 1.0;
+                    }
+
+                    /* Compact spacing */
+                    .image-row td:first-child {
+                        text-align: center;
+                        vertical-align: middle;
+                        font-size: 8px;
+                    }
+
+                    .image-row td:nth-child(2) {
+                        height: 25px;
+                        padding: 1px;
+                    }
+
+                    .image-row td:last-child {
+                        text-align: center;
+                        vertical-align: middle;
+                        font-size: 8px;
+                    }
+
+                    .label-row td {
+                        text-align: center;
+                        font-size: 7px;
+                        padding: 1px;
+                        height: 12px;
+                    }
+
+                    /* Footer notes */
+                    .footer-notes {
+                        border: 0;
+                        margin-top: 15px;
+                    }
+
+                    .footer-notes td:first-child {
+                        width: 2%;
+                        text-align: right;
+                        vertical-align: top;
+                        font-size: 7px;
+                        border: 0;
+                        padding-right: 3px;
+                    }
+
+                    .footer-notes td:last-child {
+                        width: 98%;
+                        text-align: left;
+                        font-size: 7px;
+                        border: 0;
+                        line-height: 1.0;
+                    }
+
+                    /* Conclusion table specific */
+                    .conclusion-table td:first-child {
+                        width: 35%;
+                        text-align: center;
+                        font-weight: bold;
+                        vertical-align: middle;
+                        height: 35px;
+                        font-size: 8px;
+                    }
+
+                    .conclusion-table td:last-child {
+                        width: 65%;
+                        text-align: justify;
+                        vertical-align: top;
+                        font-size: 8px;
+                        line-height: 1.1;
+                        padding: 3px;
+                    }
+
+                    /* Compact margin adjustments */
+                    .compact-table {
+                        margin-bottom: 2px;
+                    }
+
+                    /* Text alignment helpers */
+                    .text-left { text-align: left !important; padding-left: 3px; }
+                    .text-center { text-align: center !important; }
+                    .text-justify { text-align: justify !important; }
+
+                    /* Clear floats helper */
+                    .clearfix::after {
+                        content: "";
+                        display: table;
+                        clear: both;
+                    }
+                ';
                 // Setup header yang sama untuk semua versi
                 /* width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; */
                 switch($type) {
@@ -1045,12 +1047,13 @@ class TestApi extends Controller
                 // Tulis semua konten HTML
                 foreach ($methodsToCombine as $methodName => $methodId) {
                     // Ambil data untuk setiap metode dan no_sampel yang diminta
-                    $dataMethod = DataLapanganErgonomi::with(['detail'])
+                    $dataMethod = WsValueErgonomi::with(['detail'])
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();
                    
                     if ($dataMethod) {
+                       
                         $ttdData = null;
                         switch($type) {
                             case 'draft':
@@ -1119,10 +1122,14 @@ class TestApi extends Controller
                 foreach ($allHtmlContent as $htmlContent) {
                     if (!$firstPage) {
                         $pdf->AddPage();
+                        
                     }
                     $pdf->WriteHTML($htmlContent);
+                   
                     $firstPage = false;
+                  
                 }
+                
                 
                 // Simpan file
                 $namaFile = 'LHP_Ergonomi_'.str_replace('/', '_', $noSampel).'.pdf';
