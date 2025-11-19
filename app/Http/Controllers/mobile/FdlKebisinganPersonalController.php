@@ -267,29 +267,58 @@ class FdlKebisinganPersonalController extends Controller
         $mulai = Carbon::createFromFormat('H:i', $jamMulai);
         $selesai = Carbon::createFromFormat('H:i', $jamSelesai);
 
+        // Jika selesai < mulai → berarti shift sampai besok
         if ($selesai->lessThan($mulai)) {
-            // Jika jam selesai lebih kecil dari jam mulai, anggap keesokan harinya
             $selesai->addDay();
         }
 
+        // Hitung durasi total
         $durasiMenit = $selesai->diffInMinutes($mulai);
 
-        // Periksa apakah waktu kerja melewati jam makan siang (12:00 - 13:00)
-        $mulaiKerjaMenit = $mulai->hour * 60 + $mulai->minute;
-        $selesaiKerjaMenit = $selesai->hour * 60 + $selesai->minute;
+        // Cek apakah melewati jam istirahat (12:00–13:00)
+        $istirahatMulai = $mulai->copy()->setTime(12, 0);
+        $istirahatSelesai = $mulai->copy()->setTime(13, 0);
 
-        $jamIstirahatMulai = 12 * 60;
-        $jamIstirahatSelesai = 13 * 60;
-
-        if ($mulaiKerjaMenit <= $jamIstirahatMulai && $selesaiKerjaMenit >= $jamIstirahatSelesai) {
+        if ($mulai->lessThanOrEqualTo($istirahatMulai) && $selesai->greaterThanOrEqualTo($istirahatSelesai)) {
             $durasiMenit -= $istirahatMenit;
         }
 
-        // Format hasil: xx Jam xx Menit
-        $jamKerja = floor($durasiMenit / 60);
-        $menitKerja = $durasiMenit % 60;
+        // Format hasil
+        $jam = floor($durasiMenit / 60);
+        $menit = $durasiMenit % 60;
 
-        return str_pad($jamKerja, 2, '0', STR_PAD_LEFT) . ' Jam ' . str_pad($menitKerja, 2, '0', STR_PAD_LEFT) . ' Menit';
+        return sprintf("%02d Jam %02d Menit", $jam, $menit);
     }
+
+
+    // private function hitungDurasiKerja($jamMulai, $jamSelesai, $istirahatMenit = 0)
+    // {
+    //     $mulai = Carbon::createFromFormat('H:i', $jamMulai);
+    //     $selesai = Carbon::createFromFormat('H:i', $jamSelesai);
+
+    //     if ($selesai->lessThan($mulai)) {
+    //         // Jika jam selesai lebih kecil dari jam mulai, anggap keesokan harinya
+    //         $selesai->addDay();
+    //     }
+
+    //     $durasiMenit = $selesai->diffInMinutes($mulai);
+
+    //     // Periksa apakah waktu kerja melewati jam makan siang (12:00 - 13:00)
+    //     $mulaiKerjaMenit = $mulai->hour * 60 + $mulai->minute;
+    //     $selesaiKerjaMenit = $selesai->hour * 60 + $selesai->minute;
+
+    //     $jamIstirahatMulai = 12 * 60;
+    //     $jamIstirahatSelesai = 13 * 60;
+
+    //     if ($mulaiKerjaMenit <= $jamIstirahatMulai && $selesaiKerjaMenit >= $jamIstirahatSelesai) {
+    //         $durasiMenit -= $istirahatMenit;
+    //     }
+
+    //     // Format hasil: xx Jam xx Menit
+    //     $jamKerja = floor($durasiMenit / 60);
+    //     $menitKerja = $durasiMenit % 60;
+
+    //     return str_pad($jamKerja, 2, '0', STR_PAD_LEFT) . ' Jam ' . str_pad($menitKerja, 2, '0', STR_PAD_LEFT) . ' Menit';
+    // }
 
 }
