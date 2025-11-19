@@ -170,6 +170,15 @@ class FdlKebisinganPersonalController extends Controller
             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $header->save();
 
+            $wsValue = WsValueUdara::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
+            if(!$wsValue){
+                $wsValue = new WsValueUdara;
+            }
+            $wsValue->no_sampel = $data->no_sampel;
+            $wsValue->id_kebisingan_header = $header->id;
+            $wsValue->hasil1 = $data->value_kebisingan;
+            $wsValue->save();
+
             app(NotificationFdlService::class)->sendApproveNotification('Kebisingan Personal', $data->no_sampel, $this->karyawan, $data->created_by);
 
             return response()->json([
