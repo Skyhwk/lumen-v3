@@ -101,7 +101,7 @@
         <td style="width:3%; vertical-align:top;">a.</td>
         <td style="width:35%;">No. Penawaran (Quotation)</td>
         <td style="width:2%;">:</td>
-        <td>NO QT</td>
+        <td>{{$data->no_quotation ?? '-'}}</td>
     </tr>
     <tr>
         <td>b.</td>

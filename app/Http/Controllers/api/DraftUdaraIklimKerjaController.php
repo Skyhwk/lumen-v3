@@ -272,6 +272,7 @@ class DraftUdaraIklimKerjaController extends Controller
                     $cleaned_indeks_suhu = $this->cleanArrayKeys($request->indeks_suhu_basah);
                     $cleaned_kondisi = $this->cleanArrayKeys($request->kondisi);
                     $cleaned_tanggal_sampling = $this->cleanArrayKeys($request->tanggal_sampling);
+                    $cleaned_lokasi = $this->cleanArrayKeys($request->keterangan);
 
                     if (array_key_exists($val, $cleaned_no_sampel)) {
                         $detail = new LhpsIklimDetail;
@@ -281,7 +282,7 @@ class DraftUdaraIklimKerjaController extends Controller
                         $detail->keterangan = $cleaned_lokasi[$val] ?? null;
                         $detail->indeks_suhu_basah = $cleaned_indeks_suhu[$val] ?? null;
                         $detail->kecepatan_angin = $cleaned_kecepatan_angin[$val] ?? null;
-                        $detail->suhu_temperatur = $cleaned_suhu_temperatur[$val] ?? null;
+                        $detail->suhu_temperatur = $cleaned_indeks_suhu[$val] ?? null;
                         $detail->kondisi = $cleaned_kondisi[$val] ?? null;
                         $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val] ?? null;
                     }
