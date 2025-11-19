@@ -674,6 +674,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
             $nilai = $ws[$fKoreksiKey] ?? $ws[$fKoreksiKey] ?? '-';
         }
+
+        if($nilai == '-'){ 
+            $nilai = $ws['C3_persen'] ?? '-';
+        }
+
         return $nilai;
 
     }
