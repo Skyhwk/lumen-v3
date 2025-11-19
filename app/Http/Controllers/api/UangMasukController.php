@@ -67,14 +67,17 @@ class UangMasukController extends Controller
         try {
             $salesIn = SalesIn::where('id', $request->id)->first();
             foreach ($request->nilai_pelunasan as $no_invoice => $nilai_pelunasan) {
+                $nilai_pengurangan = $request->nilai_pengurangan[$no_invoice] ?? 0;
+
                 $dataDetail = new SalesInDetail();
                 $dataDetail->id_header = $request->id;
                 $dataDetail->no_penawaran = $request->no_penawaran;
                 $dataDetail->id_invoice = $request->id_invoice[$no_invoice];
                 $dataDetail->no_invoice = $no_invoice;
                 $dataDetail->nominal_pelunasan = str_replace(['.', ','], ['', '.'], $nilai_pelunasan);
-                $dataDetail->nilai_pengurangan = str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice]);
+                $dataDetail->nilai_pengurangan = str_replace(['.', ','], ['', '.'], $nilai_pengurangan);
                 $dataDetail->kurang_bayar = str_replace(['.', ','], ['', '.'], $request->kurang_bayar[$no_invoice]);
+                $dataDetail->lebih_bayar = str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]);
                 $dataDetail->keterangan = $request->keterangan ?? null;
                 $dataDetail->proccessed_by = $this->karyawan;
                 $dataDetail->proccessed_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -94,7 +97,7 @@ class UangMasukController extends Controller
                         ->first();
 
                     if ($getSisa->sisa_pembayaran) {
-                        $sisaPembayaran = $getSisa->sisa_pembayaran - floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice] ?? 0));
+                        $sisaPembayaran = $getSisa->sisa_pembayaran - floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $nilai_pengurangan ?? 0));
                     } else {
                         $sisaPembayaran = $getSisa->sisa_pembayaran;
                     }
@@ -102,7 +105,7 @@ class UangMasukController extends Controller
                     $nilaiPembayaran = $getNilai->nilai_pembayaran + floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan));
                 } else {
                     $nilaiPembayaran = floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan));
-                    $sisaPembayaran = floatval(str_replace(['.', ','], ['', '.'], $request->nilai_tagihan[$no_invoice])) - floatval(\str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice] ?? 0));
+                    $sisaPembayaran = floatval(str_replace(['.', ','], ['', '.'], $request->nilai_tagihan[$no_invoice])) - floatval(\str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $nilai_pengurangan ?? 0));
                 }
 
                 RecordPembayaranInvoice::insert([
@@ -110,7 +113,8 @@ class UangMasukController extends Controller
                     'no_invoice' => $no_invoice,
                     'tgl_pembayaran' => $salesIn->tanggal_masuk,
                     'nilai_pembayaran' => str_replace(['.', ','], ['', '.'], $nilai_pelunasan),
-                    'nilai_pengurangan' => str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice]),
+                    'nilai_pengurangan' => str_replace(['.', ','], ['', '.'], $nilai_pengurangan),
+                    'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
                     'sisa_pembayaran' => $sisaPembayaran,
                     'keterangan' => $request->keterangan,
                     'status' => 0,
@@ -123,13 +127,14 @@ class UangMasukController extends Controller
                         'tgl_pelunasan' => $salesIn->tanggal_masuk,
                         'nilai_pelunasan' => $nilaiPembayaran,
                         'keterangan_pelunasan' => $request->keterangan,
+                        'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
                     ]);
 
-                if ($request->jenis_pelunasan[$no_invoice] && $request->nilai_pengurangan[$no_invoice]) {
+                if (isset($request->jenis_pelunasan[$no_invoice]) && $nilai_pengurangan) {
                     $withdraw = new Withdraw();
                     $withdraw->id_sales_in_detail = $dataDetail->id;
                     $withdraw->no_invoice = $no_invoice;
-                    $withdraw->nilai_pembayaran = str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice]);
+                    $withdraw->nilai_pembayaran = str_replace(['.', ','], ['', '.'], $nilai_pengurangan);
                     $withdraw->sisa_tagihan = $sisaPembayaran;
                     $withdraw->keterangan_pelunasan = $request->jenis_pelunasan[$no_invoice];
                     $withdraw->keterangan_tambahan = $request->keterangan_pelunasan[$no_invoice] ?? null;
@@ -184,13 +189,14 @@ class UangMasukController extends Controller
                 $invoice->tgl_pelunasan = null;
                 $invoice->nilai_pelunasan = null;
             }
+            if ($salesInDetail->lebih_bayar) $invoice->lebih_bayar = null;
             $invoice->updated_by = $this->karyawan;
             $invoice->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $invoice->save();
 
             // UPDATE SALES IN
             $sumPelunasan = SalesInDetail::where('id_header', $salesIn->id)
-                ->where('id_invoice', $invoice->id)
+                // ->where('id_invoice', $invoice->id)
                 ->where('is_active', true)
                 ->where('id', '!=', $salesInDetail->id)
                 ->sum('nominal_pelunasan');
@@ -240,24 +246,6 @@ class UangMasukController extends Controller
                 ->orderBy('id')
                 ->get();
 
-            // DELETE RECORD PEMBAYARAN INVOICE + RESTORE
-            $recordPembayaranInvoice = RecordPembayaranInvoice::where('id_sales_in_detail', $salesInDetail->id)->first();
-            if (!$recordPembayaranInvoice) return response()->json(['message' => 'Record Pembayaran Invoice Not Found'], 404);
-
-            $recordPembayaranInvoice->is_active = false;
-            $recordPembayaranInvoice->deleted_by = $this->karyawan;
-            $recordPembayaranInvoice->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
-            $recordPembayaranInvoice->save();
-
-            $penguranganRestore = (float) $recordPembayaranInvoice->nilai_pengurangan;
-            $pembayaranRestore  = (float) $recordPembayaranInvoice->nilai_pembayaran;
-
-            $recordsAfter = RecordPembayaranInvoice::where('no_invoice', $recordPembayaranInvoice->no_invoice)
-                ->where('is_active', true)
-                ->where('id', '>', $recordPembayaranInvoice->id)
-                ->orderBy('id')
-                ->get();
-
             foreach ($recordsAfter as $rec) {
                 if ($penguranganRestore > 0) {
                     if ($rec->nilai_pengurangan > 0) {
@@ -272,7 +260,7 @@ class UangMasukController extends Controller
                 $rec->save();
             }
 
-            // DELETE SALES IN DETAIL
+            // DELETE SALES IN DETAIL + RECALCULATION
             $salesInDetail->is_active = false;
             $salesInDetail->updated_by = $this->karyawan;
             $salesInDetail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
