@@ -274,7 +274,6 @@ class DraftSwabTesController extends Controller
                 $mappedData = array_merge($mappedData, $tmpData);
             }
 
-            // buang duplikat kalau perlu (misal no_sampel + parameter + id_regulasi sama)
             $mappedData = collect($mappedData)->values()->toArray();
 
             if ($cekLhp) {
@@ -291,7 +290,10 @@ class DraftSwabTesController extends Controller
                 $detail = array_merge($detail, $data_all);
 
                 $detail = collect($detail)
-                    ->sortBy('tanggal_sampling')
+                    ->sortBy([
+                        ['no_sampel', 'asc'],
+                        ['tanggal_sampling', 'asc'],
+                    ])
                     ->values()
                     ->toArray();
 
@@ -310,8 +312,8 @@ class DraftSwabTesController extends Controller
             }
 
             $mappedData = collect($mappedData)->sortBy([
-                ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc'],
+                ['tanggal_sampling', 'asc'],
             ])->values()->toArray();
 
             return response()->json([
