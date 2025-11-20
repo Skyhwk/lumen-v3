@@ -1774,7 +1774,7 @@ class DraftUlkErgonomiController extends Controller
                 ->first();
 
             /* save file */
-            $saveFilePDF = new WsValueErgonomi;
+            $saveFilePDF = new DraftErgonomiFile;
             $pdfFile = $saveFilePDF::where('no_sampel',$noSampel)->first();
             
             if ($pdfFile === null) {
@@ -1792,7 +1792,7 @@ class DraftUlkErgonomiController extends Controller
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
-            $dataLHP = WsValueErgonomi::with(['detail','lapangan'])
+            $dataLHP = WsValueErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
             if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
                 $dataQr =(object)[
