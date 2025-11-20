@@ -40,6 +40,8 @@ class DraftUlkController extends Controller
         $data = OrderDetail::with([
             'lhps_ling',
             'allDetailLingkunganKerja',
+            'dataLapanganDirectLain',
+            'dataLapanganPartikulatMeter',
             'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
             ->where([
@@ -60,7 +62,23 @@ class DraftUlkController extends Controller
 
         $data->transform(function ($item) {
             // Tentukan data lapangan
-            $lapangan                             = $item->allDetailLingkunganKerja;
+            // $lapangan                             = $item->allDetailLingkunganKerja ?? $item->dataLapanganDirectLain ?? $item->dataLapanganPartikulatMeter;
+            // Ambil lapangan berdasarkan fallback
+            $lapangan = collect($item->allDetailLingkunganKerja);
+
+            if ($lapangan->isEmpty()) {
+                // belongsTo → bungkus jadi collection
+                $lapangan = $item->dataLapanganDirectLain
+                    ? collect([$item->dataLapanganDirectLain])
+                    : collect();
+            }
+
+            if ($lapangan->isEmpty()) {
+                $lapangan = $item->dataLapanganPartikulatMeter
+                    ? collect([$item->dataLapanganPartikulatMeter])
+                    : collect();
+            }
+
             $lhps                                 = $item->lhps_ling;
             $item->created_detail                 = $lapangan->max('created_at');
             $item->data_lapangan_lingkungan_kerja = $item->kategori_1 === 'S24'
@@ -334,16 +352,7 @@ class DraftUlkController extends Controller
                 ->useLampiran(true)
                 ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHPFinal');
-
             $header->file_lhp = $fileName;
-            // if ($header->is_revisi == 1) {
-            //     $header->is_revisi = 0;
-            //     $header->is_generated = 0;
-            //     $header->count_revisi++;
-            //     if ($header->count_revisi > 2) {
-            //         $this->handleApprove($request);
-            //     }
-            // }
             $header->save();
 
             DB::commit();

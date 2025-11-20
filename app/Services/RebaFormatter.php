@@ -2,7 +2,7 @@
 namespace App\Services;
 
 class RebaFormatter {
-    public static function formatRebaData($dataRequest) {
+    public  function formatRebaData($dataRequest) {
         // mapping dasar (seperti sebelumnya)
         
 
@@ -115,95 +115,88 @@ class RebaFormatter {
         return $result;
     }
     protected function tablePointLeher($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "1-leher menekuk sekitar sudut 0-20 deg","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "2-leher menekuk sekitar sudut > 20 deg ke depan","score"=>2,"index"=>1];
-                case 2 :return ["keterangan" => "2-leher menekuk ke belakang","score"=>2,"index"=>2];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "1-leher menekuk sekitar sudut 0-20 deg","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "2-leher menekuk sekitar sudut > 20 deg ke depan","score"=>2,"index"=>1];
+            case 2 :return ["keterangan" => "2-leher menekuk ke belakang","score"=>2,"index"=>2];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointBadan ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "badan dalam posisi netral","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "badan menekuk sekitar sudut 0-20 deg ke depan dan kebelakang","score"=>2,"index"=>1];
-                case 2 :return ["keterangan" => "badan menekuk sekitar sudut 20-60 deg","score"=>3,"index"=>2];
-                case 3 :return ["keterangan" => "badan menekuk hingga sudut >60 deg","score"=>4,"index"=>3];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointBadan ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "badan dalam posisi netral","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "badan menekuk sekitar sudut 0-20 deg ke depan dan kebelakang","score"=>2,"index"=>1];
+            case 2 :return ["keterangan" => "badan menekuk sekitar sudut 20-60 deg","score"=>3,"index"=>2];
+            case 3 :return ["keterangan" => "badan menekuk hingga sudut >60 deg","score"=>4,"index"=>3];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointKaki ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "Kaki dalam posisi netral","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "salah satu kaki menekuk","score"=>2,"index"=>1];
-                case 2 :return ["keterangan" => "kaki menekuk hingga sudut 30-60 deg","score"=>1,"index"=>2];
-                case 3 :return ["keterangan" => "kaki menekuk hingga sudut >60 deg","score"=>2,"index"=>3];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointKaki ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "Kaki dalam posisi netral","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "salah satu kaki menekuk","score"=>2,"index"=>1];
+            case 2 :return ["keterangan" => "kaki menekuk hingga sudut 30-60 deg","score"=>1,"index"=>2];
+            case 3 :return ["keterangan" => "kaki menekuk hingga sudut >60 deg","score"=>2,"index"=>3];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointLenganAtas ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "lengan atas dalam posisi netral atau berputar sekitar sudut 0-20 deg","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "lengan atas berputar sekitar sudut 20-45 deg ke depan dan/atau kebelakang","score"=>2,"index"=>1];
-                case 2 :return ["keterangan" => "lengan atas berputar sekitar sudut 45-90 deg","score"=>3,"index"=>2];
-                case 3 :return ["keterangan" => "lengan atas berputar hingga sudut >90 deg","score"=>4,"index"=>3];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointLenganAtas ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "lengan atas dalam posisi netral atau berputar sekitar sudut 0-20 deg","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "lengan atas berputar sekitar sudut 20-45 deg ke depan dan/atau kebelakang","score"=>2,"index"=>1];
+            case 2 :return ["keterangan" => "lengan atas berputar sekitar sudut 45-90 deg","score"=>3,"index"=>2];
+            case 3 :return ["keterangan" => "lengan atas berputar hingga sudut >90 deg","score"=>4,"index"=>3];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointLenganBawah ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "lengan bawah menekuk hingga sudut antara 60-100 deg","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "lengan bawah menekuk dari sudut 0-60 deg dan atau diatas 100 deg","score"=>2,"index"=>1];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointLenganBawah ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "lengan bawah menekuk hingga sudut antara 60-100 deg","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "lengan bawah menekuk dari sudut 0-60 deg dan atau diatas 100 deg","score"=>2,"index"=>1];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointPergelanganTangan ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "pergelangan lengan menekuk hingga sudut antara 0-15 deg, baik keatas dan kebawah","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "pergelangan lengan menekuk >15deg, baik keatas dan kebawah","score"=>2,"index"=>1];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointPergelanganTangan ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "pergelangan lengan menekuk hingga sudut antara 0-15 deg, baik keatas dan kebawah","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "pergelangan lengan menekuk >15deg, baik keatas dan kebawah","score"=>2,"index"=>1];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tablePointAktivitasOtot ($value) {
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "satu atau lebih bagian tubuh dalam keadaan statis, Misal ditopang lebih dari 1 min","score"=>1,"index"=>0];
-                case 1 :return ["keterangan" => "gerakan berulang-ulang, Misal lebih dari 4 min, Tidak termasuk berjalan","score"=>1,"index"=>1];
-                case 2 :return ["keterangan" => "postur tubuh tidak stabil selama kerja","score"=>1,"index"=>2];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
-            
+    }
+    protected function tablePointAktivitasOtot ($value) {
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "satu atau lebih bagian tubuh dalam keadaan statis, Misal ditopang lebih dari 1 min","score"=>1,"index"=>0];
+            case 1 :return ["keterangan" => "gerakan berulang-ulang, Misal lebih dari 4 min, Tidak termasuk berjalan","score"=>1,"index"=>1];
+            case 2 :return ["keterangan" => "postur tubuh tidak stabil selama kerja","score"=>1,"index"=>2];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
-        protected function tableBeban ($value){
-            if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "Beban < 5 Kg","score"=>0,"index"=>0];
-                case 1 :return ["keterangan" => "Beban 5-10 Kg","score"=>1,"index"=>1];
-                case 2 :return ["keterangan" => "Beban > 10 Kg","score"=>2,"index"=>2];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
+    }
+    protected function tableBeban ($value){
+        if($value === null) return ["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "Beban < 5 Kg","score"=>0,"index"=>0];
+            case 1 :return ["keterangan" => "Beban 5-10 Kg","score"=>1,"index"=>1];
+            case 2 :return ["keterangan" => "Beban > 10 Kg","score"=>2,"index"=>2];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
+    }
 
-        protected function tablePointPegangan($value){
-            if($value === null)  return["keterangan" =>"Tidak diketahu","score"=>0];
-            switch((int)$value){
-                case 0 :return ["keterangan" => "Pegangan Bagus","score"=>0,"index"=>0];
-                case 1 :return ["keterangan" => "Pegangan Sedang","score"=>1,"index"=>1];
-                case 2 :return ["keterangan" => "Pegangan Kurang Baik","score"=>2,"index"=>2];
-                case 3 :return ["keterangan" => "Pegangan Jelek","score"=>3,"index"=>3];
-                default:return ["keterangan" =>"Tidak diketahu","score"=>0];
-            }
+    protected function tablePointPegangan($value){
+        if($value === null)  return["keterangan" =>"Tidak diketahu","score"=>0];
+        switch((int)$value){
+            case 0 :return ["keterangan" => "Pegangan Bagus","score"=>0,"index"=>0];
+            case 1 :return ["keterangan" => "Pegangan Sedang","score"=>1,"index"=>1];
+            case 2 :return ["keterangan" => "Pegangan Kurang Baik","score"=>2,"index"=>2];
+            case 3 :return ["keterangan" => "Pegangan Jelek","score"=>3,"index"=>3];
+            default:return ["keterangan" =>"Tidak diketahu","score"=>0];
         }
+    }
 
 }
