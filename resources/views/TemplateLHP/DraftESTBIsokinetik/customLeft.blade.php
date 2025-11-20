@@ -7,6 +7,7 @@
     });
 
     $total = count($data);
+    
 @endphp
 
 <div class="left" style="page-break-before: always;">
@@ -21,8 +22,9 @@
         @else
             <th rowspan="1" class="pd-5-solid-top-center" style="white-space: nowrap;">HASIL UJI</th>
         @endif
-
+        @if ($page != 3)
         <th width="75" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>
+        @endif
         <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SATUAN</th>
         <th width="200" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SPESIFIKASI METODE</th>
     </tr>
@@ -55,8 +57,9 @@
                 @if ($hasTerkoreksi)
                     <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['terkoreksi'] ?? '' !!}</td>
                 @endif
-
+                @if ($page != 3)
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
+                @endif
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['satuan'] ?? '') }}</td>
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['spesifikasi_metode'] ?? '') }}</td>
             </tr>

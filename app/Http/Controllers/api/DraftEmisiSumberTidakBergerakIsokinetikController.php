@@ -150,6 +150,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     $detail->akr                = $request->akr[$key] ?? null;
                     $detail->parameter_lab      = $request->parameter_lab[$key] ?? null;
                     $detail->hasil_uji          = $request->hasil_uji[$key] ?? null;
+                    $detail->hasil_terkoreksi   = $request->hasil_terkoreksi[$key] ?? null;
                     $detail->spesifikasi_metode = $request->spesifikasi_metode[$key] ?? null;
                     $detail->satuan             = $request->satuan[$key] ?? null;
                     $detail->baku_mutu          = $request->baku_mutu[$key] ?? null;
@@ -349,6 +350,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                         'parameter'     => $val['parameter'],
                         'parameter_lab' => $val['parameter_lab'],
                         'C'             => $val['hasil_uji'],
+                        'terkoreksi'    => $val['hasil_terkoreksi'],
                         'satuan'        => $val['satuan'],
                         'methode'       => $val['spesifikasi_metode'],
                         'baku_mutu'     => $val['baku_mutu'],
@@ -478,7 +480,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['berat_molekul_kering'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'g/gmol',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_metode' => 'SNI 7177.15:2009',
                                 ];
                             }
                             // kadar_uap_air
@@ -488,7 +490,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['kadar_uap_air'],
                                     'baku_mutu' => '-',
                                     'satuan' => '%',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_metode' => 'SNI 7177.16:2009',
                                 ];
                             }
                             // kecepatan_volumetrik_aktual
@@ -498,7 +500,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['kecepatan_volumetrik_aktual'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'm³/s',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_metode' => 'SNI 7177.14:2009',
                                 ];
                             }
                             // traverse_poin_partikulat_1
@@ -508,7 +510,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat_1'],
                                     'baku_mutu' => '-',
                                     'satuan' => '-',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_metode' => 'SNI 7177.13:2009',
                                 ];
                             }
                             // persen_sampling_isokinetik
@@ -518,7 +520,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'hasil_uji' => $hasilIsokinetik['persen_sampling_isokinetik'],
                                     'baku_mutu' => '90-110',
                                     'satuan' => '%',
-                                    'spesifikasi_method' => 'SNI 7177.15:2009',
+                                    'spesifikasi_metode' => 'SNI 7177.17:2009',
                                 ];
                             }
 
@@ -611,6 +613,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
     }
 
     private function buildPage3($data){
+        // dd($data);
         // Mapping sesuai PDF
         $mapping = [
             'traverse_poin_partikulat_1' => ['Titik Lintas Partikulat', '-', 'Perhitungan'],
@@ -654,6 +657,8 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
             'persen_sampling_isokinetik' => ['Persen Sampling Isokinetik', '%', 'Perhitungan'],
             'effisiensi_pembakaran' => ['Effisiensi Pembakaran', '%', 'Perhitungan'],
+            'volume_gas_buang_aktual' => ['Volume Gas Buang Aktual', 'm³/s', 'Perhitungan'],
+            'konstanta_1' => ['Konstanta 1', '-', 'Perhitungan'],
         ];
 
         // Key yang harus dibuang
@@ -672,7 +677,6 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             'volume_sampel_gas_standar',
             'rata_suhu_gas_standar',
             'uap_air_dalam_aliran_gas_hide',
-            'konstanta_1',
             'konstanta_2',
             'konstanta_4',
             'konstanta_5'
@@ -698,7 +702,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 'hasil_uji' => $value,
                 'baku_mutu' => '-',
                 'satuan' => $satuan,
-                'spesifikasi_method' => $method,
+                'spesifikasi_metode' => $method,
             ];
         }
 
@@ -815,61 +819,31 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
             $kategori3 = $data->kategori_3;
             $category2 = (int) explode('-', $kategori3)[0];
+            $lhps = LhpsEmisiIsokinetikHeader::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
 
-            if ($category2 == 31 || $category2 == 32) {
-                $lhps = LhpsEmisiHeader::where('no_lhp', $data->no_sampel)->where('is_active', true)->first();
+            if ($lhps) {
+                $lhpsHistory = $lhps->replicate();
+                $lhpsHistory->setTable((new LhpsEmisiIsokinetikHeaderHistory())->getTable());
+                $lhpsHistory->created_at = $lhps->created_at;
+                $lhpsHistory->update_at  = $lhps->updated_at;
+                $lhpsHistory->delete_at  = Carbon::now()->format('Y-m-d H:i:s');
+                $lhpsHistory->delete_by  = $this->karyawan;
+                $lhpsHistory->save();
 
-                if ($lhps) {
-                    $lhpsHistory = $lhps->replicate();
-                    $lhpsHistory->setTable((new LhpsEmisiHeaderHistory())->getTable());
-                    $lhpsHistory->created_at = $lhps->created_at;
-                    $lhpsHistory->updated_at = $lhps->updated_at;
-                    $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $lhpsHistory->deleted_by = $this->karyawan;
-                    $lhpsHistory->save();
-
-                    $oldDetails = LhpsEmisiDetail::where('id_header', $lhps->id)->get();
-                    foreach ($oldDetails as $detail) {
-                        $detailHistory = $detail->replicate();
-                        $detailHistory->setTable((new LhpsEmisiDetailHistory())->getTable());
-                        $detailHistory->created_by = $this->karyawan;
-                        $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                        $detailHistory->save();
-                    }
-
-                    foreach ($oldDetails as $detail) {
-                        $detail->delete();
-                    }
-
-                    $lhps->delete();
+                $oldDetails = LhpsEmisiIsokinetikDetail::where('id_header', $lhps->id)->get();
+                foreach ($oldDetails as $detail) {
+                    $detailHistory = $detail->replicate();
+                    $detailHistory->setTable((new LhpsEmisiIsokinetikDetailHistory())->getTable());
+                    $detailHistory->created_by = $this->karyawan;
+                    $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $detailHistory->save();
                 }
-            } else if ($category2 === 34) {
-                $lhps = LhpsEmisiIsokinetikHeader::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
 
-                if ($lhps) {
-                    $lhpsHistory = $lhps->replicate();
-                    $lhpsHistory->setTable((new LhpsEmisiIsokinetikHeaderHistory())->getTable());
-                    $lhpsHistory->created_at = $lhps->created_at;
-                    $lhpsHistory->update_at  = $lhps->updated_at;
-                    $lhpsHistory->delete_at  = Carbon::now()->format('Y-m-d H:i:s');
-                    $lhpsHistory->delete_by  = $this->karyawan;
-                    $lhpsHistory->save();
-
-                    $oldDetails = LhpsEmisiIsokinetikDetail::where('id_header', $lhps->id)->get();
-                    foreach ($oldDetails as $detail) {
-                        $detailHistory = $detail->replicate();
-                        $detailHistory->setTable((new LhpsEmisiIsokinetikDetailHistory())->getTable());
-                        $detailHistory->created_by = $this->karyawan;
-                        $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                        $detailHistory->save();
-                    }
-
-                    foreach ($oldDetails as $detail) {
-                        $detail->delete();
-                    }
-
-                    $lhps->delete();
+                foreach ($oldDetails as $detail) {
+                    $detail->delete();
                 }
+
+                $lhps->delete();
             }
 
             $data->status = 1;
