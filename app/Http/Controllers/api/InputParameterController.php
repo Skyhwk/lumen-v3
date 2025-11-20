@@ -3092,6 +3092,7 @@ class InputParameterController extends Controller
 			if (!$isO3) {
 				$data_parsing->durasi = $durasiFin;
 				$data_parsing->nilQs = $nilQs;
+				$data_parsing->array_qs = $Qs;
 				$data_parsing->data_total = $datot;
 				$data_parsing->average_flow = $rerataFlow;
 				$data_parsing->flow_array = $rerata;
@@ -3644,6 +3645,35 @@ class InputParameterController extends Controller
 				];
 			}
 
+			$data_lapangan = DetailLingkunganHidup::where('no_sampel', $request->no_sample)
+				->where('parameter', $request->parameter)
+				->get();
+
+			if($data_lapangan->isEmpty()){
+				return (object)[
+					'message'=> 'Data Lapangan tidak ditemukan untuk parameter : '.$request->parameter.'',
+					'status' => 404
+				];
+			}else if($data_lapangan->count() < 2){
+				return (object)[
+					'message'=> 'Data Lapangan masih kurang untuk melakukan perhitungan hasil uji pada parameter : '.$request->parameter.'',
+					'status' => 404
+				];
+			}
+
+			$data_lapangan = $data_lapangan->toArray();
+			$start = Carbon::parse($data_lapangan[0]['tanggal_pemasangan'] . ' ' . $data_lapangan[0]['waktu_pengujian']);
+			$end   = Carbon::parse($data_lapangan[1]['tanggal_selesai'] . ' ' . $data_lapangan[1]['waktu_selesai']);
+
+			$jam = $start->diffInHours($end, true);   // selisih dalam jam
+			$selisih_hari = $jam / 24;          // konversi ke jam desimal
+
+			
+			$luas_botol = array_map(function($item){
+				return (float) $item['luas_botol'];
+			}, $data_lapangan);
+			$average_luas_botol = count($luas_botol) > 0 ? array_sum($luas_botol) / count($luas_botol) : 0;
+
 			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
 			$tgl_terima = $order_detail->tanggal_terima;
@@ -3658,7 +3688,8 @@ class InputParameterController extends Controller
 			$function = $functionObj->function;
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
-
+			$data_parsing->selisih_hari = $selisih_hari;
+			$data_parsing->average_luas_botol = $average_luas_botol;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3688,10 +3719,11 @@ class InputParameterController extends Controller
 				$header->created_at     = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				// $data_kalkulasi['lingkungan_header_id'] = $header->id;
-				// $data_kalkulasi['no_sampel'] = $request->no_sample;
-				// $data_kalkulasi['created_by'] = $this->karyawan;
-				// WsValueLingkungan::create($data_kalkulasi);
+				$data_kalkulasi['lingkungan_header_id'] = $header->id;
+				$data_kalkulasi['no_sampel'] = $request->no_sample;
+				$data_kalkulasi['created_by'] = $this->karyawan;
+				$data_kalkulasi['C5'] = $data_kalkulasi['hasil'];
+				WsValueLingkungan::create($data_kalkulasi);
 
 				$data_udara = array();
 				$data_udara['id_dustfall_header']   = $header->id;
