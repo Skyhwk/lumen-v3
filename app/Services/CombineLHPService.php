@@ -127,7 +127,7 @@ class CombineLHPService
 
                     $linkLhp->list_lhp_rilis = json_encode($listLhpRilis);
                     $linkLhp->jumlah_lhp_rilis = count($listLhpRilis);
-                    $linkLhp->jumlah_lhp = $orderHeader->orderDetail->pluck('cfr')->unique()->count();
+                    $linkLhp->jumlah_lhp = $orderHeader->orderDetail->where('periode', $periode)->where('is_active', true)->pluck('cfr')->unique()->count();
                     $linkLhp->is_completed = $linkLhp->jumlah_lhp == count($listLhpRilis);
                 }
             } else {
@@ -139,8 +139,8 @@ class CombineLHPService
                 $linkLhp->nama_perusahaan = $orderHeader->nama_perusahaan;
                 $linkLhp->jumlah_lhp_rilis = 1;
                 $linkLhp->list_lhp_rilis = json_encode([$noLhp]);
-                $linkLhp->jumlah_lhp = $orderHeader->orderDetail->pluck('cfr')->unique()->count();
-                $linkLhp->is_completed = $orderHeader->orderDetail->pluck('cfr')->unique()->count() == 1;
+                $linkLhp->jumlah_lhp = $orderHeader->orderDetail->where('periode', $periode)->where('is_active', true)->pluck('cfr')->unique()->count();
+                $linkLhp->is_completed = $orderHeader->orderDetail->where('periode', $periode)->where('is_active', true)->pluck('cfr')->unique()->count() == 1;
                 $linkLhp->created_by = $karyawan;
                 $linkLhp->created_at = Carbon::now();
                 // Log::info("CombineLHPService: Created new LinkLHP for {$noOrder}");
