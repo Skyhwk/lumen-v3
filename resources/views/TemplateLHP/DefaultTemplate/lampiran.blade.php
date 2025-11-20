@@ -1,8 +1,18 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
+    $custom = json_decode($header->regulasi_custom ?? '[]');
+    if (isset($custom[0]->page)) {
+    $regulasiCustom = [];
 
-    $regulasi = array_merge(json_decode($header->regulasi_custom ?? '[]'), json_decode($header->regulasi ?? '[]'));
+    foreach ($custom as $value) {
+        $regulasiCustom[] = $value->id . '-' . $value->regulasi;
+        }
+    } else {
+        $regulasiCustom = $custom;
+    }
+
+    $regulasi = array_merge($regulasiCustom, json_decode($header->regulasi ?? '[]'));
     $regulasi = array_unique($regulasi);
     $regulasi = array_values($regulasi);
     
