@@ -23,7 +23,7 @@
 
         <th width="75" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>
         <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SATUAN</th>
-        <th rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SPESIFIKASI METODE</th>
+        <th width="200" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">SPESIFIKASI METODE</th>
     </tr>
 
     @if ($hasTerkoreksi)
@@ -48,7 +48,7 @@
                 </td>
 
                 {{-- hasil ukur --}}
-                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['C'] ?? '' !!}</td>
+                <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['hasil_uji'] ?? '' !!}</td>
 
                 {{-- hasil terkoreksi (hanya jika ada koreksi) --}}
                 @if ($hasTerkoreksi)

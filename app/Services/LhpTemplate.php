@@ -10,6 +10,8 @@ use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
+use App\Models\LhpsEmisiIsokinetikHeader;
+use App\Models\LhpsEmisiIsokinetikDetail;
 use App\Models\MasterBakumutu;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
@@ -382,8 +384,18 @@ class LhpTemplate
                     }
                 }
             } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
-                $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                if(collect($dataDecode)->contains(function ($item) {
+                    return in_array(
+                        $item,
+                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
+                    );
+                })){
+                    $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                } else {
+                    $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                }
 
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {

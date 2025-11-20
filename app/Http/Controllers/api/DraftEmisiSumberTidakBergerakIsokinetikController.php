@@ -179,33 +179,33 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                         }
                     }
                 }
-                // if ($header != null) {
+                if ($header != null) {
 
-                //     $file_qr = new GenerateQrDocumentLhp();
-                //     $file_qr = $file_qr->insert('LHP_EMISI_ISOKINETIK', $header, $this->karyawan);
-                //     if ($file_qr) {
-                //         $header->file_qr = $file_qr;
-                //         $header->save();
-                //     }
+                    $file_qr = new GenerateQrDocumentLhp();
+                    $file_qr = $file_qr->insert('LHP_EMISI_ISOKINETIK', $header, $this->karyawan);
+                    if ($file_qr) {
+                        $header->file_qr = $file_qr;
+                        $header->save();
+                    }
 
-                //     $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
 
-                //     $custom = LhpsEmisiIsokinetikCustom::where('id_header', $header->id)
-                //         ->get()
-                //         ->groupBy('page')
-                //         ->toArray();
+                    $custom = LhpsEmisiIsokinetikCustom::where('id_header', $header->id)
+                        ->get()
+                        ->groupBy('page')
+                        ->toArray();
 
-                //     $view = 'DraftESTB';
+                    $view = 'DraftESTBIsokinetik';
 
-                //     $fileName = LhpTemplate::setDataHeader($header)
-                //         ->setDataDetail($detail)
-                //         ->setDataCustom($custom)
-                //         ->whereView($view)
-                //         ->render('downloadLHPFinal');
+                    $fileName = LhpTemplate::setDataHeader($header)
+                        ->setDataDetail($detail)
+                        ->setDataCustom($custom)
+                        ->whereView($view)
+                        ->render('downloadLHPFinal');
 
-                //     $header->file_lhp = $fileName;
-                //     $header->save();
-                // }
+                    $header->file_lhp = $fileName;
+                    $header->save();
+                }
             } catch (\Exception $e) {
                 throw new \Exception("Error in header or detail assignment: " . $e->getMessage() . "line " . $e->getLine() . "file : " . $e->getFile());
             }
@@ -217,6 +217,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'line'    => $th->getLine(),
@@ -573,6 +574,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             ], 500);
         }
     }
+
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
         $param = $val->parameter_emisi;
@@ -773,6 +775,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         return $nilai;
 
     }
+
     private function getKoreksi($val, $satuan)
     {
 
@@ -907,6 +910,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         $extand                                      = explode("|", $data);
         return $extand;
     }
+
     public function getUser(Request $request)
     {
         $users = MasterKaryawan::with(['department', 'jabatan'])->where('id', $request->id ?: $this->user_id)->first();
@@ -1002,13 +1006,14 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             $data = LhpsEmisiIsokinetikHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
+
             $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp   = $data->no_lhp;
 
             $detail = LhpsEmisiIsokinetikDetail::where('id_header', $data->id)->get();
 
             $qr = QrDocument::where('id_document', $data->id)
-                ->where('type_document', 'LHP_EMISI_CEROBONG')
+                ->where('type_document', 'LHP_EMISI_ISOKINETIK')
                 ->where('is_active', 1)
                 ->where('file', $data->file_qr)
                 ->orderBy('id', 'desc')
@@ -1049,13 +1054,25 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     $qr->save();
                 }
 
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
 
-                if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                if($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                // $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                // ->first();
+
+                // EmailLhpRilisHelpers::run([
+                //     'cfr'              => $request->cfr,
+                //     'no_order'         => $data->no_order,
+                //     'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                //     'nama_perusahaan'  => $data->nama_pelanggan,
+                //     'periode'          => $cekDetail->periode,
+                //     'karyawan'         => $this->karyawan
+                // ]);
             }
 
             DB::commit();
