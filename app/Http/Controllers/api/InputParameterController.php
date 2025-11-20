@@ -133,6 +133,7 @@ class InputParameterController extends Controller
             // Kumpulkan sampel berdasarkan kategori prioritas terlebih dahulu
             $priority_samples = [];
             $backup_samples = [];
+			$pm24_samples_excluded = [];
 
             foreach ($join as $key => $val) {
 				// Ambil parameter
@@ -145,7 +146,7 @@ class InputParameterController extends Controller
 				$isOrderContainerPM24 = in_array('PM 10 (24 Jam)', $param) || in_array('PM10 (24 Jam)', $param) || in_array('PM2.5 (24 Jam)', $param) || in_array('PM 2.5 (24 Jam)', $param);
 				
 				if($stp->name == 'GRAVIMETRI' && $stp->sample->nama_kategori == 'Udara' && $isOrderContainerPM24 && $val->kategori_3 == '27-Udara Lingkungan Kerja'){
-					continue;
+					$pm24_samples_excluded[] = $val->no_sampel;
 				}
                 // Cek apakah ada parameter yang mengandung 'BOD'
                 $isBodExist = collect($param)->contains(function ($item) {
@@ -504,6 +505,9 @@ class InputParameterController extends Controller
                     ->get();
 				// dump($select);
                 foreach($select as $k => $parameter) {
+					if($parameter == 'PM 10 (24 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
+						$tes[$k] = array_values(array_diff($tes[$k], $pm24_samples_excluded));
+					}
                     // Get data for Linghidup
                     $linghidupData = LingkunganHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
