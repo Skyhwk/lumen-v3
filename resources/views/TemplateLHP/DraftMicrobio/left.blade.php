@@ -75,27 +75,27 @@
             @elseif ($isMultiSampelOneParam)
                 <tr>
                     <!-- NO: 2 baris -->
-                    <th width="25" class="pd-5-solid-top-center" style="white-space: nowrap;" rowspan="2">
+                    <th class="pd-5-solid-top-center" rowspan="2">
                         NO
                     </th>
 
                     <!-- LOKASI / KETERANGAN SAMPEL: 2 baris -->
-                    <th width="240" class="pd-5-solid-top-center" style="white-space: nowrap;" rowspan="2">
+                    <th width="240" class="pd-5-solid-top-center" rowspan="2">
                         LOKASI / KETERANGAN SAMPEL
                     </th>
 
                     <!-- HASIL UJI: baris 1 -->
-                    <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th class="pd-5-solid-top-center">
                         Suhu
                     </th>
 
                     <!-- BAKU MUTU***: baris 1 -->
-                    <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th class="pd-5-solid-top-center">
                         Kelembapan
                     </th>
 
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        <th class="pd-5-solid-top-center">
                             @php
                                 foreach ($detail as $row) {
                                     if ($row['parameter'] === $param) {
@@ -108,15 +108,15 @@
                         </th>
                     @endforeach
 
-                    <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;" rowspan="2">
+                    <th class="pd-5-solid-top-center" rowspan="2">
                         TANGGAL SAMPLING
                     </th>
                 </tr>
 
                 <tr>
-                    <th width="80" class="pd-5-solid-top-center" style="white-space: nowrap;">(°C)</th>
-                    <th width="80" class="pd-5-solid-top-center" style="white-space: nowrap;">(%)</th>
-                    <th width="80" class="pd-5-solid-top-center" style="white-space: nowrap;">{{ $satuan }}
+                    <th class="pd-5-solid-top-center">(°C)</th>
+                    <th class="pd-5-solid-top-center">(%)</th>
+                    <th class="pd-5-solid-top-center">{{ $satuan }}
                     </th>
 
                 </tr>
