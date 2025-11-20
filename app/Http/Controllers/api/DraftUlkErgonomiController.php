@@ -8,7 +8,7 @@ use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 use App\Helpers\EmailLhpRilisHelpers;
 
-use App\Models\{HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
+use App\Models\{HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp,WsValueErgonomi};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
@@ -1792,7 +1792,7 @@ class DraftUlkErgonomiController extends Controller
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
-            $dataLHP = DataLapanganErgonomi::with(['detail'])
+            $dataLHP = WsValueErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
             if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
                 $dataQr =(object)[
@@ -2783,7 +2783,7 @@ class DraftUlkErgonomiController extends Controller
                 // Tulis semua konten HTML
                 foreach ($methodsToCombine as $methodName => $methodId) {
                     // Ambil data untuk setiap metode dan no_sampel yang diminta
-                    $dataMethod = DataLapanganErgonomi::with(['detail'])
+                    $dataMethod = WsValueErgonomi::with(['detail'])
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();

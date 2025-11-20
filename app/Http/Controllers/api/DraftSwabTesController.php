@@ -16,6 +16,7 @@ use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
+use App\Models\SubKontrak;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
@@ -170,6 +171,15 @@ class DraftSwabTesController extends Controller
                     ->where('lhps', 1)
                     ->get();
             }
+            if ($swabData->isEmpty()) {
+                $swabData = Subkontrak::with('ws_udara')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approved', 1)
+                    ->where('is_active', 1)
+                    ->where('lhps', 1)
+                    ->get();
+            }
+
 
             $regulasiList = is_array($request->regulasi) ? $request->regulasi : [];
             $getSatuan    = new HelperSatuan;
@@ -264,7 +274,6 @@ class DraftSwabTesController extends Controller
                 $mappedData = array_merge($mappedData, $tmpData);
             }
 
-            // buang duplikat kalau perlu (misal no_sampel + parameter + id_regulasi sama)
             $mappedData = collect($mappedData)->values()->toArray();
 
             if ($cekLhp) {
@@ -281,7 +290,10 @@ class DraftSwabTesController extends Controller
                 $detail = array_merge($detail, $data_all);
 
                 $detail = collect($detail)
-                    ->sortBy('tanggal_sampling')
+                    ->sortBy([
+                        ['no_sampel', 'asc'],
+                        ['tanggal_sampling', 'asc'],
+                    ])
                     ->values()
                     ->toArray();
 
@@ -300,8 +312,8 @@ class DraftSwabTesController extends Controller
             }
 
             $mappedData = collect($mappedData)->sortBy([
-                ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc'],
+                ['tanggal_sampling', 'asc'],
             ])->values()->toArray();
 
             return response()->json([
@@ -623,6 +635,7 @@ class DraftSwabTesController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
+        DB::beginTransaction();
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
@@ -710,15 +723,15 @@ class DraftSwabTesController extends Controller
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                // EmailLhpRilisHelpers::run([
-                //     'cfr'             => $request->cfr,
-                //     'no_order'        => $data->no_order,
-                //     'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
-                //     'nama_perusahaan' => $data->nama_pelanggan,
-                //     'periode'         => $cekDetail->periode,
-                //     'karyawan'        => $this->karyawan,
-                // ]);
-
+                EmailLhpRilisHelpers::run([
+                    'cfr'             => $data->no_lhp,
+                    'no_order'        => $data->no_order,
+                    'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan' => $data->nama_pelanggan,
+                    'periode'         => $cekDetail->periode,
+                    'karyawan'        => $this->karyawan,
+                ]);
+                
             } else {
                 DB::rollBack();
                 return response()->json([
@@ -735,7 +748,6 @@ class DraftSwabTesController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,
