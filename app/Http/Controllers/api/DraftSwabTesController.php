@@ -3,33 +3,28 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Models\DataLapanganSwab;
+use App\Models\HistoryAppReject;
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsSwabTesDetail;
 use App\Models\LhpsSwabTesDetailHistory;
 use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpsSwabTesHeaderHistory;
+use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
+use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\SwabTestHeader;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
-use App\Models\HistoryAppReject;
-use App\Models\KonfirmasiLhp;
-
-use App\Helpers\EmailLhpRilisHelpers;
-
-use App\Models\GenerateLink;
-use App\Services\PrintLhp;
-use App\Services\SendEmail;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Jobs\CombineLHPJob;
-use App\Models\LinkLhp;
-use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class DraftSwabTesController extends Controller
@@ -274,6 +269,9 @@ class DraftSwabTesController extends Controller
                 $detail          = LhpsSwabTesDetail::where('id_header', $cekLhp->id)->get();
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
+                $lhpHeader = LhpsSwabTesHeader::where('id', $cekLhp->id)
+                    ->get();
+
                 $data_all = collect($mappedData)
                     ->reject(fn($item) => in_array($item['no_sampel'], $existingSamples))
                     ->map(fn($item) => array_merge($item, ['status' => 'belom_diadjust']))
@@ -289,7 +287,7 @@ class DraftSwabTesController extends Controller
                     ->toArray();
 
                 return response()->json([
-                    'data'       => $cekLhp,
+                    'data'       => $lhpHeader,
                     'detail'     => $detail,
                     'success'    => true,
                     'status'     => 200,
@@ -454,7 +452,7 @@ class DraftSwabTesController extends Controller
             $akr               = collect($request->akr ?? []);
             $jenis_persyaratan = collect($request->jenis_persyaratan ?? []);
             $bakumutu          = collect($request->bakumutu ?? []);
-            $method            = collect($request->method ?? []);
+            $methode           = collect($request->methode ?? []);
             $tanggal_sampling  = collect($request->tanggal_sampling ?? []);
             $nama_lab          = collect($request->nama_lab ?? []);
 
@@ -480,7 +478,7 @@ class DraftSwabTesController extends Controller
                         'jenis_persyaratan' => $jenis_persyaratan[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
                         'bakumutu'          => $bakumutu[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
                         'tanggal_sampling'  => $tanggal_sampling[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
-                        'method'            => $method[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'methode'           => $methode[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
                         'nama_lab'          => $nama_lab[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
                     ];
                 }
@@ -504,7 +502,7 @@ class DraftSwabTesController extends Controller
                     $detail->baku_mutu = $this->cleanField($row['bakumutu'] ?? null);
 
                     $detail->tanggal_sampling = $this->cleanField($row['tanggal_sampling'] ?? null);
-                    $detail->methode          = $this->cleanField($row['method'] ?? null);
+                    $detail->methode          = $this->cleanField($row['methode'] ?? null);
 
                     $detail->save();
                 }
@@ -710,14 +708,14 @@ class DraftSwabTesController extends Controller
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                EmailLhpRilisHelpers::run([
-                    'cfr'             => $request->cfr,
-                    'no_order'        => $data->no_order,
-                    'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
-                    'nama_perusahaan' => $data->nama_pelanggan,
-                    'periode'         => $cekDetail->periode,
-                    'karyawan'        => $this->karyawan,
-                ]);
+                // EmailLhpRilisHelpers::run([
+                //     'cfr'             => $request->cfr,
+                //     'no_order'        => $data->no_order,
+                //     'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
+                //     'nama_perusahaan' => $data->nama_pelanggan,
+                //     'periode'         => $cekDetail->periode,
+                //     'karyawan'        => $this->karyawan,
+                // ]);
 
             } else {
                 DB::rollBack();
@@ -743,7 +741,7 @@ class DraftSwabTesController extends Controller
         }
     }
 
-       public function handleReject(Request $request)
+    public function handleReject(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -754,14 +752,14 @@ class DraftSwabTesController extends Controller
 
             if ($lhps) {
                 HistoryAppReject::insert([
-                    'no_lhp' => $lhps->no_lhp,
-                    'no_sampel' => $request->noSampel,
-                    'kategori_2' => $lhps->id_kategori_2,
-                    'kategori_3' => $lhps->id_kategori_3,
-                    'menu' => 'Draft SWAB TES',
-                    'status' => 'rejected',
+                    'no_lhp'      => $lhps->no_lhp,
+                    'no_sampel'   => $request->noSampel,
+                    'kategori_2'  => $lhps->id_kategori_2,
+                    'kategori_3'  => $lhps->id_kategori_3,
+                    'menu'        => 'Draft SWAB TES',
+                    'status'      => 'rejected',
                     'rejected_at' => Carbon::now(),
-                    'rejected_by' => $this->karyawan
+                    'rejected_by' => $this->karyawan,
                 ]);
                 // History Header Kebisingan
                 $lhpsHistory = $lhps->replicate();
@@ -793,21 +791,21 @@ class DraftSwabTesController extends Controller
             OrderDetail::where('cfr', $request->no_lhp)
                 ->whereIn('no_sampel', $noSampel)
                 ->update([
-                    'status' => 1
+                    'status' => 1,
                 ]);
 
             DB::commit();
 
             return response()->json([
-                'status' => 'success',
-                'message' => 'Data draft Swab Tes no LHP ' . $request->no_lhp . ' berhasil direject'
+                'status'  => 'success',
+                'message' => 'Data draft Swab Tes no LHP ' . $request->no_lhp . ' berhasil direject',
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
             // dd($th);
             return response()->json([
-                'status' => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage() . ' On line ' . $th->getLine() . ' On File ' . $th->getFile()
+                'status'  => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage() . ' On line ' . $th->getLine() . ' On File ' . $th->getFile(),
             ], 401);
         }
     }

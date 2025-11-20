@@ -6,6 +6,7 @@
 
     $detailData = collect($detailData)->map(fn($r) => (array) $r);
 
+
     $sampelUnik = $detailData->pluck('no_sampel')->filter()->unique()->values();
     $paramUnik = $detailData->pluck('parameter')->filter()->unique()->values();
 
@@ -21,9 +22,13 @@
     // Area swab: aku asumsikan dar keterangan (bisa dimodif kalau ada field khusus)
     $areaSwabUnik = $detailData->pluck('keterangan')->filter()->unique()->values();
 
-    // Metode sampling (ambil dari header seperti sebelumnya)
-    $metodeSampling = $header->metode_sampling ? $header->metode_sampling : [];
-
+    if (!empty($header->metode_sampling)) {
+        $metodeSampling = is_array($header->metode_sampling)
+            ? $header->metode_sampling
+            : json_decode($header->metode_sampling, true) ?? [];
+    } else {
+        $metodeSampling = [];
+    }
     if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
         if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
             $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
@@ -75,7 +80,7 @@
                         @if ($isSingleSampel)
                             <td class="custom" width="33%">{{ $header->no_sampel }}</td>
                         @endif
-                        <td class="custom">Swab Lingkungan</td>
+                        <td class="custom">Swab Lingkungan Kerja</td>
                     </tr>
                 </table>
             </td>
@@ -242,12 +247,22 @@
                             <td class="custom5" width="120">Spesifikasi Metode</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
-                                {{-- Kalau kamu punya mapping spesifikasi per parameter, bisa looping di sini --}}
                                 @foreach ($paramUnik as $idx => $p)
                                     @if ($idx > 0)
                                         <br>
                                     @endif
-                                    {{ $p }} : {{ $header->spesifikasi_metode_per_param[$p] ?? '-' }}
+
+                                    @php
+                                        $methode = '-';
+                                        foreach ($detail as $row) {
+                                            if ($row['parameter'] === $p) {
+                                                $methode = $row['methode'];
+                                                break;
+                                            }
+                                        }
+                                    @endphp
+
+                                    {{ $p }} : {{ $methode }}
                                 @endforeach
                             </td>
                         </tr>
@@ -265,6 +280,14 @@
                                 @else
                                     -
                                 @endif
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="custom5" width="120">Area Swab</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->deskripsi_titik ?? '-' }}
                             </td>
                         </tr>
                     @endif
@@ -285,9 +308,9 @@
                             $regulasiName = $parts[1] ?? '';
                         @endphp
 
-                        <table style="padding-top: 10px;" width="100%">
+                        <table style="padding: 10px 0px 0px 0px;" width="100%">
                             <tr>
-                                <td class="custom5" colspan="3">**{{ $regulasiName }}</td>
+                                <td class="custom5" colspan="3">** {{ $regulasiName }}</td>
                             </tr>
                         </table>
                     @endforeach
@@ -306,22 +329,19 @@
                         }
                     }
                 @endphp
-                @if ($isSingleSampel)
-                    @if (!empty($header->keterangan))
-                        <table style="padding: 5px 0px 0px 10px;" width="100%">
-                            @foreach (json_decode($header->keterangan) as $vx)
-                                @foreach ($temptArrayPush as $symbol)
-                                    @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
-                                        <tr>
-                                            <td class="custom5" colspan="3">{{ $vx }}</td>
-                                        </tr>
-                                        @break
-                                    @endif
-                                @endforeach
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 3px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
                             @endforeach
-                        </table>
-                    @endif
-
+                        @endforeach
+                    </table>
                 @endif
             </td>
         </tr>

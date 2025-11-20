@@ -19,10 +19,7 @@
     $isMultiSampelOneParam = $totalSampel > 1 && $totalParam === 1;
     $isMultiSampelMultiParam = $totalSampel > 1 && $totalParam > 1;
 
-    $satuan = $data
-        ->pluck('satuan')
-        ->filter() 
-        ->first();
+    $satuan = $data->pluck('satuan')->filter()->first();
 
 @endphp
 
@@ -71,7 +68,7 @@
                     </th>
 
                     <!-- HASIL UJI: baris 1 -->
-                    <th width="160"  class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         HASIL UJI
                     </th>
 
@@ -97,8 +94,7 @@
                         LOKASI / KETERANGAN SAMPEL</th>
 
                     {{-- HASIL UJI: total kolom = jumlah parameter * (1 atau 2) --}}
-                    <th colspan="{{ $parameters->count() * ($hasTerkoreksi ? 2 : 1) }}" class="pd-5-solid-top-center"
-                        style="white-space: nowrap;">
+                    <th colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         HASIL UJI
                     </th>
 
@@ -106,36 +102,20 @@
                     <th colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         BAKU MUTU
                     </th>
-                    <th colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         TANGGAL SAMPLING </th>
                 </tr>
                 <tr>
                     {{-- HASIL UJI - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        @if ($hasTerkoreksi)
-                            <th class="pd-5-solid-top-center" style="white-space: nowrap;">
-                                {{ $param }}<br><small>TERUKUR</small>
-                            </th>
-                            <th class="pd-5-solid-top-center" style="white-space: nowrap;">
-                                {{ $param }}<br><small>TERKOREKSI</small>
-                            </th>
-                        @else
-                            <th class="pd-5-solid-top-center" style="white-space: nowrap;">
-                                {{ $param }}
-                            </th>
-                        @endif
-                    @endforeach
-
-                    {{-- BAKU MUTU - PARAMETER --}}
-                    @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        <th class="pd-5-solid-top-center">
                             {{ $param }}
                         </th>
                     @endforeach
 
-
+                    {{-- BAKU MUTU - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        <th class="pd-5-solid-top-center">
                             {{ $param }}
                         </th>
                     @endforeach
@@ -237,6 +217,7 @@
                         $keterangan = $ref['keterangan'] ?? '';
                         $satuan = $ref['satuan'] ?? '-';
                         $methode = $ref['methode'] ?? '-';
+                        $tanggal_sampling = $ref['tanggal_sampling'] ?? '-';
                     @endphp
 
                     <tr>
@@ -283,16 +264,10 @@
                             </td>
                         @endforeach
 
-                        {{-- TANGGAL SAMPLING per parameter --}}
-                        @foreach ($parameters as $param)
-                            @php
-                                $r = $rowsByParam->get($param, []);
-                                $tanggal_sampling = $r['tanggal_sampling'] ?? '-';
-                            @endphp
-                            <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
-                                {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
-                            </td>
-                        @endforeach
+
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
+                        </td>
                     </tr>
                 @endforeach
             @endif
