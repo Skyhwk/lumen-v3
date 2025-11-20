@@ -172,7 +172,7 @@
                     @php
                         // Bersihkan nilai kosong & spasi berlebih
                         $items = array_map('trim', array_filter($keterangan_koreksi));
-
+                        
                         // Inisialisasi variabel hasil
                         $bagian_standar = '';
                         $bagian_o2 = '';
@@ -201,7 +201,6 @@
                                     $bagian_angka = 'sebesar 15%';
                                 }
                             } elseif (Str::contains(strtolower($v), 'partikulat')) {
-                                // Tambahan: khusus untuk partikulat
                                 $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
                             }
                         }

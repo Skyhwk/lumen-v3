@@ -419,7 +419,7 @@ class DraftSwabTesController extends Controller
             $header->alamat_sampling        = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
             $header->sub_kategori           = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
             $header->deskripsi_titik        = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
-            $header->metode_sampling        = $request->metode_sampling ? $request->metode_sampling : null;
+            $header->metode_sampling        = $request->metode_sampling ? json_encode($request->metode_sampling, JSON_UNESCAPED_SLASHES) : null;
             $header->tanggal_sampling       = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
             $header->nama_karyawan          = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $header->jabatan_karyawan       = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
@@ -428,7 +428,7 @@ class DraftSwabTesController extends Controller
             $header->tanggal_lhp            = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
             $header->keterangan             = $request->keterangan != '' ? json_encode($keteranganHeader) : null;
             $header->save();
-
+            
             $existingDetails = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             if ($existingDetails->isNotEmpty()) {
@@ -536,6 +536,7 @@ class DraftSwabTesController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,
