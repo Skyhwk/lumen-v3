@@ -20,14 +20,15 @@ class SwabTest
             $hasil4 = (($n * $f) / ($a / 10000)) * $d;
 
 			// Cek apakah id_param sesuai dan rumus kurang dari 1
-			if ($id_parameter == 227 || $id_parameter == 337) {
-				if ($rumus < 1) {
-					$rumus = '<1';
-				} else {
-					// Format hasil perhitungan ke 2 desimal
-					$rumus = number_format($rumus, 2, '.', '');
-				}
-			}
+			// if ($id_parameter == 227 || $id_parameter == 337) {
+				// if ($rumus < 1) {
+				// 	$rumus = '<1';
+				// } else {
+					// // Format hasil perhitungan ke 2 desimal
+					// $rumus = number_format($rumus, 2, '.', '');
+				// }
+			// }
+			$rumus = number_format($rumus, 2, '.', '');
             $hasil2 = number_format($hasil2, 2, '.', '');
             $hasil3 = number_format($hasil3, 2, '.', '');
             $hasil4 = number_format($hasil4, 2, '.', '');
