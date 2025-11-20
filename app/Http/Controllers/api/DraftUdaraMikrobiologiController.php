@@ -151,6 +151,8 @@ class DraftUdaraMikrobiologiController extends Controller
                 ->where('status', 2)
                 ->pluck('no_sampel');
             // dd($orders);
+            
+            $subKontrak = Subkontrak::with('ws_udara', 'detail_lapangan_microbiologi')->whereIn('no_sampel', $orders)->where('is_active', true)->where('is_approve', true)->get();
 
             // Ambil data KebisinganHeader + relasinya
             $swabData = MicrobioHeader::with('ws_value', 'detail_lapangan')
@@ -159,6 +161,8 @@ class DraftUdaraMikrobiologiController extends Controller
                 ->where('is_active', 1)
                 ->where('lhps', 1)
                 ->get();
+
+            // dd($swabData, $subKontrak);
             // dd($swabData);
             // if ($swabData->isEmpty()) {
             //     $swabData = MicrobioHeader::with('ws_value')
@@ -168,7 +172,8 @@ class DraftUdaraMikrobiologiController extends Controller
             //         ->where('lhps', 1)
             //         ->get();
             // }
-
+            $allData = $subKontrak->merge($swabData);
+            
             $regulasiList = is_array($request->regulasi) ? $request->regulasi : [];
 
             $getSatuan    = new HelperSatuan;
@@ -187,9 +192,9 @@ class DraftUdaraMikrobiologiController extends Controller
                 }
 
                 // isi "detail" untuk regulasi ini
-                $detailList = $swabData->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
-                    $ws    = $val->ws_value;
-                    $lapangan = $val->detail_lapangan;
+                $detailList = $allData->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
+                    $ws    = $val->ws_value ?? $val->ws_udara;
+                    $lapangan = $val->detail_lapangan ?? $val->detail_lapangan_microbiologi;
                     $hasil = $ws->toArray();
 
                     $orderRow = OrderDetail::where('no_sampel', $val->no_sampel)
@@ -261,10 +266,10 @@ class DraftUdaraMikrobiologiController extends Controller
                 ];
             }
 
-
             // buang duplikat kalau perlu (misal no_sampel + parameter + id_regulasi sama)
             $mappedData = collect($mappedData)->values()->toArray();
-
+            // dd($mappedData);
+            
             if ($cekLhp) {
                 $detail          = LhpsMicrobiologiDetail::where('id_header', $cekLhp->id)->get();
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
