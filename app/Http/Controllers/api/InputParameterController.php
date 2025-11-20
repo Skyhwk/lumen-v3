@@ -3092,6 +3092,7 @@ class InputParameterController extends Controller
 			if (!$isO3) {
 				$data_parsing->durasi = $durasiFin;
 				$data_parsing->nilQs = $nilQs;
+				$data_parsing->array_qs = $Qs;
 				$data_parsing->data_total = $datot;
 				$data_parsing->average_flow = $rerataFlow;
 				$data_parsing->flow_array = $rerata;
