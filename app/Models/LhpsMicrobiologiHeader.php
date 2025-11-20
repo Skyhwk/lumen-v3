@@ -14,7 +14,7 @@ class LhpsMicrobiologiHeader extends Sector
 
     public function lhpsMicrobiologiDetailSampel()
     {
-        return $this->hasMany(LhpsMicrobiologiDetailSampel::class, 'id_header', 'id');
+        return $this->hasMany(LhpsMicrobiologiDetail::class, 'id_header', 'id');
     }
 
     public function lhpsMicrobiologiDetailParameter()
