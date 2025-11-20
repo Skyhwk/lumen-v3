@@ -427,7 +427,7 @@ class DraftSwabTesController extends Controller
             $header->tanggal_lhp            = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
             $header->keterangan             = $request->keterangan != '' ? json_encode($keteranganHeader) : null;
             $header->save();
-
+            
             $existingDetails = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             if ($existingDetails->isNotEmpty()) {
@@ -536,6 +536,7 @@ class DraftSwabTesController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,
