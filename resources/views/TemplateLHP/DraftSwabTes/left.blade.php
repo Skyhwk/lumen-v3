@@ -76,6 +76,10 @@
                     <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         BAKU MUTU
                     </th>
+
+                    <th width="160" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        Tanggal Sampling
+                    </th>
                 </tr>
 
                 <tr>
@@ -181,6 +185,7 @@
                         $hasilUji = $ref['hasil_uji'] ?? '-';
                         $bakuMutu = $ref['baku_mutu'] ?? '-';
                         $satuan = $ref['satuan'] ?? '-';
+                        $tanggal_sampling = $ref['tanggal_sampling'] ?? '-';
                     @endphp
 
                     <tr>
@@ -195,6 +200,9 @@
                         </td>
                         <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
                             {{ htmlspecialchars($bakuMutu) }}
+                        </td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
                         </td>
                     </tr>
                 @endforeach
