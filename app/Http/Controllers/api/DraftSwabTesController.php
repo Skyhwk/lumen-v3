@@ -16,6 +16,7 @@ use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
+use App\Models\SubKontrak;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
@@ -170,6 +171,15 @@ class DraftSwabTesController extends Controller
                     ->where('lhps', 1)
                     ->get();
             }
+            if ($swabData->isEmpty()) {
+                $swabData = Subkontrak::with('ws_udara')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approved', 1)
+                    ->where('is_active', 1)
+                    ->where('lhps', 1)
+                    ->get();
+            }
+
 
             $regulasiList = is_array($request->regulasi) ? $request->regulasi : [];
             $getSatuan    = new HelperSatuan;
@@ -194,8 +204,10 @@ class DraftSwabTesController extends Controller
 
                 // mapping setiap swabData terhadap regulasi ini
                 $tmpData = $swabData->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
-                    $keterangan   = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
-                    $parameterLab = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
+                    $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
+                    $parameterLab      = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
+                    $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
+                    $parameterLhp      = Parameter::where('id', $val->id_parameter)->first()->nama_lhp ?? null;
 
                     $ws       = $val->ws_value;
                     $hasil    = $ws->toArray();
@@ -244,7 +256,7 @@ class DraftSwabTesController extends Controller
                     }
                     return [
                         'no_sampel'        => $val->no_sampel ?? null,
-                        'parameter'        => $val->parameter ?? null,
+                        'parameter'        => $parameterLhp ?? $parameterRegulasi ?? null,
                         'nama_lab'         => $parameterLab ?? null,
                         'bakumutu'         => $bakumutu ? $bakumutu->baku_mutu : '-',
                         'satuan'           => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
@@ -269,9 +281,6 @@ class DraftSwabTesController extends Controller
                 $detail          = LhpsSwabTesDetail::where('id_header', $cekLhp->id)->get();
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
-                $lhpHeader = LhpsSwabTesHeader::where('id', $cekLhp->id)
-                    ->get();
-
                 $data_all = collect($mappedData)
                     ->reject(fn($item) => in_array($item['no_sampel'], $existingSamples))
                     ->map(fn($item) => array_merge($item, ['status' => 'belom_diadjust']))
@@ -287,7 +296,7 @@ class DraftSwabTesController extends Controller
                     ->toArray();
 
                 return response()->json([
-                    'data'       => $lhpHeader,
+                    'data'       => $cekLhp,
                     'detail'     => $detail,
                     'success'    => true,
                     'status'     => 200,
@@ -331,6 +340,7 @@ class DraftSwabTesController extends Controller
     {
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
+        // dd($request->all());
         try {
             // =========================
             // BAGIAN HEADER (punyamu)
@@ -419,7 +429,7 @@ class DraftSwabTesController extends Controller
             $header->alamat_sampling        = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
             $header->sub_kategori           = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
             $header->deskripsi_titik        = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
-            $header->metode_sampling        = $request->metode_sampling ? $request->metode_sampling : null;
+            $header->metode_sampling        = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
             $header->tanggal_sampling       = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
             $header->nama_karyawan          = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $header->jabatan_karyawan       = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
@@ -428,7 +438,7 @@ class DraftSwabTesController extends Controller
             $header->tanggal_lhp            = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
             $header->keterangan             = $request->keterangan != '' ? json_encode($keteranganHeader) : null;
             $header->save();
-
+            
             $existingDetails = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             if ($existingDetails->isNotEmpty()) {
@@ -445,10 +455,11 @@ class DraftSwabTesController extends Controller
                 LhpsSwabTesDetail::where('id_header', $header->id)->delete();
             }
 
+            $parameter         = collect($request->parameter ?? []);
             $hasilUji          = collect($request->hasil_uji ?? []);
             $satuan            = collect($request->satuan ?? []);
             $akreditasi        = collect($request->akreditasi ?? []);
-            $keterangan        = collect($request->keterangan ?? []);
+            $keterangan        = collect($request->lokasi_sampel ?? []);
             $akr               = collect($request->akr ?? []);
             $jenis_persyaratan = collect($request->jenis_persyaratan ?? []);
             $bakumutu          = collect($request->bakumutu ?? []);
@@ -536,6 +547,7 @@ class DraftSwabTesController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,

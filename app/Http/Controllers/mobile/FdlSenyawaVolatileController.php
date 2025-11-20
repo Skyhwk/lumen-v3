@@ -530,10 +530,10 @@ class FdlSenyawaVolatileController extends Controller
                 $fdlvalue->save();
             }
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 

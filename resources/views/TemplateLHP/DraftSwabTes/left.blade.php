@@ -76,6 +76,10 @@
                     <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         BAKU MUTU
                     </th>
+
+                    <th width="160" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        Tanggal Sampling
+                    </th>
                 </tr>
 
                 <tr>
@@ -90,32 +94,40 @@
                  ======================= --}}
                 <tr>
                     <th width="25" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">NO</th>
-                    <th width="120" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th width="240" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         LOKASI / KETERANGAN SAMPEL</th>
 
                     {{-- HASIL UJI: total kolom = jumlah parameter * (1 atau 2) --}}
-                    <th colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th width="160" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         HASIL UJI
                     </th>
 
                     {{-- BAKU MUTU: 1 kolom per parameter --}}
-                    <th colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th width="160" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         BAKU MUTU
                     </th>
-                    <th rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    <th  width="160" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
                         TANGGAL SAMPLING </th>
                 </tr>
                 <tr>
                     {{-- HASIL UJI - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center">
-                            {{ $param }}
+                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                            @php
+                                foreach ($detail as $row) {
+                                    if ($row['parameter'] === $param) {
+                                        $akr = $row['akr'];
+                                        break;
+                                    }
+                                }
+                            @endphp
+                            <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
                         </th>
                     @endforeach
 
                     {{-- BAKU MUTU - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center">
+                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
                             {{ $param }}
                         </th>
                     @endforeach
@@ -181,6 +193,7 @@
                         $hasilUji = $ref['hasil_uji'] ?? '-';
                         $bakuMutu = $ref['baku_mutu'] ?? '-';
                         $satuan = $ref['satuan'] ?? '-';
+                        $tanggal_sampling = $ref['tanggal_sampling'] ?? '-';
                     @endphp
 
                     <tr>
@@ -195,6 +208,9 @@
                         </td>
                         <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
                             {{ htmlspecialchars($bakuMutu) }}
+                        </td>
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
                         </td>
                     </tr>
                 @endforeach

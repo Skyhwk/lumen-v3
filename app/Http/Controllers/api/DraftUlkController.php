@@ -61,9 +61,6 @@ class DraftUlkController extends Controller
             ->get();
 
         $data->transform(function ($item) {
-            // Tentukan data lapangan
-            // $lapangan                             = $item->allDetailLingkunganKerja ?? $item->dataLapanganDirectLain ?? $item->dataLapanganPartikulatMeter;
-            // Ambil lapangan berdasarkan fallback
             $lapangan = collect($item->allDetailLingkunganKerja);
 
             if ($lapangan->isEmpty()) {

@@ -74,6 +74,30 @@ class MasterPelanggan extends Sector
 
     public function latestOrder()
     {
-        return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')->orderByDesc('tanggal_order');
+        return $this->hasOne(OrderHeader::class, 'id_pelanggan', 'id_pelanggan')->where('is_active', true)->orderByDesc('tanggal_order');
+    }
+
+    public function latestKontrakQuotation()
+    {
+        return $this->hasOne(QuotationKontrakH::class, 'pelanggan_ID', 'id_pelanggan')->where('is_active', true)->orderByDesc('id');
+    }
+
+    public function latestNonKontrakQuotation()
+    {
+        return $this->hasOne(QuotationNonKontrak::class, 'pelanggan_ID', 'id_pelanggan')->where('is_active', true)->orderByDesc('id');
+    }
+
+    public function latestDFUS()
+    {
+        return $this->hasOne(DFUS::class, 'id_pelanggan', 'id_pelanggan')
+            ->orderByDesc('tanggal');
+    }
+
+    public function getLatestDFUSMatchAttribute()
+    {
+        return $this->latestDFUS && 
+            $this->latestDFUS->sales_penanggung_jawab === $this->sales_penanggung_jawab
+            ? $this->latestDFUS
+            : null;
     }
 }
