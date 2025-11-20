@@ -6,7 +6,6 @@
 
     $detailData = collect($detailData)->map(fn($r) => (array) $r);
 
-
     $sampelUnik = $detailData->pluck('no_sampel')->filter()->unique()->values();
     $paramUnik = $detailData->pluck('parameter')->filter()->unique()->values();
 
@@ -171,7 +170,23 @@
                         <tr>
                             <td class="custom5" width="120">Parameter Pengujian</td>
                             <td class="custom5" width="12">:</td>
-                            <td class="custom5">{{ $paramUnik->first() }}</td>
+                            @foreach ($paramUnik as $idx => $p)
+                                @if ($idx > 0)
+                                    <br>
+                                @endif
+
+                                @php
+                                    $methode = '-';
+                                    foreach ($detail as $row) {
+                                        if ($row['parameter'] === $p) {
+                                            $akr = $row['akr'];
+                                            break;
+                                        }
+                                    }
+                                @endphp
+
+                                <td class="custom5"><sup>{{ $akr }}</sup>&nbsp;{{ $p }}</td>
+                            @endforeach
                         </tr>
 
                         {{-- spesifikasi metode (hardcode / dari header kalau ada) --}}
@@ -179,7 +194,23 @@
                             <td class="custom5" width="120">Spesifikasi Metode</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
-                                {{ $header->spesifikasi_metode ?? '-' }}
+                                @foreach ($paramUnik as $idx => $p)
+                                    @if ($idx > 0)
+                                        <br>
+                                    @endif
+
+                                    @php
+                                        $methode = '-';
+                                        foreach ($detail as $row) {
+                                            if ($row['parameter'] === $p) {
+                                                $methode = $row['methode'];
+                                                break;
+                                            }
+                                        }
+                                    @endphp
+
+                                    {{ $methode }}
+                                @endforeach
                             </td>
                         </tr>
 
@@ -310,7 +341,7 @@
 
                         <table style="padding: 10px 0px 0px 0px;" width="100%">
                             <tr>
-                                <td class="custom5" colspan="3">** {{ $regulasiName }}</td>
+                                <td class="custom5" colspan="3">{{ $regulasiName }}</td>
                             </tr>
                         </table>
                     @endforeach

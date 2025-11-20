@@ -209,6 +209,8 @@ class DraftSwabTesController extends Controller
                         ->where('parameter', $val->parameter)
                         ->first();
 
+
+
                     $nilai = '-';
                     $index = $getSatuan->udara($bakumutu->satuan ?? null);
 
@@ -269,9 +271,6 @@ class DraftSwabTesController extends Controller
                 $detail          = LhpsSwabTesDetail::where('id_header', $cekLhp->id)->get();
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
-                $lhpHeader = LhpsSwabTesHeader::where('id', $cekLhp->id)
-                    ->get();
-
                 $data_all = collect($mappedData)
                     ->reject(fn($item) => in_array($item['no_sampel'], $existingSamples))
                     ->map(fn($item) => array_merge($item, ['status' => 'belom_diadjust']))
@@ -287,7 +286,7 @@ class DraftSwabTesController extends Controller
                     ->toArray();
 
                 return response()->json([
-                    'data'       => $lhpHeader,
+                    'data'       => $cekLhp,
                     'detail'     => $detail,
                     'success'    => true,
                     'status'     => 200,
@@ -331,6 +330,7 @@ class DraftSwabTesController extends Controller
     {
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
+
         try {
             // =========================
             // BAGIAN HEADER (punyamu)
@@ -393,12 +393,15 @@ class DraftSwabTesController extends Controller
 
             $keteranganRequest = $request->keterangan ?? [];
 
+
+
             $keteranganHeader = collect($keteranganRequest)
                 ->filter(function ($value, $key) {
                     return is_int($key); // hanya 0,1,2
                 })
                 ->values()
                 ->all();
+
 
             $parameter                      = $request->parameter;
             $header->no_order               = $request->no_order != '' ? $request->no_order : null;
@@ -419,7 +422,7 @@ class DraftSwabTesController extends Controller
             $header->alamat_sampling        = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
             $header->sub_kategori           = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
             $header->deskripsi_titik        = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
-            $header->metode_sampling        = $request->metode_sampling ? $request->metode_sampling : null;
+            $header->metode_sampling        = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
             $header->tanggal_sampling       = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
             $header->nama_karyawan          = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $header->jabatan_karyawan       = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
@@ -483,6 +486,8 @@ class DraftSwabTesController extends Controller
                     ];
                 }
             }
+
+
 
             foreach ($detailGabungan as $noSampel => $paramResults) {
                 foreach ($paramResults as $paramName => $row) {
