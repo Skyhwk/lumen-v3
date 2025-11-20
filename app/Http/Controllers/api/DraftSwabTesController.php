@@ -16,6 +16,7 @@ use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
+use App\Models\SubKontrak;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
@@ -170,6 +171,15 @@ class DraftSwabTesController extends Controller
                     ->where('lhps', 1)
                     ->get();
             }
+            if ($swabData->isEmpty()) {
+                $swabData = Subkontrak::with('ws_udara')
+                    ->whereIn('no_sampel', $orders)
+                    ->where('is_approved', 1)
+                    ->where('is_active', 1)
+                    ->where('lhps', 1)
+                    ->get();
+            }
+
 
             $regulasiList = is_array($request->regulasi) ? $request->regulasi : [];
             $getSatuan    = new HelperSatuan;
