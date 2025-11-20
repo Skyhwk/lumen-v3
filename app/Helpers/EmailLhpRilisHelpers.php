@@ -21,7 +21,7 @@ class EmailLhpRilisHelpers
             $company    = $data['nama_perusahaan'];
             $periode    = $data['periode'];
             if ($periode !== null) {
-                $periode = Carbon::createFromFormat('Y-m', $periode)->translatedFormat('F Y');
+                $periode = Carbon::createFromFormat('Y-m', $periode)->locale('id')->isoFormat('MMMM Y');
             }
             $karyawan   = $data['karyawan'];
 
@@ -30,7 +30,6 @@ class EmailLhpRilisHelpers
             $cekHistory = EmailHistory::where('email_subject', 'LIKE', "{$prefix}%")->first();
 
             if (!$cekHistory) {
-                Log::warning("EmailLhpRilisHelpers: EmailHistory NOT FOUND for no_order {$no_order}");
                 return false;
             }
 
@@ -58,7 +57,6 @@ class EmailLhpRilisHelpers
                 ->fromLhp()
                 ->send();
 
-            Log::info("EmailLhpRilisHelpers: Email sent for {$no_order} to {$cekHistory->email_to}");
             return $email;
         } catch (\Exception $e) {
             Log::error("EmailLhpRilisHelpers ERROR: " . $e->getMessage());
