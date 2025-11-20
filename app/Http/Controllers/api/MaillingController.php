@@ -25,14 +25,14 @@ class MaillingController extends Controller
             ], [
                 'to.required' => 'The "To" field is required.',
                 'to.*.required' => 'The "To" field is required.',
-                'to.*.email' => 'The "To" field must contain valid email addresses !.',
+                'to.*.email' => 'The "To" field must contain valid email addresses.',
                 'subject.required' => 'The "Subject" field is required.',
                 'content.required' => 'The "Content" field is required.',
                 'attachments.*.file' => 'Lampiran harus berupa file yang valid.',
             ]);
     
             if ($validator->fails()) {
-                return response()->json(['message' => $validator->errors()], 401);
+                return response()->json(['message' => $validator->fails()], 401);
             }
             
             $to = $request->input('to');
