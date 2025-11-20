@@ -213,14 +213,7 @@
                                 @endforeach
                             </td>
                         </tr>
-
-                        {{-- tanggal sampling --}}
-                        <tr>
-                            <td class="custom5" width="120">Tanggal Sampling</td>
-                            <td class="custom5" width="12">:</td>
-                            <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
-                        </tr>
-
+                        
                         {{-- periode analisa --}}
                         <tr>
                             <td class="custom5" width="120">Periode Analisa</td>
