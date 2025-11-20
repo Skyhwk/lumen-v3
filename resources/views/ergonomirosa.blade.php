@@ -389,7 +389,7 @@
                         <tr>
                             <td>{{ $personal->no_lhp }}</td>
                             <td>{{ $personal->no_sampel }}</td>
-                            <td>{{ $personal->jenis_sampel }} - Rosa</td>
+                            <td></td>
                         </tr>
                     </tbody>
                 </table>
