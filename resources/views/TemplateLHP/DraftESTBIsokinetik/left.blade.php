@@ -2,7 +2,7 @@
     $data = $detail->toArray();
 
     $hasTerkoreksi = collect($data)->contains(function ($item) {
-        return !empty($item['terkoreksi']) && $item['terkoreksi'] !== '-';
+        return !empty($item['hasil_terkoreksi']) && $item['hasil_terkoreksi'] !== '-';
     });
 
     $total = count($data);
@@ -52,7 +52,7 @@
 
                 {{-- hasil terkoreksi (hanya jika ada koreksi) --}}
                 @if ($hasTerkoreksi)
-                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['terkoreksi'] ?? '' !!}</td>
+                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{!! $yy['hasil_terkoreksi'] ?? '' !!}</td>
                 @endif
 
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ htmlspecialchars($yy['baku_mutu'] ?? '') }}</td>
