@@ -69,7 +69,9 @@
             $suhu = $cekDataLapangan->suhu;
             $kelembapan = $cekDataLapangan->kelembapan;
 
-            $kecepatan_angin = $cekDataLapangan->kecepatan_angin;
+            $kecepatan_angin = ($cekDataLapangan->kecepatan_angin !== null && $cekDataLapangan->kecepatan_angin !== "") 
+                ? str_replace(',', '', number_format($cekDataLapangan->kecepatan_angin * 3.6, 2)) 
+                : '-';
             $arah_angin = $cekDataLapangan->arah_angin;
             $tekanan_udara = $cekDataLapangan->tekanan_udara;
         }
