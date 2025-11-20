@@ -83,4 +83,9 @@ class Subkontrak extends Sector
         return $this->belongsTo('App\Models\FtcT', 'no_sampel', 'no_sample')->where('is_active', true);
     }
 
+    public function detail_lapangan_microbiologi()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
+    }
+
 }
