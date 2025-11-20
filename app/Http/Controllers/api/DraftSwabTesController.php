@@ -635,6 +635,7 @@ class DraftSwabTesController extends Controller
 
     public function handleApprove(Request $request, $isManual = true)
     {
+        DB::beginTransaction();
         try {
             if ($isManual) {
                 $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
@@ -722,15 +723,15 @@ class DraftSwabTesController extends Controller
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                // EmailLhpRilisHelpers::run([
-                //     'cfr'             => $request->cfr,
-                //     'no_order'        => $data->no_order,
-                //     'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
-                //     'nama_perusahaan' => $data->nama_pelanggan,
-                //     'periode'         => $cekDetail->periode,
-                //     'karyawan'        => $this->karyawan,
-                // ]);
-
+                EmailLhpRilisHelpers::run([
+                    'cfr'             => $data->no_lhp,
+                    'no_order'        => $data->no_order,
+                    'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan' => $data->nama_pelanggan,
+                    'periode'         => $cekDetail->periode,
+                    'karyawan'        => $this->karyawan,
+                ]);
+                
             } else {
                 DB::rollBack();
                 return response()->json([
@@ -747,7 +748,6 @@ class DraftSwabTesController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,
