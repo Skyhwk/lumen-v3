@@ -33,7 +33,7 @@ class EmisiCerobongDirect {
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
         $paramO2P = ["O2 (P)"];
-        $paramNO2_NOxP = ["NO2-NOx (P)"];
+        $paramNO2_NOxP = ["NO2-Nox (P)"];
 
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
