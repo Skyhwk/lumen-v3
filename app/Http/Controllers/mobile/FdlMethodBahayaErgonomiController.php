@@ -255,7 +255,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 InsertActivityFdl::by($this->user_id)->action('input')->target("Bahaya Ergonomi pada nomor sampel $data->no_sample")->save();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
