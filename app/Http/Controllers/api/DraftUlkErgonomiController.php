@@ -2748,7 +2748,7 @@ class DraftUlkErgonomiController extends Controller
                                         <b>Halaman {PAGENO} dari {nbpg}</b>
                                     </td>
                                     <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">
-                                        <img src="'.$file_qr.'" width="25" height="25" alt="QR Code" />
+
                                     </td>
                                 </tr>
                             </table>';
@@ -2801,7 +2801,7 @@ class DraftUlkErgonomiController extends Controller
                                     'nama_karyawan' => $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah',
                                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor',
                                     'tanggal' => Carbon::now('Asia/Jakarta')->locale('id')->isoFormat('DD MMMM YYYY'),
-                                    'qr_path' => null
+                                    'qr_path' => public_path('qr_documents/' . $pdfFile->file_qr . '.svg')
                                 ];
                                 break;
                             case 'lhp_digital':
