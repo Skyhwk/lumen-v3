@@ -574,7 +574,11 @@
                     </tr>
                     <tr>
                      <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
-                     <td colspan="3" height="40"></td>
+                     <td colspan="3" height="40">
+                        Skor NBM setelah bekerja: {{$pengukuran->setelah->total_skor}}.
+                        Tingkat risiko: {{$pengukuran->setelah->tingkat_risiko}} ({{$pengukuran->setelah->kategori_risiko}})
+                        Tindakan perbaikan: {{$pengukuran->setelah->tindakan_perbaikan}}.
+                     </td>
                     </tr>
                 </tbody>
             </table>
@@ -583,7 +587,7 @@
                         <tr>
                             <th>DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
                             <td colspan="2" height="60" style="vertical-align: top; text-align:left;">
-                                {{$personal->aktivitas_ukur}}
+                                {{$personal->aktivitas}}
                             </td>
                         </tr>
                 </table>
@@ -641,7 +645,7 @@
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
                         <tr>
-                            <td>Periode Analisis</td>
+                            <td style="width: 25%; text-align:start;">>Periode Analisis</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
                         </tr>
