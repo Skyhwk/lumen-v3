@@ -197,6 +197,7 @@ class DraftSwabTesController extends Controller
                     $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
                     $parameterLab      = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
                     $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
+                    $parameterLhp      = Parameter::where('id', $val->id_parameter)->first()->nama_lhp ?? null;
 
                     $ws       = $val->ws_value;
                     $hasil    = $ws->toArray();
@@ -245,7 +246,7 @@ class DraftSwabTesController extends Controller
                     }
                     return [
                         'no_sampel'        => $val->no_sampel ?? null,
-                        'parameter'        => $parameterRegulasi ?? null,
+                        'parameter'        => $parameterLhp ?? $parameterRegulasi ?? null,
                         'nama_lab'         => $parameterLab ?? null,
                         'bakumutu'         => $bakumutu ? $bakumutu->baku_mutu : '-',
                         'satuan'           => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',

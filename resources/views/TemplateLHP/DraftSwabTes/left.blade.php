@@ -112,15 +112,31 @@
                 <tr>
                     {{-- HASIL UJI - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center">
-                            {{ $param }}
+                        <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                            @php
+                                foreach ($detail as $row) {
+                                    if ($row['parameter'] === $param) {
+                                        $akr = $row['akr'];
+                                        break;
+                                    }
+                                }
+                            @endphp
+                            <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
                         </th>
                     @endforeach
 
                     {{-- BAKU MUTU - PARAMETER --}}
                     @foreach ($parameters as $param)
-                        <th class="pd-5-solid-top-center">
-                            {{ $param }}
+                        <th class="pd-5-solid-top-center"  style="white-space: nowrap;">
+                            @php
+                                foreach ($detail as $row) {
+                                    if ($row['parameter'] === $param) {
+                                        $akr = $row['akr'];
+                                        break;
+                                    }
+                                }
+                            @endphp
+                            <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
                         </th>
                     @endforeach
                 </tr>
