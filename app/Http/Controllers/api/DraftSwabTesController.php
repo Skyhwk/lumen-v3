@@ -194,8 +194,9 @@ class DraftSwabTesController extends Controller
 
                 // mapping setiap swabData terhadap regulasi ini
                 $tmpData = $swabData->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
-                    $keterangan   = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
-                    $parameterLab = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
+                    $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
+                    $parameterLab      = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
+                    $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
 
                     $ws       = $val->ws_value;
                     $hasil    = $ws->toArray();
@@ -208,8 +209,6 @@ class DraftSwabTesController extends Controller
                     $bakumutu = MasterBakumutu::where('id_regulasi', $id_regulasi)
                         ->where('parameter', $val->parameter)
                         ->first();
-
-
 
                     $nilai = '-';
                     $index = $getSatuan->udara($bakumutu->satuan ?? null);
@@ -246,7 +245,7 @@ class DraftSwabTesController extends Controller
                     }
                     return [
                         'no_sampel'        => $val->no_sampel ?? null,
-                        'parameter'        => $val->parameter ?? null,
+                        'parameter'        => $parameterRegulasi ?? null,
                         'nama_lab'         => $parameterLab ?? null,
                         'bakumutu'         => $bakumutu ? $bakumutu->baku_mutu : '-',
                         'satuan'           => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
@@ -330,7 +329,7 @@ class DraftSwabTesController extends Controller
     {
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
-
+        // dd($request->all());
         try {
             // =========================
             // BAGIAN HEADER (punyamu)
@@ -393,15 +392,12 @@ class DraftSwabTesController extends Controller
 
             $keteranganRequest = $request->keterangan ?? [];
 
-
-
             $keteranganHeader = collect($keteranganRequest)
                 ->filter(function ($value, $key) {
                     return is_int($key); // hanya 0,1,2
                 })
                 ->values()
                 ->all();
-
 
             $parameter                      = $request->parameter;
             $header->no_order               = $request->no_order != '' ? $request->no_order : null;
@@ -448,10 +444,11 @@ class DraftSwabTesController extends Controller
                 LhpsSwabTesDetail::where('id_header', $header->id)->delete();
             }
 
+            $parameter         = collect($request->parameter ?? []);
             $hasilUji          = collect($request->hasil_uji ?? []);
             $satuan            = collect($request->satuan ?? []);
             $akreditasi        = collect($request->akreditasi ?? []);
-            $keterangan        = collect($request->keterangan ?? []);
+            $keterangan        = collect($request->lokasi_sampel ?? []);
             $akr               = collect($request->akr ?? []);
             $jenis_persyaratan = collect($request->jenis_persyaratan ?? []);
             $bakumutu          = collect($request->bakumutu ?? []);
@@ -486,8 +483,6 @@ class DraftSwabTesController extends Controller
                     ];
                 }
             }
-
-
 
             foreach ($detailGabungan as $noSampel => $paramResults) {
                 foreach ($paramResults as $paramName => $row) {
