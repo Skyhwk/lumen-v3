@@ -5,21 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Sector;
 
-class LhpsMicrobiologiHeader extends Sector
+class LhpsMicrobiologiHeaderHistory extends Sector
 {
-    protected $table = "lhps_microbiologi_header";
+    protected $table = "lhps_microbiologi_header_history";
     public $timestamps = false;
 
     protected $guarded = [];
 
     public function lhpsMicrobiologiDetailSampel()
     {
-        return $this->hasMany(LhpsMicrobiologiDetail::class, 'id_header', 'id');
-    }
-
-    public function lhpsMicrobiologiDetailParameter()
-    {
-        return $this->hasMany(LhpsMicrobiologiDetailParameter::class, 'id_header', 'id');
+        return $this->hasMany(LhpsMicrobiologiDetailHistory::class, 'id_header', 'id');
     }
 
     // public function lhpsMicrobiologiCustomSampel()

@@ -223,6 +223,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetailSampel', 'lhpsSwabTesDetailParameter')->where('is_active', true);
     }
+    public function lhps_microbiologi()
+    {
+        return $this->belongsTo(LhpsMicrobiologiHeader::class, 'cfr', 'no_lhp')->with('lhpsMicrobiologiDetailSampel')->where('is_active', true);
+    }
 
     public function t_fct()
     {
