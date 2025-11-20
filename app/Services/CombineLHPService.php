@@ -127,9 +127,8 @@ class CombineLHPService
 
                     $linkLhp->list_lhp_rilis = json_encode($listLhpRilis);
                     $linkLhp->jumlah_lhp_rilis = count($listLhpRilis);
-
+                    $linkLhp->jumlah_lhp = $orderHeader->orderDetail->pluck('cfr')->unique()->count();
                     $linkLhp->is_completed = $linkLhp->jumlah_lhp == count($listLhpRilis);
-                    // Log::info("CombineLHPService: Updated LinkLHP list for {$noOrder}", $listLhpRilis);
                 }
             } else {
                 $linkLhp = new LinkLhp();

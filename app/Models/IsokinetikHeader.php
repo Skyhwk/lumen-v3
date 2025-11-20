@@ -53,4 +53,9 @@ class IsokinetikHeader extends Sector{
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 5);
     }
+
+    public function ws_value()
+    {
+        return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_isokinetik')->where('is_active', true);
+    }
 }
