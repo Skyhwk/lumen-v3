@@ -69,10 +69,23 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $history->save();
             }
+
+            if (empty($request->tanggal_lhp)) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Tanggal pengesahan LHP tidak boleh kosong',
+                    'status' => false
+                ], 400);
+            }
+
+            $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                ->orderByDesc('berlaku_mulai')
+                ->first();
+
             $parameter_uji = explode(', ', $request->parameter_uji);
             try {
-                $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                    return ['page' => (int) $page, 'regulasi' => $item];
+                $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) use ($request) {
+                    return ['page' => (int) $page, 'regulasi' => $request->regulasi ? $request->regulasi[0] : $item];
                 })->values()->toArray();
 
                 $header->id_kategori_2    = $request->category2 ?: null;
@@ -94,19 +107,19 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 $header->no_pic           = $request->no_pic ?: null;
                 $header->email_pic        = $request->email_pic ?: null;
                 $header->type_sampling    = $request->kategori_1 ?: null;
-                $header->tanggal_sampling = $request->tanggal_sampling ?: null;
+                // $header->tanggal_sampling = $request->tanggal_sampling ?: null;
                 $header->tanggal_terima   = $request->tanggal_terima ?: null;
                 $header->tanggal_tugas    = $request->tanggal_tugas ?: null;
                 $header->periode_analisa  = $request->periode_analisa ?: null;
-                $header->nama_karyawan    = 'Abidah Walfathiyyah';
-                $header->jabatan_karyawan = 'Technical Control Supervisor';
+                $header->nama_karyawan    = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah'; //ok
+                $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor'; //ok
                 $header->keterangan       = $request->keterangan ? json_encode($request->keterangan) : null;
                 $header->deskripsi_titik  = $request->penamaan_titik ?: null;
                 $header->titik_koordinat  = $request->titik_koordinat ?: null;
-                $header->regulasi        = $request->regulasi ? json_encode($request->regulasi) : null;
-                $header->regulasi_custom = isset($regulasi_custom) ? json_encode($regulasi_custom) : null;
-                $header->created_by      = $this->karyawan;
-                $header->created_at      = Carbon::now()->format('Y-m-d H:i:s');
+                $header->regulasi         = $request->regulasi ? json_encode($request->regulasi) : null;
+                $header->regulasi_custom  = isset($regulasi_custom) ? json_encode($regulasi_custom) : null;
+                $header->created_by       = $this->karyawan;
+                $header->created_at       = Carbon::now()->format('Y-m-d H:i:s');
                 $header->save();
 
                 $param     = $request->parameter;
@@ -134,12 +147,9 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                         $detail = $existing;
                     }
 
-                    $detail->akr           = $request->akr[$key] ?? null;
-                    $detail->parameter_lab = $request->parameter_lab[$key] ?? null;
-                    $detail->C             = $request->C[$key] ?? null;
-                    $detail->terukur            = $request->terukur[$key] ?? null;
-                    $detail->terkoreksi         = $request->terkoreksi[$key] ?? null;
-                    $detail->attr               = $request->attr[$key] ?? null;
+                    $detail->akr                = $request->akr[$key] ?? null;
+                    $detail->parameter_lab      = $request->parameter_lab[$key] ?? null;
+                    $detail->hasil_uji          = $request->hasil_uji[$key] ?? null;
                     $detail->spesifikasi_metode = $request->spesifikasi_metode[$key] ?? null;
                     $detail->satuan             = $request->satuan[$key] ?? null;
                     $detail->baku_mutu          = $request->baku_mutu[$key] ?? null;
@@ -155,52 +165,47 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 if (isset($request->custom_parameter)) {
                     foreach ($request->custom_parameter as $page => $values) {
                         foreach ($values as $param => $val) {
-                            $custom                = new LhpsEmisiIsokinetikCustom();
-                            $custom->id_header     = $header->id;
-                            $custom->page          = $page;
-                            $custom->parameter     = $param;
-                            $custom->akr           = $request->custom_akr[$page][$param] ?? null;
-                            $custom->parameter_lab = $request->custom_parameter_lab[$page][$param] ?? null;
-                            $custom->C             = $request->custom_C[$page][$param] ?? null;
-                            $custom->terukur            = $request->custom_terukur[$page][$param] ?? null;
-                            $custom->terkoreksi         = $request->custom_terkoreksi[$page][$param] ?? null;
-                            $custom->attr               = $request->custom_attr[$page][$param] ?? null;
+                            $custom                     = new LhpsEmisiIsokinetikCustom();
+                            $custom->id_header          = $header->id;
+                            $custom->page               = $page;
+                            $custom->parameter          = $param;
+                            $custom->akr                = $request->custom_akr[$page][$param] ?? null;
+                            $custom->parameter_lab      = $param;
+                            $custom->hasil_uji          = $request->custom_hasil_uji[$page][$param] ?? null;
                             $custom->spesifikasi_metode = $request->custom_methode[$page][$param] ?? null;
                             $custom->satuan             = $request->custom_satuan[$page][$param] ?? null;
                             $custom->baku_mutu          = $request->custom_baku_mutu[$page][$param] ?? null;
-
                             $custom->save();
                         }
                     }
                 }
+                // if ($header != null) {
 
-                if ($header != null) {
+                //     $file_qr = new GenerateQrDocumentLhp();
+                //     $file_qr = $file_qr->insert('LHP_EMISI_ISOKINETIK', $header, $this->karyawan);
+                //     if ($file_qr) {
+                //         $header->file_qr = $file_qr;
+                //         $header->save();
+                //     }
 
-                    $file_qr = new GenerateQrDocumentLhp();
-                    $file_qr = $file_qr->insert('LHP_EMISI_C', $header, $this->karyawan);
-                    if ($file_qr) {
-                        $header->file_qr = $file_qr;
-                        $header->save();
-                    }
+                //     $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
 
-                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                //     $custom = LhpsEmisiIsokinetikCustom::where('id_header', $header->id)
+                //         ->get()
+                //         ->groupBy('page')
+                //         ->toArray();
 
-                    $custom = LhpsEmisiIsokinetikCustom::where('id_header', $header->id)
-                        ->get()
-                        ->groupBy('page')
-                        ->toArray();
+                //     $view = 'DraftESTB';
 
-                    $view = 'DraftESTB';
+                //     $fileName = LhpTemplate::setDataHeader($header)
+                //         ->setDataDetail($detail)
+                //         ->setDataCustom($custom)
+                //         ->whereView($view)
+                //         ->render('downloadLHPFinal');
 
-                    $fileName = LhpTemplate::setDataHeader($header)
-                        ->setDataDetail($detail)
-                        ->setDataCustom($custom)
-                        ->whereView($view)
-                        ->render('downloadLHPFinal');
-
-                    $header->file_lhp = $fileName;
-                    $header->save();
-                }
+                //     $header->file_lhp = $fileName;
+                //     $header->save();
+                // }
             } catch (\Exception $e) {
                 throw new \Exception("Error in header or detail assignment: " . $e->getMessage() . "line " . $e->getLine() . "file : " . $e->getFile());
             }
@@ -329,10 +334,12 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         try {
             $cek_lhp = LhpsEmisiIsokinetikHeader::with('LhpsEmisiIsokinetikDetail', 'LhpsEmisiIsokinetikCustom')->where('no_sampel', $request->no_sampel)->first();
             if ($cek_lhp) {
-                $data_entry   = [];
-                $data_custom  = [];
-                $cek_regulasi = [];
-                $methodUsed   = [];
+                $data_entry     = [];
+                $data_custom    = [];
+                $cek_regulasi   = [];
+                $methodUsed     = [];
+                $dataPage2      = [];
+                $dataPage3      = [];
 
                 foreach ($cek_lhp->LhpsEmisiIsokinetikDetail->toArray() as $key => $val) {
                     $data_entry[$key] = [
@@ -340,19 +347,13 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                         'no_sampel'     => $request->no_sampel,
                         'parameter'     => $val['parameter'],
                         'parameter_lab' => $val['parameter_lab'],
-                        'C'             => $val['C'],
-                        // 'C1' => $val['C1'],
-                        // 'C2' => $val['C2'],
+                        'C'             => $val['hasil_uji'],
                         'satuan'        => $val['satuan'],
                         'methode'       => $val['spesifikasi_metode'],
                         'baku_mutu'     => $val['baku_mutu'],
                     ];
 
                     $methodUsed[] = $val['spesifikasi_metode'];
-                }
-
-                if (isset($request->other_regulasi) && ! empty($request->other_regulasi)) {
-                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)->select('id', 'peraturan as regulasi')->get()->toArray();
                 }
 
                 if (! empty($cek_lhp->LhpsEmisiIsokinetikCustom) && ! empty($cek_lhp->regulasi_custom)) {
@@ -385,36 +386,36 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     foreach ($cek_lhp->LhpsEmisiIsokinetikCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
-
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
                     usort($regulasi_custom, function ($a, $b) {
                         return $a['page'] <=> $b['page'];
                     });
-
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) {
+                        if (empty($item['page'])) {
                             continue;
                         }
 
-                        $id_regulasi = (string) "id_" . $item['id'];
                         $page        = $item['page'];
-
                         if (! empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
-                                    'id'            => $val['id'],
-                                    'no_sampel'     => $request->no_sampel,
-                                    'parameter'     => $val['parameter'],
-                                    'parameter_lab' => $val['parameter_lab'],
-                                    'C'             => $val['C'],
-                                    // 'C1' => $val['C1'],
-                                    // 'C2' => $val['C2'],
-                                    'satuan'        => $val['satuan'],
-                                    'methode'       => $val['spesifikasi_metode'],
-                                    'baku_mutu'     => $val['baku_mutu'],
-                                    'akr'           => $val->akr,
-                                ];
+                                if($page == 2) {
+                                    $dataPage2[] = [
+                                        'parameter' => $val['parameter'],
+                                        'hasil_uji' => $val['hasil_uji'],
+                                        'baku_mutu' => $val['baku_mutu'],
+                                        'satuan' => $val['satuan'],
+                                        'spesifikasi_method' => $val['spesifikasi_metode'] ?? '-',
+                                    ];
+                                } elseif($page == 3){
+                                    $dataPage3[] = [
+                                        'parameter' => $val['parameter'],
+                                        'hasil_uji' => $val['hasil_uji'],
+                                        'baku_mutu' => $val['baku_mutu'],
+                                        'satuan' => $val['satuan'],
+                                        'spesifikasi_method' => $val['spesifikasi_metode'] ?? '-',
+                                    ];
+                                }
                             }
                         }
                     }
@@ -434,7 +435,8 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                 return response()->json([
                     'status'             => true,
                     'data'               => $data_entry,
-                    'next_page'          => $data_custom,
+                    'next_page'          => $dataPage2,
+                    'next_page_2'        => $dataPage3,
                     'spesifikasi_method' => $returnMethods,
                     'keterangan'         => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
