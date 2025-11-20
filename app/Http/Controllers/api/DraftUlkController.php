@@ -41,6 +41,7 @@ class DraftUlkController extends Controller
             'lhps_ling',
             'allDetailLingkunganKerja',
             'dataLapanganDirectLain',
+            'dataLapanganPartikulatMeter',
             'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
             ->where([
@@ -60,8 +61,21 @@ class DraftUlkController extends Controller
             ->get();
 
         $data->transform(function ($item) {
-            // Tentukan data lapangan
-            $lapangan                             = $item->allDetailLingkunganKerja;
+            $lapangan = collect($item->allDetailLingkunganKerja);
+
+            if ($lapangan->isEmpty()) {
+                // belongsTo → bungkus jadi collection
+                $lapangan = $item->dataLapanganDirectLain
+                    ? collect([$item->dataLapanganDirectLain])
+                    : collect();
+            }
+
+            if ($lapangan->isEmpty()) {
+                $lapangan = $item->dataLapanganPartikulatMeter
+                    ? collect([$item->dataLapanganPartikulatMeter])
+                    : collect();
+            }
+
             $lhps                                 = $item->lhps_ling;
             $item->created_detail                 = $lapangan->max('created_at');
             $item->data_lapangan_lingkungan_kerja = $item->kategori_1 === 'S24'

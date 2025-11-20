@@ -33,7 +33,7 @@ class EmisiCerobongDirect {
         $paramSO2P = ["SO2 (P)"];
         $paramCOP = ["CO (P)"];
         $paramO2P = ["O2 (P)"];
-        $paramNO2_NOxP = ["NO2-NOx (P)"];
+        $paramNO2_NOxP = ["NO2-Nox (P)"];
 
         $pa = $data->tekanan_udara;
         $ta = $data->suhu;
@@ -172,8 +172,8 @@ class EmisiCerobongDirect {
 
         } else if (in_array($id_parameter, $paramCOP)) {
 
-            if ($avg_cop !== null) {
-                $c3 = round($avg_cop, 1);
+            if ($avg_co_p !== null) {
+                $c3 = round($avg_co_p, 1);
                 $c2= round(($c3 * 28.01) / 24.45, 4);
                 $c1 = intval($c2 * 1000);
                 $c4 = $c1;

@@ -3,18 +3,24 @@ namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
+use App\Models\DataLapanganSwab;
+use App\Models\HistoryAppReject;
+use App\Models\KonfirmasiLhp;
 use App\Models\LhpsSwabTesDetail;
 use App\Models\LhpsSwabTesDetailHistory;
 use App\Models\LhpsSwabTesHeader;
 use App\Models\LhpsSwabTesHeaderHistory;
+use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
-use App\Services\GenerateQrDocumentLhp;
 use App\Models\OrderDetail;
+use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use App\Models\SwabTestHeader;
+use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -41,8 +47,8 @@ class DraftSwabTesController extends Controller
             MAX(kategori_2) as kategori_2,
             MAX(kategori_3) as kategori_3,
             GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
-            GROUP_CONCAT(tanggal_sampling SEPARATOR ",") as tanggal_tugas,
-            GROUP_CONCAT(tanggal_terima SEPARATOR ",") as tanggal_terima
+            GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
         ')
             ->with([
                 'lhps_swab_udara',
@@ -53,7 +59,52 @@ class DraftSwabTesController extends Controller
             ->where('status', 2)
             ->groupBy('cfr')
             ->get();
+        $data = $data->map(function ($item) {
+            // 1. Pecah no_sampel "S1,S2,S3" jadi array
+            $noSampelList = array_filter(explode(',', $item->no_sampel));
 
+            // 2. Ambil semua data lapangan untuk no_sampel tsb
+            $lapangan = DataLapanganSwab::whereIn('no_sampel', $noSampelList)->get();
+
+            // 3. Hitung min/max created_at
+            $minDate = null;
+            $maxDate = null;
+
+            if ($lapangan->isNotEmpty()) {
+                $minDate = $lapangan->min('created_at');
+                $maxDate = $lapangan->max('created_at');
+            }
+
+            $lhps = $item->lhps_swab_udara;
+
+            if (empty($lhps) || (
+                empty($lhps->tanggal_sampling_awal) &&
+                empty($lhps->tanggal_sampling_akhir) &&
+                empty($lhps->tanggal_analisa_awal) &&
+                empty($lhps->tanggal_analisa_akhir)
+            )) {
+                $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
+                $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+
+                // tanggal_terima di hasil selectRaw bisa beberapa, pisah koma juga
+                $tglTerima = $item->tanggal_terima;
+                if (strpos($tglTerima, ',') !== false) {
+                    $list = array_filter(explode(',', $tglTerima));
+                    sort($list);
+                    $tglTerima = $list[0]; // ambil paling awal
+                }
+
+                $item->tanggal_analisa_awal  = $tglTerima ?: null;
+                $item->tanggal_analisa_akhir = Carbon::now()->format('Y-m-d');
+            } else {
+                $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
+                $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
+                $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
+                $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
+            }
+
+            return $item;
+        });
         return Datatables::of($data)->make(true);
     }
 
@@ -143,9 +194,12 @@ class DraftSwabTesController extends Controller
 
                 // mapping setiap swabData terhadap regulasi ini
                 $tmpData = $swabData->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
-                    $ws    = $val->ws_value;
-                    $hasil = $ws->toArray();
+                    $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
+                    $parameterLab      = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
+                    $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
 
+                    $ws       = $val->ws_value;
+                    $hasil    = $ws->toArray();
                     $orderRow = OrderDetail::where('no_sampel', $val->no_sampel)
                         ->where('is_active', 1)
                         ->first();
@@ -189,18 +243,20 @@ class DraftSwabTesController extends Controller
                             $nilai = $hasil[$fhasil];
                         }
                     }
-
                     return [
-                        'no_sampel'         => $val->no_sampel ?? null,
-                        'parameter'         => $val->parameter ?? null,
-                        'jenis_persyaratan' => $bakumutu ? $bakumutu->nama_header : '-',
-                        'nilai_persyaratan' => $bakumutu ? $bakumutu->baku_mutu : '-',
-                        'satuan'            => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
-                        'hasil_uji'         => $nilai,
-                        'tanggal_sampling'  => $tanggal_sampling,
-                        'verifikator'       => $val->approved_by ?? null,
-                        'id_regulasi'       => $id_regulasi,
-                        'nama_regulasi'     => $nama_regulasi,
+                        'no_sampel'        => $val->no_sampel ?? null,
+                        'parameter'        => $parameterRegulasi ?? null,
+                        'nama_lab'         => $parameterLab ?? null,
+                        'bakumutu'         => $bakumutu ? $bakumutu->baku_mutu : '-',
+                        'satuan'           => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
+                        'methode'          => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+                        'hasil_uji'        => $nilai,
+                        'tanggal_sampling' => $tanggal_sampling,
+                        'keterangan'       => $keterangan,
+                        'id_regulasi'      => $id_regulasi,
+                        'nama_regulasi'    => $nama_regulasi,
+                        'tanggal_terima'   => $val->tanggal_terima ?? null,
+                        'akr'              => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
                     ];
                 })->toArray();
 
@@ -211,7 +267,7 @@ class DraftSwabTesController extends Controller
             $mappedData = collect($mappedData)->values()->toArray();
 
             if ($cekLhp) {
-                $detail          = LhpsSwabTesDetailSampel::where('id_header', $cekLhp->id)->get();
+                $detail          = LhpsSwabTesDetail::where('id_header', $cekLhp->id)->get();
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
 
                 $data_all = collect($mappedData)
@@ -229,11 +285,16 @@ class DraftSwabTesController extends Controller
                     ->toArray();
 
                 return response()->json([
-                    'data'    => $cekLhp,
-                    'detail'  => $detail,
-                    'success' => true,
-                    'status'  => 200,
-                    'message' => 'Data berhasil diambil',
+                    'data'       => $cekLhp,
+                    'detail'     => $detail,
+                    'success'    => true,
+                    'status'     => 200,
+                    'keterangan' => [
+                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                        'ẍ Parameter belum terakreditasi.',
+                    ],
+                    'message'    => 'Data berhasil diambil',
                 ], 201);
             }
 
@@ -243,11 +304,16 @@ class DraftSwabTesController extends Controller
             ])->values()->toArray();
 
             return response()->json([
-                'data'    => [],
-                'detail'  => $mappedData,
-                'status'  => 200,
-                'success' => true,
-                'message' => 'Data berhasil diambil !',
+                'data'       => [],
+                'detail'     => $mappedData,
+                'status'     => 200,
+                'success'    => true,
+                'keterangan' => [
+                    '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+                    '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+                    'ẍ Parameter belum terakreditasi.',
+                ],
+                'message'    => 'Data berhasil diambil !',
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -261,9 +327,9 @@ class DraftSwabTesController extends Controller
 
     public function store(Request $request)
     {
-        // dd($request->all());
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
+        // dd($request->all());
         try {
             // =========================
             // BAGIAN HEADER (punyamu)
@@ -321,30 +387,47 @@ class DraftSwabTesController extends Controller
 
                 $allParams = array_values(array_unique($allParams));
             } else {
-                $allParams = $parameterRaw;
+                $allParams = [$parameterRaw];
             }
 
-            $parameter                = $request->parameter;
-            $header->no_order         = $request->no_order != '' ? $request->no_order : null;
-            $header->no_sampel        = $request->no_sampel != '' ? $request->noSampel : null;
-            $header->no_lhp           = $request->no_lhp != '' ? $request->no_lhp : null;
-            $header->id_kategori_2    = $request->kategori_2 != '' ? explode('-', $request->kategori_2)[0] : null;
-            $header->id_kategori_3    = $category != '' ? $category : null;
-            $header->no_qt            = $request->no_penawaran != '' ? $request->no_penawaran : null;
-            $header->parameter_uji    = ! empty($allParams) ? json_encode($allParams) : null;
-            $header->nama_pelanggan   = $request->nama_perusahaan != '' ? $request->nama_perusahaan : null;
-            $header->alamat_sampling  = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
-            $header->sub_kategori     = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
-            $header->deskripsi_titik  = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
-            $header->metode_sampling  = $request->metode_sampling ? $request->metode_sampling : null;
-            $header->tanggal_sampling = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
-            $header->nama_karyawan    = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
-            $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-            $header->regulasi         = $request->regulasi != null ? json_encode($request->regulasi) : null;
-            $header->regulasi_custom  = $request->regulasi_custom != null ? json_encode($request->regulasi_custom) : null;
-            $header->tanggal_lhp      = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
-            $header->save();
+            $keteranganRequest = $request->keterangan ?? [];
 
+            $keteranganHeader = collect($keteranganRequest)
+                ->filter(function ($value, $key) {
+                    return is_int($key); // hanya 0,1,2
+                })
+                ->values()
+                ->all();
+
+            $parameter                      = $request->parameter;
+            $header->no_order               = $request->no_order != '' ? $request->no_order : null;
+            $header->no_sampel              = $request->no_sampel != '' ? $request->noSampel : null;
+            $header->no_lhp                 = $request->no_lhp != '' ? $request->no_lhp : null;
+            $header->id_kategori_2          = $request->kategori_2 != '' ? explode('-', $request->kategori_2)[0] : null;
+            $header->id_kategori_3          = $category != '' ? $category : null;
+            $header->no_qt                  = $request->no_penawaran != '' ? $request->no_penawaran : null;
+            $header->parameter_uji          = ! empty($allParams) ? json_encode($allParams) : null;
+            $header->nama_pelanggan         = $request->nama_perusahaan != '' ? $request->nama_perusahaan : null;
+            $header->type_sampling          = $request->type_sampling != '' ? $request->type_sampling : null;
+            $header->tanggal_sampling       = $request->tanggal_tugas != '' ? $request->tanggal_tugas : null;
+            $header->tanggal_terima         = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
+            $header->tanggal_sampling_awal  = $request->tanggal_sampling_awal != '' ? $request->tanggal_sampling_awal : null;
+            $header->tanggal_sampling_akhir = $request->tanggal_sampling_akhir != '' ? $request->tanggal_sampling_akhir : null;
+            $header->tanggal_analisa_awal   = $request->tanggal_analisa_awal != '' ? $request->tanggal_analisa_awal : null;
+            $header->tanggal_analisa_akhir  = $request->tanggal_analisa_akhir != '' ? $request->tanggal_analisa_akhir : null;
+            $header->alamat_sampling        = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
+            $header->sub_kategori           = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
+            $header->deskripsi_titik        = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
+            $header->metode_sampling        = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
+            $header->tanggal_sampling       = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
+            $header->nama_karyawan          = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+            $header->jabatan_karyawan       = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+            $header->regulasi               = $request->regulasi != null ? json_encode($request->regulasi) : null;
+            $header->regulasi_custom        = $request->regulasi_custom != null ? json_encode($request->regulasi_custom) : null;
+            $header->tanggal_lhp            = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
+            $header->keterangan             = $request->keterangan != '' ? json_encode($keteranganHeader) : null;
+            $header->save();
+            
             $existingDetails = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             if ($existingDetails->isNotEmpty()) {
@@ -361,63 +444,99 @@ class DraftSwabTesController extends Controller
                 LhpsSwabTesDetail::where('id_header', $header->id)->delete();
             }
 
-            $hasilUji = $request->hasil_uji ?? [];
-            $satuan   = $request->satuan ?? [];
+            $parameter         = collect($request->parameter ?? []);
+            $hasilUji          = collect($request->hasil_uji ?? []);
+            $satuan            = collect($request->satuan ?? []);
+            $akreditasi        = collect($request->akreditasi ?? []);
+            $keterangan        = collect($request->lokasi_sampel ?? []);
+            $akr               = collect($request->akr ?? []);
+            $jenis_persyaratan = collect($request->jenis_persyaratan ?? []);
+            $bakumutu          = collect($request->bakumutu ?? []);
+            $methode           = collect($request->methode ?? []);
+            $tanggal_sampling  = collect($request->tanggal_sampling ?? []);
+            $nama_lab          = collect($request->nama_lab ?? []);
 
+            $detailGabungan = [];
 
-            foreach ($hasilUji as $noSampelKey => $paramResults) {
+            foreach ($hasilUji as $noSampelKey => $paramsHasil) {
 
-                $noSampelBersih = trim($noSampelKey, "'\"");
-                foreach ($paramResults as $paramNameKey => $nilaiUji) {
+                $noSampelKeyRaw = $noSampelKey;
 
-                    $paramNameBersih = trim($paramNameKey, "'\"");
-                    $nilaiUjiTrim    = trim($nilaiUji, "'\" \t\n\r\0\x0B");
+                $noSampelBersih = trim($noSampelKeyRaw, "'\"");
 
-                    $satuanParam = null;
-                    if (isset($satuan[$noSampelKey][$paramNameKey])) {
-                        $satuanParam = trim($satuan[$noSampelKey][$paramNameKey], "'\" \t\n\r\0\x0B");
-                    }
+                foreach ($paramsHasil as $paramNameKey => $nilaiHasil) {
+
+                    $paramNameKeyRaw = $paramNameKey;
+                    $paramNameBersih = trim($paramNameKeyRaw, "'\"");
+
+                    $detailGabungan[$noSampelBersih][$paramNameBersih] = [
+                        'hasil_uji'         => $nilaiHasil,
+                        'satuan'            => $satuan[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'akreditasi'        => $akreditasi[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'keterangan'        => $keterangan[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'akr'               => $akr[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'jenis_persyaratan' => $jenis_persyaratan[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'bakumutu'          => $bakumutu[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'tanggal_sampling'  => $tanggal_sampling[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'methode'           => $methode[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                        'nama_lab'          => $nama_lab[$noSampelKeyRaw][$paramNameKeyRaw] ?? null,
+                    ];
+                }
+            }
+
+            foreach ($detailGabungan as $noSampel => $paramResults) {
+                foreach ($paramResults as $paramName => $row) {
 
                     $detail            = new LhpsSwabTesDetail;
                     $detail->id_header = $header->id;
                     $detail->no_lhp    = $header->no_lhp;
-                    $detail->no_sampel = $noSampelBersih;  // <- pake yang BERSIH
-                    $detail->parameter = $paramNameBersih; // <- pake yang BERSIH
-                    $detail->hasil_uji = (string) $nilaiUjiTrim;
-                    $detail->satuan    = $satuanParam;
-                    $detail->save();
+                    $detail->no_sampel = $noSampel;
+                    $detail->parameter = $paramName;
 
+                    $detail->hasil_uji     = $this->cleanField($row['hasil_uji'] ?? null);
+                    $detail->parameter_lab = $this->cleanField($row['nama_lab'] ?? null);
+                    $detail->satuan        = $this->cleanField($row['satuan'] ?? null);
+                    $detail->akr           = $this->cleanField($row['akr'] ?? null);
+                    $detail->keterangan    = $this->cleanField($row['keterangan'] ?? null);
+
+                    $detail->baku_mutu = $this->cleanField($row['bakumutu'] ?? null);
+
+                    $detail->tanggal_sampling = $this->cleanField($row['tanggal_sampling'] ?? null);
+                    $detail->methode          = $this->cleanField($row['methode'] ?? null);
+
+                    $detail->save();
                 }
             }
-
-            // if ($header != null) {
-            //     $file_qr = new GenerateQrDocumentLhp;
-            //     $file_qr = $file_qr->insert('LHP_SWABTES', $header, $this->karyawan);
-            //     if ($file_qr) {
-            //         $header->file_qr = $file_qr;
-            //         $header->save();
-            //     }
-
-            //     $id_regulasii = explode('-', (json_decode($header->regulasi)[0]))[0];
-
-            //     $fileName = LhpTemplate::setDataDetail($detail)
-            //         ->setDataHeader($header)
-            //         ->setDataCustom($custom ?? [])
-            //         ->useLampiran(true)
-            //         ->whereView('DraftSwabTes')
-            //         ->render('downloadLHPFinal');
-
-            //     $header->file_lhp = $fileName;
-            //     $header->save();
-            // }
-
             DB::commit();
+
+            if ($header != null) {
+                $file_qr = new GenerateQrDocumentLhp;
+                $file_qr = $file_qr->insert('LHP_SWABTES', $header, $this->karyawan);
+                if ($file_qr) {
+                    $header->file_qr = $file_qr;
+                    $header->save();
+                }
+
+                $id_regulasii     = explode('-', (json_decode($header->regulasi)[0]))[0];
+                $detailCollection = LhpsSwabTesDetail::where('id_header', $header->id)->get();
+
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->useLampiran(true)
+                    ->whereView('DraftSwabTes')
+                    ->render('downloadLHPFinal');
+
+                $header->file_lhp = $fileName;
+                $header->save();
+            }
+
             return response()->json([
                 'message' => 'Data draft swab tes no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status'  => true,
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'status'  => false,
@@ -425,6 +544,17 @@ class DraftSwabTesController extends Controller
                 'file'    => $th->getFile(),
             ], 500);
         }
+    }
+
+    private function cleanField($value)
+    {
+        if (! isset($value)) {
+            return null;
+        }
+
+        $v = trim((string) $value, "'\" \t\n\r\0\x0B");
+
+        return $v === '' ? null : $v;
     }
 
     public function updateTanggalLhp(Request $request)
@@ -487,6 +617,197 @@ class DraftSwabTesController extends Controller
                 'status'  => false,
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
             ], 500);
+        }
+    }
+
+    public function handleApprove(Request $request, $isManual = true)
+    {
+        try {
+            if ($isManual) {
+                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+
+                if (! $konfirmasiLhp) {
+                    $konfirmasiLhp             = new KonfirmasiLhp();
+                    $konfirmasiLhp->created_by = $this->karyawan;
+                    $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                } else {
+                    $konfirmasiLhp->updated_by = $this->karyawan;
+                    $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                }
+
+                $konfirmasiLhp->no_lhp                      = $request->cfr;
+                $konfirmasiLhp->is_nama_perusahaan_sesuai   = $request->nama_perusahaan_sesuai;
+                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+                $konfirmasiLhp->is_no_sampel_sesuai         = $request->no_sampel_sesuai;
+                $konfirmasiLhp->is_no_lhp_sesuai            = $request->no_lhp_sesuai;
+                $konfirmasiLhp->is_regulasi_sesuai          = $request->regulasi_sesuai;
+                $konfirmasiLhp->is_qr_pengesahan_sesuai     = $request->qr_pengesahan_sesuai;
+                $konfirmasiLhp->is_tanggal_rilis_sesuai     = $request->tanggal_rilis_sesuai;
+
+                $konfirmasiLhp->save();
+            }
+
+            $data = LhpsSwabTesHeader::where('no_lhp', $request->cfr)
+                ->where('is_active', true)
+                ->first();
+
+            $noSampel = array_map('trim', explode(',', $request->noSampel));
+            $no_lhp   = $data->no_lhp;
+
+            $detail = LhpsSwabTesDetail::where('id_header', $data->id)->get();
+
+            $qr = QrDocument::where('id_document', $data->id)
+                ->where('type_document', 'LHP_SWAB_TES')
+                ->where('is_active', 1)
+                ->where('file', $data->file_qr)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($data != null) {
+                OrderDetail::where('cfr', $request->cfr)
+                    ->whereIn('no_sampel', $noSampel)
+                    ->where('is_active', true)
+                    ->update([
+                        'is_approve'  => 1,
+                        'status'      => 3,
+                        'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                        'approved_by' => $this->karyawan,
+                    ]);
+
+                $data->is_approve  = 1;
+                $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->approved_by = $this->karyawan;
+
+                HistoryAppReject::insert([
+                    'no_lhp'      => $data->no_lhp,
+                    'no_sampel'   => $request->noSampel,
+                    'kategori_2'  => $data->id_kategori_2,
+                    'kategori_3'  => $data->id_kategori_3,
+                    'menu'        => 'Draft SWAB TES',
+                    'status'      => 'approved',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan,
+                ]);
+
+                if ($qr != null) {
+                    $dataQr                     = json_decode($qr->data);
+                    $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
+                    $dataQr->Disahkan_Oleh      = $data->nama_karyawan;
+                    $dataQr->Jabatan            = $data->jabatan_karyawan;
+                    $qr->data                   = json_encode($dataQr);
+                    $qr->save();
+                }
+
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                $cekLink   = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
+
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                    $this->dispatch($job);
+                }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                // EmailLhpRilisHelpers::run([
+                //     'cfr'             => $request->cfr,
+                //     'no_order'        => $data->no_order,
+                //     'nama_pic_order'  => $orderHeader->nama_pic_order ?? '-',
+                //     'nama_perusahaan' => $data->nama_pelanggan,
+                //     'periode'         => $cekDetail->periode,
+                //     'karyawan'        => $this->karyawan,
+                // ]);
+
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'status'  => false,
+                ], 404);
+            }
+
+            DB::commit();
+            return response()->json([
+                'data'    => $data,
+                'status'  => true,
+                'message' => 'Data draft Kebisingan no LHP ' . $no_lhp . ' berhasil diapprove',
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            dd($th);
+            return response()->json([
+                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                'status'  => false,
+            ], 500);
+        }
+    }
+
+    public function handleReject(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+
+            $lhps = LhpsSwabTesHeader::where('id', $request->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($lhps) {
+                HistoryAppReject::insert([
+                    'no_lhp'      => $lhps->no_lhp,
+                    'no_sampel'   => $request->noSampel,
+                    'kategori_2'  => $lhps->id_kategori_2,
+                    'kategori_3'  => $lhps->id_kategori_3,
+                    'menu'        => 'Draft SWAB TES',
+                    'status'      => 'rejected',
+                    'rejected_at' => Carbon::now(),
+                    'rejected_by' => $this->karyawan,
+                ]);
+                // History Header Kebisingan
+                $lhpsHistory = $lhps->replicate();
+                $lhpsHistory->setTable((new LhpsSwabTesHeaderHistory())->getTable());
+                $lhpsHistory->created_at = $lhps->created_at;
+                $lhpsHistory->updated_at = $lhps->updated_at;
+                $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+                $lhpsHistory->deleted_by = $this->karyawan;
+                $lhpsHistory->save();
+
+                // History Detail Kebisingan
+                $oldDetails = LhpsSwabTesDetail::where('id_header', $lhps->id)->get();
+                foreach ($oldDetails as $detail) {
+                    $detailHistory = $detail->replicate();
+                    $detailHistory->setTable((new LhpsSwabTesDetailHistory())->getTable());
+                    $detailHistory->created_by = $this->karyawan;
+                    $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $detailHistory->save();
+                }
+
+                foreach ($oldDetails as $detail) {
+                    $detail->delete();
+                }
+
+                $lhps->delete();
+            }
+
+            $noSampel = array_map('trim', explode(",", $request->no_sampel));
+            OrderDetail::where('cfr', $request->no_lhp)
+                ->whereIn('no_sampel', $noSampel)
+                ->update([
+                    'status' => 1,
+                ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Data draft Swab Tes no LHP ' . $request->no_lhp . ' berhasil direject',
+            ], 201);
+        } catch (\Exception $th) {
+            DB::rollBack();
+            // dd($th);
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage() . ' On line ' . $th->getLine() . ' On File ' . $th->getFile(),
+            ], 401);
         }
     }
 

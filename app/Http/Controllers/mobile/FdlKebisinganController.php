@@ -66,7 +66,6 @@ class FdlKebisinganController extends Controller
     public function store(Request $request)
     {
         DB::beginTransaction();
-        // dd($request);
         try {
             $cek = DataLapanganKebisingan::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
             $nilai_array = [];
@@ -186,7 +185,7 @@ class FdlKebisinganController extends Controller
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
                 $orderDetail->save();
             }
 

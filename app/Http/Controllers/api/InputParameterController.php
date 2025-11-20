@@ -133,15 +133,21 @@ class InputParameterController extends Controller
             // Kumpulkan sampel berdasarkan kategori prioritas terlebih dahulu
             $priority_samples = [];
             $backup_samples = [];
+			$pm24_samples_excluded = [];
 
             foreach ($join as $key => $val) {
-                // Ambil parameter
+				// Ambil parameter
                 $param = !is_null(json_decode($val->parameter))
-                    ? array_map(function ($item) {
-                        return explode(';', $item)[1];
-                    }, json_decode($val->parameter, true))
-                    : [];
+					? array_map(function ($item) {
+						return explode(';', $item)[1];
+					}, json_decode($val->parameter, true))
+					: [];
 
+				$isOrderContainerPM24 = in_array('PM 10 (24 Jam)', $param) || in_array('PM10 (24 Jam)', $param) || in_array('PM2.5 (24 Jam)', $param) || in_array('PM 2.5 (24 Jam)', $param);
+				
+				if($stp->name == 'GRAVIMETRI' && $stp->sample->nama_kategori == 'Udara' && $isOrderContainerPM24 && $val->kategori_3 == '27-Udara Lingkungan Kerja'){
+					$pm24_samples_excluded[] = $val->no_sampel;
+				}
                 // Cek apakah ada parameter yang mengandung 'BOD'
                 $isBodExist = collect($param)->contains(function ($item) {
                     return Str::contains($item, 'BOD');
@@ -186,7 +192,7 @@ class InputParameterController extends Controller
                     // }
 
                     // --- PERUBAHAN PENTING: Hanya proses quota jika parameter ada dalam $quota dan tanggal request lebih besar atau sama dengan tanggal berlaku
-                    if (!in_array($stp->name, ['SUBKONTRAK','OTHER']) && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
+                    if (!in_array($stp->name, ['SUBKONTRAK','OTHER','Other']) && isset($quota[$p]) && $tglRequest >= $tglBerlaku) {
                         // Pastikan struktur quota_count ada
                         if (!$quota_count->has($request->id_stp)) {
                             $quota_count->put($request->id_stp, collect());
@@ -248,7 +254,7 @@ class InputParameterController extends Controller
                         $row[$p] = $val->no_sampel;
 
                         // Untuk SUBKONTRAK juga langsung tampilkan
-                        if (in_array($stp->name, ['SUBKONTRAK','OTHER'])) {
+                        if (in_array($stp->name, ['SUBKONTRAK','OTHER','Other'])) {
                             $row[$p] = $val->no_sampel;
                         }
                     }
@@ -499,6 +505,9 @@ class InputParameterController extends Controller
                     ->get();
 				// dump($select);
                 foreach($select as $k => $parameter) {
+					if($parameter == 'PM 10 (24 Jam)' || $parameter == 'PM 2.5 (24 Jam)') {
+						$tes[$k] = array_values(array_diff($tes[$k], $pm24_samples_excluded));
+					}
                     // Get data for Linghidup
                     $linghidupData = LingkunganHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
@@ -3138,7 +3147,7 @@ class InputParameterController extends Controller
 				];
 			}
 
-			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329];
+			$saveShift = [246, 247, 248, 249, 289, 290, 291, 293, 294, 295, 296, 299, 300, 326, 327, 328, 329, 308];
 			DB::beginTransaction();
 			try {
 				$data = new LingkunganHeader;
