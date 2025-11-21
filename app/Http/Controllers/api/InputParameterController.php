@@ -1059,6 +1059,7 @@ class InputParameterController extends Controller
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
 					$result = self::HelperColorimetri($request, $stp, $repo_quota);
+
 					if($result->status == 200){
 						return response()->json([
 							'message'=> $result->message,
@@ -2486,7 +2487,7 @@ class InputParameterController extends Controller
 				}else{
 					$hp = $request->hp;
 				}
-
+				
 				$data_kalkulasi = AnalystFormula::where('function', $function)
 					->where('data', $data_parsing)
 					->where('id_parameter', $data_parameter->id)
