@@ -701,7 +701,7 @@
                     </table>
             </div>
             <div class="risk-table">
-                <p>Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</p>
+                <p>Tabel Acuan Skor Risiko dan Tindakan Perbaikan<sup>**</sup></p>
                 <table>
                     <thead>
                         <tr>
