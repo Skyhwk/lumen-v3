@@ -218,6 +218,7 @@ class TemplateLhpErgonomi
                 "lama_kerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->lama_kerja : '-',
                 "jenis_kelamin" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->jenis_kelamin : '-',
                 "aktivitas_ukur" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas_ukur :'-',
+                "divisi" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->divisi :'-',
                 "aktivitas" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas :'-',
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
