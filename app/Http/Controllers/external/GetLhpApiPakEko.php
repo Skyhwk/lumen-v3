@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\external;
 
 use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
+use Laravel\Lumen\Routing\Controller as BaseController;
 
-class GetLhpApiPakEko extends Controller
+class GetLhpApiPakEko extends BaseController
 {
     public function getLHP(Request $request){
         $key = $request->header('key');
