@@ -585,7 +585,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
                     ]);
                 } else if ($request->data_type == 'microbio') {
-                    // Update data for 'direct'
                     $data = MicrobioHeader::where('id', $request->id)->update([
                         'is_approve'   => 0,
                         'notes_reject' => $request->note,
