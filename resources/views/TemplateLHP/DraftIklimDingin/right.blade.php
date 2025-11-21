@@ -10,12 +10,12 @@
                     <tr>
                         <td class="custom" width="33%">No. LHP</td>
                         <td class="custom" width="33%">JENIS SAMPEL</td>
-                        <td class="custom" width="33%">Iklim Kerja Dingin (IKD)</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
                         <td class="custom">Lingkungan Kerja</td>
-                        <td class="custom">Iklim Kerja</td>
+                        <td class="custom">Iklim Kerja Dingin (IKD)</td>
                     </tr>
                 </table>
             </td>
