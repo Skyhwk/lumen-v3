@@ -19,7 +19,7 @@ class MicrobiologiUdara
 
             foreach ($data->jumlah_coloni as $key => $value) {
                 if($data->volume[$key] <= 0){
-                    $rumus = 0;
+                    $rumus = $value / 1;
                 } else {
                     $rumus = $value / $data->volume[$key];
                 }
