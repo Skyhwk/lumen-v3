@@ -329,9 +329,9 @@
             <table class="skor-table">
                 <tr>
                     <td width="40%" class="text-center font-bold">Skor Section D (Section B & Section C)</td>
-                    <td width="8%" rowspan="2" class="no-border text-center" style="font-size: 14pt;"></td>
+                    <td width="8%" rowspan="2" class="no-border text-center" style="font-size: 14pt; border:none;"></td>
                     <td width="27%" class="text-center font-bold">Skor ROSA</td>
-                    <td width="8%" rowspan="2" class="no-border text-center" style="font-size: 14pt;">→</td>
+                    <td width="8%" rowspan="2" class="no-border text-center" style="font-size: 14pt; border:none;">→</td>
                     <td width="17%" rowspan="2" class="text-center font-bold" style="font-size: 12pt;">{{$pengukuran->final_skor_rosa}}</td>
                 </tr>
                 <tr>
