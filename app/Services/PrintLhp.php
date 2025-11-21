@@ -183,12 +183,7 @@ class PrintLhp
         // $dataDecode = json_decode($data);
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
-
-        // $orderDetail = OrderDetail::where('no_sampel', $no_sampel)->first();
-
-        // $kategori = explode('-', $orderDetail->kategori_2)[0];
         foreach ($data as $key => $value) {
-            // $parameter = Parameter::where('nama_lab', $value)->where('id_kategori', $kategori)->first();
             if ($value->akr != 'ẍ') {
                 $parameterAkreditasi++;
             } else {
@@ -196,12 +191,11 @@ class PrintLhp
             }
         }
         $total = count($data);
-        // dd($total);
         if ($parameterAkreditasi == 0) {
             return false;
         }
 
-        if ($total / $parameterAkreditasi >= 0.6) {
+        if ($parameterAkreditasi / $total >= 0.6) {
             return true;
         } else {
             return false;
