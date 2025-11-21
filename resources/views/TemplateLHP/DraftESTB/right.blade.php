@@ -202,6 +202,8 @@
                                 }
                             } elseif (Str::contains(strtolower($v), 'partikulat')) {
                                 $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
+                            } elseif (Str::contains(strtolower($v), 'NO2') || Str::contains(strtolower($v), 'SO2')) {
+                                $bagian_khusus = 'khusus untuk Nitrogen Oksida (NO2) dan Sulfur Dioksida (SO2)';
                             }
                         }
 
