@@ -65,6 +65,32 @@ class PlanktonController extends Controller
         ->make(true);
     }
 
+    public function approveData(Request $request){
+        DB::beginTransaction();
+        try {
+            $data = Subkontrak::where('id', $request->id)->first();
+            $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->approved_by = $this->karyawan;
+            $data->is_approve = 1;
+            $data->save();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                "success" => true,
+                'message' => 'Data colorimetri no sample ' . $data->no_sampel . ' berhasil disetujui .!'
+            ],200);
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan! ' . $th->getMessage()
+            ],401);
+        }
+    }
+
     public function deleteData(Request $request){
         DB::beginTransaction();
         try {
