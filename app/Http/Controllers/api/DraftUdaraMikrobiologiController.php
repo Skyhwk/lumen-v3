@@ -573,10 +573,10 @@ class DraftUdaraMikrobiologiController extends Controller
                     $detail->save();
                 }
             }
-            $dataPage1     = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
-            $groupedByPage = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())
-                ->groupBy('page')
-                ->toArray();
+            // $dataPage1     = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
+            // $groupedByPage = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())
+            //     ->groupBy('page')
+            //     ->toArray();
 
             if ($header != null) {
                 $file_qr = new GenerateQrDocumentLhp;
@@ -600,7 +600,7 @@ class DraftUdaraMikrobiologiController extends Controller
             }
             DB::commit();
             return response()->json([
-                'message' => 'Data draft swab tes no LHP ' . $request->no_lhp . ' berhasil disimpan',
+                'message' => 'Data draft Microbio no LHP ' . $request->no_lhp . ' berhasil disimpan',
                 'status'  => true,
             ], 201);
         } catch (\Exception $th) {
@@ -756,13 +756,13 @@ class DraftUdaraMikrobiologiController extends Controller
                 $konfirmasiLhp->save();
             }
 
-            $data = LhpsPencahayaanHeader::where('no_lhp', $request->no_lhp)
+            $data = LhpsMicrobiologiHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
             $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp   = $data->no_lhp;
 
-            $detail = LhpsPencahayaanDetail::where('id_header', $data->id)->get();
+            $detail = LhpsMicrobiologiDetail::where('id_header', $data->id)->get();
 
             $qr = QrDocument::where('id_document', $data->id)
                 ->where('type_document', 'LHP_MIKROBIOLOGI')
@@ -792,7 +792,7 @@ class DraftUdaraMikrobiologiController extends Controller
                     'no_sampel'   => $request->noSampel,
                     'kategori_2'  => $data->id_kategori_2,
                     'kategori_3'  => $data->id_kategori_3,
-                    'menu'        => 'Draft Udara',
+                    'menu'        => 'Draft Microbio',
                     'status'      => 'approved',
                     'approved_at' => Carbon::now(),
                     'approved_by' => $this->karyawan,
@@ -839,7 +839,7 @@ class DraftUdaraMikrobiologiController extends Controller
             return response()->json([
                 'data'    => $data,
                 'status'  => true,
-                'message' => 'Data draft LHP Pencahayaan no LHP ' . $no_lhp . ' berhasil diapprove',
+                'message' => 'Data draft LHP Microbiologi no LHP ' . $no_lhp . ' berhasil diapprove',
 
             ], 201);
         } catch (\Exception $th) {
@@ -920,7 +920,7 @@ class DraftUdaraMikrobiologiController extends Controller
             DB::commit();
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Data draft Pencahayaan no LHP ' . ($no_lhp ?? '-') . ' berhasil direject',
+                'message' => 'Data draft Microbio no LHP ' . ($no_lhp ?? '-') . ' berhasil direject',
             ]);
         } catch (\Exception $th) {
             DB::rollBack();
