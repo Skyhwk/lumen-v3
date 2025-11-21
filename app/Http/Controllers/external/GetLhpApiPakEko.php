@@ -4,6 +4,7 @@ namespace App\Http\Controllers\external;
 
 use Illuminate\Http\Request;
 use Laravel\Lumen\Routing\Controller as BaseController;
+use Illuminate\Support\Facades\Http;
 
 class GetLhpApiPakEko extends BaseController
 {
