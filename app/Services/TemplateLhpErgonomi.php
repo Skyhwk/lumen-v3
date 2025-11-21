@@ -112,7 +112,7 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lapangan->lama_kerja,
+                "lama_kerja" => $dataRwl->lama_kerja,
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
                 "aktivitas" => $dataRwl->aktivita,
@@ -134,7 +134,6 @@ class TemplateLhpErgonomi
 
     public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     { 
-        
         try {
             $mpdfConfig = [
                 'mode' => 'utf-8',
@@ -299,7 +298,7 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataReba->no_sampel,
                 "nama_pekerja" => $dataReba->nama_pekerja,
                 "usia" => $dataReba->usia,
-                "lama_kerja" => $dataReba->lapangan->lama_kerja,
+                "lama_kerja" => $dataReba->lama_kerja,
                 "jenis_kelamin" => $dataReba->jenis_kelamin,
                 "aktivitas_ukur" => $dataReba->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
