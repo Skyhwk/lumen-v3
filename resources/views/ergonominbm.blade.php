@@ -354,7 +354,7 @@
 <body>
     <div class="content-container clearfix" >
         <div class="left-section">
-            
+            <div class="section-title">A.KELELAHAN SISTEM MUSCULOSKETAL</div>
                 <table>
                     <thead>
                         <tr>
@@ -575,14 +575,12 @@
                             </td>
                             <td colspan="8" height="40">
                                 Berdasarkan total Skor kelelahan sebelum berkerja yaitu {{$pengukuran->sebelum->total_skor}}. <br>
-                                Berdasarkan total Skor kelelahan setelah berkerja yaitu {{$pengukuran->setelah->total_skor}}. 
+                                Sedangkan total Skor kelelahan setelah berkerja yaitu {{$pengukuran->setelah->total_skor}}. 
                             </td>
                         </tr>
 
                     </tbody>
                 </table>
-
-
             <div class="section-title" style="margin-top: 15px;">B. KELUHAN SUBJEKTIF</div>
             <table>
                 <thead>
@@ -609,9 +607,9 @@
                     <tr>
                      <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
                      <td colspan="3" height="40">
-                        Skor NBM setelah bekerja: {{$pengukuran->setelah->total_skor}}.
-                        Tingkat risiko: {{$pengukuran->setelah->tingkat_risiko}} ({{$pengukuran->setelah->kategori_risiko}})
-                        Tindakan perbaikan: {{$pengukuran->setelah->tindakan_perbaikan}}.
+                        Berdasarkan hasil analisa yang telah dilakukan, didapatkan skor NBM setelah bekerja yaitu {{$pengukuran->setelah->total_skor}}. <br>
+                        Hasil skor tersebut masuk dalam tingkat resiko {{$pengukuran->setelah->tingkat_risiko}} dengan kategori resiko {{$pengukuran->setelah->kategori_risiko}}.<br>
+                        Sehingga {{$pengukuran->setelah->tindakan_perbaikan}}.
                      </td>
                     </tr>
                 </tbody>
@@ -630,6 +628,7 @@
             
         </div>
         <div class="right-section">
+            <div class="section-title">&nbsp;</div>
             <div>
                 <table>
                     <thead>
@@ -695,11 +694,6 @@
                             <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
                         </tr>
                         <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
-                        </tr>
-                        <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
@@ -707,7 +701,7 @@
                     </table>
             </div>
             <div class="risk-table">
-                <p>**Tabel Acuan Skor Risiko dan Tindakan Perbaikan</p>
+                <p>Tabel Acuan Skor Risiko dan Tindakan Perbaikan<sup>**</sup></p>
                 <table>
                     <thead>
                         <tr>

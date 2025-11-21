@@ -245,18 +245,17 @@
                     <th colspan="4" width="62%">Skor Section A</th>
                 </tr>
                 <tr>
-                    <td class="text-center">Section A</td>
-                    <td class="text-center">Durasi</td>
+                    <td  colspan=2 class="text-center">Section A</td>
+                    <td class="text-center" width="40">Durasi</td>
                     <td class="text-center">Total (Section A + Durasi)</td>
-                    <td class="text-center">Skor Section A</td>
                 </tr>
                 <tr>
                     <td class="text-center">1.</td>
                     <td>Tinggi Kursi & Lebar Kursi</td>
                     <td class="text-center">{{$pengukuran->skor_total_tinggi_kursi_dan_lebar_dudukan}}</td>
+                    <td rowspan="2" class="text-center">{{$pengukuran->total_section_a}}</td>
                     <td rowspan="2" class="text-center">{{$pengukuran->skor_durasi_kerja_bagian_kursi}}</td>
                     <td rowspan="2" class="text-center">{{($pengukuran->total_section_a + $pengukuran->skor_durasi_kerja_bagian_kursi)}}</td>
-                    <td rowspan="2" class="text-center">{{$pengukuran->total_section_a}}</td>
                 </tr>
                 <tr>
                     <td class="text-center">2.</td>
@@ -438,7 +437,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                            <td style="text-align:start;">{{$personal->divisi}}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
