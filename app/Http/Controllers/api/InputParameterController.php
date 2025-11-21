@@ -3914,7 +3914,7 @@ class InputParameterController extends Controller
 					$volume_shift = json_encode($volume);
 				}
                 if(isset($request->jumlah_coloni)){
-                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
+                    $data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
                 }
 				if(!is_null($swab)){
 					$header->luas = $luas;
