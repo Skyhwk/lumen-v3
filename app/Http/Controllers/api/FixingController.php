@@ -9,6 +9,7 @@ use App\Models\ExpiredLink;
 use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\GenerateLink;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -244,11 +245,10 @@ class FixingController extends Controller
 
     public function generateToken(Request $request)
     {
-
-        if (! $request->token) {
+        $token = $request['token']['token'];
+        if (!$token) {
             return response()->json(['message' => 'Token not found.!', 'status' => '404'], 401);
         }
-        $token       = $request->token;
         $expired     = Carbon::now()->addMonths(3)->format('Y-m-d');
         $get_expired = DB::table('expired_link_quotation')
             ->where('token', $token)
