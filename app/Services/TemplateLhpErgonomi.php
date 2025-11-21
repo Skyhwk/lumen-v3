@@ -3,7 +3,7 @@ namespace App\Services;
 
 use \Mpdf\Mpdf as PDF;
 use Illuminate\Support\Facades\View;
-use App\Models\{DataLapanganErgonomi,WsValueErgonomi};
+use App\Models\{DataLapanganErgonomi};
 use Carbon\Carbon;
 use App\Helpers\Helper;
 
@@ -20,7 +20,7 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 5,
             ];
-            $dataRula = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
+            $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
             ->first();
             
@@ -58,12 +58,12 @@ class TemplateLhpErgonomi
             
             $personal = (object) [
                 "no_sampel" => $dataRula->no_sampel,
-                "nama_pekerja" => isset($dataRula->lapangan) ? $dataRula->lapangan->nama_pekerja : '-',
-                "usia" => isset($dataRula->lapangan) ? $dataRula->lapangan->usia : '-',
-                "lama_kerja" => isset($dataRula->lapangan) ? $dataRula->lapangan->lama_kerja : '-',
-                "jenis_kelamin" => isset($dataRula->lapangan) ? $dataRula->lapangan->jenis_kelamin : '-',
-                "aktivitas_ukur" => isset($dataRula->lapangan) ? $dataRula->lapangan->aktivitas_ukur : '-',
-                "aktivitas" => isset($dataRula->lapangan) ? $dataRula->lapangan->aktivitas :'-',
+                "nama_pekerja" => $dataRula->nama_pekerja,
+                "usia" => $dataRula->usia,
+                "lama_kerja" => $dataRula->lama_kerja,
+                "jenis_kelamin" => $dataRula->jenis_kelamin,
+                "aktivitas_ukur" => $dataRula->aktivitas_ukur,
+                "aktivitas" => $dataRula->aktivita,
                 "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
@@ -94,7 +94,7 @@ class TemplateLhpErgonomi
                 'margin_top' => 5,
                 'margin_bottom' => 15,
             ];
-            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 5)
                 ->first();
             // $pengukuran = json_decode($dataRwl->pengukuran);
@@ -110,14 +110,12 @@ class TemplateLhpErgonomi
             $pengukuran->berat_beban = $dataRwl->berat_beban;
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
-                "nama_pekerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->nama_pekerja : '-',
-                "usia" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->usia : '-',
-                "lama_kerja" => isset($dataRwl->lapangan->lama_kerja) 
-                    ? implode(', ', (array)json_decode($dataRwl->lapangan->lama_kerja)) 
-                    : '-',
-                "jenis_kelamin" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->jenis_kelamin : '-',
-                "aktivitas_ukur" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas_ukur :'-',
-                "aktivitas" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas :'-',
+                "nama_pekerja" => $dataRwl->nama_pekerja,
+                "usia" => $dataRwl->usia,
+                "lama_kerja" => $dataRwl->lapangan->lama_kerja,
+                "jenis_kelamin" => $dataRwl->jenis_kelamin,
+                "aktivitas_ukur" => $dataRwl->aktivitas_uku,
+                "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
@@ -148,11 +146,11 @@ class TemplateLhpErgonomi
             ];
             
             // olah data:
-            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
                 ->first();
 
-            // $ws_ergo = WsValueErgonomi::where('id_data_lapangan', $data->id)->first();
+            // $ws_ergo = DataLapanganErgonomi::where('id_data_lapangan', $data->id)->first();
             // if($ws_ergo){
             //     $dataRwl->pengukuran = $ws_ergo->pengukuran;
             //     $dataRwl->sebelum_kerja = $ws_ergo->sebelum_kerja;
@@ -213,13 +211,13 @@ class TemplateLhpErgonomi
            
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
-                "nama_pekerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->nama_pekerja : '-',
-                "usia" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->usia : '-',
-                "lama_kerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->lama_kerja : '-',
-                "jenis_kelamin" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->jenis_kelamin : '-',
-                "aktivitas_ukur" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas_ukur :'-',
-                "divisi" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->divisi :'-',
-                "aktivitas" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas :'-',
+                "nama_pekerja" => $dataRwl->nama_pekerja,
+                "usia" => $dataRwl->usia,
+                "lama_kerja" => $dataRwl->lama_kerja,
+                "jenis_kelamin" => $dataRwl->jenis_kelamin,
+                "aktivitas_ukur" => $dataRwl->aktivitas_uku,
+                "divisi" => $dataRwl->divisi,
+                "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
@@ -252,7 +250,7 @@ class TemplateLhpErgonomi
                 // 'margin_footer' => 5,
             ];
     
-            $dataReba = WsValueErgonomi::with(['detail','lapangan'])
+            $dataReba = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 2)
                 ->first();
@@ -299,20 +297,18 @@ class TemplateLhpErgonomi
             $pengukuran->result = $result;
             $personal = (object) [
                 "no_sampel" => $dataReba->no_sampel,
-                "nama_pekerja" => isset($dataReba->lapangan) ? $dataReba->lapangan->nama_pekerja : '-',
-                "usia" => isset($dataReba->lapangan) ? $dataReba->lapangan->usia : '-',
-                "lama_kerja" => isset($dataReba->lapangan->lama_kerja) 
-                    ? implode(', ', (array)json_decode($dataReba->lapangan->lama_kerja)) 
-                    : '-',
-                "jenis_kelamin" => isset($dataReba->lapangan) ? $dataReba->lapangan->jenis_kelamin : '-',
-                "aktivitas_ukur" => isset($dataReba->lapangan) ? $dataReba->lapangan->aktivitas_ukur : '-',
-                "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : '-',
-                "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : '-',
+                "nama_pekerja" => $dataReba->nama_pekerja,
+                "usia" => $dataReba->usia,
+                "lama_kerja" => $dataReba->lapangan->lama_kerja,
+                "jenis_kelamin" => $dataReba->jenis_kelamin,
+                "aktivitas_ukur" => $dataReba->aktivitas_ukur,
+                "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataReba->detail) ? Carbon::parse($dataReba->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
-                "no_lhp" => isset($dataReba->detail) ? $dataReba->detail->cfr : '-',
-                "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : '-',
+                "no_lhp" => isset($dataReba->detail) ? $dataReba->detail->cfr : null,
+                "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : null,
                 "periode_analisis" => '-',
-                "deskripsi_pekerjaan" => isset($dataReba->lapangan) ? $dataReba->lapangan->aktivitas_ukur :'-'
+                "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
             ];
 
             
@@ -342,7 +338,7 @@ class TemplateLhpErgonomi
                 // 'margin_footer' => 5,
             ];
     
-            $dataRosa = WsValueErgonomi::with(['detail','lapangan'])
+            $dataRosa = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 4)
                 ->first();
@@ -376,19 +372,18 @@ class TemplateLhpErgonomi
             $pengukuran->tindakan = $tindakan;
             $pengukuran->result = $result;
             $personal = (object) [
-                "no_lhp" => isset($dataRosa->detail) ? $dataRosa->detail->cfr : '-',
+                "no_lhp" => isset($dataRosa->detail) ? $dataRosa->detail->cfr : null,
                 "no_sampel" => $dataRosa->no_sampel,
-                "jenis_sampel" => isset($dataRosa->detail) ? explode('-', $dataRosa->detail->kategori_3)[1] : '-',
-                "nama_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->nama_perusahaan : '-',
-                "alamat_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->alamat_perusahaan : '-',
+                "jenis_sampel" => isset($dataRosa->detail) ? explode('-', $dataRosa->detail->kategori_3)[1] : null,
+                "nama_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->nama_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRosa->detail) ? Carbon::parse($dataRosa->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "periode_analisis" => '-',
-                "nama_pekerja" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->nama_pekerja : '-',
-                "aktivitas_ukur" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->aktivitas_ukur : '-',
-                "usia" => isset($dataRosa->lapangan) ? $dataRosa->lapangan->usia : '-',
-                "lama_kerja" => isset($dataRosa->lapangan->lama_kerja) 
-                    ? implode(', ', (array)json_decode($dataRosa->lapangan->lama_kerja)) 
-                    : '-',
+                "nama_pekerja" => $dataRosa->nama_pekerja,
+                "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
+                "usia" => $dataRosa->usia,
+                "lama_kerja" => $dataRosa->lama_kerja,
+                "divisi" => $dataRosa->divisi,
             ];
             
             $pdf = new PDF($mpdfConfig);
@@ -437,7 +432,7 @@ class TemplateLhpErgonomi
             ];
     
             $pdf = new PDF($mpdfConfig);
-            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel',$data->no_sampel)
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
                 ->where('method', 8)
                 ->first();
             $personal = (object) [
@@ -493,7 +488,7 @@ class TemplateLhpErgonomi
             ];
     
             $pdf = new PDF($mpdfConfig);
-            $dataRwl = WsValueErgonomi::with(['detail','lapangan'])->where('no_sampel', $data->no_sampel)
+            $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 7)
                 ->first();
     
@@ -504,22 +499,18 @@ class TemplateLhpErgonomi
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
-                "nama_pekerja" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->nama_pekerja : '-',
-                "usia" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->usia : '-',
-                "lama_kerja" => isset($dataRwl->lapangan->lama_kerja) 
-                    ? implode(', ', (array)json_decode($dataRwl->lapangan->lama_kerja)) 
-                    : '-',
-                "jenis_kelamin" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->jenis_kelamin : '-',
-                "aktivitas_ukur" => isset($dataRwl->lapangan) ? $dataRwl->lapangan->aktivitas_ukur : '-',
+                "nama_pekerja" => $dataRwl->nama_pekerja,
+                "usia" => $dataRwl->usia,
+                "lama_kerja" => $dataRwl->lama_kerja,
+                "jenis_kelamin" => $dataRwl->jenis_kelamin,
+                "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
-                'jabatan' =>isset($dataRwl->lapangan) ? $dataRwl->lapangan->divisi : '-',
-                'aktifitas_k3' =>isset($dataRwl->lapangan->input_k3) 
-                    ? implode(', ', (array)json_decode($dataRwl->lapangan->input_k3)) 
-                    : '-'
+                'jabatan' =>$dataRwl->divisi,
+                'aktifitas_k3' =>json_decode($dataRwl->input_k3)
             ];
 
             

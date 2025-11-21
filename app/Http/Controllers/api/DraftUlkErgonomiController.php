@@ -1792,9 +1792,9 @@ class DraftUlkErgonomiController extends Controller
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
-            $dataLHP = WsValueErgonomi::with(['detail'])
+            $dataLHP = DataLapanganErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
-            if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
+            if($pdfFile->file_qr == null || $pdfFile->file_qr == ''){
                 $dataQr =(object)[
                     'id' => $saveFilePDF->id,
                     'no_lhp' => $dataLHP->detail->cfr,
@@ -2648,15 +2648,48 @@ class DraftUlkErgonomiController extends Controller
                                 </table>';
                             break;
                     case 'lhp':
-                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
-                                <tr>
-                                    <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
-                                    </td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
-                                    </td>
-                                <tr>
-                                </table>';
+                        // $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                        //         <tr>
+                        //             <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                        //             </td>
+                        //             <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                        //             <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                        //             </td>
+                        //         <tr>
+                        //         </table>';
+                        $noSampelAkre = OrderDetail::where('no_sampel',$noSampel)->first();
+                        $decodeParameterNya =json_decode($noSampelAkre->parameter,true);
+                        $idParameterAkre =explode(';',$decodeParameterNya[0])[0];
+                        $akreditasiKan = Parameter::where('id', $idParameterAkre)->where('status', "AKREDITASI")->where('is_active', true)->first();
+
+                        if($akreditasiKan === null){
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                    <tr>
+                                        <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                            <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                        <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
+                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                        </td>
+                                        <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                        </td>
+                                    </tr>
+                                     </table>';
+                        }else{
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                    <tr>
+                                        <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                            <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                        <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
+                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                        </td>
+                                        <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                            <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                    </tr>
+                                     </table>';
+                        }
                             break;
                     case 'lhp_digital':
                         /* chek akreditasi */
@@ -2783,7 +2816,7 @@ class DraftUlkErgonomiController extends Controller
                 // Tulis semua konten HTML
                 foreach ($methodsToCombine as $methodName => $methodId) {
                     // Ambil data untuk setiap metode dan no_sampel yang diminta
-                    $dataMethod = WsValueErgonomi::with(['detail'])
+                    $dataMethod = DataLapanganErgonomi::with(['detail'])
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();
