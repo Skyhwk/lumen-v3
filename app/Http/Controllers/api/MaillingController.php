@@ -32,7 +32,7 @@ class MaillingController extends Controller
             ]);
     
             if ($validator->fails()) {
-                return response()->json(['message' => "Data tidak boleh kosong"], 401);
+                return response()->json(['message' => $validator->fails()], 401);
             }
             
             $to = $request->input('to');

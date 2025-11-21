@@ -2783,7 +2783,7 @@ class DraftUlkErgonomiController extends Controller
                 // Tulis semua konten HTML
                 foreach ($methodsToCombine as $methodName => $methodId) {
                     // Ambil data untuk setiap metode dan no_sampel yang diminta
-                    $dataMethod = DataLapanganErgonomi::with(['detail'])
+                    $dataMethod = WsValueErgonomi::with(['detail'])
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();

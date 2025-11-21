@@ -555,7 +555,7 @@ class FdlLingkunganHidupController extends Controller
                     }
                     
                     $shift2 = $request->shift_pengambilan;
-                    if ($request->kateg_uji[$in] == null || $request->kateg_uji[$in] == '') {
+                    if ($request->kateg_uji[$in] == null || $request->kateg_uji[$in] == '' || $request->kateg_uji[$in] == 0) {
                         $shift_peng = 'Sesaat';
                         $shift2 = 'Sesaat';
                     } else if ($request->kateg_uji[$in] == '24 Jam') {

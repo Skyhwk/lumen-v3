@@ -40,8 +40,9 @@ class DustFall {
 		$w2 = $data->w2;
 		$w1 = $data->w1;
 		$vl = $data->vl;
-		$a = $data->a;
-		$t = $data->t;
+		$a = $data->average_luas_botol;
+		$t = $data->selisih_hari;
+        // C13 (Ton/Km²/Bulan) = (((W2-W1)*30*V)/(A*T*0.250))
 		$rumus = number_format(((($w2-$w1) * 30 * $vl) / ($a * $t * 0.250)), 4);
 
         $satuan = "Ton/Km²/Bulan";

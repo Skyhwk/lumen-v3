@@ -158,6 +158,11 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
     }
 
+    public function lhps_emisi_isokinetik()
+    {
+        return $this->belongsTo(LhpsEmisiIsokinetikHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiIsokinetikDetail', 'lhpsEmisiIsokinetikCustom')->where('is_active', true);
+    }
+
     public function lingkunganHeader()
     {
         return $this->belongsTo(LingkunganHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
