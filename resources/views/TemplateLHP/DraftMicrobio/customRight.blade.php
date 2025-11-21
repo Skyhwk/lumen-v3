@@ -1,8 +1,9 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
-
-    $detailData = is_object($detail) && method_exists($detail, 'toArray') ? $detail->toArray() : (array) $detail;
+    use App\Models\LhpsMicrobiologiDetail;
+    $custom = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', $page)->get();
+    $detailData = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
 
     $detailData = collect($detailData)->map(fn($r) => (array) $r);
 
@@ -133,7 +134,7 @@
 
                                     @php
                                         $methode = '-';
-                                        foreach ($detail as $row) {
+                                        foreach ($custom as $row) {
                                             if ($row['parameter'] === $p) {
                                                 $methode = $row['methode'];
                                                 break;
@@ -182,7 +183,7 @@
 
                                     @php
                                         $methode = '-';
-                                        foreach ($detail as $row) {
+                                        foreach ($custom as $row) {
                                             if ($row['parameter'] === $p) {
                                                 $methode = $row['methode'];
                                                 $methode_suhu = $row['methode_suhu'];
@@ -255,7 +256,7 @@
 
                                     @php
                                         $methode = '-';
-                                        foreach ($detail as $row) {
+                                        foreach ($custom as $row) {
                                             if ($row['parameter'] === $p) {
                                                 $methode = $row['methode'];
                                                 break;
@@ -300,7 +301,7 @@
                 @if (!empty($header->regulasi))
                 
                     @foreach (json_decode($header->regulasi) as $i => $y)
-                        @if($i === 0)
+                        @if($i === ($page - 1))
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ explode('-',$y)[1] }}</strong></td>
@@ -326,8 +327,8 @@
 
                 @php
                     $temptArrayPush = [];
-                    if (!empty($detail)) {
-                        foreach ($detail as $v) {
+                    if (!empty($custom)) {
+                        foreach ($custom as $v) {
                             if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
                                 $temptArrayPush[] = $v['akr'];
                             }
