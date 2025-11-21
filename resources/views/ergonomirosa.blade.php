@@ -253,9 +253,9 @@
                     <td class="text-center">1.</td>
                     <td>Tinggi Kursi & Lebar Kursi</td>
                     <td class="text-center">{{$pengukuran->skor_total_tinggi_kursi_dan_lebar_dudukan}}</td>
-                    <td rowspan="2" class="text-center">{{$pengukuran->total_section_a}}</td>
-                    <td rowspan="2" class="text-center">{{$pengukuran->skor_durasi_kerja_bagian_kursi}}</td>
-                    <td rowspan="2" class="text-center">{{($pengukuran->total_section_a + $pengukuran->skor_durasi_kerja_bagian_kursi)}}</td>
+                    <td rowspan="2" class="text-center">{{$pengukuran->total_skor_a}}</td>
+                    <td rowspan="2" class="text-center">{{$pengukuran->skor_durasi_tinggi_kursi}}</td>
+                    <td rowspan="2" class="text-center">{{($pengukuran->total_skor_a + $pengukuran->skor_durasi_tinggi_kursi)}}</td>
                 </tr>
                 <tr>
                     <td class="text-center">2.</td>
@@ -282,15 +282,15 @@
                     <td>Monitor</td>
                     <td class="text-center">{{$pengukuran->skor_monitor}}</td>
                     <td class="text-center">{{$pengukuran->skor_durasi_kerja_monitor}}</td>
-                    <td class="text-center">{{($pengukuran->total_section_b + $pengukuran->skor_durasi_kerja_monitor + $pengukuran->skor_durasi_kerja_telepon )}}</td>
-                    <td rowspan="2" class="text-center">{{$pengukuran->total_section_b}}</td>
+                    <td class="text-center">{{($pengukuran->total_skor_b + $pengukuran->skor_durasi_kerja_monitor + $pengukuran->skor_durasi_kerja_telepon )}}</td>
+                    <td rowspan="2" class="text-center">{{$pengukuran->total_skor_b}}</td>
                 </tr>
                 <tr>
                     <td class="text-center">2.</td>
                     <td>Telepon</td>
                     <td class="text-center">{{$pengukuran->skor_telepon}}</td>
                     <td class="text-center">{{$pengukuran->skor_durasi_kerja_telepon}}</td>
-                    <td class="text-center">{{($pengukuran->total_section_b + $pengukuran->skor_durasi_kerja_monitor + $pengukuran->skor_durasi_kerja_telepon )}}</td>
+                    <td class="text-center">{{($pengukuran->total_skor_b + $pengukuran->skor_durasi_kerja_monitor + $pengukuran->skor_durasi_kerja_telepon )}}</td>
                 </tr>
             </table>
 
@@ -312,15 +312,15 @@
                     <td>Mouse</td>
                     <td class="text-center">{{$pengukuran->skor_mouse}}</td>
                     <td class="text-center">{{$pengukuran->skor_durasi_kerja_mouse}}</td>
-                    <td class="text-center">{{($pengukuran->total_section_c + $pengukuran->skor_durasi_kerja_mouse + $pengukuran->skor_durasi_kerja_keyboard )}}</td>
-                    <td rowspan="2" class="text-center">{{$pengukuran->total_section_c}}</td>
+                    <td class="text-center">{{($pengukuran->total_skor_c + $pengukuran->skor_durasi_kerja_mouse + $pengukuran->skor_durasi_kerja_keyboard )}}</td>
+                    <td rowspan="2" class="text-center">{{$pengukuran->total_skor_c}}</td>
                 </tr>
                 <tr>
                     <td class="text-center">2.</td>
                     <td>Keyboard</td>
                     <td class="text-center">{{$pengukuran->skor_keyboard}}</td>
                     <td class="text-center">{{$pengukuran->skor_durasi_kerja_keyboard}}</td>
-                    <td class="text-center">{{($pengukuran->total_section_c + $pengukuran->skor_durasi_kerja_mouse + $pengukuran->skor_durasi_kerja_keyboard )}}</td>
+                    <td class="text-center">{{($pengukuran->total_skor_c + $pengukuran->skor_durasi_kerja_mouse + $pengukuran->skor_durasi_kerja_keyboard )}}</td>
                 </tr>
             </table>
 
@@ -334,7 +334,7 @@
                     <td width="17%" rowspan="2" class="text-center font-bold" style="font-size: 12pt;">{{$pengukuran->final_skor_rosa}}</td>
                 </tr>
                 <tr>
-                    <td class="text-center">{{$pengukuran->total_section_d}}</td>
+                    <td class="text-center">{{$pengukuran->total_skor_d}}</td>
                     <td class="text-center font-bold">Skoring Section A & Section D</td>
                 </tr>
             </table>

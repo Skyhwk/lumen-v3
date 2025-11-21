@@ -386,7 +386,7 @@ class TemplateLhpErgonomi
             ];
             
             $pdf = new PDF($mpdfConfig);
-           
+            
             $html = View::make('ergonomirosa', compact('pengukuran', 'personal','ttd'))->render();
             return $html;
         }catch (ViewException $e) {
