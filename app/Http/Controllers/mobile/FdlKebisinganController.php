@@ -152,23 +152,23 @@ class FdlKebisinganController extends Controller
             }
 
             if ($request->kebisingan) {
-                $nilai = [];
-                foreach ($request->kebisingan as $value) {
-                    // Jadikan string supaya desimal tidak hilang
-                    $str = (string)$value;
+                // $nilai = [];
+                // foreach ($request->kebisingan as $value) {
+                //     // Jadikan string supaya desimal tidak hilang
+                //     $str = (string)$value;
 
-                    // Ambil hanya sampai 1 angka desimal tanpa pembulatan
-                    if (strpos($str, '.') !== false) {
-                        $parts = explode('.', $str);
-                        $desimal = substr($parts[1], 0, 1); // hanya ambil 1 angka
-                        $nilai[] = $parts[0] . '.' . $desimal;
-                    } else {
-                        // jika tidak ada desimal, masukkan apa adanya
-                        $nilai[] = $str;
-                    }
-                }
+                //     // Ambil hanya sampai 1 angka desimal tanpa pembulatan
+                //     if (strpos($str, '.') !== false) {
+                //         $parts = explode('.', $str);
+                //         $desimal = substr($parts[1], 0, 1); // hanya ambil 1 angka
+                //         $nilai[] = $parts[0] . '.' . $desimal;
+                //     } else {
+                //         // jika tidak ada desimal, masukkan apa adanya
+                //         $nilai[] = $str;
+                //     }
+                // }
 
-                $data->value_kebisingan = json_encode($nilai);
+                $data->value_kebisingan = json_encode($request->kebisingan);
             }
             if ($request->jam_pemaparan) {
                 $data->jam_pemaparan = $request->jam_pemaparan;

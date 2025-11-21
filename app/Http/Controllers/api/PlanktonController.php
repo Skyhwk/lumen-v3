@@ -30,6 +30,10 @@ class PlanktonController extends Controller
             ->orderColumn('no_sampel', function ($query, $order) {
                 $query->orderBy('no_sampel', $order);
             })
+            ->editColumn('hasil_json', function ($item) {
+                $hasil = json_decode($item->ws_value->hasil_json ?? '{}', true);
+                return $hasil ?? [];
+            })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
