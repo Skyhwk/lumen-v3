@@ -21,13 +21,16 @@ class DirectHCHO8Jmgm3 {
             }
         }
 
-        $average = !empty($measurements) ?
-            number_format(array_sum($measurements) / count($measurements), 3) : 0;
+        if(count($measurements) > 1){
+            $average = !empty($measurements) ? number_format(array_sum($measurements) / count($measurements), 3) : 0;
+        } else {
+            $average = !empty($measurements) ? $measurements[0] : 0;
+        }
         $tekanan_udara = !empty($pa) ? round(array_sum($pa) / count($pa), 1) : 0;
         $suhu = !empty($ta) ? round(array_sum($ta) / count($ta), 1) : 0;
 
         $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
-            
+        
         $c2 = round($average * ($suhu / $tekanan_udara) * (298 / 760), 4); // mg/m³
         $c1 = round($c2 * 1000, 4); // ug/Nm³ 
         $c3 = round(($c2 / 30.03) * 24.45, 4); // mg/m³

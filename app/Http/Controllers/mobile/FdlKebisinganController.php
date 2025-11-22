@@ -152,23 +152,32 @@ class FdlKebisinganController extends Controller
             }
 
             if ($request->kebisingan) {
-                // $nilai = [];
-                // foreach ($request->kebisingan as $value) {
-                //     // Jadikan string supaya desimal tidak hilang
-                //     $str = (string)$value;
+                $nilai = [];
+                foreach ($request->kebisingan as $value) {
 
-                //     // Ambil hanya sampai 1 angka desimal tanpa pembulatan
-                //     if (strpos($str, '.') !== false) {
-                //         $parts = explode('.', $str);
-                //         $desimal = substr($parts[1], 0, 1); // hanya ambil 1 angka
-                //         $nilai[] = $parts[0] . '.' . $desimal;
-                //     } else {
-                //         // jika tidak ada desimal, masukkan apa adanya
-                //         $nilai[] = $str;
-                //     }
-                // }
+                    // ubah ke string agar desimal tidak hilang
+                    $str = (string)$value;
 
-                $data->value_kebisingan = json_encode($request->kebisingan);
+                    // cek ada titik atau tidak
+                    if (strpos($str, '.') !== false) {
+                        // pisahkan integer dan desimal
+                        [$int, $des] = explode('.', $str);
+
+                        // ambil hanya 1 digit desimal tanpa pembulatan
+                        $des = substr($des, 0, 1);
+
+                        // jika desimal kosong (misal "63."), set jadi "0"
+                        if ($des === "") $des = "0";
+
+                        $nilai[] = $int . '.' . $des;
+                    } else {
+                        // tidak ada desimal → tambahkan ".0"
+                        $nilai[] = $str . '.0';
+                    }
+                }
+
+
+                $data->value_kebisingan = json_encode($nilai);
             }
             if ($request->jam_pemaparan) {
                 $data->jam_pemaparan = $request->jam_pemaparan;
