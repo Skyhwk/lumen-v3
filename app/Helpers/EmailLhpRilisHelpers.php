@@ -45,7 +45,6 @@ class EmailLhpRilisHelpers
             $bcc = $cekHistory->email_bcc != null ? json_decode($cekHistory->email_bcc, true) : [];
             
             $bcc = is_array($bcc) ? $bcc : [];
-            array_push($bcc, 'dedi@intilab.com');
 
             $email = SendEmail::where('to', $cekHistory->email_to)
                 ->where('subject', $subject)

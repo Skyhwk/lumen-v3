@@ -53,11 +53,15 @@ class DirectLain {
                 }
                 
                 else if (in_array($row->parameter, $paramVoc)) {
-                    $c2 = $totalNilai / $jumlahElemen;
-                    $c1 = round($c2 * 1000, 6);
+                    $vocRata2 = $totalNilai / $jumlahElemen;
+
+                    $c2 = round($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
+                    $c1 = round($c2 * 1000, 3);
+                    $c17 = round($vocRata2, 3);
+                    $c16 = round($c17 * 1000, 3);
+                    $c3 = round(($c17 * 24.45) / 78.9516, 3);
                     $satuan = "mg/m3";
 
-                    // cek batas bawah di akhir
                     if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = round($c2, 3);
                 }
 
