@@ -396,7 +396,7 @@
                         <tr>
                             <td>{{$personal->no_lhp}}</td>
                             <td>{{$personal->no_sampel}}</td>
-                            <td>Ergonomi - RULA</td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>
@@ -412,7 +412,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
                     <div class="info-header">Informasi Sampling</div>
@@ -439,22 +439,22 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                            <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Analisa</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Metode Analisa*</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengamatan Langsung - RULA</td>
+                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - RULA</td>
                         </tr>
                     </table>
                     <div class="info-note">

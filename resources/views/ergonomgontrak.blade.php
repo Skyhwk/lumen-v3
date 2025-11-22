@@ -140,7 +140,7 @@
                         <tr>
                             <td>{{ $personal->no_lhp }}</td>
                             <td>{{ $personal->no_sampel }}</td>
-                            <td>Ergonomi</td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>
@@ -148,58 +148,60 @@
                 <div class="section">
                     <span class="bold">Informasi Pelanggan</span>
                     <table class="info-table">
-                        <tr>
-                            <td style="width: 120px;">Nama Pelanggan</td>
-                            <td> <div class="text-input-space">{{ $personal->nama_pelanggan }}</div>
-                            </td>
+                       <tr>
+                            <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
+                            <td style="width: 3%; text-align:start;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                         </tr>
                         <tr>
-                            <td>Alamat / Lokasi Sampling</td>
-                            <td> <div class="text-input-space">{{ $personal->alamat_pelanggan }}</div>
-                            </td>
+                            <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%; text-align:start;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
                 </div>
                 <div class="section">
                     <span class="bold">Informasi Sampling</span>
                     <table class="info-table">
-                        <tr>
+                        <!-- <tr>
                             <td style="width: 120px;">Metode Sampling</td>
                             <td> SNI 9011:2021</td>
+                        </tr> -->
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
                         <tr>
-                            <td>Tanggal Sampling</td>
-                            <td> <div class="text-input-space">{{ $personal->tanggal_sampling }}</div>
-                            </td>
+                            <td style="width: 25%; text-align:start;">Jenis Analisis</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">Kuesioner</td>
                         </tr>
                         <tr>
-                            <td>Periode Analisis</td>
-                            <td> <div class="text-input-space">{{ $personal->periode_analisis }}</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Jenis Analisis</td>
-                            <td> Kuesioner</td>
-                        </tr>
-                        <tr>
-                            <td>Metode Analisis*</td>
-                            <td> Identifikasi Keluhan Gangguan Otot dan Rangka</td>
+                            <td style="width: 25%; text-align:start;">Metode Analisis*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%; text-align:start;">Identifikasi Keluhan Gangguan Otot dan Rangka</td>
                         </tr>
                     </table>
                 </div>
 
                 <div class="section">
                     <span class="bold">Data Individu/Pekerja yang Diukur</span>
-                    <table class="info-table" style="margin-bottom: 10px;">
+                    <table class="info-table">
                         <tr>
-                            <td style="width: 120px;">Nama</td>
-                            <td> <div class="text-input-space">{{ $personal->nama_pekerja }}</div>
-                            </td>
+                            <td style="width: 25%; text-align:start;">Nama</td>
+                            <td style="width: 3% ;text-align:start;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td>Posisi/Jabatan</td>
-                            <td> <div class="text-input-space">{{ $personal->jabatan }}</div>
-                            </td>
+                            <td style="width: 25%; text-align:start;">Usia</td>
+                            <td style="width: 3% ;text-align:start;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Lama Bekerja</td>
+                            <td style="width: 3% ;text-align:start;">:</td>
+                            <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
 

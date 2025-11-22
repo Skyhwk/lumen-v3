@@ -58,7 +58,7 @@
                                 <tr>
                                     <td>{{$personal->no_lhp}}</td>
                                     <td>{{$personal->no_sampel}}</td>
-                                    <td>Ergonomi Potensi Bahaya</td>
+                                    <td>ERGONOMI</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -67,14 +67,14 @@
                             <div class="section-titleP">Informasi Pelanggan</div>
                             <table class="info-table">
                                 <tr>
-                                    <td style="width:35%">Nama Pelanggan</td>
-                                    <td style="width:5%">:</td>
-                                    <td>{{ strtoupper($personal->nama_pelanggan) }}</td>
+                                    <td style="width:25%">Nama Pelanggan</td>
+                                    <td style="width:3%">:</td>
+                                    <td style="width:72%;text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                                 </tr>
                                 <tr>
-                                    <td>Alamat / Lokasi</td>
-                                    <td>:</td>
-                                    <td>{{ $personal->alamat_pelanggan }}</td>
+                                    <td style="width:25%" >Alamat / Lokasi</td>
+                                    <td style="width:3%">:</td>
+                                    <td style="width: 72%;text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                                 </tr>
                             </table>
                         </div>
@@ -82,19 +82,14 @@
                             <div class="section-titleP">Informasi Sampling</div>
                             <table class="info-table">
                                 <tr>
-                                    <td style="width:35%">Tanggal</td>
-                                    <td style="width:5%">:</td>
-                                    <td>{{ $personal->tanggal_sampling }}</td>
+                                    <td style="width:25%">Tanggal</td>
+                                    <td style="width:3%">:</td>
+                                    <td style="width: 72%;text-align:start;">{{ $personal->tanggal_sampling }}</td>
                                 </tr>
                                 <tr>
-                                    <td>Periode Analisis</td>
-                                    <td>:</td>
-                                    <td>{{ $personal->periode_analisis }}</td>
-                                </tr>
-                                <tr>
-                                    <td>Metode Analisa</td>
-                                    <td>:</td>
-                                    <td>Observasi Potensi Bahaya Ergonomi SNI 9011:2021</td>
+                                    <td style="width:25%">Metode Analisa</td>
+                                    <td style="width:3%">:</td>
+                                    <td style="width: 72%;text-align:start;">Observasi Potensi Bahaya Ergonomi SNI 9011:2021</td>
                                 </tr>
                             </table>
                         </div>
@@ -104,22 +99,22 @@
                                     <tr>
                                         <td style="width:35%">Nama</td>
                                         <td style="width:5%">:</td>\
-                                        <td>{{ $personal->nama_pekerja }}</td>
+                                        <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
                                     </tr>
                                     <tr>
-                                        <td>Usia</td>
-                                        <td>:</td>
-                                        <td>{{ $personal->usia }} Tahun</td>
+                                        <td style="width:25%">Usia</td>
+                                        <td style="width:3%">:</td>
+                                        <td style="width: 72%;text-align:start;">{{ $personal->usia }} Tahun</td>
                                     </tr>
                                     <tr>
-                                        <td>Jenis Pekerjaan</td>
-                                        <td>:</td>
-                                        <td>{{$personal->aktivitas_ukur}}</td>
+                                        <td style="width:25%">Jenis Pekerjaan</td>
+                                        <td style="width:3%">:</td>
+                                        <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                                     </tr>
                                     <tr>
-                                        <td>Lama Bekerja</td>
-                                        <td>:</td>
-                                        <td>{{ $personal->lama_kerja }} Tahun</td>
+                                        <td style="width:25%">Lama Bekerja</td>
+                                        <td style="width:3%">:</td>
+                                        <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
                                     </tr>
                                 </table>
                         </div>
