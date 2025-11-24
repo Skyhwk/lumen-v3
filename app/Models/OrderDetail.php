@@ -237,6 +237,11 @@ class OrderDetail extends Sector
         return $this->belongsTo(LhpsMicrobiologiHeader::class, 'cfr', 'no_lhp')->with('lhpsMicrobiologiDetailSampel')->where('is_active', true);
     }
 
+    public function dataLapanganSenyawaVolatil()
+    {
+        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel');
+    }
+
     public function t_fct()
     {
         return $this->belongsTo(Ftc::class, 'no_sampel', 'no_sample')->where('is_active', true);
