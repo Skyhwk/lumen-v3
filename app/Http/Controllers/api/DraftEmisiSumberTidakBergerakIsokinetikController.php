@@ -38,6 +38,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
+//Helper
+use App\Helpers\EmailLhpRilisHelpers;
+
 class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 {
     public function index(Request $request)
