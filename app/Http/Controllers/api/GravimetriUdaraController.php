@@ -9,6 +9,7 @@ use App\Models\WsValueLingkungan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\DustFallHeader;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -27,17 +28,28 @@ class GravimetriUdaraController extends Controller
     public function index(Request $request){
         $dataLingkungan = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
-            ->where('lingkungan_header.is_active', true)
+            ->where('is_active', true)
+            ->where('template_stp', $request->template_stp)
+            ->get();
+
+        $dataDustfall = DustFallHeader::with('ws_udara', 'order_detail', 'ws_value')
+            ->where('is_approved', $request->approve)
+            ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
         $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
-            ->where('debu_personal_header.is_active', true)
+            ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
-        $data = $dataLingkungan->concat($dataDebu)->values();
+        $data = collect()
+            ->concat($dataLingkungan)
+            ->concat($dataDustfall)
+            ->concat($dataDebu)
+            ->values();
+
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
@@ -45,6 +57,15 @@ class GravimetriUdaraController extends Controller
             ->editColumn('data_shift', function ($data) {
                 return $data->data_shift ? json_decode($data->data_shift, true) : null;
             })
+            ->editColumn('inputan_analis', function ($data) {
+                if ($data instanceof DustFallHeader) {
+                    return $data->inputan_analis
+                        ? json_decode($data->inputan_analis, true)
+                        : null;
+                }
+                return null;
+            })
+
             // ->orderColumn('tanggal_terima', function ($query, $order) {
             //     $query->orderBy('tanggal_terima', $order);
             // })

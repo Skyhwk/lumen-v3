@@ -3687,8 +3687,6 @@ class InputParameterController extends Controller
 			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
 			$jam = $start->diffInHours($end, true);   // selisih dalam jam
 			$selisih_hari = round($jam / 24, 1);          // konversi ke jam desimal
-			
-			$luas_botol = (float) str_replace(' m2','',$pemasangan->luas_botol);
 
 			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
@@ -3705,7 +3703,6 @@ class InputParameterController extends Controller
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
 			$data_parsing->selisih_hari = $selisih_hari;
-			$data_parsing->luas_botol = $luas_botol;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3728,7 +3725,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => $luas_botol / 10000, // dari cm2 ke m2
+					'luas_botol' => $request->luas_botol / 10000, // dari cm2 ke m2
 					'selisih_hari' => $selisih_hari
 				];
 

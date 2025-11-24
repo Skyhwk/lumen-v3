@@ -3,30 +3,12 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
-use App\Models\LhpsGetaranDetail;
-use App\Models\LhpsGetaranHeader;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsPencahayaanHeader;
 use App\Models\LhpsSinarUVDetail;
 use App\Models\LhpsSinarUVHeader;
 use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
-use App\Models\DetailLingkunganHidup;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DetailLingkunganKerja;
-use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganCahaya;
+use App\Models\DataLapanganSinarUV;
 
-use App\Models\IklimHeader;
-use App\Models\GetaranHeader;
-use App\Models\PsikologiHeader;
-use App\Models\KebisinganHeader;
-use App\Models\PencahayaanHeader;
-use App\Models\LingkunganHeader;
-use App\Models\DirectLainHeader;
+use App\Models\SinarUVHeader;
 use App\Models\Subkontrak;
 
 use Illuminate\Http\Request;
@@ -99,28 +81,6 @@ class TqcSinarUvController extends Controller
         }
     }
 
-    // public function rejectData(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         $data = OrderDetail::where('id', $request->id)->first();
-    //         if ($data) {
-    //             $data->status = 0;
-    //             $data->save();
-    //             DB::commit();
-    //             return response()->json([
-    //                 'status' => 'success',
-    //                 'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
-    //             ]);
-    //         }
-    //     } catch (\Throwable $th) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Terjadi kesalahan ' . $th->getMessage()
-    //         ]);
-    //     }
-    // }
     public function rejectData(Request $request)
     {
         DB::beginTransaction();
@@ -171,13 +131,6 @@ class TqcSinarUvController extends Controller
                     ->addSelect(DB::raw("'subkontrak' as data_type"))
                     ->get();
 
-                // $psikologi = PsikologiHeader::with(['data_lapangan'])
-                //     ->where('no_sampel', $request->no_sampel)
-                //     ->where('is_approve', 1)
-                //     ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'is_active')
-                //     ->addSelect(DB::raw("'psikologi' as data_type"))
-                //     ->get();
-
                 $combinedData = $lingkunganData->merge($directData)->merge($subkontrak);
 
                 $processedData = $combinedData->map(function ($item) {
@@ -186,51 +139,13 @@ class TqcSinarUvController extends Controller
                 });
 
                 return Datatables::of($processedData)->make(true);
-            } else if ($request->kategori == 23 || $request->kategori == 24 || $request->kategori == 25 || $request->kategori == 26) {
-                $data = KebisinganHeader::with(['ws_udara'])->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', 1)
-                    ->where('status', 0);
-
-                return Datatables::of($data)->make(true);
-            } else if ($request->kategori == 28) {
-                $data = PencahayaanHeader::with(['data_lapangan', 'ws_udara'])
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', 1)
-                    ->where('status', 0);
-
-                return Datatables::of($data)->make(true);
-            } else if ($request->kategori == 21) {
-                $data = IklimHeader::with(['iklim_panas', 'iklim_dingin', 'ws_udara'])->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->where('status', 0);
-
-                return Datatables::of($data)->make(true);
-            } else if ($request->kategori == 17 || $request->kategori == 19 || $request->kategori == 20 || $request->kategori == 14 || $request->kategori == 15 || $request->kategori == 18 || $request->kategori == 13 || $request->kategori == 16) {
-
-                $data = GetaranHeader::with(['lapangan_getaran', 'lapangan_getaran_personal', 'ws_udara'])->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->where('status', 0);
-
-                return Datatables::of($data)->make(true);
             }
         } catch (\Throwable $th) {
             return response()->json([
                 'message' => $th->getMessage(),
+                'line' => $th->getLine()
             ], 401);
         }
-    }
-
-    public function detailPsikologi(Request $request)
-    {
-        $data = PsikologiHeader::with('data_lapangan')
-            ->where('no_sampel', $request->no_sampel)
-            ->where('is_approve', true)
-            ->where('is_active', true)
-            ->select('*')
-            ->addSelect(DB::raw("'psikologi' as data_type"))
-            ->first();
-        $data->data_lapangan->hasil = json_decode($data->data_lapangan->hasil);
-        return response()->json($data, 200);
     }
 
     public function detailLapangan(Request $request)
@@ -335,35 +250,25 @@ class TqcSinarUvController extends Controller
                 ->select('mata', 'siku','betis')->get()
                 ->toArray();
 
-
+            $header = SinarUVHeader::where('no_sampel', $orderDetail->no_sampel)->first();
+            $lapangan = DataLapanganSinarUV::where('no_sampel', $orderDetail->no_sampel)->first();
             $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)
                 ->orderByDesc('id')
-                ->first()
-                ->hasil1 ?? null;
-
-            $hasilDecoded = json_decode($hasil, true);
+                ->first();
 
 
-            if (is_array($hasilDecoded)) {
-                $data[] = [
-                    'no_sampel' => $orderDetail->no_sampel,
-                    'titik' => $orderDetail->keterangan_1,
-                    'history' => $lhpsSinarUvDetail,
-                    'hasil' => json_decode($hasil),
-                    'analyst' => optional($lhpsSinarUvHeader)->created_by,
-                    'approved_by' => optional($lhpsSinarUvHeader)->approved_by
-                ];
-
-            } else {
-                $data[] = [
-                    'no_sampel' => $orderDetail->no_sampel,
-                    'titik' => $orderDetail->keterangan_1,
-                    'history' => $lhpsSinarUvDetail,
-                    'hasil' => $hasil,
-                    'analyst' => optional($lhpsSinarUvHeader)->created_by,
-                    'approved_by' => optional($lhpsSinarUvHeader)->approved_by
-                ];
-            }
+            $data[] = [
+                'no_sampel' => $orderDetail->no_sampel,
+                'waktu_pemaparan' => $lapangan->waktu_pemaparan ?? null,
+                'nab' => $hasil->nab ?? null,
+                'titik' => $orderDetail->keterangan_1,
+                'history' => $lhpsSinarUvDetail,
+                'mata' => $hasil->hasil1 ?? null,
+                'siku' => $hasil->hasil2 ?? null,
+                'betis' => $hasil->hasil3 ?? null,
+                'analyst' => optional($lhpsSinarUvHeader)->created_by ?? $header->created_by,
+                'approved_by' => optional($lhpsSinarUvHeader)->approved_by ?? $header->approved_by
+            ];
         }
 
         return response()->json([
