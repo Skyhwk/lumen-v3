@@ -2663,26 +2663,26 @@ class DraftUlkErgonomiController extends Controller
                         $akreditasiKan = Parameter::where('id', $idParameterAkre)->where('status', "AKREDITASI")->where('is_active', true)->first();
 
                         if($akreditasiKan === null){
-                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                            $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif; ">
                                     <tr>
                                         <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                             <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
                                         </td>
                                         <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
-                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                            <span style="font-size:16px;font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span>
                                         </td>
                                         <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                         </td>
                                     </tr>
                                      </table>';
                         }else{
-                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif; ">
                                     <tr>
                                         <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                             <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
                                         </td>
                                         <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
-                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                            <span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span>
                                         </td>
                                         <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                             <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
