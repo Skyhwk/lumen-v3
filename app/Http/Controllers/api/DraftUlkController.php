@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
+// Models
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
@@ -23,6 +24,8 @@ use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
+use App\Models\DetailSenyawaVolatile;
+// Services
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Helpers\EmailLhpRilisHelpers;
@@ -42,6 +45,7 @@ class DraftUlkController extends Controller
             'allDetailLingkunganKerja',
             'dataLapanganDirectLain',
             'dataLapanganPartikulatMeter',
+            'dataLapanganSenyawaVolatil',
             'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
             ->where([
@@ -73,6 +77,12 @@ class DraftUlkController extends Controller
             if ($lapangan->isEmpty()) {
                 $lapangan = $item->dataLapanganPartikulatMeter
                     ? collect([$item->dataLapanganPartikulatMeter])
+                    : collect();
+            }
+
+            if ($lapangan->isEmpty()) {
+                $lapangan = $item->dataLapanganSenyawaVolatil
+                    ? collect($item->dataLapanganSenyawaVolatil)
                     : collect();
             }
 
