@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\api;
 
 // model
+
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\{HistoryAppReject,KonfirmasiLhp,MasterKaryawan,LhpsEmisiHeader,LhpsEmisiDetail,LhpsEmisiHeaderHistory,LhpsEmisiDetailHistory,LhpsEmisiCHeader,LhpsEmisiCDetail,LhpsEmisiCHeaderHistory,LhpsEmisiCDetailHistory,OrderDetail,MetodeSampling,MasterBakumutu,PengesahanLhp,Subkontrak,DataLapanganEmisiCerobong,DataLapanganEmisiKendaraan,EmisiCerobongHeader,MasterRegulasi,Parameter,GenerateLink,QrDocument,LhpsEmisiCustom,LinkLhp};
 
 // service
@@ -915,6 +917,15 @@ class DraftEmisiSumberBergerakController extends Controller
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->cfr,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
 
                 // $servicePrint = new PrintLhp($data->file_lhp);
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
