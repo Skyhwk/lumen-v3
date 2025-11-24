@@ -17,7 +17,7 @@
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
                         <td class="custom">Lingkungan Kerja</td>
-                        <td class="custom">Iklim Kerja</td>
+                        <td class="custom">Iklim Kerja Panas (ISBB)</td>
                     </tr>
                 </table>
             </td>

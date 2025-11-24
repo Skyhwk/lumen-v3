@@ -18,7 +18,11 @@ class MicrobiologiUdara
             $count = 0;
 
             foreach ($data->jumlah_coloni as $key => $value) {
-                $rumus = $value / $data->volume[$key];
+                if($data->volume[$key] <= 0){
+                    $rumus = $value / 1;
+                } else {
+                    $rumus = $value / $data->volume[$key];
+                }
                 $nilai = $key + 1;
 
                 // simpan hasil per shift (as array asosiatif tunggal)

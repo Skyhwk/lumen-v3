@@ -1059,6 +1059,7 @@ class InputParameterController extends Controller
 			if(isset($request->jenis_pengujian) && $request->jenis_pengujian=='sample'){
 				if(isset($request->no_sample) && $request->no_sample!=null){
 					$result = self::HelperColorimetri($request, $stp, $repo_quota);
+
 					if($result->status == 200){
 						return response()->json([
 							'message'=> $result->message,
@@ -1398,6 +1399,23 @@ class InputParameterController extends Controller
 						'status' => $result->status
 					], $result->status);
 				}else{
+					return response()->json([
+						'message'=> $result->message,
+						'status' => $result->status
+					], $result->status);
+				}
+			}else if(in_array($par->id, [223,224])){
+				$po = OrderDetail::where('no_sampel', $request->no_sample)
+					->where('is_active', true)
+					->first();
+
+				$par = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
+
+				$header = DustFallHeader::where('no_sampel', $request->no_sample)
+					->where('parameter', $request->parameter)
+					->where('is_active', true)->first();
+				$result = self::HelperDustFall($request, $stp, $po, $header);
+				if($result->status){
 					return response()->json([
 						'message'=> $result->message,
 						'status' => $result->status
@@ -2486,7 +2504,7 @@ class InputParameterController extends Controller
 				}else{
 					$hp = $request->hp;
 				}
-
+				
 				$data_kalkulasi = AnalystFormula::where('function', $function)
 					->where('data', $data_parsing)
 					->where('id_parameter', $data_parameter->id)
@@ -3662,17 +3680,15 @@ class InputParameterController extends Controller
 			}
 
 			$data_lapangan = $data_lapangan->toArray();
-			$start = Carbon::parse($data_lapangan[0]['tanggal_pemasangan'] . ' ' . $data_lapangan[0]['waktu_pengujian']);
-			$end   = Carbon::parse($data_lapangan[1]['tanggal_selesai'] . ' ' . $data_lapangan[1]['waktu_selesai']);
-
-			$jam = $start->diffInHours($end, true);   // selisih dalam jam
-			$selisih_hari = $jam / 24;          // konversi ke jam desimal
-
+			$pemasangan = json_decode($data_lapangan[0]['pengukuran']);
+			$pengambilan = json_decode($data_lapangan[1]['pengukuran']);
 			
-			$luas_botol = array_map(function($item){
-				return (float) $item['luas_botol'];
-			}, $data_lapangan);
-			$average_luas_botol = count($luas_botol) > 0 ? array_sum($luas_botol) / count($luas_botol) : 0;
+			$start = Carbon::parse($pemasangan->tanggal_pemasangan . ' ' . $data_lapangan[0]['waktu_pengukuran']);
+			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
+			$jam = $start->diffInHours($end, true);   // selisih dalam jam
+			$selisih_hari = round($jam / 24, 1);          // konversi ke jam desimal
+			
+			$luas_botol = (float) str_replace(' m2','',$pemasangan->luas_botol);
 
 			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
@@ -3689,7 +3705,7 @@ class InputParameterController extends Controller
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
 			$data_parsing->selisih_hari = $selisih_hari;
-			$data_parsing->average_luas_botol = $average_luas_botol;
+			$data_parsing->luas_botol = $luas_botol;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3706,6 +3722,15 @@ class InputParameterController extends Controller
 
 			DB::beginTransaction();
 			try {
+				$inputan_analis = (object)[
+					'berat_kosong_1' => $request->bk1,
+					'berat_kosong_2' => $request->bk2,
+					'berat_kosong_dengan_isi_1' => $request->bki1,
+					'berat_kosong_dengan_isi_2' => $request->bki2,
+					'volume_filtrat' => $request->vl,
+					'luas_botol' => $luas_botol / 10000, // dari cm2 ke m2
+					'selisih_hari' => $selisih_hari
+				];
 
 				$header                 = new DustFallHeader();
 				$header->no_sampel      = $request->no_sample;
@@ -3716,14 +3741,18 @@ class InputParameterController extends Controller
 				$header->tanggal_terima = $tgl_terima;
 				$header->is_active      = true;
 				$header->created_by     = $this->karyawan;
+				$header->inputan_analis = json_encode($inputan_analis);
 				$header->created_at     = Carbon::now()->format('Y-m-d H:i:s');
 				$header->save();
 
-				$data_kalkulasi['lingkungan_header_id'] = $header->id;
-				$data_kalkulasi['no_sampel'] = $request->no_sample;
-				$data_kalkulasi['created_by'] = $this->karyawan;
-				$data_kalkulasi['C5'] = $data_kalkulasi['hasil'];
-				WsValueLingkungan::create($data_kalkulasi);
+				$data_lingkungan = $data_kalkulasi;
+				$data_lingkungan['dustfall_header_id'] = $header->id;
+				$data_lingkungan['no_sampel'] = $request->no_sample;
+				$data_lingkungan['created_by'] = $this->karyawan;
+				$data_lingkungan['C5'] = $data_kalkulasi['hasil'];
+				unset($data_lingkungan['satuan']);
+				unset($data_lingkungan['hasil']);
+				WsValueLingkungan::create($data_lingkungan);
 
 				$data_udara = array();
 				$data_udara['id_dustfall_header']   = $header->id;
@@ -3733,15 +3762,19 @@ class InputParameterController extends Controller
 				WsValueUdara::create($data_udara);
 
 				DB::commit();
-				return response()->json([
-					'message'=> 'Value Parameter berhasil disimpan.!',
-					'par' => $request->parameter
-				], 200);
+				return (object)[
+					'message' => 'Value Parameter berhasil disimpan.!',
+					'par' => $request->parameter,
+					'status' => 200
+				];
 			} catch (\Exception $e) {
-				DB::rollback();
-				return response()->json([
-					'message' => 'Error: ' . $e->getMessage()
-				], 401);
+				DB::rollBack();
+				return (object)[
+					'message' => 'Gagal input data: '.$e->getMessage(),
+					'status' => 500,
+					'line' => $e->getLine(),
+					'file' => $e->getFile()
+				];
 			}
 		}
 	}
@@ -3882,7 +3915,7 @@ class InputParameterController extends Controller
 					$volume_shift = json_encode($volume);
 				}
                 if(isset($request->jumlah_coloni)){
-                    $data_pershift = json_encode($data_kalkulasi['data_pershift']);
+                    $data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
                 }
 				if(!is_null($swab)){
 					$header->luas = $luas;

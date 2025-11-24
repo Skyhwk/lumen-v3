@@ -196,24 +196,46 @@
         }
 
         /* Styling untuk tabel nested SEBELUM/SESUDAH */
-        .nested-table-container {
+        .nested-table-container { 
             padding: 0;
-        }
+            width: 80px; /* Lebar tetap */
+            min-width: 80px;
+            max-width: 80px;
+        } 
 
-        .nested-table {
-            width: 100%;
-            margin: 0;
+        .nested-table { 
+            width: 100%; 
+            margin: 0; 
             border: none;
+            table-layout: fixed; /* PENTING: Paksa ukuran tetap */
+            border-collapse: collapse; /* Pastikan border tidak double */
+        } 
+
+        .nested-table td { 
+            border: 1px solid black; 
+            width: 40px; /* Lebar tetap untuk setiap cell */
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center; 
+            font-weight: bold; 
+            padding: 3px; 
+            font-size: 9px;
+            overflow: hidden; 
+            white-space: nowrap;
+            box-sizing: border-box; /* Include padding dalam perhitungan width */
         }
 
-        .nested-table td {
-            border: 1px solid black;
-            width: 50%;
+        /* TD untuk nilai skor */
+        .score-cell {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
             text-align: center;
-            font-weight: bold;
             padding: 3px;
-            font-size: 9px; /* Konsisten */
+            box-sizing: border-box;
         }
+
+        
 
         .total-score {
             font-weight: bold;
@@ -349,237 +371,253 @@
             font-size: 8pt;
             vertical-align: top;
         }
+
+        .result-header {
+            text-align: center;
+            font-weight: bold;
+            margin: 5px 0;
+            font-size: 9px;
+        }
+
+        /* Cell untuk header SEBELUM/SESUDAH */
+        .result-cell {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
+            font-weight: bold;
+            padding: 3px;
+            font-size: 9px;
+            border: 1px solid black;
+            box-sizing: border-box;
+            background-color: #f0f0f0; /* Optional: beri warna background */
+        }
     </style>
 </head>
 <body>
     <div class="content-container clearfix" >
         <div class="left-section">
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>NO.</th>
-                        <th >BAGIAN</th>
-                        <th >Sebelum</th>
-                        <th>Sesudah</th>
-                        <th colspan="2">PETA BAGIAN TUBUH</th>
-                        <th>NO.</th>
-                        <th>BAGIAN</th>
-                        <th>Sebelum</th>
-                        <th>Sesudah</th>
-                    </tr>
-                    
-                </thead>
+            <div class="section-title">A.KELELAHAN SISTEM MUSCULOSKETAL</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="30">NO.</th>
+                            <th >BAGIAN</th>
+                            <th >Sebelum</th>
+                            <th>Sesudah</th>
+                            <th colspan="2">PETA BAGIAN TUBUH</th>
+                            <th width="30">NO.</th>
+                            <th>BAGIAN</th>
+                            <th>Sebelum</th>
+                            <th>Sesudah</th>
+                        </tr>
+                        
+                    </thead>
 
-                <tbody>
+                    <tbody>
 
-                    <tr>
-                        <td>0.</td>
-                        <td class="text-left">Leher atas</td>
-                        <td>{{ $pengukuran->sebelum->skor_leher_atas }}</td>
-                        <td>{{ $pengukuran->setelah->skor_leher_atas }}</td>
+                        <tr>
+                            <td>0.</td>
+                            <td>Leher atas</td>
+                            <td>{{ $pengukuran->sebelum->skor_leher_atas }}</td>
+                            <td>{{ $pengukuran->setelah->skor_leher_atas }}</td>
 
-                        <td rowspan="12" colspan="2" style="padding:0; vertical-align: top;">
-                            <img src="{{ public_path('dokumen/img_ergo/nbm/anatomi.jpg') }}" class="body-map">
-                        </td>
+                            <td rowspan="12" colspan="2" style="padding:0; vertical-align: top;">
+                                <img src="{{ public_path('dokumen/img_ergo/nbm/anatomi.jpg') }}" class="body-map">
+                            </td>
 
-                        <td>1.</td>
-                        <td class="text-left">Tengkuk</td>
-                        <td>{{ $pengukuran->sebelum->skor_tengkuk }}</td>
-                        <td>{{ $pengukuran->setelah->skor_tengkuk }}</td>
-                    </tr>
+                            <td>1.</td>
+                            <td>Tengkuk</td>
+                            <td>{{ $pengukuran->sebelum->skor_tengkuk }}</td>
+                            <td>{{ $pengukuran->setelah->skor_tengkuk }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>2.</td>
-                        <td class="text-left">Bahu kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_bahu_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_bahu_kiri }}</td>
+                        <tr>
+                            <td>2.</td>
+                            <td>Bahu kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_bahu_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_bahu_kiri }}</td>
 
-                        <td>3.</td>
-                        <td class="text-left">Bahu kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_bahu_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_bahu_kanan }}</td>
-                    </tr>
+                            <td>3.</td>
+                            <td>Bahu kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_bahu_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_bahu_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>4.</td>
-                        <td class="text-left">Lengan atas kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_lengan_atas_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lengan_atas_kiri }}</td>
+                        <tr>
+                            <td>4.</td>
+                            <td>Lengan atas kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_lengan_atas_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lengan_atas_kiri }}</td>
 
-                        <td>5.</td>
-                        <td class="text-left">Punggung</td>
-                        <td>{{ $pengukuran->sebelum->skor_punggung ?? '' }}</td>
-                        <td>{{ $pengukuran->setelah->skor_punggung ?? '' }}</td>
-                    </tr>
+                            <td>5.</td>
+                            <td>Punggung</td>
+                            <td>{{ $pengukuran->sebelum->skor_punggung ?? '' }}</td>
+                            <td>{{ $pengukuran->setelah->skor_punggung ?? '' }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>6.</td>
-                        <td class="text-left">Lengan atas kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_lengan_atas_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lengan_atas_kanan }}</td>
+                        <tr>
+                            <td>6.</td>
+                            <td>Lengan atas kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_lengan_atas_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lengan_atas_kanan }}</td>
 
-                        <td>7.</td>
-                        <td class="text-left">Pinggang</td>
-                        <td>{{ $pengukuran->sebelum->skor_pinggang }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pinggang }}</td>
-                    </tr>
+                            <td>7.</td>
+                            <td>Pinggang</td>
+                            <td>{{ $pengukuran->sebelum->skor_pinggang }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pinggang }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>8.</td>
-                        <td class="text-left">Pinggul</td>
-                        <td>{{ $pengukuran->sebelum->skor_pinggul }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pinggul }}</td>
+                        <tr>
+                            <td>8.</td>
+                            <td>Pinggul</td>
+                            <td>{{ $pengukuran->sebelum->skor_pinggul }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pinggul }}</td>
 
-                        <td>9.</td>
-                        <td class="text-left">Pantat</td>
-                        <td>{{ $pengukuran->sebelum->skor_pantat }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pantat }}</td>
-                    </tr>
+                            <td>9.</td>
+                            <td>Pantat</td>
+                            <td>{{ $pengukuran->sebelum->skor_pantat }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pantat }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>10.</td>
-                        <td class="text-left">Siku kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_siku_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_siku_kiri }}</td>
+                        <tr>
+                            <td>10.</td>
+                            <td>Siku kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_siku_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_siku_kiri }}</td>
 
-                        <td>11.</td>
-                        <td class="text-left">Siku kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_siku_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_siku_kanan }}</td>
-                    </tr>
+                            <td>11.</td>
+                            <td>Siku kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_siku_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_siku_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>12.</td>
-                        <td class="text-left">Lengan bawah kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_lengan_bawah_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lengan_bawah_kiri }}</td>
+                        <tr>
+                            <td>12.</td>
+                            <td>Lengan bawah kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_lengan_bawah_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lengan_bawah_kiri }}</td>
 
-                        <td>13.</td>
-                        <td class="text-left">Lengan bawah kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_lengan_bawah_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lengan_bawah_kanan }}</td>
-                    </tr>
+                            <td>13.</td>
+                            <td>Lengan bawah kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_lengan_bawah_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lengan_bawah_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>14.</td>
-                        <td class="text-left">Pergelangan tangan kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_pergelangan_tangan_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pergelangan_tangan_kiri }}</td>
+                        <tr>
+                            <td>14.</td>
+                            <td>Pergelangan tangan kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_pergelangan_tangan_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pergelangan_tangan_kiri }}</td>
 
-                        <td>15.</td>
-                        <td class="text-left">Pergelangan tangan kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_pergelangan_tangan_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pergelangan_tangan_kanan }}</td>
-                    </tr>
+                            <td>15.</td>
+                            <td>Pergelangan tangan kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_pergelangan_tangan_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pergelangan_tangan_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>16.</td>
-                        <td class="text-left">Tangan kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_tangan_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_tangan_kiri }}</td>
+                        <tr>
+                            <td>16.</td>
+                            <td>Tangan kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_tangan_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_tangan_kiri }}</td>
 
-                        <td>17.</td>
-                        <td class="text-left">Tangan kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_tangan_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_tangan_kanan }}</td>
-                    </tr>
+                            <td>17.</td>
+                            <td>Tangan kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_tangan_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_tangan_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>18.</td>
-                        <td class="text-left">Paha kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_paha_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_paha_kiri }}</td>
+                        <tr>
+                            <td>18.</td>
+                            <td>Paha kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_paha_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_paha_kiri }}</td>
 
-                        <td>19.</td>
-                        <td class="text-left">Paha kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_paha_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_paha_kanan }}</td>
-                    </tr>
+                            <td>19.</td>
+                            <td>Paha kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_paha_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_paha_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>20.</td>
-                        <td class="text-left">Lutut kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_lutut_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lutut_kiri }}</td>
+                        <tr>
+                            <td>20.</td>
+                            <td>Lutut kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_lutut_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lutut_kiri }}</td>
 
-                        <td>21.</td>
-                        <td class="text-left">Lutut kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_lutut_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_lutut_kanan }}</td>
-                    </tr>
+                            <td>21.</td>
+                            <td>Lutut kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_lutut_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_lutut_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>22.</td>
-                        <td class="text-left">Betis kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_betis_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_betis_kiri }}</td>
+                        <tr>
+                            <td>22.</td>
+                            <td>Betis kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_betis_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_betis_kiri }}</td>
 
-                        <td>23.</td>
-                        <td class="text-left">Betis kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_betis_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_betis_kanan }}</td>
-                    </tr>
+                            <td>23.</td>
+                            <td>Betis kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_betis_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_betis_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>24.</td>
-                        <td class="text-left">Pergelangan kaki kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_pergelangan_kaki_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pergelangan_kaki_kiri }}</td>
+                        <tr>
+                            <td>24.</td>
+                            <td>Pergelangan kaki kiri</td>
+                            <td>{{ $pengukuran->sebelum->skor_pergelangan_kaki_kiri }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pergelangan_kaki_kiri }}</td>
 
-                        <td colspan="2" class="result-header">HASIL AKHIR</td>
+                            <td colspan="2" class="result-header">HASIL AKHIR</td>
 
-                        <td>25.</td>
-                        <td class="text-left">Pergelangan kaki kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_pergelangan_kaki_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_pergelangan_kaki_kanan }}</td>
-                    </tr>
+                            <td>25.</td>
+                            <td>Pergelangan kaki kanan</td>
+                            <td>{{ $pengukuran->sebelum->skor_pergelangan_kaki_kanan }}</td>
+                            <td>{{ $pengukuran->setelah->skor_pergelangan_kaki_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td>26.</td>
-                        <td class="text-left">Kaki kiri</td>
-                        <td>{{ $pengukuran->sebelum->skor_kaki_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_kaki_kiri }}</td>
+                        <tr>
+                            <td>26.</td>
+                            <td>Kaki kiri</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kaki_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kaki_kiri }}</td>
 
-                        <td colspan="2" class="nested-table-container">
-                            <table class="nested-table">
-                                <tr>
-                                    <td>SEBELUM</td>
-                                    <td>SESUDAH</td>
-                                </tr>
-                            </table>
-                        </td>
+                            <td class="result-cell">SEBELUM</td>
+                            <td class="result-cell">SESUDAH</td>
 
-                        <td>27.</td>
-                        <td class="text-left">Kaki kanan</td>
-                        <td>{{ $pengukuran->sebelum->skor_kaki_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_kaki_kanan }}</td>
-                    </tr>
+                            <td>27.</td>
+                            <td>Kaki kanan</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kaki_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kaki_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td colspan="2" class="total-score">TOTAL SKOR KIRI</td>
-                        <td>{{ $pengukuran->sebelum->skor_kiri }}</td>
-                        <td>{{ $pengukuran->setelah->skor_kiri }}</td>
+                        <tr>
+                            <td colspan="2" class="total-score">TOTAL SKOR KIRI</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kiri }}</td>
 
-                        <td class="nested-table-container">{{ $pengukuran->sebelum->total_skor }}</td>
-                        <td class="nested-table-container">{{ $pengukuran->setelah->total_skor }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->total_skor }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->total_skor }}</td>
 
-                        <td colspan="2" class="total-score">TOTAL SKOR KANAN</td>
-                        <td>{{ $pengukuran->sebelum->skor_kanan }}</td>
-                        <td>{{ $pengukuran->setelah->skor_kanan }}</td>
-                    </tr>
+                            <td colspan="2" class="total-score">TOTAL SKOR KANAN</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kanan }}</td>
+                        </tr>
 
-                    <tr>
-                        <td rowspan="3" colspan="2">
-                            KESIMPULAN AKHIR KELUHAN SISTEM MUSCULOSKELETAL
-                        </td>
-                        <td colspan="8" height="40"></td>
-                    </tr>
+                        <tr>
+                            <td rowspan="3" colspan="2">
+                                KESIMPULAN AKHIR KELUHAN SISTEM MUSCULOSKELETAL
+                            </td>
+                            <td colspan="8" height="40">
+                                Berdasarkan total Skor kelelahan sebelum berkerja yaitu {{$pengukuran->sebelum->total_skor}}. <br>
+                                Sedangkan total Skor kelelahan setelah berkerja yaitu {{$pengukuran->setelah->total_skor}}. 
+                            </td>
+                        </tr>
 
-                </tbody>
-            </table>
-
-
+                    </tbody>
+                </table>
             <div class="section-title" style="margin-top: 15px;">B. KELUHAN SUBJEKTIF</div>
             <table>
                 <thead>
@@ -606,9 +644,9 @@
                     <tr>
                      <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
                      <td colspan="3" height="40">
-                        Skor NBM setelah bekerja: {{$pengukuran->setelah->total_skor}}.
-                        Tingkat risiko: {{$pengukuran->setelah->tingkat_risiko}} ({{$pengukuran->setelah->kategori_risiko}})
-                        Tindakan perbaikan: {{$pengukuran->setelah->tindakan_perbaikan}}.
+                        Berdasarkan hasil analisa yang telah dilakukan, didapatkan skor NBM setelah bekerja yaitu {{$pengukuran->setelah->total_skor}}. <br>
+                        Hasil skor tersebut masuk dalam tingkat resiko {{$pengukuran->setelah->tingkat_risiko}} dengan kategori resiko {{$pengukuran->setelah->kategori_risiko}}.<br>
+                        Sehingga {{$pengukuran->setelah->tindakan_perbaikan}}.
                      </td>
                     </tr>
                 </tbody>
@@ -617,8 +655,9 @@
                 <table>
                         <tr>
                             <th>DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
-                            <td colspan="2" height="60" style="vertical-align: top; text-align:left;">
-                                {{$personal->aktivitas}}
+                            <td colspan="2" height="60" style="vertical-align: top; text-align:center;">
+                                {{$personal->divisi}} <br>
+                                {{$personal->aktivitas_ukur}}
                             </td>
                         </tr>
                 </table>
@@ -626,6 +665,7 @@
             
         </div>
         <div class="right-section">
+            <div class="section-title">&nbsp;</div>
             <div>
                 <table>
                     <thead>
@@ -639,7 +679,7 @@
                         <tr>
                             <td>{{$personal->no_lhp}}</td>
                             <td>{{$personal->no_sampel}}</td>
-                            <td></td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>
@@ -691,11 +731,6 @@
                             <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
                         </tr>
                         <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
-                        </tr>
-                        <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
@@ -703,7 +738,7 @@
                     </table>
             </div>
             <div class="risk-table">
-                <p>**Tabel Acuan Skor Risiko dan Tindakan Perbaikan</p>
+                <p>Tabel Acuan Skor Risiko dan Tindakan Perbaikan<sup>**</sup></p>
                 <table>
                     <thead>
                         <tr>

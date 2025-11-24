@@ -484,7 +484,7 @@
                             <tr>
                                 <td>{{$personal->no_lhp}}</td>
                                 <td>{{$personal->no_sampel}}</td>
-                                <td>Ergonomi - RWL</td>
+                                <td>ERGONOMI</td>
                             </tr>
                         </tbody>
                     </table>
@@ -501,7 +501,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
                     <div class="info-header">Informasi Sampling</div>
@@ -510,11 +510,6 @@
                             <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%;text-align:start; ">{{$personal->tanggal_sampling}}</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Periode Analisa</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;"></td>
                         </tr>
                     </table>
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
@@ -527,7 +522,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->divisi}}</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->divisi}}</td>
                         </tr>
                     </table>
                 </div>
