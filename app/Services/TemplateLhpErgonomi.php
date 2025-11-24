@@ -60,13 +60,13 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRula->no_sampel,
                 "nama_pekerja" => $dataRula->nama_pekerja,
                 "usia" => $dataRula->usia,
-                "lama_kerja" => $dataRula->lama_kerja,
+                "lama_kerja" => json_decode($dataRula->lama_kerja),
                 "jenis_kelamin" => $dataRula->jenis_kelamin,
                 "aktivitas_ukur" => $dataRula->aktivitas_ukur,
                 "aktivitas" => $dataRula->aktivita,
                 "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRula->detail) ? $dataRula->detail->tanggal_sampling : null,
+                "tanggal_sampling" => isset($dataRula->detail) ? Carbon::parse($dataRula->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analisis" => null,
             ];
@@ -112,13 +112,13 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
+                "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
                 "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
+                "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
             ];
@@ -135,6 +135,7 @@ class TemplateLhpErgonomi
     public function ergonomiNbm($data = null,$cssGlobal='',$spesifik='',$ttd= null)
     { 
         try {
+            
             $mpdfConfig = [
                 'mode' => 'utf-8',
                 'format' => 'A4-L',
@@ -163,8 +164,6 @@ class TemplateLhpErgonomi
             $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
             
-            
-            // dd($pengukuran,$sebelumKerja,$setelahKerja,$personal);
             //total sebelum kiri/kanan
             $kiriSebelumOnly = array_sum(array_filter((array) $pengukuran->sebelum, function ($value, $key) {
                 return stripos($key, 'kiri') !== false && $key !== 'skor_kiri';
@@ -212,17 +211,18 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
+                "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
                 "divisi" => $dataRwl->divisi,
                 "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
+                "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
             ];
+            
             
             $pdf = new PDF($mpdfConfig);
             $html = View::make('ergonominbm', compact('pengukuran', 'personal','spesifik','ttd'))->render();
@@ -298,7 +298,7 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataReba->no_sampel,
                 "nama_pekerja" => $dataReba->nama_pekerja,
                 "usia" => $dataReba->usia,
-                "lama_kerja" => $dataReba->lama_kerja,
+                "lama_kerja" => json_decode($dataReba->lama_kerja),
                 "jenis_kelamin" => $dataReba->jenis_kelamin,
                 "aktivitas_ukur" => $dataReba->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
@@ -381,7 +381,7 @@ class TemplateLhpErgonomi
                 "nama_pekerja" => $dataRosa->nama_pekerja,
                 "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
                 "usia" => $dataRosa->usia,
-                "lama_kerja" => $dataRosa->lama_kerja,
+                "lama_kerja" => json_decode($dataRosa->lama_kerja),
                 "divisi" => $dataRosa->divisi,
             ];
             
@@ -438,12 +438,12 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
+                "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
+                "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
@@ -500,12 +500,12 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
-                "lama_kerja" => $dataRwl->lama_kerja,
+                "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
-                "tanggal_sampling" => isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null,
+                "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
