@@ -52,7 +52,7 @@ class DraftUlkSinarUvController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->where('parameter', 'like', '%Sinar UV%')
+            ->whereJsonContains('parameter', '324;Sinar UV')
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();
@@ -289,14 +289,7 @@ class DraftUlkSinarUvController extends Controller
                 ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            // if ($header->is_revisi == 1) {
-            //     $header->is_revisi = 0;
-            //     $header->is_generated = 0;
-            //     $header->count_revisi++;
-            //     if ($header->count_revisi > 2) {
-            //         $this->handleApprove($request, false);
-            //     }
-            // }
+            
             $header->save();
 
             DB::commit();
