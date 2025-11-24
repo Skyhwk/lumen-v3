@@ -361,6 +361,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 					->where('is_active', true)
 					->first();
 
+				$periode = $cekDetail->periode ?? null;
+
 				$cekLink = LinkLhp::where('no_order', $data->no_order);
 				if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
 				$cekLink = $cekLink->first();
@@ -373,14 +375,14 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                    EmailLhpRilisHelpers::run([
-                        'cfr'              => $data->no_cfr,
-                        'no_order'         => $data->no_order,
-                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
-                        'nama_perusahaan'  => $data->nama_pelanggan,
-                        'periode'          => $cekDetail->periode,
-                        'karyawan'         => $this->karyawan
-                    ]);
+				EmailLhpRilisHelpers::run([
+					'cfr'              => $data->no_cfr,
+					'no_order'         => $data->no_order,
+					'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+					'nama_perusahaan'  => $data->nama_pelanggan,
+					'periode'          => $periode,
+					'karyawan'         => $this->karyawan
+				]);
 			} else {
 				DB::rollBack();
 				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);
