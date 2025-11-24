@@ -105,7 +105,6 @@
         .section-header {
             font-weight: bold;
             font-size: 8pt;
-            text-decoration: underline;
             text-align: left;
             margin: 3px 0 2px 0;
             display: block;
@@ -480,7 +479,7 @@
                     <tr>
                         <td>{{ $personal->no_lhp }}</td>
                         <td>{{ $personal->no_sampel }}</td>
-                        <td>{{ $personal->jenis_sampel }} - Reba</td>
+                        <td>ERGONOMI</td>
                     </tr>
                 </table>
                 
@@ -493,9 +492,9 @@
                         <td style="width: 72%; text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                     </tr>
                     <tr>
-                        <td>Alamat / Lokasi Sampling</td>
-                        <td>:</td>
-                        <td>{{ $personal->alamat_pelanggan }}</td>
+                        <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
+                        <td style="width: 3%; text-align:start;">:</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                     </tr>
                 </table>
                 <!-- Informasi Sampling -->
@@ -505,11 +504,7 @@
                         <td style="width: 3%;">:</td>
                         <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                     </tr>
-                    <tr>
-                        <td style="width: 25%; text-align:start;">Periode Analisis</td>
-                        <td style="width: 3%; text-align:start;">:</td>
-                        <td style="width: 72%; text-align:start;">{{ $personal->periode_analisis }}</td>
-                    </tr>
+                    
                     <tr>
                         <td style="width: 25%; text-align:start;">Jenis Analisis</td>
                         <td style="width: 3%; text-align:start;">:</td>
@@ -537,7 +532,7 @@
                     <tr>
                         <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                         <td style="width: 3% ;text-align:start;">:</td>
-                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                        <td style="width: 72%; text-align:start;">{{ $personal->lama_kerja }}</td>
                     </tr>
                 </table>
                 <!-- Tabel Acuan -->
