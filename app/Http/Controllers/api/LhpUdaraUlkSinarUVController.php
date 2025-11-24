@@ -31,7 +31,7 @@ class LhpUdaraUlkSinarUVController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->where('parameter', 'like', '%Sinar UV%')
+            ->whereJsonContains('parameter', '324;Sinar UV')
             ->groupBy('cfr')
             ->where('status', 3)
             ->get();
