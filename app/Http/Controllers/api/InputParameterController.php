@@ -518,6 +518,15 @@ class InputParameterController extends Controller
                         ->orderBy('no_sampel', 'asc')
                         ->get();
 
+                    $dustfallData = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
                     // Get data for DebuPersonal
                     $debuData = DebuPersonalHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
@@ -529,7 +538,9 @@ class InputParameterController extends Controller
                         ->get();
 
                     // Combine data from both sources
-                    $combinedData = $linghidupData->concat($debuData);
+                    $combinedData = $linghidupData
+						->concat($dustfallData)
+						->concat($debuData);
 
                     // Map sample data
                     $tes1[$k] = $combinedData->map(function($item) {
@@ -3650,9 +3661,10 @@ class InputParameterController extends Controller
 
 	public function HelperDustFall($request, $stp, $order_detail, $header){
 		if($header) {
-			return response()->json([
-				'message' => 'Parameter sudah diinput..!!'
-			], 401);
+			return (object)[
+				'message' => 'Parameter sudah diinput..!!',
+				'status' => 401
+			];
 		}else{
 			$id_po = '';
 			$tgl_terima = '';
@@ -3726,7 +3738,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => $request->luas_botol / 10000, // dari cm2 ke m2
+					'luas_botol' => (0.25 * 3.14 * pow($request->luas_botol, 2)) / 10000, // dari cm2 ke m2
 					'selisih_hari' => $selisih_hari
 				];
 

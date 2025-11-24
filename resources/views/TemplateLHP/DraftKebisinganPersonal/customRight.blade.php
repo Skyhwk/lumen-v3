@@ -14,8 +14,8 @@
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Kebisingan</td>
-                        <td class="custom">Intensitas Kebisingan <sup style="font-size: 8px;"><u>a</u></sup></td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Kebisingan Personal <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
@@ -72,7 +72,6 @@
                             </table>
                         </td>
                     </tr>
-                   
                 </table>
 
                 {{-- Regulasi --}}
@@ -83,31 +82,14 @@
                             <tr>
                                 <td class="custom5" colspan="3">
                                     <strong>
-                                      {{ explode('-',$y)[1] }}
+                                        {{ explode('-',$y)[1] }}
                                     </strong>
                                 </td>
                             </tr>
                         @endif
                     </table>
                     @endforeach
-                    @php
-                            $regulasiId = explode('-', $y)[0];
-                            $regulasiName = explode('-', $y)[1] ?? '';
-                            $regulasi = MasterRegulasi::find($regulasiId);
-                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
-                            $table = $tableObj ? $tableObj->konten : '';
-                        @endphp
-                        @if($table)
-                        <table style="padding-top: 5px;" width="100%">
-                                <tr>
-                                    <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
-                                </tr>
-                        </table>
-                        @endif
                 @endif
-
-              
-
             </td>
         </tr>
     </table>
