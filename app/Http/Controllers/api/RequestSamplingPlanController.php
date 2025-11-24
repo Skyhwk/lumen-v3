@@ -65,6 +65,15 @@ class RequestSamplingPlanController extends Controller
                     });
                 });
             })
+            ->filterColumn('wilayah', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->whereHas('quotation', function ($sub) use ($keyword) {
+                        $sub->where('wilayah', 'like', "%{$keyword}%");
+                    })->orWhereHas('quotationKontrak', function ($sub) use ($keyword) {
+                        $sub->where('wilayah', 'like', "%{$keyword}%");
+                    });
+                });
+            })
             ->filterColumn('opsi_1', function ($query, $keyword) {
                 $query->where('opsi_1', 'like', '%' . $keyword . '%');
             })

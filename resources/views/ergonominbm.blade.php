@@ -196,24 +196,46 @@
         }
 
         /* Styling untuk tabel nested SEBELUM/SESUDAH */
-        .nested-table-container {
+        .nested-table-container { 
             padding: 0;
-        }
+            width: 80px; /* Lebar tetap */
+            min-width: 80px;
+            max-width: 80px;
+        } 
 
-        .nested-table {
-            width: 100%;
-            margin: 0;
+        .nested-table { 
+            width: 100%; 
+            margin: 0; 
             border: none;
+            table-layout: fixed; /* PENTING: Paksa ukuran tetap */
+            border-collapse: collapse; /* Pastikan border tidak double */
+        } 
+
+        .nested-table td { 
+            border: 1px solid black; 
+            width: 40px; /* Lebar tetap untuk setiap cell */
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center; 
+            font-weight: bold; 
+            padding: 3px; 
+            font-size: 9px;
+            overflow: hidden; 
+            white-space: nowrap;
+            box-sizing: border-box; /* Include padding dalam perhitungan width */
         }
 
-        .nested-table td {
-            border: 1px solid black;
-            width: 50%;
+        /* TD untuk nilai skor */
+        .score-cell {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
             text-align: center;
-            font-weight: bold;
             padding: 3px;
-            font-size: 9px; /* Konsisten */
+            box-sizing: border-box;
         }
+
+        
 
         .total-score {
             font-weight: bold;
@@ -348,6 +370,27 @@
             padding: 0px 2px;
             font-size: 8pt;
             vertical-align: top;
+        }
+
+        .result-header {
+            text-align: center;
+            font-weight: bold;
+            margin: 5px 0;
+            font-size: 9px;
+        }
+
+        /* Cell untuk header SEBELUM/SESUDAH */
+        .result-cell {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
+            font-weight: bold;
+            padding: 3px;
+            font-size: 9px;
+            border: 1px solid black;
+            box-sizing: border-box;
+            background-color: #f0f0f0; /* Optional: beri warna background */
         }
     </style>
 </head>
@@ -538,35 +581,29 @@
                         <tr>
                             <td>26.</td>
                             <td>Kaki kiri</td>
-                            <td>{{ $pengukuran->sebelum->skor_kaki_kiri }}</td>
-                            <td>{{ $pengukuran->setelah->skor_kaki_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kaki_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kaki_kiri }}</td>
 
-                            <td colspan="2" class="nested-table-container">
-                                <table class="nested-table">
-                                    <tr>
-                                        <td>SEBELUM</td>
-                                        <td>SESUDAH</td>
-                                    </tr>
-                                </table>
-                            </td>
+                            <td class="result-cell">SEBELUM</td>
+                            <td class="result-cell">SESUDAH</td>
 
                             <td>27.</td>
                             <td>Kaki kanan</td>
-                            <td>{{ $pengukuran->sebelum->skor_kaki_kanan }}</td>
-                            <td>{{ $pengukuran->setelah->skor_kaki_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kaki_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kaki_kanan }}</td>
                         </tr>
 
                         <tr>
                             <td colspan="2" class="total-score">TOTAL SKOR KIRI</td>
-                            <td>{{ $pengukuran->sebelum->skor_kiri }}</td>
-                            <td>{{ $pengukuran->setelah->skor_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kiri }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kiri }}</td>
 
-                            <td class="nested-table-container">{{ $pengukuran->sebelum->total_skor }}</td>
-                            <td class="nested-table-container">{{ $pengukuran->setelah->total_skor }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->total_skor }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->total_skor }}</td>
 
                             <td colspan="2" class="total-score">TOTAL SKOR KANAN</td>
-                            <td>{{ $pengukuran->sebelum->skor_kanan }}</td>
-                            <td>{{ $pengukuran->setelah->skor_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->sebelum->skor_kanan }}</td>
+                            <td class="score-cell">{{ $pengukuran->setelah->skor_kanan }}</td>
                         </tr>
 
                         <tr>
@@ -642,7 +679,7 @@
                         <tr>
                             <td>{{$personal->no_lhp}}</td>
                             <td>{{$personal->no_sampel}}</td>
-                            <td></td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>

@@ -52,7 +52,7 @@ class TestApi extends Controller
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
-            $dataLHP = WsValueErgonomi::with(['detail'])
+            $dataLHP = DataLapanganErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
             if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
                 $dataQr =(object)[
@@ -902,22 +902,32 @@ class TestApi extends Controller
                 /* width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; */
                 switch($type) {
                     case 'draft':
-                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                        /***
+                         * 
+                         * style="text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
+                    <tr>
+                        <td>
+                            <span
+                                style="font-weight: bold; border-bottom: 1px solid #000">'.$title_lhp.'</span>
+                        </td>
+                    </tr>
+                         */
+                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
                                 <tr>
                                     <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                     </td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span></td>
                                     <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                     </td>
                                 <tr>
                                 </table>';
                             break;
                     case 'lhp':
-                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
                                 <tr>
                                     <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                     </td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span></td>
                                     <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                     </td>
                                 <tr>
@@ -931,26 +941,26 @@ class TestApi extends Controller
                         $akreditasiKan = Parameter::where('id', $idParameterAkre)->where('status', "AKREDITASI")->where('is_active', true)->first();
 
                         if($akreditasiKan === null){
-                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif; ">
                                     <tr>
                                         <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                             <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
                                         </td>
                                         <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
-                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                            <span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span>
                                         </td>
                                         <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                         </td>
                                     </tr>
                                      </table>';
                         }else{
-                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse; text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
                                     <tr>
                                         <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
                                             <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
                                         </td>
                                         <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
-                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                            <span style="font-weight: bold; border-bottom: 1px solid #000">LAPORAN HASIL PENGUJIAN</span>
                                         </td>
                                         <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
                                             <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
@@ -1047,7 +1057,7 @@ class TestApi extends Controller
                 // Tulis semua konten HTML
                 foreach ($methodsToCombine as $methodName => $methodId) {
                     // Ambil data untuk setiap metode dan no_sampel yang diminta
-                    $dataMethod = WsValueErgonomi::with(['detail'])
+                    $dataMethod = DataLapanganErgonomi::with(['detail'])
                         ->where('no_sampel', $noSampel)
                         ->where('method', $methodId)
                         ->first();

@@ -27,6 +27,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
+use App\Helpers\EmailLhpRilisHelpers;
 
 class DraftSwabTesController extends Controller
 {
