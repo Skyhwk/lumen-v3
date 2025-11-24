@@ -415,7 +415,7 @@ class DraftUdaraPencahayaanController extends Controller
                     }
 
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
+                    // usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
 
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
