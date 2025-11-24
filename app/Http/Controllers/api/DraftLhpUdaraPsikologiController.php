@@ -356,19 +356,16 @@ class DraftLhpUdaraPsikologiController extends Controller
 					$qr->data = json_encode($dataQr);
 					$qr->save();
 				}
-
-				$cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+				$cekDetail = OrderDetail::where('cfr', $data->no_cfr)
 					->where('is_active', true)
 					->first();
-
 				$periode = $cekDetail->periode ?? null;
 
 				$cekLink = LinkLhp::where('no_order', $data->no_order);
 				if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
 				$cekLink = $cekLink->first();
-
 				if ($cekLink) {
-					$job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $this->karyawan, $cekDetail->periode);
 					$this->dispatch($job);
 				}
 
