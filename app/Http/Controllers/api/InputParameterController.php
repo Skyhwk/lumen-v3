@@ -3737,7 +3737,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => $request->luas_botol / 10000, // dari cm2 ke m2
+					'luas_botol' => (0.25 * 3.14 * pow($request->luas_botol, 2)) / 10000, // dari cm2 ke m2
 					'selisih_hari' => $selisih_hari
 				];
 
