@@ -4,11 +4,11 @@
             <thead>
                 <tr>
                     <th width="8%" class="custom" rowspan="2">NO</th>
-                    <th width="30%" rowspan="2" class="custom">KETERANGAN</th>
-                    <th width="30%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
-                    <th width="16%" rowspan="2" class="custom">NAB (mW/cm²)**</th>
-                    <th width="16%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
-                    <th width="16%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
+                    <th width="25%" rowspan="2" class="custom">KETERANGAN</th>
+                    <th width="25%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
+                    <th width="15%" rowspan="2" class="custom">NAB (mW/cm²)</th>
+                    <th width="15%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
+                    <th width="17%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th class="custom">MATA</th>

@@ -298,8 +298,9 @@
                      REGULASI  (SAMA UNTUK SEMUA KONDISI)
                 ========================================== --}}
                 @if (!empty($header->regulasi))
+                
                     @foreach (json_decode($header->regulasi) as $i => $y)
-                        @if ($i === $page - 1)
+                        @if($i === 0)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>

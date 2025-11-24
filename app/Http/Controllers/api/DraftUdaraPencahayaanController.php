@@ -146,6 +146,13 @@ class DraftUdaraPencahayaanController extends Controller
         }
     }
 
+    private function cleanArrayKeys($arr)
+    {
+        if (!$arr) return [];
+        $cleanedKeys = array_map(fn($k) => trim($k, " '\""), array_keys($arr));
+        return array_combine($cleanedKeys, array_values($arr));
+    }
+
     public function store(Request $request)
     {
         DB::beginTransaction();
@@ -189,41 +196,30 @@ class DraftUdaraPencahayaanController extends Controller
             $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
 
-            // === 3. Persiapan data header ===
             $parameter_uji = !empty($request->parameter_header) ? explode(', ', $request->parameter_header) : [];
-            $keterangan = array_values(array_filter($request->keterangan ?? []));
 
-            $regulasi_custom = collect($request->regulasi_custom ?? [])->map(function ($item, $page) {
-                return ['page' => (int) $page, 'regulasi' => $item];
-            })->values()->toArray();
-            // === 4. Simpan / update header ===
-            $header->fill([
-                'no_order' => $request->no_order ?: null,
-                'no_sampel' => implode(', ', $request->no_sampel) ?: null,
-                'no_lhp' => $request->no_lhp ?: null,
-                'no_qt' => $request->no_penawaran ?: null,
-                'nama_pelanggan' => $request->nama_perusahaan ?: null,
-                'alamat_sampling' => $request->alamat_sampling ?: null,
-                'parameter_uji' => json_encode($parameter_uji),
-                'id_kategori_2' => 4,
-                'id_kategori_3' => 28,
-                'deskripsi_titik' => $request->deskripsi_titik ?: null,
-                'sub_kategori' => $request->jenis_sampel ?: null,
-                // 'status_sampling' => $request->type_sampling ?: null,
-                // 'tanggal_terima'  => $request->tanggal_terima ?: null,
-                'metode_sampling' => $request->metode_sampling ? json_encode($request->metode_sampling) : null,
-                'tanggal_sampling' => $request->tanggal_terima ?: null,
-                'nama_karyawan' => $nama_perilis,
-                'jabatan_karyawan' => $jabatan_perilis,
-                'regulasi' => $request->regulasi ? json_encode($request->regulasi) : null,
-                'regulasi_custom' => $regulasi_custom ? json_encode($regulasi_custom) : null,
-                // 'keterangan'      => $keterangan ? json_encode($keterangan) : null,
-                'tanggal_lhp' => $request->tanggal_lhp ?: null,
-                'created_by' => $this->karyawan,
-                'created_at' => Carbon::now(),
-            ]);
-
+            $header->no_order         = $request->no_order ?: null;
+            $header->no_sampel        = !empty($request->no_sampel) ? implode(', ', $request->no_sampel) : null;
+            $header->no_lhp           = $request->no_lhp ?: null;
+            $header->no_qt            = $request->no_penawaran ?: null;
+            $header->nama_pelanggan   = $request->nama_perusahaan ?: null;
+            $header->alamat_sampling  = $request->alamat_sampling ?: null;
+            $header->parameter_uji    = json_encode($parameter_uji);
+            $header->id_kategori_2    = 4;
+            $header->id_kategori_3    = 28;
+            $header->deskripsi_titik  = $request->deskripsi_titik ?: null;
+            $header->sub_kategori     = $request->jenis_sampel ?: null;
+            $header->metode_sampling  = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
+            $header->tanggal_sampling = $request->tanggal_terima ?: null;
+            $header->nama_karyawan    = $nama_perilis;
+            $header->jabatan_karyawan = $jabatan_perilis;
+            $header->regulasi         = $request->regulasi ? json_encode($request->regulasi) : null;
+            $header->regulasi_custom  = ($request->regulasi_custom != null) ? json_encode($request->regulasi_custom) : null;
+            $header->tanggal_lhp      = $request->tanggal_lhp ?: null;
+            $header->created_by       = $this->karyawan;
+            $header->created_at       = Carbon::now()->format('Y-m-d H:i:s');
             $header->save();
+
             $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->first();
             if ($detail != null) {
                 $history = $detail->replicate();
@@ -231,34 +227,27 @@ class DraftUdaraPencahayaanController extends Controller
                 $history->created_by = $this->karyawan;
                 $history->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $history->save();
+                $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->delete();
             }
-            $detail = LhpsPencahayaanDetail::where('id_header', $header->id)->delete();
-            foreach ($request->no_sampel ?? [] as $key => $val) {
-                $cleaned_key_hasil_uji = array_map(fn($k) => trim($k, " '\""), array_keys($request->hasil_uji));
-                $cleaned_hasil_uji = array_combine($cleaned_key_hasil_uji, array_values($request->hasil_uji));
-                $cleaned_key_lokasi = array_map(fn($k) => trim($k, " '\""), array_keys($request->lokasi));
-                $cleaned_lokasi = array_combine($cleaned_key_lokasi, array_values($request->lokasi));
-                $cleaned_key_noSampel = array_map(fn($k) => trim($k, " '\""), array_keys($request->no_sampel));
-                $cleaned_noSampel = array_combine($cleaned_key_noSampel, array_values($request->no_sampel));
-
-                $cleaned_key_sumber_cahaya = array_map(fn($k) => trim($k, " '\""), array_keys($request->sumber_cahaya));
-                $cleaned_sumber_cahaya = array_combine($cleaned_key_sumber_cahaya, array_values($request->sumber_cahaya));
-                $cleaned_key_jenis_pengukuran = array_map(fn($k) => trim($k, " '\""), array_keys($request->jenis_pengukuran));
-                $cleaned_jenis_pengukuran = array_combine($cleaned_key_jenis_pengukuran, array_values($request->jenis_pengukuran));
-                // $cleaned_key_nab = array_map(fn($k) => trim($k, " '\""), array_keys($request->nab));
-                // $cleaned_nab = array_combine($cleaned_key_nab, array_values($request->nab));
-                $cleaned_key_tanggal_sampling = array_map(fn($k) => trim($k, " '\""), array_keys($request->tanggal_sampling));
-                $cleaned_tanggal_sampling = array_combine($cleaned_key_tanggal_sampling, array_values($request->tanggal_sampling));
+            
+            $cleaned_param              = $this->cleanArrayKeys($request->param) ?? [];
+            $cleaned_lokasi             = $this->cleanArrayKeys($request->lokasi);
+            $cleaned_sumber_cahaya      = $this->cleanArrayKeys($request->sumber_cahaya);
+            $cleaned_noSampel           = $this->cleanArrayKeys($request->no_sampel);
+            $cleaned_hasil_uji          = $this->cleanArrayKeys($request->hasil_uji ?? []);
+            $cleaned_tanggal_sampling   = $this->cleanArrayKeys($request->tanggal_sampling ?? []);
+            $cleaned_jenis_pengukuran   = $this->cleanArrayKeys($request->jenis_pengukuran);
+            
+            foreach ($request->no_sampel as $key => $val) {
                 if (array_key_exists($val, $cleaned_noSampel)) {
                     $detail = new LhpsPencahayaanDetail;
                     $detail->id_header = $header->id;
-                    $detail->param = $request->parameter_header;
+                    $detail->param = $cleaned_param[$val];
                     $detail->no_sampel = $cleaned_noSampel[$val];
                     $detail->lokasi_keterangan = $cleaned_lokasi[$val];
                     $detail->hasil_uji = $cleaned_hasil_uji[$val];
                     $detail->sumber_cahaya = $cleaned_sumber_cahaya[$val];
                     $detail->jenis_pengukuran = $cleaned_jenis_pengukuran[$val];
-                    // $detail->nab                = $cleaned_nab[$val];
                     $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val];
                     $detail->save();
                 }
@@ -267,43 +256,43 @@ class DraftUdaraPencahayaanController extends Controller
             // === 6. Handle custom ===
             LhpsPencahayaanCustom::where('id_header', $header->id)->delete();
 
-            if ($request->custom_no_sampel) {
-                foreach ($request->custom_no_sampel as $page => $sampel) {
-                    foreach ($sampel as $sampel => $hasil) {
-                        LhpsPencahayaanCustom::create([
-                            'id_header' => $header->id,
-                            'page' => $page,
-                            'no_sampel' => $request->custom_no_sampel[$page][$sampel] ?? null,
-                            'lokasi_keterangan' => $request->custom_lokasi[$page][$sampel],
-                            'param' => $request->custom_param[$page][$sampel],
-                            'sumber_cahaya' => $request->custom_sumber_cahaya[$page][$sampel] ?? null,
-                            'jenis_pengukuran' => $request->custom_jenis_pengukuran[$page][$sampel] ?? null,
-                            'hasil_uji' => $request->custom_hasil_uji[$page][$sampel] ?? null,
-                            // 'nab'                   => $request->custom_nab[$page][$sampel] ?? null,
-                            'tanggal_sampling' => $request->custom_tanggal_sampling[$page][$sampel] ?? null
-                        ]);
+            $custom = isset($request->regulasi_custom) && !empty($request->regulasi_custom);
+            if($custom){
+                foreach ($request->regulasi_custom as $key => $val) {
+                    $custom_cleaned_param      = $this->cleanArrayKeys($request->custom_param[$key]);
+                    $custom_cleaned_lokasi     = $this->cleanArrayKeys($request->custom_lokasi[$key]);
+                    $custom_cleaned_noSampel   = $this->cleanArrayKeys($request->custom_no_sampel[$key]);
+                    $custom_cleaned_hasil_uji  = $this->cleanArrayKeys($request->custom_hasil_uji[$key] ?? []);
+                    $custom_cleaned_tanggal_sampling  = $this->cleanArrayKeys($request->custom_tanggal_sampling[$key] ?? []);
+                    $custom_cleaned_jenis_pengukuran   = $this->cleanArrayKeys($request->custom_jenis_pengukuran[$key]);
+                    $custom_cleaned_sumber_cahaya      = $this->cleanArrayKeys($request->custom_sumber_cahaya[$key]);
+                    
+                    foreach ($request->custom_no_sampel[$key] as $idx => $val) {
+                        if (array_key_exists($val, $custom_cleaned_noSampel)) {
+                            $custom = new LhpsPencahayaanCustom;
+                            $custom->id_header = $header->id;
+                            $custom->page = number_format($key);
+                            $custom->no_sampel = $custom_cleaned_noSampel[$val];
+                            $custom->param = $custom_cleaned_param[$val];
+                            $custom->lokasi_keterangan = $custom_cleaned_lokasi[$val];
+                            $custom->hasil_uji = $custom_cleaned_hasil_uji[$val];
+                            $custom->sumber_cahaya = $custom_cleaned_sumber_cahaya[$val];
+                            $custom->jenis_pengukuran = $custom_cleaned_jenis_pengukuran[$val];
+                            $custom->tanggal_sampling = $custom_cleaned_tanggal_sampling[$val];
+                            
+                            $custom->save();
+                        }
                     }
                 }
             }
+            
 
-            // $details = LhpsPencahayaanDetail::where('id_header', $header->id)->get();
             if ($header != null) {
                 $file_qr = new GenerateQrDocumentLhp();
                 $file_qr = $file_qr->insert('LHP_PENCAHAYAAN', $header, $this->karyawan);
                 if ($file_qr) {
                     $header->file_qr = $file_qr;
                     $header->save();
-                }
-
-                $groupedByPage = [];
-                if (!empty($custom)) {
-                    foreach ($custom as $item) {
-                        $page = $item['page'];
-                        if (!isset($groupedByPage[$page])) {
-                            $groupedByPage[$page] = [];
-                        }
-                        $groupedByPage[$page][] = $item;
-                    }
                 }
             }
 
@@ -318,13 +307,14 @@ class DraftUdaraPencahayaanController extends Controller
             $groupedByPage = collect(LhpsPencahayaanCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
+
             $renderDetail = LhpsPencahayaanDetail::where('id_header', $header->id)->orderBy('no_sampel')->get();
 
             $renderDetail = collect($renderDetail)->sortBy([
                 ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc']
             ])->values()->toArray();
-
+            
             $fileName = LhpTemplate::setDataDetail($renderDetail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
@@ -333,14 +323,7 @@ class DraftUdaraPencahayaanController extends Controller
                 ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            // if ($header->is_revisi == 1) {
-            //     $header->is_revisi = 0;
-            //     $header->is_generated = 0;
-            //     $header->count_revisi++;
-            //     if ($header->count_revisi > 2) {
-            //         $this->handleApprove($request, false);
-            //     }
-            // }
+
             $header->save();
 
             DB::commit();
@@ -432,7 +415,7 @@ class DraftUdaraPencahayaanController extends Controller
                     }
 
                     // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
+                    // usort($regulasi_custom, fn($a, $b) => $a['page'] <=> $b['page']);
 
                     // Bentuk data_custom
                     foreach ($regulasi_custom as $item) {
@@ -710,10 +693,15 @@ class DraftUdaraPencahayaanController extends Controller
                     $qr->save();
                 }
 
-                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
 
-                if($cekLink) {
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
+
+                if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }

@@ -18,9 +18,9 @@
                         @php
                         @endphp
                             @if($header->sub_kategori == "Getaran (Seluruh Tubuh)")
-                            <td class="custom">Getaran Seluruh Tubuh <sup style="font-size: 8px;"><u>a</u></sup></td>
+                            <td class="custom">Getaran Seluruh Tubuh @if($showKan) <sup style="font-size: 8px;"><u>a</u></sup> @endif</td>
                             @else
-                            <td class="custom">Getaran Lengan Tangan <sup style="font-size: 8px;"><u>a</u></sup></td>
+                            <td class="custom">Getaran Lengan Tangan @if($showKan) <sup style="font-size: 8px;"><u>a</u></sup> @endif</td>
                            @endif
                       
                     </tr>
@@ -84,12 +84,9 @@
                     </tr>
 
             </table>
-
-                {{-- Regulasi --}}
-                
-               @if (!empty($header->regulasi))
+                @if (!empty($header->regulasi_custom))
         
-                    @foreach (json_decode($header->regulasi) as $y)
+                    @foreach (json_decode($header->regulasi_custom) as $key => $y)
                         <table style="padding-top: 10px;" width="100%">
                             <tr>
                                 @php
@@ -104,8 +101,7 @@
                             </tr>
                         </table>
                     @endforeach
-                       @php
-                            // pastikan $header ada nilainya
+                        @php
                             $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
                             $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
                                 if (!empty($table)) {
@@ -121,9 +117,7 @@
                                 </tr>
                         </table>
                         @endif --}}
-                    
                 @endif
-          
             </td>
         </tr>
     </table>

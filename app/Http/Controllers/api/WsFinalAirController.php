@@ -94,6 +94,10 @@ class WsFinalAirController extends Controller
 			});
 
 		return Datatables::of($data)
+			->editColumn('hasil_json', function ($item) {
+				$hasil = json_decode($item->hasil_json ?? '{}', true);
+				return $hasil ?? [];
+			})
 			->make(true);
 	}
 

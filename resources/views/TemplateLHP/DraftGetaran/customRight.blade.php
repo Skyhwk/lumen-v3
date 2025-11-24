@@ -8,19 +8,20 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
-                        <td class="custom" width="200">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">No. LHP</td>
+                        <td class="custom" width="33%">JENIS SAMPEL</td>
+                        <td class="custom" width="33%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Getaran</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Getaran></td>
                     </tr>
                 </table>
             </td>
         </tr>
         <tr>
             <td>
-                {{-- Informasi Pelanggan --}}
                 <table style="padding: 20px 0px 0px 0px;" width="100%">
                     <tr>
                         <td colspan="3"><span style="font-weight: bold; border-bottom: 1px solid #000">Informasi Pelanggan</span></td>

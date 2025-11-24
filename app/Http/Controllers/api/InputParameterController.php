@@ -518,6 +518,15 @@ class InputParameterController extends Controller
                         ->orderBy('no_sampel', 'asc')
                         ->get();
 
+                    $dustfallData = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
                     // Get data for DebuPersonal
                     $debuData = DebuPersonalHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
@@ -529,7 +538,9 @@ class InputParameterController extends Controller
                         ->get();
 
                     // Combine data from both sources
-                    $combinedData = $linghidupData->concat($debuData);
+                    $combinedData = $linghidupData
+						->concat($dustfallData)
+						->concat($debuData);
 
                     // Map sample data
                     $tes1[$k] = $combinedData->map(function($item) {
@@ -3649,9 +3660,10 @@ class InputParameterController extends Controller
 
 	public function HelperDustFall($request, $stp, $order_detail, $header){
 		if($header) {
-			return response()->json([
-				'message' => 'Parameter sudah diinput..!!'
-			], 401);
+			return (object)[
+				'message' => 'Parameter sudah diinput..!!',
+				'status' => 401
+			];
 		}else{
 			$id_po = '';
 			$tgl_terima = '';
@@ -3687,8 +3699,6 @@ class InputParameterController extends Controller
 			$end   = Carbon::parse($pengambilan->tanggal_selesai . ' ' . $data_lapangan[1]['waktu_pengukuran']);
 			$jam = $start->diffInHours($end, true);   // selisih dalam jam
 			$selisih_hari = round($jam / 24, 1);          // konversi ke jam desimal
-			
-			$luas_botol = (float) str_replace(' m2','',$pemasangan->luas_botol);
 
 			$data_parameter = Parameter::where('nama_lab', $request->parameter)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
 			$id_po = $order_detail->id;
@@ -3705,7 +3715,6 @@ class InputParameterController extends Controller
 			$data_parsing = $request->all();
 			$data_parsing = (object)$data_parsing;
 			$data_parsing->selisih_hari = $selisih_hari;
-			$data_parsing->luas_botol = $luas_botol;
 			$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 			$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3728,7 +3737,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => $luas_botol / 10000, // dari cm2 ke m2
+					'luas_botol' => (0.25 * 3.14 * pow($request->luas_botol, 2)) / 10000, // dari cm2 ke m2
 					'selisih_hari' => $selisih_hari
 				];
 
@@ -3913,6 +3922,8 @@ class InputParameterController extends Controller
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
 					$volume_shift = json_encode($volume);
+				}elseif(count($fdl) == 1){
+					$data_shift = json_encode($request->jumlah_coloni);
 				}
                 if(isset($request->jumlah_coloni)){
                     $data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
@@ -3920,7 +3931,7 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = $request->jumlah_pengencer;
+					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;

@@ -1,6 +1,7 @@
 @php
 use App\Models\TabelRegulasi;
 use App\Models\MasterRegulasi;
+
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -18,9 +19,9 @@ use App\Models\MasterRegulasi;
                         @php
                         @endphp
                             @if($header->sub_kategori == "Getaran (Seluruh Tubuh)")
-                            <td class="custom">Getaran Seluruh Tubuh <sup style="font-size: 8px;"><u>a</u></sup></td>
+                            <td class="custom">Getaran Seluruh Tubuh @if($showKan) <sup style="font-size: 8px;"><u>a</u></sup> @endif</td>
                             @else
-                            <td class="custom">Getaran Lengan Tangan <sup style="font-size: 8px;"><u>a</u></sup></td>
+                            <td class="custom">Getaran Lengan Tangan @if($showKan) <sup style="font-size: 8px;"><u>a</u></sup> @endif</td>
                            @endif
                       
                     </tr>
@@ -104,8 +105,7 @@ use App\Models\MasterRegulasi;
                             </tr>
                         </table>
                     @endforeach
-                       @php
-                            // pastikan $header ada nilainya
+                    @php
                             $regulasi = MasterRegulasi::where('id',  explode('-',$y)[0])->first();
                             $table = TabelRegulasi::whereJsonContains('id_regulasi',explode('-',$y)[0])->first();
                                 if (!empty($table)) {

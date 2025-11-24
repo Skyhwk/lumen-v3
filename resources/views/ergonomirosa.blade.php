@@ -381,7 +381,7 @@
                         <tr>
                             <th>NO. LHP</th>
                             <th>NO. SAMPEL</th>
-                            <th>JNS SAMPEL</th>
+                            <th>JENIS SAMPEL</th>
                         </tr>
                     </thead>
                     <tbody>

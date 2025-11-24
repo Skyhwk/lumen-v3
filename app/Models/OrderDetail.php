@@ -197,6 +197,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsKebisinganHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganDetail')->where('is_active', true);
     }
+    public function lhps_kebisingan_personal()
+    {
+        return $this->belongsTo(LhpsKebisinganPersonalHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganPersonalDetail')->where('is_active', true);
+    }
     public function lhps_ling()
     {
         return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
@@ -231,6 +235,11 @@ class OrderDetail extends Sector
     public function lhps_microbiologi()
     {
         return $this->belongsTo(LhpsMicrobiologiHeader::class, 'cfr', 'no_lhp')->with('lhpsMicrobiologiDetailSampel')->where('is_active', true);
+    }
+
+    public function dataLapanganSenyawaVolatil()
+    {
+        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel');
     }
 
     public function t_fct()
