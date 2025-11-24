@@ -4,13 +4,11 @@
             <thead>
                 <tr>
                     <th width="5%" rowspan="2" class="custom">NO</th>
-                    <th width="25%" class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
-                    <th width="15%" class="custom">HASIL UJI</th>
-                    <th width="15%" class="custom">STANDART</th>
+                    <th width="50%" class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
+                    <th width="10%" class="custom">HASIL UJI</th>
                     <th width="10%" class="custom" rowspan="2">SUMBER PENCAHAYAAN</th>
                     <th width="10%" class="custom" rowspan="2">JENIS PENGUKURAN</th>
-                    <th width="10%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
-
+                    <th width="15%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th class="custom">Satuan = LUX</th>
@@ -20,40 +18,22 @@
                 @php
                     $totdat = count($custom);
                 @endphp
-                @foreach ($custom as $k => $v)
+                @foreach ($custom as $kk => $yy)
                     @php
-                        $number = $k + 1;
-                        $no_sampel = !empty($v['no_sampel']) ? $v['no_sampel'] : '';
-                        $keterangan =
-                            isset($v['lokasi_keterangan']) && $v['lokasi_keterangan'] != 'null'
-                                ? $v['lokasi_keterangan']
-                                : '';
-                        $sumber_get = isset($v['sumber_cahaya']) ? $v['sumber_cahaya'] : '';
-                        $hasil = isset($v['hasil_uji']) ? $v['hasil_uji'] : '';
-                        $jenis_pengukuran = isset($v['jenis_pengukuran']) ? $v['jenis_pengukuran'] : '';
-                        $nab = isset($v['nab']) ? $v['nab'] : '';
-                        $sumber_cahaya = isset($v['sumber_cahaya']) ? $v['sumber_cahaya'] : '';
-                        $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
+                        $i = $kk + 1;
                     @endphp
                     <tr>
-                        <td class="custom">
-                            {{ $number }}</td>
-                        <td class="custom4"><sup
-                                style="font-size:5px; !important; margin-top:-10px;">{{ $no_sampel }}</sup>{{ $keterangan }}
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
+                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                            {{ $yy['lokasi_keterangan'] }}
                         </td>
-                        <td class="custom">
-                            {{ $hasil }}</td>
-                        <td class="custom">
-                            {{ $nab }}</td>
-                        <td class="custom">
-                            {{ $sumber_cahaya }}</td>
-                        <td class="custom">
-                            {{ $jenis_pengukuran }}</td>
-                        <td class="custom">
-                            {{ $tanggal_sampling }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil_uji'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['sumber_cahaya'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['jenis_pengukuran'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                     </tr>
                 @endforeach
-
             </tbody>
         </table>
     </div>

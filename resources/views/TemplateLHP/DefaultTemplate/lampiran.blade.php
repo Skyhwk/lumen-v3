@@ -2,11 +2,15 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     $custom = json_decode($header->regulasi_custom ?? '[]');
+    if (is_object($custom)) {
+        $custom = (array)$custom;
+    }
+    
     if (isset($custom[0]->page)) {
-    $regulasiCustom = [];
+        $regulasiCustom = [];
 
-    foreach ($custom as $value) {
-        $regulasiCustom[] = $value->id . '-' . $value->regulasi;
+        foreach ($custom as $value) {
+            $regulasiCustom[] = $value->id . '-' . $value->regulasi;
         }
     } else {
         $regulasiCustom = $custom;
