@@ -708,14 +708,14 @@ class FdlMethodBahayaErgonomiController extends Controller
                         return response()->json(['message' => 'No. Sample sudah di input.'], 401);
                     }
                 } else {
-                    if ($data) {
-                        return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                    } else {
+                    // if ($data) {
+                    //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                    // } else {
                         return response()->json([
                             'message' => 'Successful.',
                             'data' => $fdl
                         ], 200);
-                    }
+                    // }
                 }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi di No. Sampel tersebut.'], 401);
