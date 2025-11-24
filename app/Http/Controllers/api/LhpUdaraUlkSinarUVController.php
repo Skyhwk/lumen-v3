@@ -19,6 +19,7 @@ class LhpUdaraUlkSinarUVController extends Controller
 {
     public function index(Request $request)
     {
+        DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
             'lhps_sinaruv',
             'orderHeader' => function ($query) {
