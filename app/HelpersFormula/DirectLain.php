@@ -19,8 +19,8 @@ class DirectLain {
             }
         }
 
-        $tekanan_udara = !empty($pa) ? round(array_sum($pa) / count($pa), 1) : 0;
-        $suhu = !empty($ta) ? round(array_sum($ta) / count($ta), 1) : 0;
+        $tekanan_udara = !empty($pa) ? number_format(array_sum($pa) / count($pa), 1) : 0;
+        $suhu = !empty($ta) ? number_format(array_sum($ta) / count($ta), 1) : 0;
 
         // Inisialisasi default
         $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
@@ -36,33 +36,34 @@ class DirectLain {
         if ($jumlahElemen > 0) {
             foreach ($data as $row) {
                 if (in_array($row->parameter, $paramCO)) {
-                    $c3 = round($totalNilai / $jumlahElemen, 6);
+                    $c3 = number_format($totalNilai / $jumlahElemen, 6);
                     $c2 = (($c3 * 28.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
                     $c1 = $c2 * 1000;
-                    $c4 = round($c3 * 1000, 6);
-                    $c5 = round($c3 * 10000, 6);
-                    $c15 = round($c3,6);
-                    $c16 = round($c15 * 1000, 6);
-                    $c17 = round($c15 * 28.01 / 24.45, 6);
+                    $c4 = number_format($c3 * 1000, 6);
+                    $c5 = number_format($c3 * 10000, 6);
+                    $c15 = number_format($c3,6);
+                    $c16 = number_format($c15 * 1000, 6);
+                    $c17 = number_format($c15 * 28.01 / 24.45, 6);
                     $satuan = "ppm";
 
                     // setelah semua hitung selesai, baru cek batas bawah
-                    // if ($c1 < 11.45) $c1 = '<11.45'; else $c1 = round($c1, 2);
-                    // if ($c3 < 0.01) $c3 = '<0.01'; else $c3 = round($c3, 2);
-                    // if ($c2 < 0.01145) $c2 = '<0.01145'; else $c2 = round($c2, 5);
+                    // if ($c1 < 11.45) $c1 = '<11.45'; else $c1 = number_format($c1, 2);
+                    // if ($c3 < 0.01) $c3 = '<0.01'; else $c3 = number_format($c3, 2);
+                    // if ($c2 < 0.01145) $c2 = '<0.01145'; else $c2 = number_format($c2, 5);
                 }
                 
                 else if (in_array($row->parameter, $paramVoc)) {
                     $vocRata2 = $totalNilai / $jumlahElemen;
 
-                    $c2 = round($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
-                    $c1 = round($c2 * 1000, 3);
-                    $c17 = round($vocRata2, 3);
-                    $c16 = round($c17 * 1000, 3);
-                    $c3 = round(($c17 * 24.45) / 78.9516, 3);
+                    $c2 = number_format($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
+                    $c1 = number_format($c2 * 1000, 3);
+                    $c17 = number_format($vocRata2, 3);
+                    $c16 = number_format($c17 * 1000, 3);
+                    $c3 = number_format(($c17 * 24.45) / 78.9516, 3);
+                    $c15 = $c3;
                     $satuan = "mg/m3";
 
-                    if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = round($c2, 3);
+                    if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = number_format($c2, 3);
                 }
 
                 else if (in_array($row->parameter, $paramO2)) {
@@ -70,16 +71,16 @@ class DirectLain {
                     $satuan = "%";
 
                     // cek batas bawah di akhir
-                    $c5 = round($c5, 2);
+                    $c5 = number_format($c5, 2);
                 }else if (in_array($row->parameter, $paramCO2)) {
-                    $c3 = round($totalNilai / $jumlahElemen, 6);
+                    $c3 = number_format($totalNilai / $jumlahElemen, 6);
                     $c2 = (($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
                     $c1 = $c2 * 1000;
-                    $c4 = round($c3 * 1000, 6);
-                    $c5 = round($c3 / 10000, 6);
+                    $c4 = number_format($c3 * 1000, 6);
+                    $c5 = number_format($c3 / 10000, 6);
                     $c15 = $c3;
-                    $c17 = round($c15 * 44.01 / 24.45, 6);
-                    $c16 = round($c17 * 1000, 6);
+                    $c17 = number_format($c15 * 44.01 / 24.45, 6);
+                    $c16 = number_format($c17 * 1000, 6);
                     $satuan = "ppm";
                 }
             }
