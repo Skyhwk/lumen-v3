@@ -4159,54 +4159,6 @@ class TestingController extends Controller
     
     }
 
-    // private function searchClosestKey($temp_result, $isLoop = false)
-    // {
-    //     $table = $this->tableReversedMPN;
-    //     $hasil = null;
-
-    //     // ubah semua key jadi float agar bisa dibandingkan numerik
-    //     $keys = array_map('floatval', array_keys($table));
-    //     sort($keys); // urutkan dari kecil ke besar
-
-    //     $closest_key = null;
-    //     do {
-    //         // cari nilai key terdekat (paling mendekati ke atas/bawah)
-    //         $min_diff = PHP_FLOAT_MAX;
-
-    //         foreach ($keys as $key) {
-    //             $diff = abs($key - $temp_result);
-    //             if ($diff < $min_diff) {
-    //                 $min_diff = $diff;
-    //                 $closest_key = $key;
-    //             }
-    //         }
-
-    //         // jika ketemu (selisih kecil), langsung ambil hasilnya
-    //         if ($closest_key !== null) {
-    //             $hasil = (string) $table[(string)$closest_key];
-    //             break;
-    //         }
-
-    //         // jika tidak ketemu dan loop diizinkan, bagi 10 lalu ulangi
-    //         $temp_result = $temp_result / 10;
-
-    //         // jika tidak loop, hentikan setelah 1 kali
-    //         if (!$isLoop) {
-    //             break;
-    //         }
-    //     } while ($temp_result > 0.000001); // batas aman agar tidak infinite loop
-
-    //     // fallback jika hasil belum ditemukan
-    //     if ($hasil === null) {
-    //         $hasil = '000'; // set nol
-    //     }
-
-    //     return [
-    //         'value' => $hasil,
-    //         'key' => $closest_key
-    //     ];
-    // }
-
     private function searchClosestKey($temp_result, $isLoop = false)
     {
         $rows = $this->tableReversedMPN;
@@ -4243,106 +4195,11 @@ class TestingController extends Controller
         ];
     }
 
-
     private function mround($number, $multiple)
     {
         return round($number / $multiple) * $multiple;
     }
 
-    // private $tableReversedMPN = [
-    //     "1.8" => "001",
-    //     "3.6" => "011",
-    //     "3.7" => "020",
-    //     "5.5" => "021",
-    //     "5.6" => "030",
-    //     "2" => 100,
-    //     "4" => 101,
-    //     "6" => 102,
-    //     "4" => 110,
-    //     "6.1" => 111,
-    //     "8.1" => 112,
-    //     "6.1" => 120,
-    //     "8.2" => 121,
-    //     "8.3" => 130,
-    //     "10" => 131,
-    //     "11" => 140,
-    //     "4.5" => 200,
-    //     "6.8" => 201,
-    //     "9.1" => 202,
-    //     "6.8" => 210,
-    //     "9.2" => 211,
-    //     "12" => 212,
-    //     "8.3" => 220,
-    //     "12" => 221,
-    //     "14" => 222,
-    //     "12" => 230,
-    //     "14" => 231,
-    //     "15" => 240,
-    //     "7.8" => 300,
-    //     "11" => 301,
-    //     "13" => 302,
-    //     "11" => 310,
-    //     "14" => 311,
-    //     "17" => 312,
-    //     "14" => 320,
-    //     "17" => 321,
-    //     "20" => 322,
-    //     "17" => 330,
-    //     "21" => 331,
-    //     "24" => 332,
-    //     "21" => 340,
-    //     "24" => 341,
-    //     "25" => 350,
-    //     "13" => 400,
-    //     "17" => 401,
-    //     "21" => 402,
-    //     "25" => 403,
-    //     "17" => 410,
-    //     "21" => 411,
-    //     "26" => 412,
-    //     "31" => 413,
-    //     "22" => 420,
-    //     "26" => 421,
-    //     "32" => 422,
-    //     "38" => 423,
-    //     "27" => 430,
-    //     "33" => 431,
-    //     "39" => 432,
-    //     "34" => 440,
-    //     "40" => 441,
-    //     "47" => 442,
-    //     "41" => 450,
-    //     "48" => 451,
-    //     "23" => 500,
-    //     "31" => 501,
-    //     "43" => 502,
-    //     "58" => 503,
-    //     "33" => 510,
-    //     "46" => 511,
-    //     "63" => 512,
-    //     "84" => 513,
-    //     "49" => 520,
-    //     "70" => 521,
-    //     "94" => 522,
-    //     "120" => 523,
-    //     "150" => 524,
-    //     "79" => 530,
-    //     "110" => 531,
-    //     "140" => 532,
-    //     "170" => 533,
-    //     "210" => 534,
-    //     "130" => 540,
-    //     "170" => 541,
-    //     "220" => 542,
-    //     "280" => 543,
-    //     "350" => 544,
-    //     "430" => 545,
-    //     "240" => 550,
-    //     "350" => 551,
-    //     "540" => 552,
-    //     "920" => 553,
-    //     "1600" => 554
-    // ];
 
     private $tableReversedMPN = [
         ["key" => 1.8, "value" => "001"],
@@ -4438,5 +4295,4 @@ class TestingController extends Controller
         ["key" => 920, "value" => "553"],
         ["key" => 1600, "value" => "554"]
     ];
-    
 }
