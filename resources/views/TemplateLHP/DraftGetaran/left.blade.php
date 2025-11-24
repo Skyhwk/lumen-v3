@@ -38,7 +38,6 @@
                             <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
                         </td>
                         <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="43%" style="border-left: none; text-align: left;"> 
-                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
                             {{ $yy['keterangan'] }}
                         </td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['percepatan'] ?? $yy['kecepatan'] }}</td>
