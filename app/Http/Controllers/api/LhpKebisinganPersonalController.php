@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\LhpsKebisinganHeader;
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsKebisinganCustom;
+use App\Models\LhpsKebisinganPersonalHeader;
+use App\Models\LhpsKebisinganPersonalDetail;
+use App\Models\LhpsKebisinganPersonalCustom;
 use App\Models\OrderDetail;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
@@ -17,7 +17,7 @@ use Carbon\Carbon;
 use Exception;
 use Yajra\Datatables\Datatables;
 
-class LhpKebisinganController extends Controller
+class LhpKebisinganPersonalController extends Controller
 {
     public function index(Request $request){
         DB::statement("SET SESSION sql_mode = ''");
@@ -32,7 +32,7 @@ class LhpKebisinganController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
-            ->whereJsonDoesntContain('parameter', '271;Kebisingan (P8J)')
+            ->whereJsonContains('parameter', '271;Kebisingan (P8J)')
             ->where('status', 3)
             ->groupBy('cfr')
             ->get();
@@ -43,7 +43,7 @@ class LhpKebisinganController extends Controller
     public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsKebisinganPersonalHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             if($header != null) {
 
                 $header->is_approve = 0;
@@ -75,7 +75,7 @@ class LhpKebisinganController extends Controller
 
     public function handleDownload(Request $request) {
         try {
-            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsKebisinganPersonalHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             
                 $fileName = $header->file_lhp;
 
@@ -95,16 +95,16 @@ class LhpKebisinganController extends Controller
     {
         DB::beginTransaction();
         try {
-            $header = LhpsKebisinganHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header = LhpsKebisinganPersonalHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             $header->count_print = $header->count_print + 1; 
             $header->save();
-            $detail = LhpsKebisinganDetail::where('id_header', $header->id)->get();
+            $detail = LhpsKebisinganPersonalDetail::where('id_header', $header->id)->get();
 
             $detail = collect($detail)->sortBy([
                 ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc']
             ])->values()->toArray();
-            $custom = collect(LhpsKebisinganCustom::where('id_header', $header->id)->get())
+            $custom = collect(LhpsKebisinganPersonalCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
 
