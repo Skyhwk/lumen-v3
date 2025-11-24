@@ -429,7 +429,7 @@ class DraftSwabTesController extends Controller
     {
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
-        dd($request->all());
+        // dd($request->all());
         try {
             // =========================
             // BAGIAN HEADER (punyamu)
@@ -554,14 +554,14 @@ class DraftSwabTesController extends Controller
 
             foreach ($pivot as $key => $page) {
                 foreach ($page as $noSampel => $row) {
-                    $satuan           = $row['satuan'];
                     $tanggal_sampling = $row['tanggal_sampling'];
-                    $akr              = $row['akr'];
                     $keterangan       = $row['keterangan'];
 
                     foreach ($row['hasil_uji'] as $paramName => $hasilUji) {
                         $bakumutu = $row['bakumutu'][$paramName] ?? null;
                         $parameterLab = $row['parameter_lab'][$paramName] ?? null;
+                        $satuan = $row['satuan'][$paramName] ?? null;
+                        $akr = $row['akr'][$paramName] ?? null;
 
                         $metodeParam = $methode[$key][$noSampel][$paramName] ?? null;
 
