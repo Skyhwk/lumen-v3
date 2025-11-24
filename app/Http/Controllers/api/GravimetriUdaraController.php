@@ -117,12 +117,9 @@ class GravimetriUdaraController extends Controller
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
             if(is_null($data) || $data->is_approved == 1){
                 $data = DebuPersonalHeader::where('id', $request->id)->where('is_active', true)->first();
-                if(is_null($data)){
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Data udara gravimetri no sample ' . $data->no_sampel . ' tidak ditemukan'
-                    ],401);
-                }
+            }
+            if(is_null($data) || $data->is_approved == 1){
+                $data = DustFallHeader::where('id', $request->id)->where('is_active', true)->first();
             }
             if($data->is_approved == 1){
                 return response()->json([
@@ -158,6 +155,10 @@ class GravimetriUdaraController extends Controller
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
             if(is_null($data)){
                 $data = DebuPersonalHeader::where('id', $request->id)->where('is_active', true)->first();
+
+            }
+            if(is_null($data)){
+                $data = DustFallHeader::where('id', $request->id)->where('is_active', true)->first();
             }
             $data->is_active = false;
             $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
