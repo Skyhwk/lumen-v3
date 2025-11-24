@@ -10,7 +10,7 @@
         $regulasiCustom = [];
 
         foreach ($custom as $value) {
-            $regulasiCustom[] = $value->id . '-' . $value->regulasi;
+            $regulasiCustom[] = (isset($value->id) ? $value->id : $value->page) . '-' . $value->regulasi;
         }
     } else {
         $regulasiCustom = $custom;
