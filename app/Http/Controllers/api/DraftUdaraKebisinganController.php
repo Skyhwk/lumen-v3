@@ -56,6 +56,7 @@ class DraftUdaraKebisinganController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
+            ->whereJsonDoesntContain('parameter', '271;Kebisingan (P8J)')
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();

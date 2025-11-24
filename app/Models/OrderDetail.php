@@ -197,6 +197,10 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsKebisinganHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganDetail')->where('is_active', true);
     }
+    public function lhps_kebisingan_personal()
+    {
+        return $this->belongsTo(LhpsKebisinganPersonalHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganPersonalDetail')->where('is_active', true);
+    }
     public function lhps_ling()
     {
         return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
