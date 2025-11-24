@@ -15,7 +15,7 @@
             <thead>
                 <tr>
                     <th width="8%" class="custom" rowspan="2">NO</th>
-                    <th width="25%" rowspan="2" class="custom">KETERANGAN</th>
+                    <th width="25%" rowspan="2" class="custom" colspan="2">KETERANGAN</th>
                     <th width="25%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
                     <th width="15%" rowspan="2" class="custom">NAB (mW/cm²)</th>
                     <th width="15%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
@@ -40,7 +40,9 @@
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
                             <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
-                            {{ $akr }} &nbsp;{{ $yy['keterangan'] }}
+                        </td>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="23%" style="border-left: none; text-align: left;"> 
+                            {{ $yy['keterangan'] }}
                         </td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['mata'] }}</td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['siku'] }}</td>
