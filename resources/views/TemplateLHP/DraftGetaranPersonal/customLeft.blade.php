@@ -4,7 +4,7 @@
             <thead>
                 <tr>
                     <th width="8%" class="custom" rowspan="2">NO</th>
-                    <th width="25%" class="custom" rowspan="2">KETERANGAN</th>
+                    <th width="25%" class="custom" rowspan="2" colspan="2">KETERANGAN</th>
                     <th width="15%" class="custom" rowspan="2">SUMBER GETARAN</th>
                     <th width="13%" class="custom" rowspan="2">DUARSI JAM PEMAPARAN PER HARI</th>
                     <th width="10%" class="custom">HASIL UJI</th>
@@ -23,8 +23,10 @@
                     @endphp
                     <tr>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
-                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
-                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="7%" style="text-align: right; border-right: none;"> 
+                            <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
+                        </td>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="18%" style="border-left: none; text-align: left;"> 
                             {{ $yy['keterangan'] }}
                         </td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['sumber_get'] }}</td>

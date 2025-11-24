@@ -4,7 +4,7 @@
             <thead>
                 <tr>
                     <th width="6%" class="custom" rowspan="2">NO</th>
-                    <th width="32%" class="custom" rowspan="2">NAMA PEKERJA</th>
+                    <th width="32%" class="custom" rowspan="2" colspan="2">NAMA PEKERJA</th>
                     <th width="18%" class="custom" rowspan="2">LOKASI SAMPLING</th>
                     <th width="14%" class="custom" rowspan="2">DURASI PAPARAN PEKERJA PER JAM</th>
                     <th width="7%" class="custom">HASIL UJI</th>
@@ -23,8 +23,10 @@
                     @endphp
                     <tr>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
-                        <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
-                            <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="7%" style="text-align: right; border-right: none;"> 
+                            <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
+                        </td>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="25%" style="border-left: none; text-align: left;"> 
                             {{ $yy['nama_pekerja'] }}
                         </td>
                         <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['lokasi_keterangan'] }}</td>

@@ -501,6 +501,20 @@ class LhpTemplate
                             border-bottom: 1px solid #000000;
                             font-size: 9px;
                         }
+                        .pd-3-dot {
+                            padding: 3px;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
+                        .pd-3-solid {
+                            padding: 3px;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-dot-center {
                             padding: 8px;
                             text-align: center;
