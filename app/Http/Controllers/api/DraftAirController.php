@@ -1033,6 +1033,8 @@ class DraftAirController extends Controller
                 ->where('is_active', true)
                 ->first();
 
+            $periode = $cekDetail->periode ?? null;
+
             $cekLink = LinkLhp::where('no_order', $header->no_order);
             if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
             $cekLink = $cekLink->first();
