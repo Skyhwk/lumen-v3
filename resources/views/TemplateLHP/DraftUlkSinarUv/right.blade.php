@@ -105,7 +105,7 @@
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi) as $y)
                             <tr>
-                                <td class="custom5" colspan="3"><strong>**{{ $y }}</strong></td>
+                                <td class="custom5" colspan="3"><strong>{{ $y }}</strong></td>
                             </tr>
                         @endforeach
                     </table>

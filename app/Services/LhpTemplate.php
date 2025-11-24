@@ -391,26 +391,26 @@ class LhpTemplate
                     }
                 }
             } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
-                // if(collect($dataDecode)->contains(function ($item) {
-                //     return in_array(
-                //         $item,
-                //         ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
-                //     );
-                // })){
-                //     $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                //     $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
-                // } else {
-                //     $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                //     $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-                // }
+                if(collect($dataDecode)->contains(function ($item) {
+                    return in_array(
+                        $item,
+                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
+                    );
+                })){
+                    $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                } else {
+                    $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                }
 
-                // foreach ($detail as $val) {
-                //     if ($val->akr != 'ẍ') {
-                //         $parameterAkreditasi++;
-                //     } else {
-                //         $parameterNonAkreditasi++;
-                //     }
-                // }
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
             } else {
                 foreach ($dataDecode as $val) {
                     $bakumutu = MasterBakumutu::where('id_regulasi', explode("-", $dataRegulasi)[0])->where('parameter', explode(";", $val)[1])->first();
