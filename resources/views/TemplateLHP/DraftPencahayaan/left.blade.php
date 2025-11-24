@@ -25,7 +25,7 @@
                     <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="7%" style="text-align: right; border-right: none;"> 
                         <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
                     </td>
-                    <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="43%" style="border-left: none; text-align: left;">
+                    <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="40%" style="border-left: none; text-align: left;">
                         {{ $yy['lokasi_keterangan'] }}
                     </td>
                     <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil_uji'] }}</td>
