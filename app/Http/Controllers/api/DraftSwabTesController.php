@@ -693,6 +693,8 @@ class DraftSwabTesController extends Controller
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
 
+                $data->save();
+
                 HistoryAppReject::insert([
                     'no_lhp'      => $data->no_lhp,
                     'no_sampel'   => $request->noSampel,
@@ -713,8 +715,13 @@ class DraftSwabTesController extends Controller
                     $qr->save();
                 }
 
-                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
-                $cekLink   = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
 
                 if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
