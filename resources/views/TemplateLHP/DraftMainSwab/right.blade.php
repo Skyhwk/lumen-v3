@@ -69,11 +69,17 @@
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
                         <td class="custom">No. LHP</td>
+                        @if ($isSingleSampel)
+                            <td class="custom" width="33%">No. SAMPEL</td>
+                        @endif
                         <td class="custom">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Lingkungan Kerja</td>
+                        @if ($isSingleSampel)
+                            <td class="custom" width="33%">{{ $header->no_sampel }}</td>
+                        @endif
+                        <td class="custom">Swab Lingkungan Kerja</td>
                     </tr>
                 </table>
             </td>
@@ -121,35 +127,28 @@
                     </tr>
 
                     @if ($isSingleSampel)
-
-                        <tr>
-                            <td class="custom5" width="120">Spesifikasi Metode</td>
-                            <td class="custom5" width="12">:</td>
-                            <td class="custom5">
-                                @foreach ($paramUnik as $idx => $p)
-                                    @if ($idx > 0)
-                                        <br>
-                                    @endif
-
-                                    @php
-                                        $methode = '-';
-                                        foreach ($detail as $row) {
-                                            if ($row['parameter'] === $p) {
-                                                $methode = $row['methode'];
-                                                break;
-                                            }
-                                        }
-                                    @endphp
-
-                                    {{ $p }} : {{ $methode }}
-                                @endforeach
-                            </td>
-                        </tr>
                         <tr>
                             <td class="custom5" width="120">Tanggal Sampling</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
                         </tr>
+
+                        {{-- keterangan (bisa gabung semua area/keterangan) --}}
+                        <tr>
+                            <td class="custom5" width="120">Keterangan</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">{{ $header->deskripsi_titik ?? '-' }}</td>
+                        </tr>
+
+                        {{-- area swab (kalau mau dipisah) --}}
+                        <tr>
+                            <td class="custom5" width="120">Area Swab</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->deskripsi_titik ?? '-' }}
+                            </td>
+                        </tr>
+
                         <tr>
                             <td class="custom5" width="120">Periode Analisa</td>
                             <td class="custom5" width="12">:</td>
@@ -165,11 +164,31 @@
                             </td>
                         </tr>
 
-
-
                         {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
                     @elseif ($isMultiSampelOneParam)
                         {{-- parameter pengujian --}}
+                        <tr>
+                            <td class="custom5" width="120">Parameter Pengujian</td>
+                            <td class="custom5" width="12">:</td>
+                            @foreach ($paramUnik as $idx => $p)
+                                @if ($idx > 0)
+                                    <br>
+                                @endif
+
+                                @php
+                                    $methode = '-';
+                                    foreach ($detail as $row) {
+                                        if ($row['parameter'] === $p) {
+                                            $akr = $row['akr'];
+                                            break;
+                                        }
+                                    }
+                                @endphp
+
+                                <td class="custom5"><sup>{{ $akr }}</sup>&nbsp;{{ $p }}</td>
+                            @endforeach
+                        </tr>
+
                         {{-- spesifikasi metode (hardcode / dari header kalau ada) --}}
                         <tr>
                             <td class="custom5" width="120">Spesifikasi Metode</td>
@@ -185,18 +204,12 @@
                                         foreach ($detail as $row) {
                                             if ($row['parameter'] === $p) {
                                                 $methode = $row['methode'];
-                                                $methode_suhu = $row['methode_suhu'];
-                                                $methode_kelembapan = $row['methode_kelembapan'];
                                                 break;
                                             }
                                         }
                                     @endphp
 
-                                    {{ $p }} : {{ $methode }}
-                                    <br>
-                                    Suhu : {{ $methode_suhu }}
-                                    <br>
-                                    Kelembapan : {{ $methode_kelembapan }}
+                                    {{ $methode }}
                                 @endforeach
                             </td>
                         </tr>
@@ -216,6 +229,16 @@
                                 @endif
                             </td>
                         </tr>
+
+                        {{-- area swab --}}
+                        <tr>
+                            <td class="custom5" width="120">Area Swab</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                {{ $header->deskripsi_titik ?? '-' }}
+                            </td>
+                        </tr>
+
                         {{-- KONDISI 3: banyak no sampel, banyak parameter --}}
                     @elseif ($isMultiSampelMultiParam)
                         {{-- metode sampling (array) --}}
@@ -298,8 +321,9 @@
                      REGULASI  (SAMA UNTUK SEMUA KONDISI)
                 ========================================== --}}
                 @if (!empty($header->regulasi))
+
                     @foreach (json_decode($header->regulasi) as $i => $y)
-                        @if ($i === $page - 1)
+                        @if ($i === 0)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
@@ -322,7 +346,6 @@
                         </table>
                     @endif
                 @endif
-
 
                 @php
                     $temptArrayPush = [];
