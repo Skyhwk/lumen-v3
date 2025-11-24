@@ -1,6 +1,9 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
+    use App\Models\LhpsSwabTesDetail;
+
+    $custom = LhpsSwabTesDetail::where('id_header', $header->id)->where('page', $page)->get();
 
     $detailData = is_object($detail) && method_exists($detail, 'toArray') ? $detail->toArray() : (array) $detail;
 
@@ -213,7 +216,7 @@
                                 @endforeach
                             </td>
                         </tr>
-                        
+
                         {{-- periode analisa --}}
                         <tr>
                             <td class="custom5" width="120">Periode Analisa</td>
@@ -321,24 +324,32 @@
                      REGULASI  (SAMA UNTUK SEMUA KONDISI)
                 ========================================== --}}
                 @if (!empty($header->regulasi))
+                    @foreach (json_decode($header->regulasi) as $i => $y)
+                        @if ($i === $page - 1)
+                            <table style="padding-top: 10px;" width="100%">
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong>
+                                    </td>
+                                </tr>
+                            </table>
+                        @endif
+                    @endforeach
                     @php
-                        $regulasiList = json_decode($header->regulasi, true) ?? [];
+                        $regulasiId = explode('-', $y)[0];
+                        $regulasiName = explode('-', $y)[1] ?? '';
+                        $regulasi = MasterRegulasi::find($regulasiId);
+                        $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                        $table = $tableObj ? $tableObj->konten : '';
                     @endphp
-
-                    @foreach ($regulasiList as $regItem)
-                        @php
-                            $parts = explode('-', $regItem, 2);
-                            $regulasiId = $parts[0] ?? null;
-                            $regulasiName = $parts[1] ?? '';
-                        @endphp
-
-                        <table style="padding: 10px 0px 0px 0px;" width="100%">
+                    @if ($table)
+                        <table style="padding-top: 5px;" width="100%">
                             <tr>
-                                <td class="custom5" colspan="3">{{ $regulasiName }}</td>
+                                <td class="custom5" colspan="3">Lampiran di halaman terakhir</td>
                             </tr>
                         </table>
-                    @endforeach
+                    @endif
                 @endif
+
 
                 @php
                     $temptArrayPush = [];
