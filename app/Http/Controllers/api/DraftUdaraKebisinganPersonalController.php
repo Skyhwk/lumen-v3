@@ -252,7 +252,6 @@ class DraftUdaraKebisinganPersonalController extends Controller
                 $fileName = LhpTemplate::setDataDetail($details)
                         ->setDataHeader($header)
                         ->setDataCustom($custom)
-                        ->useLampiran(true)
                         ->whereView('DraftKebisinganPersonal')
                         ->render('downloadLHPFinal');
 
@@ -335,7 +334,6 @@ class DraftUdaraKebisinganPersonalController extends Controller
             $fileName = LhpTemplate::setDataDetail($detail)
                         ->setDataHeader($dataHeader)
                         ->setDataCustom($custom)
-                        ->useLampiran(true)
                         ->whereView('DraftKebisinganPersonal')
                         ->render('downloadLHPFinal');
 
@@ -391,21 +389,13 @@ class DraftUdaraKebisinganPersonalController extends Controller
                 $tanggal_sampling = OrderDetail::where('no_sampel', $val->no_sampel)->where('is_active', 1)->first()->tanggal_sampling;
                 return [
                     'lokasi_keterangan' => $val->data_lapangan_personal->departemen ?? null,
-                    'paparan'          => $val->data_lapangan->jam_pemaparan
-                        ?? $val->data_lapangan_personal->waktu_pengukuran
-                        ?? null,
-                    'titik_koordinat'  => $val->data_lapangan->titik_koordinat
-                        ?? $val->data_lapangan_personal->titik_koordinat
-                        ?? null,
+                    'paparan'          => $this->durasiPaparan($val->data_lapangan_personal->waktu_pengukuran) ?? null,
                     'nama_pekerja'     => $val->data_lapangan_personal->keterangan ?? null,
                     'id'              => $val->id,
                     'no_sampel'       => $val->no_sampel ?? null,
                     'param'           => $val->parameter ?? null,
-                    'leq_ls'             => $val->leq_ls ?? null,
-                    'leq_lm'             => $val->leq_lm ?? null,
-                    'leq_lsm'             => $val->ws_udara->hasil1 ?? null,
                     'hasil_uji'       => $val->ws_udara->hasil1 ?? null,
-                    'nab'             => $val->ws_udara->nab ?? null,
+                    'nab'             => $this->nabPersonal($val->data_lapangan_personal->waktu_pengukuran) ?? null,
                     'tanggal_sampling' => $tanggal_sampling ?? null,
                 ];
             })->values()->toArray();
@@ -844,4 +834,96 @@ class DraftUdaraKebisinganPersonalController extends Controller
         $extand = explode("|", $data);
         return $extand;
     }
+
+    private function durasiPaparan($waktuPaparan)
+    {
+        try {
+            if (!$waktuPaparan || !is_string($waktuPaparan)) {
+                return '-';
+            }
+
+            preg_match('/(\d+(\.\d+)?)\s*Jam/i', $waktuPaparan, $jamMatch);
+            preg_match('/(\d+(\.\d+)?)\s*Menit/i', $waktuPaparan, $menitMatch);
+
+            $jam   = isset($jamMatch[1]) ? floatval($jamMatch[1]) : 0;
+            $menit = isset($menitMatch[1]) ? floatval($menitMatch[1]) : 0;
+
+            $durasi = $jam + ($menit / 60);
+
+            if (!is_numeric($durasi)) {
+                return '-';
+            }
+
+            return number_format($durasi, 1, '.', '');
+        } catch (\Exception $e) {
+            return '-';
+        }
+    }
+
+    private function nabPersonal($waktuPaparan)
+    {
+        try {
+            if (!$waktuPaparan || !is_string($waktuPaparan)) {
+                return '-';
+            }
+
+            // Parsing jam & menit
+            preg_match('/(\d+(\.\d+)?)\s*Jam/i', $waktuPaparan, $jamMatch);
+            preg_match('/(\d+(\.\d+)?)\s*Menit/i', $waktuPaparan, $menitMatch);
+
+            $jam   = isset($jamMatch[1]) ? floatval($jamMatch[1]) : 0;
+            $menit = isset($menitMatch[1]) ? floatval($menitMatch[1]) : 0;
+
+            if (!isset($jamMatch[1]) && !isset($menitMatch[1])) {
+                return '-';
+            }
+
+            if (!is_numeric($jam) || !is_numeric($menit)) {
+                return '-';
+            }
+
+            // Durasi jam desimal
+            $durasi = $jam + ($menit / 60);
+            $durasi = floatval(number_format($durasi, 1, '.', ''));
+
+            if ($durasi <= 0 || !is_numeric($durasi)) {
+                return '-';
+            }
+
+            // =======================
+            // LOGIKA NAB
+            // =======================
+
+            // Durasi ≥ 1 jam
+            if ($durasi == 8) return 85;
+            if ($durasi >= 4 && $durasi < 8) return 85;
+            if ($durasi >= 3 && $durasi < 4) return 88;
+
+            // Durasi < 1 jam → hitung menit
+            $m = $durasi * 60;
+
+            if ($m == 30) return 97;
+            if ($m > 15 && $m < 30) return 97;
+
+            if ($m == 15) return 100;
+            if ($m > 7.5 && $m < 15) return 100;
+
+            if ($m == 7.5) return 103;
+            if ($m > 3.75 && $m < 7.5) return 103;
+
+            if ($m == 3.75) return 106;
+            if ($m > 1.88 && $m < 3.75) return 106;
+
+            if ($m == 1.88) return 109;
+            if ($m > 0.94 && $m < 1.88) return 109;
+
+            if ($m == 0.94) return 112;
+
+            return '-';
+
+        } catch (\Exception $e) {
+            return '-';
+        }
+    }
+
 }
