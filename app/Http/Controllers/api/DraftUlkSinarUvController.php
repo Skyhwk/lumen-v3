@@ -191,7 +191,7 @@ class DraftUlkSinarUvController extends Controller
                 'no_lhp' => $request->no_lhp ?: null,
                 'no_qt' => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
-                // 'tanggal_sampling'=> $request->tanggal_sampling ?: null,
+                'tanggal_sampling'=> implode(', ', $request->tanggal_sampling) ?: null,
                 'tanggal_terima' => $request->tanggal_terima ?: null,
                 'parameter_uji' => json_encode($parameter_uji),
                 'nama_pelanggan' => $request->nama_perusahaan ?: null,
@@ -281,6 +281,7 @@ class DraftUlkSinarUvController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsSinarUVDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
                 ->whereView('DraftUlkSinarUv')
                 ->render('downloadLHPFinal');
 
@@ -653,11 +654,17 @@ class DraftUlkSinarUvController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
+
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
             } else {

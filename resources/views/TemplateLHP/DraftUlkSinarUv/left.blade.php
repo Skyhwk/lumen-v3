@@ -19,7 +19,7 @@
                     <th width="30%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
                     <th width="16%" rowspan="2" class="custom">NAB (mW/cm²)**</th>
                     <th width="16%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
-                    <th width="16%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
+                    {{-- <th width="16%" rowspan="2" class="custom">TANGGAL SAMPLING</th> --}}
                 </tr>
                 <tr>
                     <th class="custom">MATA</th>
@@ -44,7 +44,7 @@
                         <td class="pd-5-solid-center">{{ $yy['betis'] }}</td>
                         <td class="pd-5-solid-center">{{ $yy['nab'] }}</td>
                         <td class="pd-5-solid-center">{{ $hasil }}</td>
-                        <td class="pd-5-solid-center">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+                        {{-- <td class="pd-5-solid-center">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td> --}}
                     </tr>
                 @endforeach
             </tbody>
