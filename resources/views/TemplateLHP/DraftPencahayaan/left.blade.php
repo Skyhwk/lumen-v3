@@ -3,12 +3,11 @@
         <thead>
             <tr>
                 <th width="5%" rowspan="2" class="custom">NO</th>
-                <th width="25%" class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
-                <th width="15%" class="custom">HASIL UJI</th>
-                {{-- <th width="15%" class="custom">STANDART</th> --}}
+                <th width="50%" class="custom" rowspan="2">LOKASI / KETERANGAN SAMPEL</th>
+                <th width="10%" class="custom">HASIL UJI</th>
                 <th width="10%" class="custom" rowspan="2">SUMBER PENCAHAYAAN</th>
                 <th width="10%" class="custom" rowspan="2">JENIS PENGUKURAN</th>
-                <th width="10%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
+                <th width="15%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
 
             </tr>
             <tr>
@@ -19,18 +18,18 @@
             @php $totdat = count($detail); @endphp
             @foreach ($detail as $kk => $yy)
                 @php
-                    $p = $kk + 1;
+                    $i = $kk + 1;
                 @endphp
                 <tr>
-                    <td class="custom">{{ $p }}</td>
-                    <td class="custom4"><sup
-                            style="font-size:5px; !important; margin-top:-10px;">{{ $yy['no_sampel'] }}</sup>{{ $yy['lokasi_keterangan'] }}
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
+                        <sup style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup>
+                        {{ $yy['lokasi_keterangan'] }}
                     </td>
-                    <td class="custom">{{ $yy['hasil_uji'] }}</td>
-                    {{-- <td class="custom">{{ $yy['nab'] }}</td> --}}
-                    <td class="custom">{{ $yy['sumber_cahaya'] }}</td>
-                    <td class="custom">{{ $yy['jenis_pengukuran'] }}</td>
-                    <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil_uji'] }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['sumber_cahaya'] }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['jenis_pengukuran'] }}</td>
+                    <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                 </tr>
             @endforeach
         </tbody>
