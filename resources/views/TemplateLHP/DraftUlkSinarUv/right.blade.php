@@ -4,14 +4,14 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="25%">No. LHP <sup style="font-size: 8px;"><u>a</u></sup></td>
-                        <td class="custom" width="25%">No. SAMPEL</td>
-                        <td class="custom" width="50%">JENIS SAMPEL</td>
+                        <td class="custom" width="30%">No. LHP</td>
+                        <td class="custom" width="30%">JENIS SAMPEL</td>
+                        <td class="custom" width="40%">PARAMETER UJI</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">{{ $header->no_sampel }}</td>
-                        <td class="custom">{{ $header->sub_kategori }}</td>
+                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Intensitas Sinar UV <sup style="font-size: 8px;"><u>a</u></sup></td>
                     </tr>
                 </table>
             </td>
@@ -74,7 +74,7 @@
                 </tr>
 
                 {{-- Tanggal Sampling / Terima --}}
-                <tr>
+                {{-- <tr>
                     <td class="custom5" width="120">
                         @if ($header->status_sampling == 'SD') 
                             Tanggal Terima 
@@ -89,14 +89,14 @@
                             : $header->tanggal_sampling;
                     @endphp
                     <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($tanggal_) }}</td>
-                </tr>
+                </tr> --}}
 
                 {{-- Periode Analisa --}}
-                <tr>
+                {{-- <tr>
                     <td class="custom5" width="120">Periode Analisa</td>
                     <td class="custom5" width="12">:</td>
                     <td class="custom5">{{ $header->periode_analisa ?? '-' }}</td>
-                </tr>
+                </tr> --}}
             </table>
 
 

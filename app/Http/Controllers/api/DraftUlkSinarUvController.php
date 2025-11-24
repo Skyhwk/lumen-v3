@@ -1,6 +1,8 @@
 <?php
 
 namespace App\Http\Controllers\api;
+
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\HistoryAppReject;
 
 use App\Models\lhpsSinarUVCustom;
@@ -667,6 +669,17 @@ class DraftUlkSinarUvController extends Controller
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)->first();
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->cfr,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
             } else {
                 DB::rollBack();
                 return response()->json([
