@@ -19,13 +19,12 @@ class LhpUdaraUlkSinarUVController extends Controller
 {
     public function index(Request $request)
     {
-        DB::statement("SET SESSION sql_mode = ''");
         $data = OrderDetail::with([
             'lhps_sinaruv',
             'orderHeader' => function ($query) {
-                $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
-            }
-        ])
+                    $query->select('id', 'nama_pic_order', 'jabatan_pic_order', 'no_pic_order', 'email_pic_order', 'alamat_sampling');
+                }
+            ])
             ->selectRaw('order_detail.*, GROUP_CONCAT(no_sampel SEPARATOR ", ") as no_sampel')
             ->where('is_approve', 1)
             ->where('is_active', true)
