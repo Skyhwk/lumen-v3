@@ -172,6 +172,13 @@ class FdlSinarUVController extends Controller
 
                 $parameter = Parameter::where('nama_lab', $parameterValue)->first();
 
+                $totalMenit = $data->waktu_pemaparan ?? null;
+                // hitung NAB
+                $nab = null;
+                if ($totalMenit){
+                    $nab = isset($totalMenit) ? $this->getNab($totalMenit) : null;
+                }
+
 
                 $function = Formula::where('id_parameter', $parameter->id)->where('is_active', true)->first()->function;
                 $calculate = AnalystFormula::where('function', $function)
@@ -202,6 +209,7 @@ class FdlSinarUVController extends Controller
                 $ws->hasil1 = $calculate['hasil1']; // Mata
                 $ws->hasil2 = $calculate['hasil2']; // Siku
                 $ws->hasil3 = $calculate['hasil3']; // Betis
+                $ws->nab = $nab;
                 $ws->save();
 
                 $data->is_approve = true;
@@ -379,4 +387,30 @@ class FdlSinarUVController extends Controller
             ], 401);
         }
     }
+
+    private function getNab($waktu)
+	{
+		if ($waktu >= 1 && $waktu < 5) {
+            return 0.05;
+        } elseif ($waktu >= 5 && $waktu < 10) {
+            return 0.01;
+        } elseif ($waktu >= 10 && $waktu < 15) {
+            return 0.005;
+        } elseif ($waktu >= 15 && $waktu < 30) {
+            return 0.0033;
+        } elseif ($waktu >= 30 && $waktu < 60) {
+            return 0.0017;
+        } elseif ($waktu >= 60 && $waktu < 120) {
+            return 0.0008;
+        } elseif ($waktu >= 120 && $waktu < 240) {
+            return 0.0004;
+        } elseif ($waktu >= 240 && $waktu < 480) {
+            return 0.0002;
+        } elseif ($waktu >= 480) {
+            return 0.0001;
+        } else {
+            return null;
+        }
+		return null;
+	}
 }
