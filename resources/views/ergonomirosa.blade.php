@@ -238,108 +238,104 @@
         <!-- Left Section -->
         <div class="left-section">
             <!-- Section A -->
-            <table class="skor-table">
+            <table class="skor-table" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
                 <tr>
-                    <th rowspan="2" width="8%">No</th>
-                    <th rowspan="2" width="30%">Jenis Skoring</th>
-                    <th colspan="4" width="62%">Skor Section A</th>
+                    <th rowspan="2" style="width: 8%;">No</th>
+                    <th rowspan="2" style="width: 30%;">Jenis Skoring</th>
+                    <th colspan="4" style="width: 62%;">Skor Section A</th>
                 </tr>
                 <tr>
-                    <td class="text-center">Section A</td>
-                    <td class="text-center">Durasi</td>
-                    <td class="text-center">Total (Section A + Durasi)</td>
-                    <td class="text-center">Skor Section A</td>
+                    <td class="text-center" colspan=2 style="width: 24%;">Section A</td>
+                    <td class="text-center" style="width: 28%;">Durasi</td>
+                    <td class="text-center" style="width: 10%;">Total (Section A + Durasi)</td>
                 </tr>
                 <tr>
-                    <td class="text-center">1.</td>
-                    <td>Tinggi Kursi & Lebar Kursi</td>
-                    <td class="text-center">3</td>
-                    <td rowspan="2" class="text-center">2</td>
-                    <td rowspan="2" class="text-center">5</td>
-                    <td rowspan="2" class="text-center">5</td>
+                    <td class="text-center" style="width: 8%;">1.</td>
+                    <td style="width: 30%;">Tinggi Kursi & Lebar Kursi</td>
+                    <td class="text-center" style="width: 10%;">{{$pengukuran->skor_total_tinggi_kursi_dan_lebar_dudukan}}</td>
+                    <td class="text-center" rowspan=2 style="width: 14%;">{{$pengukuran->total_section_a}}</td>
+                    <td class="text-center" rowspan=2 style="width: 28%;">{{$pengukuran->skor_durasi_kerja_bagian_kursi}}</td>
+                    <td class="text-center" rowspan=2 style="width: 10%;">{{($pengukuran->total_section_a + $pengukuran->skor_durasi_kerja_bagian_kursi )}}</td>
                 </tr>
                 <tr>
-                    <td class="text-center">2.</td>
-                    <td>Sandaran Lengan & Punggung</td>
-                    <td class="text-center">4</td>
+                    <td class="text-center" style="width: 8%;">2.</td>
+                    <td style="width: 30%;">Sandaran Lengan & Punggung</td>
+                    <td class="text-center" style="width: 10%;">{{$pengukuran->skor_total_sandaran_lengan_dan_punggung}}</td>
                 </tr>
             </table>
 
             <!-- Section B -->
-            <table class="skor-table">
+            <table class="skor-table" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
                 <tr>
-                    <th rowspan="2" width="8%">No</th>
-                    <th rowspan="2" width="30%">Jenis Skoring</th>
-                    <th colspan="4" width="62%">Skor Section B</th>
+                    <th rowspan="2" style="width: 8%;">No</th>
+                    <th rowspan="2" style="width: 30%;">Jenis Skoring</th>
+                    <th colspan="4" style="width: 62%;">Skor Section B</th>
                 </tr>
                 <tr>
-                    <td class="text-center">Section B</td>
-                    <td class="text-center">Durasi</td>
-                    <td class="text-center">Total (Section B + Durasi)</td>
-                    <td class="text-center">Skor Section B</td>
+                    <td class="text-center" style="width: 10%;">Section B</td>
+                    <td class="text-center" style="width: 14%;">Durasi</td>
+                    <td class="text-center" style="width: 28%;">Total (Section B + Durasi)</td>
+                    <td class="text-center" style="width: 10%;">Skor Section B</td>
                 </tr>
                 <tr>
-                    <td class="text-center">1.</td>
-                    <td>Monitor</td>
-                    <td class="text-center">2</td>
-                    <td class="text-center">1</td>
-                    <td class="text-center">3</td>
-                    <td rowspan="2" class="text-center">4</td>
+                    <td class="text-center" style="width: 8%;">1.</td>
+                    <td style="width: 30%;">Monitor</td>
+                    <td class="text-center" style="width: 10%;">{{$pengukuran->skor_monitor}}</td>
+                    <td class="text-center" style="width: 14%;">{{$pengukuran->skor_durasi_kerja_monitor}}</td>
+                    <td class="text-center" style="width: 28%;">{{($pengukuran->skor_monitor + $pengukuran->skor_durasi_kerja_monitor)}}</td>
+                    <td rowspan="2" class="text-center" style="width: 10%;">{{$pengukuran->total_section_b}}</td>
                 </tr>
                 <tr>
-                    <td class="text-center">2.</td>
-                    <td>Telepon</td>
-                    <td class="text-center">1</td>
-                    <td class="text-center">2</td>
-                    <td class="text-center">3</td>
+                    <td class="text-center" style="width: 8%;">2.</td>
+                    <td style="width: 30%;">Telepon</td>
+                    <td class="text-center" style="width: 10%;">{{$pengukuran->skor_telepon}}</td>
+                    <td class="text-center" style="width: 14%;">{{$pengukuran->skor_durasi_kerja_telepon}}</td>
+                    <td class="text-center" style="width: 28%;">{{($pengukuran->skor_telepon + $pengukuran->skor_durasi_kerja_telepon )}}</td>
                 </tr>
             </table>
 
             <!-- Section C -->
             <table class="skor-table">
                 <tr>
-                    <th rowspan="2" width="8%">No</th>
-                    <th rowspan="2" width="30%">Jenis Skoring</th>
-                    <th colspan="4" width="62%">Skor Section C</th>
+                    <th rowspan="2" style="width: 8%;">No</th>
+                    <th rowspan="2" style="width: 30%;">Jenis Skoring</th>
+                    <th colspan="4" style="width: 62%;">Skor Section C</th>
                 </tr>
                 <tr>
-                    <td class="text-center">Section C</td>
-                    <td class="text-center">Durasi</td>
-                    <td class="text-center">Total (Section C + Durasi)</td>
-                    <td class="text-center">Skor Section C</td>
+                    <td class="text-center" style="width: 10%;" >Section C</td>
+                    <td class="text-center" style="width: 14%;" >Durasi</td>
+                    <td class="text-center" style="width: 28%;" >Total (Section C + Durasi)</td>
+                    <td class="text-center" style="width: 10%;" >Skor Section C</td>
                 </tr>
                 <tr>
-                    <td class="text-center">1.</td>
-                    <td>Mouse</td>
-                    <td class="text-center">2</td>
-                    <td class="text-center">1</td>
-                    <td class="text-center">3</td>
-                    <td rowspan="2" class="text-center">3</td>
+                    <td class="text-center" style="width: 8%;">1.</td>
+                    <td style="width: 30%;">Mouse</td>
+                    <td class="text-center" style="width: 10%;">{{$pengukuran->skor_mouse}}</td>
+                    <td class="text-center" style="width: 14%;">{{$pengukuran->skor_durasi_kerja_mouse}}</td>
+                    <td class="text-center" style="width: 28%;">{{($pengukuran->skor_mouse + $pengukuran->skor_durasi_kerja_mouse)}}</td>
+                    <td rowspan="2" class="text-center" style="width: 10%;">{{$pengukuran->total_section_c}}</td>
                 </tr>
                 <tr>
                     <td class="text-center">2.</td>
                     <td>Keyboard</td>
-                    <td class="text-center">1</td>
-                    <td class="text-center">1</td>
-                    <td class="text-center">2</td>
+                    <td class="text-center">{{$pengukuran->skor_keyboard}}</td>
+                    <td class="text-center">{{$pengukuran->skor_durasi_kerja_keyboard}}</td>
+                    <td class="text-center">{{($pengukuran->skor_keyboard + $pengukuran->skor_durasi_kerja_keyboard )}}</td>
                 </tr>
             </table>
 
             <!-- Final Score -->
             <table class="skor-table">
                 <tr>
-                    <td width="40%" class="text-center font-bold">Skor Section A (Section B & Section C)</td>
-                    <td width="8%" class="no-border text-center" style="font-size: 14pt;">→</td>
+                    <td width="40%" class="text-center font-bold">Skor Section D (Section B & Section C)</td>
+                    <td width="8%" rowspan="2" style="font-size: 14pt; border:none;"></td>
                     <td width="27%" class="text-center font-bold">Skor ROSA</td>
-                    <td width="8%" class="no-border text-center" style="font-size: 14pt;">→</td>
-                    <td width="17%" class="text-center font-bold" style="font-size: 12pt;">4</td>
+                    <td width="8%" rowspan="2"  style="font-size: 14pt; border:none;">→</td>
+                    <td width="17%" rowspan="2" class="text-center font-bold" style="font-size: 12pt;">{{$pengukuran->final_skor_rosa}}</td>
                 </tr>
                 <tr>
-                    <td class="text-center">5</td>
-                    <td class="no-border"></td>
+                    <td class="text-center">{{$pengukuran->total_section_d}}</td>
                     <td class="text-center font-bold">Skoring Section A & Section D</td>
-                    <td class="no-border"></td>
-                    <td class="no-border"></td>
                 </tr>
             </table>
 
@@ -356,7 +352,7 @@
                     <td class="text-left">Mungkin perlu dilakukan tindakan</td>
                 </tr>
                 <tr>
-                    <td class="text-center">3 - 5</td>
+                    <td class="text-center">3 - 4</td>
                     <td class="text-center">Sedang</td>
                     <td class="text-left">Diperlukan tindakan karena rawan terkena cedera</td>
                 </tr>
@@ -372,7 +368,7 @@
                 <tr>
                     <td class="kesimpulan-cell">
                         <strong>Kesimpulan:</strong><br><br>
-                        Berdasarkan penilaian ROSA, skor akhir adalah 4 yang termasuk dalam kategori risiko sedang. Diperlukan tindakan perbaikan ergonomis untuk mengurangi risiko cedera muskuloskeletal pada pekerja.
+                        {{$pengukuran->result}}
                     </td>
                 </tr>
             </table>
@@ -385,14 +381,14 @@
                         <tr>
                             <th>NO. LHP</th>
                             <th>NO. SAMPEL</th>
-                            <th>#JNS SAMPEL</th>
+                            <th>JNS SAMPEL</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>{{ $personal->no_lhp }}</td>
                             <td>{{ $personal->no_sampel }}</td>
-                            <td>{{ $personal->jenis_sampel }} - Rosa</td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>
@@ -403,7 +399,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                            <td style="width: 72%;text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
@@ -418,11 +414,6 @@
                             <td style="width: 25%; text-align:start;">Tanggal</td>
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
-                        </tr>
-                        <tr>
-                            <td>Periode Analisis</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->periode_analisis }}</td>
                         </tr>
                     </table>
 
@@ -441,29 +432,32 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                            <td style="text-align:start;">{{$personal->divisi}}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                            <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
                     <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <span class="info-label">Jenis Analisa</span>
-                        <span>: Pengumpulan Data (Pengukuran & Skoring)</span>
+                        <table class="info-table">
+                            <tr>
+                                <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                                <td style="width: 3%;">:</td>
+                                <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                            </tr>
+                        </table>
                     </div>
 
                     <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <span class="info-label">Metode Analisa*</span>
-                        <span>: Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</span>
-                    </div>
-
-                    <div class="info-note">
-                        * Metode Analisa Mengacu kepada Jenis Metode yang Direkomendasikan pada
-                        Pedoman Teknis Pemeriksaan K3 Pengelolaan Tambahan Peraturan Menteri
-                        Ketenagakerjaan RI No.5 Tahun 2018.<br>
-                        ** Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and Ergonomic
+                        <table class="info-table">
+                            <tr>
+                                <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                                <td style="width: 3%;">:</td>
+                                <td style="width: 72%;text-align:start;">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
 

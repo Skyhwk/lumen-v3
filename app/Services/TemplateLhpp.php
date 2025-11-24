@@ -455,10 +455,10 @@ class TemplateLhpp
         $qrData = $this->prepareQrData($data);
         
         // Build HTML content
-        $html = $this->buildHeader();
-        $html .= $this->buildDataUmum($data, $cfr, $mode_download);
-        $html .= $this->buildPemeriksaanSection($data, $mode_download);
-        $html .= $this->buildPengujianTeknis($data_detail, $mode_download);
+        $header = $this->buildHeader('downloadLHPFinal', false);
+        $html   = $this->buildDataUmum($data, $cfr, $mode_download);
+        $html   .= $this->buildPemeriksaanSection($data, $mode_download);
+        $html   .= $this->buildPengujianTeknis($data_detail, $mode_download);
         
         if ($mode_download == 'downloadLHP') {
             $html .= $this->buildKesimpulanLHP();
@@ -480,7 +480,7 @@ class TemplateLhpp
         $ttd = $this->buildSignatureSection($mode_download, $qrData, $pengesahanLhp, $data);
         $html .= $ttd;
         // Generate PDF
-        return $this->generatePdf($html, $ttd, $cfr, $mode_download, $qrData['qr_img']);
+        return $this->generatePdf($html, $ttd, $cfr, $mode_download, $qrData['qr_img'], $header);
     }
 
     // ===============================================
@@ -517,14 +517,50 @@ class TemplateLhpp
     /**
      * Build header section
      */
-    private function buildHeader()
+    private function buildHeader($mode, $showKan = false)
     {
-        return '
-        <div style="text-align:center; margin-bottom: 30px;">
-            <h2 style="margin-bottom: 5px;">LAPORAN HASIL PENGUJIAN</h2>
-            <h4 style="margin-top: 0; margin-bottom: 5px;">PT INTI SURYA LABORATORIUM</h4>
-            <p style="margin-top: 0; font-style: italic;">Icon Business Park Blok O No. 5-6, Sampora, Kec. Cisauk, Tangerang, Banten 15345</p>
-        </div>';
+        $logoISL = public_path('img/isl_logo.png');
+        $logoKAN = public_path('img/logo_kan.png');
+
+        // MODE: downloadWSDraft & downloadLHP
+        if ($mode == 'downloadWSDraft' || $mode == 'downloadLHP') {
+            return '
+                <table width="100%" style="text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
+                    <tr>
+                        <td style="text-align: center;">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000;">LAPORAN HASIL PENGUJIAN</span>
+                        </td>
+                    </tr>
+                </table>
+            ';
+        }
+
+        // MODE: downloadLHPFinal
+        if ($mode == 'downloadLHPFinal') {
+            return '
+                <table width="100%" style="text-align: center; font-weight: bold; font-size: 15px; font-family: Arial, Helvetica, sans-serif;">
+                    <tr>
+                        <td style="width: 33.33%; text-align: left; padding-left: 30px; vertical-align: top;">
+                            <img src="'.$logoISL.'" alt="ISL" style="height: 40px;">
+                        </td>
+
+                        <td style="width: 33.33%; text-align: center; vertical-align: middle;">
+                            <span style="font-weight: bold; border-bottom: 1px solid #000;">LAPORAN HASIL PENGUJIAN</span>
+                        </td>
+
+                        '.(
+                            $showKan
+                            ? '<td style="width: 33.33%; text-align: right; padding-right: 50px; height: 50px;">
+                                    <img src="'.$logoKAN.'" alt="KAN" style="height: 50px;">
+                            </td>'
+                            : '<td style="width: 33.33%; text-align: right; padding-right: 50px; height: 55px;"></td>'
+                        ).'
+                    </tr>
+                </table>
+            ';
+        }
+
+        return '';
     }
 
     /**
@@ -542,9 +578,11 @@ class TemplateLhpp
         
         if ($mode_download != 'downloadLHP') {
             $rows[] = ['c.', 'Pengurus/Penanggungjawab', $data['penanggung_jawab'] ?? '-'];
+            $rows[] = ['d.', 'Lokasi Pemeriksaan/Pengujian', $data['lokasi_pemeriksaan'] ?? '-'];
+        } else {
+            $rows[] = ['c.', 'Lokasi Pemeriksaan/Pengujian', $data['lokasi_pemeriksaan'] ?? '-'];
         }
         
-        $rows[] = ['d.', 'Lokasi Pemeriksaan/Pengujian', $data['lokasi_pemeriksaan'] ?? '-'];
         
         if ($mode_download != 'downloadLHP') {
             $rows[] = ['e.', 'Nomor Dokumen Pengujian Sebelumnya', $cfr ?? '-'];
@@ -729,7 +767,7 @@ class TemplateLhpp
         $html .= '<tr>';
         
         // Left column - Kesimpulan stress levels
-        $html .= '<td style="width: 30%; vertical-align: top; padding: 8px;">';
+        $html .= '<td style="width: 30%; vertical-align: top; padding-right: 10px;">';
         $html .= '<b>Kesimpulan</b><br>';
         $html .= '<table style="border-collapse: collapse; width: 100%; margin-top: 5px;">';
         
@@ -749,7 +787,7 @@ class TemplateLhpp
         $html .= '</table></td>';
         
         // Right column - Kategori definitions
-        $html .= '<td style="vertical-align: top; padding: 8px;">';
+        $html .= '<td style="vertical-align: top;">';
         
         $kategoriData = [
             'Ketaksaan Peran' => 'Terjadi ketika pekerja tidak memahami dengan jelas tugas, tanggung jawab, dan harapan dalam pekerjaannya.',
@@ -762,7 +800,7 @@ class TemplateLhpp
         
         $counter = 1;
         foreach ($kategoriData as $title => $desc) {
-            $html .= '<p class="mb-3">' . $counter . ' <b>' . $title . '</b>: ' . $desc . '<br></p>';
+            $html .= '<p class="mb-3">' . $counter . '. <b>' . $title . '</b>: ' . $desc . '<br></p>';
             $counter++;
         }
         
@@ -842,7 +880,7 @@ class TemplateLhpp
         
         // Left column - Title
         $html .= '<div style="width: 30%; float: left; vertical-align: top;">';
-        $html .= '<p>ANALISIS</p>';
+        $html .= '<p style="font-size: 10px">ANALISIS</p>';
         $html .= '</div>';
         
         // Right column - Content
@@ -1100,7 +1138,7 @@ class TemplateLhpp
     /**
      * Generate PDF document
      */
-    private function generatePdf($html, $ttd, $cfr, $mode_download, $qr_img)
+    private function generatePdf($html, $ttd, $cfr, $mode_download, $qr_img, $header)
     {
         $no_lhp = str_replace("/", "-", $cfr);
         
@@ -1111,18 +1149,18 @@ class TemplateLhpp
         } else {
             return null;
         }
-        return self::formatTemplate($html, $name, $ttd, $qr_img, $mode_download, null);
+        return self::formatTemplate($html, $name, $ttd, $qr_img, $mode_download, $header);
     }
 
-    private function formatTemplate($bodi, $filename, $ttd, $qr_img, $mode_download, $custom2)
+    private function formatTemplate($bodi, $filename, $ttd, $qr_img, $mode_download, $header)
     {
         $mpdfConfig = array(
             'mode' => 'utf-8',
             'format' => 'A4',
-            'margin_header' => ($mode_download == 'downloadLHPP' ? 12 : 18),
-            'margin_bottom' => 30,
+            'margin_header' => ($mode_download == 'downloadLHPP' ? 10 : 10),
+            'margin_bottom' => 22,
             'margin_footer' => 8,
-            'margin_top' => 23.5,
+            'margin_top' => 23.5, //23.5
             'margin_left' => 10,
             'margin_right' => 10,
             // 'orientation' => 'P',
@@ -1130,9 +1168,22 @@ class TemplateLhpp
         );
 
         $pdf = new PDF($mpdfConfig);
-        $pdf->SetProtection(array(
-            'print'
-        ), '', 'skyhwk12');
+        $pdf->SetProtection(
+            ['print'], // hanya boleh print
+            '',        // user password kosong (bisa dibuka tanpa password)
+            'skyhwk12',
+            128,       // level enkripsi 128-bit
+            [
+                'copy' => false,
+                'modify' => false,
+                'print' => true,
+                'annot-forms' => false,
+                'fill-forms' => false,
+                'extract' => false,
+                'assemble' => false,
+                'print-highres' => true
+            ]
+        );
         $stylesheet = " .custom {
                             padding: 3px;
                             text-align: center;
@@ -1277,16 +1328,19 @@ class TemplateLhpp
                 $qr = 'DP/7.8.1/ISL; Rev 3; 08 November 2022';
             }
             $ketFooter = '<td width="15%" style="vertical-align: bottom;">
-                          <div>PT Inti Surya Laboratorium</div>
-                          <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
-                          <div>021-5089-8988/89 contact@intilab.com</div>
-                          </td>
-                          <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
-                          Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
-                            <br>Halaman {PAGENO} - {nbpg}
+                        <div>PT Inti Surya Laboratorium</div>
+                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                        <div>021-5089-8988/89 contact@intilab.com</div>
+                        </td>
+                        <td width="59%" style="vertical-align: bottom; text-align:center; padding:0; padding-left:44px; margin:0; position:relative; min-height:100px;">
+                        Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.
+                        <br>Halaman {PAGENO} - {nbpg}
                         </td>';
             $body = '<body>';
         }
+        $pdf->SetHTMLHeader($header);
+        $pdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
+        $pdf->showWatermarkImage = true;
         // $pdf->SetHTMLHeader($header, '', TRUE);
         $pdf->WriteHTML($stylesheet, 1);
         $pdf->WriteHTML('<!DOCTYPE html>

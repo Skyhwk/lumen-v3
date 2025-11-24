@@ -7,6 +7,7 @@ use App\Models\LhpsAirHeader;
 use App\Models\QrDocument;
 use App\Models\LhpsAirDetail;
 use App\Models\LhpsAirCustom;
+use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
@@ -24,7 +25,7 @@ use App\Models\LhpsAirDetailHistory;
 use App\Models\PengesahanLhp;
 use App\Models\KonfirmasiLhp;
 
-
+use App\Helpers\EmailLhpRilisHelpers;
 
 use App\Services\TemplateLhps;
 use App\Services\SendEmail;
@@ -845,128 +846,237 @@ class DraftAirController extends Controller
         }
     }
 
+    // public function handleApprove(Request $request, $isManual = true)
+    // {
+    //     DB::beginTransaction();
+    //     try {
+    //         if ($isManual) {
+    //             $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
+    
+    //             if (!$konfirmasiLhp) {
+    //                 $konfirmasiLhp = new KonfirmasiLhp();
+    //                 $konfirmasiLhp->created_by = $this->karyawan;
+    //                 $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
+    //             } else {
+    //                 $konfirmasiLhp->updated_by = $this->karyawan;
+    //                 $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+    //             }
+    
+    //             $konfirmasiLhp->no_lhp = $request->cfr;
+    //             $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
+    //             $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
+    //             $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
+    //             $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
+    //             $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
+    //             $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
+    //             $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
+    
+    //             $konfirmasiLhp->save();
+    //         };
+
+    //         $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
+    //             ->where('is_active', true)->firstOrFail();
+
+    //         $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
+    //             ->where('id', $request->id)
+    //             ->where('is_active', true)
+    //             ->firstOrFail();
+
+    //         if ($header != null) {
+    //             $data_order->is_approve = 1;
+    //             $data_order->status = 3;
+    //             $data_order->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+    //             $data_order->approved_by = $this->karyawan;
+    //             $data_order->save();
+
+    //             $header->is_approve = 1;
+    //             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+    //             $header->approved_by = $this->karyawan;
+
+    //             $header->save();
+
+    //             HistoryAppReject::insert([
+    //                 'no_lhp' => $data_order->cfr,
+    //                 'no_sampel' => $data_order->no_sampel,
+    //                 'kategori_2' => $data_order->kategori_2,
+    //                 'kategori_3' => $data_order->kategori_3,
+    //                 'menu' => 'Draft Air',
+    //                 'status' => 'approve',
+    //                 'approved_at' => Carbon::now(),
+    //                 'approved_by' => $this->karyawan
+    //             ]);
+
+
+    //             if ($header->file_qr == null) {
+    //                 $dataQr = json_decode($qr->data);
+    //                 $dataQr->Tanggal_Pengesahan = Carbon::parse($header->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
+    //                 $dataQr->Disahkan_Oleh = $header->nama_karyawan;
+    //                 $dataQr->Jabatan = $header->jabatan_karyawan;
+    //                 $qr->data = json_encode($dataQr);
+    //                 $qr->save();
+    //             }
+
+    //             $cekDetail = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first();
+    //             $cekLink = LinkLhp::where('no_order', $header->no_order)->where('periode', $periode)->first();
+    //             $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)->where('is_active', true)->first();
+    //             if($cekLink) {
+    //                 $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);
+    //                 $this->dispatch($job);
+    //             }
+                
+    //             EmailLhpRilisHelpers::run([
+    //                 'cfr' => $header->no_lhp,
+    //                 'no_order' => $header->no_order,
+    //                 'nama_pic_order' => $orderHeader->nama_pic_order,
+    //                 'nama_perusahaan' => $header->nama_pelanggan,
+    //                 'periode' => $cekDetail->periode,
+    //                 'karyawan' => $this->karyawan
+    //             ]);
+
+    //             DB::commit();
+    //             return response()->json([
+    //                 'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!'
+    //             ], 200);
+    //         }
+    //     } catch (Exception $e) {
+    //         DB::rollBack();
+    //         dd($e);
+    //         return response()->json([
+    //             'message' => $e->getMessage(),
+    //         ], 401);
+    //     }
+    // }
+
     public function handleApprove(Request $request, $isManual = true)
     {
         DB::beginTransaction();
-        try {
-            if ($isManual) {
-                $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
-    
-                if (!$konfirmasiLhp) {
-                    $konfirmasiLhp = new KonfirmasiLhp();
-                    $konfirmasiLhp->created_by = $this->karyawan;
-                    $konfirmasiLhp->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                } else {
-                    $konfirmasiLhp->updated_by = $this->karyawan;
-                    $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-                }
-    
-                $konfirmasiLhp->no_lhp = $request->cfr;
-                $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
-                $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
-                $konfirmasiLhp->is_no_sampel_sesuai = $request->no_sampel_sesuai;
-                $konfirmasiLhp->is_no_lhp_sesuai = $request->no_lhp_sesuai;
-                $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
-                $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
-                $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
-    
-                $konfirmasiLhp->save();
-            };
 
+        try {
+
+            // ------------------------------------------------------
+            // 1. Handle Konfirmasi LHP (Manual)
+            // ------------------------------------------------------
+            if ($isManual) {
+
+                $konfirmasi = KonfirmasiLhp::firstOrNew(['no_lhp' => $request->cfr]);
+
+                $konfirmasi->fill([
+                    'is_nama_perusahaan_sesuai' => $request->nama_perusahaan_sesuai,
+                    'is_alamat_perusahaan_sesuai' => $request->alamat_perusahaan_sesuai,
+                    'is_no_sampel_sesuai' => $request->no_sampel_sesuai,
+                    'is_no_lhp_sesuai' => $request->no_lhp_sesuai,
+                    'is_regulasi_sesuai' => $request->regulasi_sesuai,
+                    'is_qr_pengesahan_sesuai' => $request->qr_pengesahan_sesuai,
+                    'is_tanggal_rilis_sesuai' => $request->tanggal_rilis_sesuai,
+                ]);
+
+                // created_by / updated_by otomatis
+                if (!$konfirmasi->exists) {
+                    $konfirmasi->created_by = $this->karyawan;
+                } else {
+                    $konfirmasi->updated_by = $this->karyawan;
+                }
+
+                $konfirmasi->save();
+            }
+
+
+            // ------------------------------------------------------
+            // 2. Ambil Data Utama (HEADER + ORDER DETAIL)
+            // ------------------------------------------------------
             $header = LhpsAirHeader::where('no_sampel', $request->no_sampel)
-                ->where('is_active', true)->firstOrFail();
-            // $detail = LhpsAirDetail::where('id_header', $header->id)->get();
-            // $custom = LhpsAirCustom::where('id_header', $header->id)->get();
-            // $qr = QrDocument::where('id_document', $header->id)
-            //     ->where('type_document', 'LHP_AIR')
-            //     ->where('is_active', 1)
-            //     ->where('file', $header->file_qr)
-            //     ->orderBy('id', 'desc')
-            //     ->first();
-            $data_order = OrderDetail::where('no_sampel', $request->no_sampel)
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            $detail = OrderDetail::where('no_sampel', $request->no_sampel)
                 ->where('id', $request->id)
                 ->where('is_active', true)
                 ->firstOrFail();
 
-            if ($header != null) {
-                $data_order->is_approve = 1;
-                $data_order->status = 3;
-                $data_order->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $data_order->approved_by = $this->karyawan;
-                $data_order->save();
 
-                $header->is_approve = 1;
-                $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                $header->approved_by = $this->karyawan;
+            // ------------------------------------------------------
+            // 3. Update Status Detail dan Header
+            // ------------------------------------------------------
+            $now = Carbon::now()->format('Y-m-d H:i:s');
 
-                // $PengesahanLhp = PengesahanLhp::where('berlaku_mulai', '<=', $header->tanggal_lhp)
-                //     ->orderBy('berlaku_mulai', 'desc')
-                //     ->first();
+            $detail->update([
+                'is_approve' => 1,
+                'status'     => 3,
+                'approved_at' => $now,
+                'approved_by' => $this->karyawan
+            ]);
 
-                // $nama_perilis = $PengesahanLhp->nama_karyawan ?? 'Abidah Walfathiyyah';
-                // $jabatan_perilis = $PengesahanLhp->jabatan_karyawan ?? 'Technical Control Supervisor';
+            $header->update([
+                'is_approve' => 1,
+                'approved_at' => $now,
+                'approved_by' => $this->karyawan
+            ]);
 
-                // $header->nama_karyawan = $nama_perilis ?? 'Abidah Walfathiyyah';
-                // $header->jabatan_karyawan = $jabatan_perilis ?? 'Technical Control Supervisor';
+            // ------------------------------------------------------
+            // 4. Insert History Approve
+            // ------------------------------------------------------
+            HistoryAppReject::create([
+                'no_lhp'       => $detail->cfr,
+                'no_sampel'    => $detail->no_sampel,
+                'kategori_2'   => $detail->kategori_2,
+                'kategori_3'   => $detail->kategori_3,
+                'menu'         => 'Draft Air',
+                'status'       => 'approve',
+                'approved_at'  => $now,
+                'approved_by'  => $this->karyawan
+            ]);
 
-                if ($header->count_print < 1) {
-                    $header->is_printed = 1;
-                    $header->count_print = $header->count_print + 1;
-                }
-                $header->save();
+            // ------------------------------------------------------
+            // 6. Cek Link + Dispatch Combine Job
+            // ------------------------------------------------------
+            $cekDetail = OrderDetail::where('cfr', $header->no_lhp)
+                ->where('is_active', true)
+                ->first();
 
-                HistoryAppReject::insert([
-                    'no_lhp' => $data_order->cfr,
-                    'no_sampel' => $data_order->no_sampel,
-                    'kategori_2' => $data_order->kategori_2,
-                    'kategori_3' => $data_order->kategori_3,
-                    'menu' => 'Draft Air',
-                    'status' => 'approve',
-                    'approved_at' => Carbon::now(),
-                    'approved_by' => $this->karyawan
-                ]);
-
-
-                if ($header->file_qr == null) {
-                    $dataQr = json_decode($qr->data);
-                    $dataQr->Tanggal_Pengesahan = Carbon::parse($header->tanggal_lhp)->locale('id')->isoFormat('DD MMMM YYYY');
-                    $dataQr->Disahkan_Oleh = $header->nama_karyawan;
-                    $dataQr->Jabatan = $header->jabatan_karyawan;
-                    $qr->data = json_encode($dataQr);
-                    $qr->save();
-                }
-                $periode = OrderDetail::where('cfr', $header->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $header->no_order)->where('periode', $periode)->first();
-                
-                if($cekLink) {
-                    $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $periode);
-                    $this->dispatch($job);
-                }
-                // $job = new JobPrintLhp($request->no_sampel);
-                // $this->dispatch($job);
-                // $servicePrint = new PrintLhp();
-                // $servicePrint->print($request->no_sampel);
-
-                // if (!$servicePrint) {
-                //     DB::rollBack();
-                //     return response()->json(['message' => 'Gagal Melakukan Approve Data', 'status' => '401'], 401);
-                // }
+            $periode = $cekDetail->periode ?? null;
 
 
+            $cekLink = LinkLhp::where('no_order', $header->no_order)
+                ->where('periode', $periode)
+                ->first();
 
-                DB::commit();
-                return response()->json([
-                    'message' => 'Approve no sampel ' . $request->no_sampel . ' berhasil!'
-                ], 200);
+            if ($cekLink) {
+                $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);
+                $this->dispatch($job);
             }
-        } catch (Exception $e) {
+
+            // ------------------------------------------------------
+            // 7. Kirim Email (Helper baru yang sudah OK)
+            // ------------------------------------------------------
+            $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                ->first();
+
+            EmailLhpRilisHelpers::run([
+                'cfr'              => $header->no_lhp,
+                'no_order'         => $header->no_order,
+                'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                'nama_perusahaan'  => $header->nama_pelanggan,
+                'periode'          => $periode,
+                'karyawan'         => $this->karyawan
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => "Approve no sampel {$request->no_sampel} berhasil!"
+            ], 200);
+
+
+        } catch (\Throwable $e) {
+
             DB::rollBack();
-            dd($e);
+
             return response()->json([
                 'message' => $e->getMessage(),
             ], 401);
         }
     }
+
 
     public function handleReject(Request $request)
     {

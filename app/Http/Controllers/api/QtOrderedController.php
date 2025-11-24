@@ -16,6 +16,8 @@ use App\Models\Ftct;
 use App\Models\JobTask;
 use Validator;
 use App\Jobs\RenderPdfPenawaran;
+use App\Jobs\CopyNonKontrakJob;
+use App\Jobs\CopyKontrakJob;
 use App\Services\Notification;
 use App\Services\GetAtasan;
 use App\Http\Controllers\Controller;
@@ -195,151 +197,27 @@ class QtOrderedController extends Controller
 
     public function copy(Request $request)
     {
-        DB::beginTransaction();
+        // DB::beginTransaction();
         try {
             if ($request->status_quotation == 'non_kontrak' || $request->status_quotation == 'null') {
-                $cek = QuotationNonKontrak::where('id_cabang', $this->idcabang)
-                    ->whereYear('tanggal_penawaran', Carbon::now()->year)
-                    ->where('no_document', 'not like', '%R%')
-                    ->where('no_document', 'like', '%/' . date('y') . '-%')
-                    ->orderBy('no_quotation', 'DESC')
-                    ->first();
-
-                $no_urut = '1';
-
-                if ($cek != null)
-                    $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
-
-                $no_quotation = sprintf('%06d', ($no_urut));
-                $no_document = 'ISL/QT/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/' . $no_quotation;
-
-                $query = QuotationNonKontrak::where('id', $request->id)->firstOrFail();
-
-                $newQuery = $query->replicate();
-                $newQuery->no_quotation = $no_quotation;
-                $newQuery->no_document = $no_document;
-                $newQuery->konsultan = $query->konsultan;
-                $newQuery->flag_status = null;
-                $newQuery->tanggal_penawaran = Carbon::now()->format('Y-m-d');
-                $newQuery->created_by = $this->karyawan;
-                $newQuery->created_at = Carbon::now();
-                $newQuery->updated_by = null;
-                $newQuery->updated_at = null;
-                $newQuery->data_lama = null;
-                $newQuery->keterangan_reject = null;
-                $newQuery->is_approved = 0;
-                $newQuery->approved_by = null;
-                $newQuery->approved_at = null;
-                $newQuery->is_emailed = 0;
-                $newQuery->is_ready_order = 0;
-                $newQuery->emailed_at = null;
-                $newQuery->emailed_by = null;
-                $newQuery->is_generated = 0;
-                $newQuery->generated_at = null;
-                $newQuery->generated_by = null;
-                $newQuery->id_token = null;
-                $newQuery->save();
-
-                JobTask::insert([
-                    'job' => 'RenderPdfPenawaran',
-                    'status' => 'processing',
-                    'no_document' => $newQuery->no_document,
-                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-
-                DB::commit();
-
-                $job = new RenderPdfPenawaran($newQuery->id, 'non kontrak');
+                $job = new CopyNonKontrakJob($this->idcabang, $this->karyawan, $request->id);
                 $this->dispatch($job);
 
-                $array_id_user = GetAtasan::where('id', $newQuery->sales_id)->get()->pluck('id')->toArray();
-
-                Notification::whereIn('id', $array_id_user)
-                    ->title('Penawaran telah diperbarui')
-                    ->message('Penawaran dengan nomor ' . $query->no_document . ' telah berhasil di salin ke nomor ' . $newQuery->no_document . '.')
-                    ->url('/quote-request')
-                    ->send();
+                sleep(3);
 
                 return response()->json([
-                    'message' => "Request Quotation number $no_document success created",
-                    'status' => 200
+                    'message' => "Penawaran berhasil dibuat dengan nomor dokumen",
                 ], 200);
             } else {
-                $db = DATE('Y');
-
-                $cek = QuotationKontrakH::where('id_cabang', $this->idcabang)
-                    ->whereYear('tanggal_penawaran', $db)
-                    ->where('no_document', 'not like', '%R%')
-                    ->where('no_document', 'like', '%/' . date('y') . '-%')
-                    ->orderBy('no_quotation', 'DESC')
-                    ->first();
-                $no_urut = '1';
-                if ($cek != null)
-                    $no_urut = floatval(explode('/', $cek->no_document)[3]) + 1;
-
-                $no_quotation = sprintf('%06d', ($no_urut));
-                $no_document = 'ISL/QTC/' . DATE('y') . '-' . self::romawi(DATE('m')) . '/' . $no_quotation;
-
-                $query = QuotationKontrakH::where('id', $request->id)->firstOrFail();
-
-                $newQuery = $query->replicate();
-                $newQuery->no_quotation = $no_quotation;
-                $newQuery->no_document = $no_document;
-                $newQuery->konsultan = $query->konsultan;
-                $newQuery->flag_status = null;
-                $newQuery->tanggal_penawaran = Carbon::now()->format('Y-m-d');
-                $newQuery->created_by = $this->karyawan;
-                $newQuery->created_at = Carbon::now();
-                $newQuery->updated_by = null;
-                $newQuery->updated_at = null;
-                $newQuery->data_lama = null;
-                $newQuery->is_approved = 0;
-                $newQuery->approved_by = null;
-                $newQuery->approved_at = null;
-                $newQuery->is_emailed = 0;
-                $newQuery->is_ready_order = 0;
-                $newQuery->emailed_at = null;
-                $newQuery->emailed_by = null;
-                $newQuery->is_generated = 0;
-                $newQuery->generated_at = null;
-                $newQuery->generated_by = null;
-                $newQuery->id_token = null;
-                $newQuery->save();
-
-                $query1 = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->id)->get();
-                foreach ($query1 as $value => $a) {
-
-                    $query2 = QuotationKontrakD::where('id', $a->id)->firstOrFail();
-                    $newQuery2 = $query2->replicate();
-                    $newQuery2->id_request_quotation_kontrak_h = $newQuery->id;
-                    $newQuery2->save();
-                }
-
-                JobTask::insert([
-                    'job' => 'RenderPdfPenawaran',
-                    'status' => 'processing',
-                    'no_document' => $newQuery->no_document,
-                    'timestamp' => Carbon::now()->format('Y-m-d H:i:s'),
-                ]);
-
-                DB::commit();
-
-                $job = new RenderPdfPenawaran($newQuery->id, 'kontrak');
+                $job = new CopyKontrakJob($this->idcabang, $this->karyawan, $request->id);
                 $this->dispatch($job);
 
-                $array_id_user = GetAtasan::where('id', $query->sales_id)->get()->pluck('id')->toArray();
-
-                Notification::whereIn('id', $array_id_user)
-                    ->title('Penawaran telah diperbarui')
-                    ->message('Penawaran dengan nomor ' . $cek->no_document . ' telah berhasil di salin ke nomor ' . $newQuery->no_document . '.')
-                    ->url('/quote-request')
-                    ->send();
-
-                return response()
-                    ->json(['message' => "Request Quotation number $no_document success created", 'status' => 200], 200);
+                sleep(3);
+                return response()->json(['message' => "Penawaran berhasil dibuat dengan nomor dokumen", 'status' => 200], 200);
             }
         } catch (\Throwable $th) {
-            DB::rollback();
+            // DB::rollback();
+            dd($th);
             return response()->json([
                 'message' => $th->getMessage()
             ], 401);

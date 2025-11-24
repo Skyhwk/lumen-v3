@@ -204,16 +204,69 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						"f_koreksi_c{$index}", // contoh: f_koreksi_c3
 						"C{$index}",           // contoh: C3
 						"f_koreksi_{$index}",  // contoh: f_koreksi_3
-						"hasil{$index}",       // contoh: hasil3
-						// fallback global jika diperlukan
-						'f_koreksi_c1',
-						'C1',
-						'f_koreksi_1',
-						'hasil1'
+						"hasil{$index}"
 					];
 
-					foreach ($keysToTry as $k) {
-						if ($has($k)) return $hasil[$k];
+					if ($index == 17) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 15) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 16) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} else {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
 					}
 
 					return '-';

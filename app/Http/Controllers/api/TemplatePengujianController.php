@@ -26,8 +26,17 @@ class TemplatePengujianController extends Controller
         }
         $data->where('is_active', true);
         return DataTables::of($data)
+            // ->editColumn('data_pendukung_sampling', function ($item) {
+            //     return json_decode($item->data_pendukung_sampling);
+            // })
             ->editColumn('data_pendukung_sampling', function ($item) {
-                return json_decode($item->data_pendukung_sampling);
+                $data = json_decode($item->data_pendukung_sampling, true);
+
+                foreach ($data as $i => &$row) {
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i+1);
+                }
+
+                return $data;
             })
             ->make(true);
     }

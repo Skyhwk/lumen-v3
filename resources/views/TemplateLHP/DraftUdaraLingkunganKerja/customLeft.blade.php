@@ -6,8 +6,8 @@
                     <th width="25" class="pd-5-solid-top-center" >NO</th>
                     <th width="200" class="pd-5-solid-top-center" >PARAMETER</th>
                     <th width="60" class="pd-5-solid-top-center" >HASIL UJI</th>
-                    <th width="50" class="pd-5-solid-top-center" >NILAI PENGUJIAN</th>
-                    <th width="50" class="pd-5-solid-top-center" >jENIS PERSYARATAN</th>
+                    <th width="50" class="pd-5-solid-top-center" >NILAI PERSYARATAN</th>
+                    <th width="50" class="pd-5-solid-top-center" >JENIS PERSYARATAN</th>
                     <th width="60" class="pd-5-solid-top-center" >SATUAN</th>
                     <th width="220" class="pd-5-solid-top-center" >SPESIFIKASI METODE</th>
                 </tr>

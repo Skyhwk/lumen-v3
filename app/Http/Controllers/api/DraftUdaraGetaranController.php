@@ -9,7 +9,8 @@ use App\Models\LhpsGetaranCustom;
 use App\Models\LhpsGetaranHeader;
 use App\Models\LhpsGetaranDetail;
 
-
+use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\OrderHeader;
 use App\Models\LhpsGetaranHeaderHistory;
 use App\Models\LhpsGetaranDetailHistory;
 
@@ -780,9 +781,11 @@ class DraftUdaraGetaranController extends Controller
                 $data = LhpsGetaranHeader::where('no_lhp', $request->no_lhp)
                     ->where('is_active', true)
                     ->first();
+
                 $noSampel = is_array($request->no_sampel) 
                     ? ($request->no_sampel ?: null) 
                     : explode(', ', $request->no_sampel);
+                    
                 $no_lhp = $data->no_lhp;
                 $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
                 $qr = QrDocument::where('id_document', $data->id)
@@ -825,30 +828,32 @@ class DraftUdaraGetaranController extends Controller
                         $dataQr = json_decode($qr->data);
                         $dataQr->Tanggal_Pengesahan = Carbon::now()->format('Y-m-d H:i:s');
                         $dataQr->Disahkan_Oleh = $data->nama_karyawan;
-                    $dataQr->Jabatan = $data->jabatan_karyawan;
+                        $dataQr->Jabatan = $data->jabatan_karyawan;
                         $qr->data = json_encode($dataQr);
                         $qr->save();
                     }
-                    $data->count_print = $data->count_print + 1; 
-                    $data->save();
 
                     $detail = LhpsGetaranDetail::where('id_header', $data->id)->get();
             
-                    // $servicePrint = new PrintLhp();
-                    // $servicePrint->printByFilename($data->file_lhp, $detail);
-                    
-                    // if (!$servicePrint) {
-                    //     DB::rollBack();
-                    //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                    // }
-
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
 
                     if($cekLink) {
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
+
+                    $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                    EmailLhpRilisHelpers::run([
+                        'cfr'              => $data->no_lhp,
+                        'no_order'         => $data->no_order,
+                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                        'nama_perusahaan'  => $data->nama_pelanggan,
+                        'periode'          => $cekDetail->periode,
+                        'karyawan'         => $this->karyawan
+                    ]);
                 } else {
                     DB::rollBack();
                     return response()->json([

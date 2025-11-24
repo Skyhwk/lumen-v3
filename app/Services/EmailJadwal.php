@@ -143,8 +143,8 @@ class EmailJadwal
             $this->tanggal_penawaran = $dataEmail['client']->tanggal_penawaran;
             $this->quotation_id = $request->quotation_id;
 
-            // get Token
             $token_ = $this->servisRenderJadwal();
+
             if ($token_) {
                 $dataEmail['file'][0] = [
                     'token' => $token_
@@ -153,6 +153,7 @@ class EmailJadwal
                 SamplingPlan::where('id', $request->sampling_id)
                     ->update(['is_approved' => false]);
             }
+
             if ($path == 'QT') {
                 $tanggal = (isset($this->value['tanggal'])) ? implode(", ", $this->value['tanggal']) : "-";
                 $jam_mulai = (isset($this->value['jam_mulai'])) ? $this->value['jam_mulai'] : "-";
@@ -294,7 +295,6 @@ class EmailJadwal
             $replyTo = ['admsales01@intilab.com'];
             $subject = "Jadwal Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
             $email = SendEmail::where('to', trim($dataEmail['client']->email_pic_order))
-                // $email = SendEmail::where('to', 'dedi@intilab.com')
                 ->where('subject', $subject)
                 ->where('body', $body_text)
                 ->where('bcc', $emailBcc)

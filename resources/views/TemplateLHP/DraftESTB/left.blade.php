@@ -44,7 +44,7 @@
             <tr>
                 <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">{{ $p }}</td>
                 <td class="pd-5-{{ $rowClass }}-left" style="white-space: nowrap;">
-                    <sup>{!! $akr !!}</sup>&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}
+                    {!! $akr !!}&nbsp;{{ htmlspecialchars($yy['parameter'] ?? '') }}
                 </td>
 
                 {{-- hasil ukur --}}

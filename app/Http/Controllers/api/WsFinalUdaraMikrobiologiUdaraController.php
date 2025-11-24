@@ -10,31 +10,82 @@ use Illuminate\Support\Facades\DB;
 use Datatables;
 use Carbon\Carbon;
 
+use App\Models\Parameter;
+use App\Models\DetailMicrobiologi;
+use App\Models\MasterBakumutu;
+
 use App\Models\HistoryAppReject;
 use App\Models\OrderDetail;
 use App\Models\WsValueLingkungan;
+use App\Models\WsValueUdara;
+use App\Models\MasterRegulasi;
 use App\Models\MicrobioHeader;
 use App\Models\MasterKaryawan;
 use App\Models\Subkontrak;
 use App\Models\LingkunganHeader;
 
+use App\Helpers\HelperSatuan;
+
 class WsFinalUdaraMikrobiologiUdaraController extends Controller
 {
-	private $categoryMicrobio = [12, 46, 33];
+	private $categoryMicrobio = [12, 33, 27];
 
 	public function index(Request $request)
 	{
-		$data = OrderDetail::where('is_active', $request->is_active)
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			'no_order',
+			'nama_perusahaan',
+			'cfr',
+			'kategori_2',
+			'kategori_3',
+		)
+			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ['33-Mikrobiologi Udara', "12-Udara Angka Kuman", "46-Udara Swab Test"])
+			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman","27-Udara Lingkungan Kerja"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
-			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderByDesc('max_id');
 
 		return Datatables::of($data)->make(true);
+
+		// $data = OrderDetail::where('is_active', $request->is_active)
+		// 	->where('kategori_2', '4-Udara')
+		// 	->whereIn('kategori_3', ['33-Mikrobiologi Udara', "12-Udara Angka Kuman"])
+		// 	->where('status', 0)
+		// 	->whereNotNull('tanggal_terima')
+		// 	->whereJsonDoesntContain('parameter', ["318;Psikologi"])
+		// 	->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+		// 	->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+		// 	->orderBy('id', "desc");
+
+		// return Datatables::of($data)->make(true);
+	}
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::with(['detailMicrobiologi','udaraMicrobio','udaraSubKontrak'])->where('cfr', $request->cfr)
+			->where('status', 0)
+			->orderByDesc('id')
+			->get()	
+			->map(function ($item) {
+                $item->getAnyHeaderUdara();
+                return $item;
+            })->values()
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			});
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
 	}
 
 	public function convertHourToMinute($hour)
@@ -75,10 +126,193 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 			$parameters = json_decode(html_entity_decode($request->parameter), true);
 			$parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
 			if (in_array($request->kategori, $this->categoryMicrobio)) {
-				$data = MicrobioHeader::with(['ws_value'])->where('no_sampel', $request->no_sampel)
+				
+				$microbio = MicrobioHeader::with(['ws_value'])->where('no_sampel', $request->no_sampel)
 					->where('is_approved', 1)
-					->where('status', 0);
-				return Datatables::of($data)->make(true);
+					->where('is_active', 1)
+					->where('status', 0)->get();
+
+				$subkontrak = Subkontrak::with(['ws_udara'])
+					->where('no_sampel', $request->no_sampel)
+					->where('is_approve', 1)
+					->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'lhps as status', 'is_active')
+					->addSelect(DB::raw("'subKontrak' as data_type"))
+					->get();
+
+				$combinedData = collect()
+					->merge($subkontrak)
+					->merge($microbio);
+
+				$processedData = $combinedData->map(function ($item) {
+					switch ($item->data_type) {
+						case 'subKontrak':
+							$item->source = 'Subkontrak';
+							break;
+						case 'microbio':
+							$item->source = 'Mikrobiologi';
+							break;
+					}
+                return $item;
+            });
+
+				$idRegulasi = $request->regulasi;
+
+				foreach ($processedData as $item) {
+					
+					$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+						->where('id_regulasi', $idRegulasi)
+						->where('is_active', 1)
+						->select('baku_mutu', 'satuan', 'method', 'nama_header')
+						->first();
+
+					$item->satuan = $bakuMutu->satuan ?? null;
+					$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
+					$item->method = $bakuMutu->method ?? null;
+					$item->nama_header = $bakuMutu->nama_header ?? null;
+				}
+				$getSatuan = new HelperSatuan;
+				return Datatables::of($processedData)
+				->addColumn('nilai_uji', function ($item) use ($getSatuan) {
+                    // ambil satuan dan index (boleh null)
+                    $satuan = $item->satuan ?? null;
+                    $index  = $getSatuan->udara($satuan);
+
+                    // pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
+                    $source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+                    if (! $source) {
+                        return 'noWs';
+                    }
+
+                    // pastikan array
+                    $hasil = is_array($source) ? $source : $source->toArray();
+                    // helper kecil: cek tersedia dan tidak kosong
+                    $has = function ($key) use ($hasil) {
+                        return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+                    };
+
+                    // jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
+                    if ($index === null) {
+                        // 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+                        if ($has('f_koreksi_c')) {
+                            return $hasil['f_koreksi_c'];
+                        }
+
+                        for ($i = 1; $i <= 16; $i++) {
+                            $k = "f_koreksi_c{$i}";
+                            if ($has($k)) {
+                                return $hasil[$k];
+                            }
+
+                        }
+
+                        // 2) C (tanpa nomor) lalu C1..C16
+                        if ($has('C')) {
+                            return $hasil['C'];
+                        }
+
+                        for ($i = 1; $i <= 16; $i++) {
+                            $k = "C{$i}";
+                            if ($has($k)) {
+                                return $hasil[$k];
+                            }
+
+                        }
+
+                        // 3) f_koreksi_1..f_koreksi_17
+                        for ($i = 1; $i <= 17; $i++) {
+                            $k = "f_koreksi_{$i}";
+                            if ($has($k)) {
+                                return $hasil[$k];
+                            }
+
+                        }
+
+                        // 4) hasil1..hasil17
+                        for ($i = 1; $i <= 17; $i++) {
+                            $k = "hasil{$i}";
+                            if ($has($k)) {
+                                return $hasil[$k];
+                            }
+
+                        }
+
+                        // kalau semua gagal
+                        return '-';
+                    }
+
+                    // bila index diketahui, cek urutan preferensi khusus index itu
+                    $keysToTry = [
+                        "f_koreksi_{$index}",
+                        "hasil{$index}",
+                        "f_koreksi_c{$index}",
+                        "C{$index}",
+                    ];
+
+                    if ($index == 17) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                        foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                    }if ($index == 15) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                        foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                    }if ($index == 16) {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                    } else {
+                        foreach ($keysToTry as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                        foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+                            if ($has($k)) {
+                                if ($hasil[$k] != null) {
+                                    return $hasil[$k];
+                                }
+                            }
+                        }
+                    }
+
+                    return '-';
+                })
+				->make(true);
 			} else {
 				return response()->json([
 					'message' => 'Kategori tidak sesuai',
@@ -88,24 +322,47 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
+				'line' => $th->getLine(),
 			], 401);
 		}
 	}
 
 	public function detailLapangan(Request $request)
 	{
-		$parameterNames = [];
+		if (in_array($request->kategori, $this->categoryMicrobio)) {
+			$getNoOrder = explode('/', $request->no_sampel)[0] ?? null;
 
-		if (is_array($request->parameter)) {
-			foreach ($request->parameter as $param) {
-				$paramParts = explode(";", $param);
-				if (isset($paramParts[1])) {
-					$parameterNames[] = trim($paramParts[1]);
+			$orderDetail = OrderDetail::where('no_order', $getNoOrder)->get();
+
+			$getNoSampel = $orderDetail->map(function ($item) {
+				return $item->no_sampel;
+			})->unique()->sortBy(function ($item) {
+				return (int) explode('/', $item)[1];
+			})->values();
+
+			$totLapangan = $getNoSampel->count();
+
+			try {
+				$data = [];
+				$model = DetailMicrobiologi::class;
+
+				$data = $model::where('no_sampel', $request->no_sampel)->first();
+				if (!$data) return response()->json(['message' => 'Data Lapangan Tidak Ditemukan'], 401);
+
+				$urutan = $getNoSampel->search($data->no_sampel);
+				$urutanDisplay = $urutan + 1;
+				$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
+				
+
+				if ($data) {
+					return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
 				}
+			} catch (\Exception $ex) {
+				dd($ex);
 			}
+		} else {
+			$data = [];
 		}
-		
-		$data = [];
 	}
 
 	public function rejectAnalys(Request $request)
@@ -674,6 +931,79 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 				'message' => $e->getMessage(),
 				'status' => 401
 			], 401);
+		}
+	}
+
+	public function getRegulasi(Request $request)
+	{
+		$data = MasterRegulasi::where('id_kategori', 4)
+			->where('is_active', true)
+			->get();
+		return response()->json([
+			'data' => $data
+		], 200);
+	}
+
+	public function getTableRegulasi(Request $request)
+	{
+		$data = DB::table('tabel_regulasi')
+			->whereJsonContains('id_regulasi', (string)$request->id)
+			->first();
+
+		return response()->json([
+			'data' => $data
+		], 200);
+	}
+
+	public function handleReject(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			MicrobioHeader::where('no_sampel', $request->no_sampel)
+				->update([
+					'is_active' => 0,
+					'rejected_by' => $this->karyawan,
+					'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil direject.',
+				'success' => true,
+				'status' => 200,
+			], 200);
+		} catch (\Throwable $th) {
+			DB::rollBack();
+			return response()->json([
+				'message' => 'Gagal mereject data: ' . $th->getMessage(),
+				'success' => false,
+				'status' => 500,
+			], 500);
+		}
+	}
+
+	public function handleApproveSelected(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+		
+			MicrobioHeader::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'lhps' => 1,
+				]);
+
+			DB::commit();
+
+			return response()->json([
+				'message' => 'Data berhasil diapprove.',
+				'success' => true,
+			], 200);
+		}catch (\Throwable $th) {
+			return response()->json([
+				'message' => 'Gagal mengapprove data: ' . $th->getMessage(),
+			]);
 		}
 	}
 }

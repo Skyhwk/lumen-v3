@@ -134,4 +134,14 @@ class QuotationKontrakH extends Sector
     {
         return $this->hasOne(AlasanVoidQt::class, 'no_quotation', 'no_document');
     }
+    
+    public function link_lhp()
+    {
+        return $this->hasMany(LinkLhp::class, 'no_quotation', 'no_document');
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
+    }
 }

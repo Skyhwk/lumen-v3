@@ -6,8 +6,9 @@ use \Mpdf\Mpdf as PDF;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Helpers\EmailLhpRilisHelpers;
 
-use App\Models\{HistoryAppReject,LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp};
+use App\Models\{HistoryAppReject, OrderHeader, LhpsKebisinganHeader,LhpsKebisinganDetail,LhpsLingHeader,LhpsLingDetail,LhpsPencahayaanHeader,LhpsGetaranHeader,LhpsGetaranDetail,LhpsPencahayaanDetail,LhpsMedanLMHeader,LhpsMedanLMDetail,LhpsKebisinganHeaderHistory,LhpsKebisinganDetailHistory,LhpsGetaranHeaderHistory,LhpsGetaranDetailHistory,LhpsPencahayaanHeaderHistory,LhpsPencahayaanDetailHistory,LhpsMedanLMHeaderHistory,LhpsMedanLMDetailHistory,LhpSinarUVHeaderHistory,LhpsSinarUVDetailHistory,LhpsLingHeaderHistory,LhpsLingDetailHistory,MasterSubKategori,OrderDetail,MetodeSampling,MasterBakumutu,MasterKaryawan,LingkunganHeader,QrDocument,PencahayaanHeader,KebisinganHeader,Subkontrak,MedanLMHeader,SinarUVHeader,GetaranHeader,DataLapanganErgonomi,Parameter,DirectLainHeader,GenerateLink,DraftErgonomiFile, DraftErgonomiFileHistory, PengesahanLhp,LinkLhp,WsValueErgonomi};
 
 use App\Services\{SendEmail,TemplateLhps,GenerateQrDocumentLhp,TemplateLhpErgonomi};
 use App\Jobs\RenderLhp;
@@ -1573,19 +1574,26 @@ class DraftUlkErgonomiController extends Controller
                         'approved_at' => Carbon::now(),
                         'approved_by' => $this->karyawan
                     ]);
-                    // if($data_order->periode != null){
-                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->where('periode',$data_order->periode)->first();
-                    // }else{
-                    //     $cekLink = LinkLhp::where('no_order', $data_order->no_order)->first();
-                    // }
 
-                    $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
+                    $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
                     
                     if($cekLink){
-                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $periode);
+                        $job = new CombineLHPJob($data_order->cfr, $data->name_file, $data_order->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
+
+                    $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
+
+                    EmailLhpRilisHelpers::run([
+                        'cfr'              => $data->no_lhp,
+                        'no_order'         => $data->no_order,
+                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                        'nama_perusahaan'  => $data->nama_pelanggan,
+                        'periode'          => $cekDetail->periode,
+                        'karyawan'         => $this->karyawan
+                    ]);
                     
                 }
                 DB::commit();
@@ -1786,7 +1794,7 @@ class DraftUlkErgonomiController extends Controller
             $file_qr = new GenerateQrDocumentLhp();
             $dataLHP = DataLapanganErgonomi::with(['detail'])
                     ->where('no_sampel', $noSampel)->first();
-            if($pdfFile->file_qr == null && $pdfFile->file_qr == ''){
+            if($pdfFile->file_qr == null || $pdfFile->file_qr == ''){
                 $dataQr =(object)[
                     'id' => $saveFilePDF->id,
                     'no_lhp' => $dataLHP->detail->cfr,
@@ -2640,15 +2648,48 @@ class DraftUlkErgonomiController extends Controller
                                 </table>';
                             break;
                     case 'lhp':
-                        $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
-                                <tr>
-                                    <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
-                                    </td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
-                                    <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
-                                    </td>
-                                <tr>
-                                </table>';
+                        // $header ='<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                        //         <tr>
+                        //             <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                        //             </td>
+                        //             <td style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;"><span>LAPORAN HASIL PENGUJIAN</span></td>
+                        //             <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                        //             </td>
+                        //         <tr>
+                        //         </table>';
+                        $noSampelAkre = OrderDetail::where('no_sampel',$noSampel)->first();
+                        $decodeParameterNya =json_decode($noSampelAkre->parameter,true);
+                        $idParameterAkre =explode(';',$decodeParameterNya[0])[0];
+                        $akreditasiKan = Parameter::where('id', $idParameterAkre)->where('status', "AKREDITASI")->where('is_active', true)->first();
+
+                        if($akreditasiKan === null){
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                    <tr>
+                                        <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                            <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                        <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
+                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                        </td>
+                                        <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                        </td>
+                                    </tr>
+                                     </table>';
+                        }else{
+                            $header = '<table width="100%" border="0" style="border:none; border-collapse:collapse;">
+                                    <tr>
+                                        <td class="left-cell" style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: left; padding-left: 20px;">
+                                            <img src="'.public_path('img/isl_logo.png').'" alt="ISL"  style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                        <td  style="border: none; padding: 10px; vertical-align: middle; height: 60px; width: 33.33%; text-align: center;">
+                                            <span class="header-title">LAPORAN HASIL PENGUJIAN</span>
+                                        </td>
+                                        <td style="border: none; padding: 10px; vertical-align: middle; height: 60px width: 33.33%; text-align: right; padding-right: 50px;">
+                                            <img src="'.public_path('img/logo_kan.png').'" alt="KAN" style ="height: 50px; width: auto; display: block;">
+                                        </td>
+                                    </tr>
+                                     </table>';
+                        }
                             break;
                     case 'lhp_digital':
                         /* chek akreditasi */
@@ -2740,7 +2781,7 @@ class DraftUlkErgonomiController extends Controller
                                         <b>Halaman {PAGENO} dari {nbpg}</b>
                                     </td>
                                     <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">
-                                        <img src="'.$file_qr.'" width="25" height="25" alt="QR Code" />
+
                                     </td>
                                 </tr>
                             </table>';
@@ -2793,7 +2834,7 @@ class DraftUlkErgonomiController extends Controller
                                     'nama_karyawan' => $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah',
                                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor',
                                     'tanggal' => Carbon::now('Asia/Jakarta')->locale('id')->isoFormat('DD MMMM YYYY'),
-                                    'qr_path' => null
+                                    'qr_path' => public_path('qr_documents/' . $pdfFile->file_qr . '.svg')
                                 ];
                                 break;
                             case 'lhp_digital':

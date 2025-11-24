@@ -43,10 +43,6 @@ class EmisiHCL
             $C2 = 24.45 * (floatval($C1) / 36.5);
             $C3 = $C;
             $C4 = $C1;
-            if (floatval($C1) < 0.0031)
-                $C1 = '<0.0031';
-            if (floatval($C2) < 0.0021)
-                $C2 = '<0.0021';
         }catch(\Throwable $e) {
             dd($e);
         }
@@ -57,6 +53,11 @@ class EmisiHCL
         $C3 = number_format($C3, 4,'.','');
         $C4 = number_format($C4, 4,'.','');
 
+        if (floatval($C1) < 0.0031)
+            $C1 = '<0.0031';
+        if (floatval($C2) < 0.0021)
+            $C2 = '<0.0021';
+        
         $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,

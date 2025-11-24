@@ -11,6 +11,9 @@ class Plankton {
         $fitoplanktonResult = $this->processData($fitoplankton['data'], 30, 'fito');
         $zooplanktonResult = $this->processData($zooplankton['data'], 19, 'zoo');
 
+        $fitoplankton['data'] = $fitoplanktonResult['data'];
+        $zooplankton['data'] = $zooplanktonResult['data'];
+
         $fitoplankton['result'] = [
             'individu' => $fitoplanktonResult['individu'],
             'taxa' => $fitoplanktonResult['taxa'],
@@ -31,43 +34,94 @@ class Plankton {
         $mergedPlankton = [$fitoplankton, $zooplankton];
 
         return [
-            'result' => json_encode($mergedPlankton)
+            'result' => $mergedPlankton
         ];
     }
 
-    private function processData($data, $taxa, $type){
+    private function processData($data, $taxa, $type)
+    {
         $individu = 0;
         $diversitas = 0;
 
-        $param_prosess = [];
-        $dataToSingleArray = array_reduce($data, function ($carry, $item) use(&$individu, &$param_prosess, $type) {
-            if($type == 'fito'){
+        /**
+         * STEP 1
+         * Ambil semua value (flatten) untuk menghitung total individu
+         */
+        $singleValues = array_reduce($data, function ($carry, $item) use (&$individu, $type) {
+
+            if ($type === 'fito') {
+
                 foreach ($item['data'] as $key => $value) {
-                    $carry[$key] = $value;
-                    $param_prosess[$key] = $value;
-                    $individu += $value;
+                    $carry[$key] = floatval($value);
+                    $individu += floatval($value);
                 }
-            }else{
+
+            } else { // zoo
+
                 foreach ($item['data'] as $key => $value) {
                     foreach ($value['data'] as $key2 => $value2) {
-                        $carry[$key2] = $value2;
-                        $param_prosess[$key2] = $value2;
-                        $individu += $value2;
+                        $carry[$key2] = floatval($value2);
+                        $individu += floatval($value2);
                     }
                 }
+
             }
+
             return $carry;
+
         }, []);
 
-        foreach ($dataToSingleArray as $key => $item) {
-            $processed = number_format(($item != 0) ? (log($item / $individu) / log(2) * ($item / $individu)) : 0, 8);
-            if (intval($item) == 0) {
+        /**
+         * STEP 2
+         * Hitung processed, update singleValues
+         */
+        foreach ($singleValues as $key => $val) {
+
+            $processed = ($individu > 0 && $val > 0)
+                ? (log($val / $individu) / log(2) * ($val / $individu))
+                : 0;
+
+            $singleValues[$key] = [
+                'hasil_uji' => $val,
+                'hasil_perkalian' => round($processed, 8)
+            ];
+
+            if ($val == 0) {
                 $taxa -= 1;
             } else {
                 $diversitas += abs($processed);
             }
         }
 
+        /**
+         * STEP 3
+         * Kembalikan ke struktur ASLI (fito / zoo)
+         */
+        $finalStructure = $data; // clone struktur awal
+
+        if ($type === 'fito') {
+
+            foreach ($finalStructure as &$item) {
+                foreach ($item['data'] as $key => $v) {
+                    $item['data'][$key] = $singleValues[$key];
+                }
+            }
+
+        } else { // zoo, 3 level
+
+            foreach ($finalStructure as &$item) {
+                foreach ($item['data'] as &$sub1) {
+                    foreach ($sub1['data'] as $key => $v) {
+                        $sub1['data'][$key] = $singleValues[$key];
+                    }
+                }
+            }
+        }
+
+        /**
+         * STEP 4
+         * Hitung nilai akhir
+         */
         $h_max = log($taxa) / log(2);
         $equitabilitas = abs($diversitas / $h_max);
 
@@ -76,7 +130,9 @@ class Plankton {
             'taxa' => $taxa,
             'diversitas' => number_format($diversitas, 2),
             'h_max' => number_format($h_max, 2),
-            'equitabilitas' => number_format($equitabilitas, 2)
+            'equitabilitas' => number_format($equitabilitas, 2),
+            'data' => $finalStructure
         ];
     }
+       
 }

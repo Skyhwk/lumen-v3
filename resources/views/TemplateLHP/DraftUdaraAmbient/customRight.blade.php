@@ -2,40 +2,81 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganHidup;
-    use \Carbon\Carbon;
+    use App\Models\LhpsLingCustom;
+    use Carbon\Carbon;
 
-    $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->first();
-    $tanggal_sampling = '';
-    if($header->status_sampling == 'S24'){
-        $detailLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
-
-        $tanggalAwal = $header->tanggal_sampling;
-
-        // $tanggalAkhir = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->max('created_at');
-        $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
-
-        $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
-
-        if ($tanggalAwal || $tanggalAkhir) {
-            if ($tanggalAwal == $tanggalAkhir) {
-            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
-            }
+    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
+        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
+        } elseif ($header->tanggal_sampling_akhir == null) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
         } else {
-            $tanggal_sampling = '-';
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
+        }
+    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
+        if ($header->tanggal_sampling == $header->tanggal_terima) {
+            $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
+        } else {
+            $tanggal_sampling =
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
+                ' - ' .
+                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
         }
     } else {
-        if ($header->tanggal_sampling || $header->tanggal_terima) {
-            if ($header->tanggal_sampling == $header->tanggal_terima) {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-            } else {
-                $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
+        $tanggal_sampling = '-';
+    }
+
+    $regulasiThisPage = null;
+    $isPagi = false;
+    $isSiang = false;
+    $isSore = false;
+    $isMalam = false;
+
+    $waktu_pengukuran = $header->waktu_pengukuran;
+    $cuaca = $header->cuaca;
+    $suhu = $header->suhu;
+    $kelembapan = $header->kelembapan;
+
+    $kecepatan_angin = $header->kec_angin;
+    $arah_angin = $header->arah_angin;
+    $tekanan_udara = $header->tekanan_udara;
+
+    if ($header->regulasi_custom != null){
+        foreach (json_decode($header->regulasi_custom) as $key => $y) {
+            if ($y->page == $page) {
+                $regulasiThisPage = $y->regulasi;
             }
-        } else {
-            $tanggal_sampling = '-';
         }
     }
+    
+    if (stripos($regulasiThisPage, "pagi") !== false) $isPagi = true;
+    if (stripos($regulasiThisPage, "siang") !== false) $isSiang = true;
+    if (stripos($regulasiThisPage, "sore") !== false) $isSore = true;
+    if (stripos($regulasiThisPage, "malam") !== false) $isMalam = true;
+
+    $cekDetail = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter_lab')->toArray();
+    
+    if(in_array('NO2 (24 Jam)', $cekDetail) || in_array('SO2 (24 Jam)', $cekDetail)) {
+        $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : ($isMalam ? 'L4' : null)));
+        if ($shift) {
+            $cekDataLapangan = DetailLingkunganHidup::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (24 Jam)', 'SO2 (24 Jam)'])->first();
+            
+            $waktu_pengukuran = $cekDataLapangan->waktu_pengukuran;
+            $cuaca = $cekDataLapangan->cuaca;
+            $suhu = $cekDataLapangan->suhu;
+            $kelembapan = $cekDataLapangan->kelembapan;
+
+            $kecepatan_angin = ($cekDataLapangan->kecepatan_angin !== null && $cekDataLapangan->kecepatan_angin !== "") 
+                ? str_replace(',', '', number_format($cekDataLapangan->kecepatan_angin * 3.6, 2)) 
+                : '-';
+            $arah_angin = $cekDataLapangan->arah_angin;
+            $tekanan_udara = $cekDataLapangan->tekanan_udara;
+        }
+    }
+
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -100,12 +141,19 @@
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
                         @php
-                            $periode_analisa = optional($header)->periode_analisa ?? $header['periode_analisa'];
-                            $periode = explode(' - ', $periode_analisa);
-                            $periode1 = $periode[0] ?? '';
-                            $periode2 = $periode[1] ?? '';
+                            $periode1 = $header->tanggal_analisa_awal ?? '';
+                            $periode2 = $header->tanggal_analisa_akhir ?? '';
                         @endphp
-                        <td class="custom5">{{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} - {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}</td>
+                        <td class="custom5">
+                            @if ($periode2)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                            @elseif ($periode1)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                            @else
+                                -
+                            @endif
+                        </td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
@@ -118,7 +166,7 @@
                         <td class="custom5">
                             @php
                                 // if ($detailLapangan) {
-                                    echo $header->titik_koordinat;
+                                echo $header->titik_koordinat;
                                 // }
                             @endphp
                         </td>
@@ -138,22 +186,22 @@
                                 <tr>
                                     <td class="custom5" width="120">Jam Pengambilan</td>
                                     <td class="custom5" width="12">:</td>
-                                    <td class="custom5">{{ $header->waktu_pengukuran }} WIB</td>
+                                    <td class="custom5">{{ $waktu_pengukuran }} WIB</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Cuaca</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->cuaca }}</td>
+                                    <td class="custom5">{{ $cuaca }}</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Suhu Lingkungan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->suhu }} °C</td>
+                                    <td class="custom5">{{ $suhu }} °C</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Kelembapan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->kelembapan }} %</td>
+                                    <td class="custom5">{{ $kelembapan }} %</td>
                                 </tr>
                             </table>
                         </td>
@@ -162,25 +210,24 @@
                                 <tr>
                                     <td class="custom5">Kecepatan Angin</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->kec_angin}} Km/Jam</td>
+                                    <td class="custom5">{{ $kecepatan_angin }} Km/Jam</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Arah Angin Dominan</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->arah_angin }}</td>
+                                    <td class="custom5">{{ $arah_angin }}</td>
                                 </tr>
                                 <tr>
                                     <td class="custom5">Tekanan Udara</td>
                                     <td class="custom5">:</td>
-                                    <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
+                                    <td class="custom5">{{ $tekanan_udara }} mmHg</td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
                 </table>
 
-
-                @if ($header->regulasi_custom!=null)
+                @if ($header->regulasi_custom != null)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi_custom) as $key => $y)
                             @if ($y->page == $page)

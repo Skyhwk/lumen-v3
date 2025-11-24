@@ -188,7 +188,7 @@ class FdlMethodGotrakController extends Controller
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 

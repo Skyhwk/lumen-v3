@@ -41,6 +41,7 @@ $router->get('/api/summaryParameter', 'external\SummaryParameterHandler@index');
 $router->post('/api/custom', 'external\CustomController@handle');
 $router->get('/api/total', 'external\CustomController@total');
 
+$router->get('/api/get-lhp-pak-eko', 'external\GetLhpApiPakEko@getLHP');
 
 $router->group(['middleware' => ['cors']], function () use ($router) {
     $router->get('/api/setWebhook', 'external\TelegramController@setWebhook');

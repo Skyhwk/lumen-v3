@@ -311,12 +311,16 @@ class DraftEmisiSumberBergerakController extends Controller
             $data = Parameter::where('id_kategori', '5')
                 ->where('id', $param)
                 ->get();
-            $resultx = $data->toArray();
+
+            $bakumutu = MasterBakumutu::where('id_regulasi', $request->regulasi)
+                ->where('is_active', true)
+                ->get();
+            $resultx = $bakumutu->toArray();
             foreach ($resultx as $key => $value) {
-                $result[$key]['id'] = $value['id'];
+                // $result[$key]['id'] = $value['id'];
                 $result[$key]['metode_sampling'] = $value['method'] ?? '';
-                $result[$key]['kategori'] = $value['nama_kategori'];
-                $result[$key]['sub_kategori'] = $subKategori[1];
+                // $result[$key]['kategori'] = $value['nama_kategori'];
+                // $result[$key]['sub_kategori'] = $subKategori[1];
             }
 
             // $result = $resultx;
@@ -335,16 +339,18 @@ class DraftEmisiSumberBergerakController extends Controller
                         if (!empty($missing)) {
                             foreach ($missing as $miss) {
                                 $result[] = [
-                                    'id' => null,
+                                    // 'id' => null,
                                     'metode_sampling' => $miss ?? '',
-                                    'kategori' => $value->kategori,
-                                    'sub_kategori' => $value->sub_kategori,
+                                    // 'kategori' => $value->kategori,
+                                    // 'sub_kategori' => $value->sub_kategori,
                                 ];
                             }
                         }
                     }
                 }
             }
+
+            $result = array_values(array_unique($result, SORT_REGULAR));
 
             return response()->json([
                 'status' => true,
@@ -559,7 +565,7 @@ class DraftEmisiSumberBergerakController extends Controller
             $no_sampel = $order_details->pluck('no_sampel')->toArray();
 
 
-            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan')
+            $lapangan = DataLapanganEmisiKendaraan::with('emisiOrder.kendaraan','detail')
                 ->whereIn('no_sampel', $no_sampel)
                 ->get();
             if ($lapangan->isNotEmpty()) {
@@ -583,7 +589,7 @@ class DraftEmisiSumberBergerakController extends Controller
 
                     $mainData[] = [
                         'no_sampel' => $lapangan->no_sampel,
-                        'nama_kendaraan' => $kendaraan->merk_kendaraan ?? '-',
+                        'nama_kendaraan' => $lapangan->detail->keterangan_1 ?? $kendaraan->merk_kendaraan ?? '-',
                         'bobot' => $kendaraan->bobot_kendaraan ?? '-',
                         'tahun' => $kendaraan->tahun_pembuatan ?? '-',
                         'hasil_co' => $lapangan->co,
@@ -869,10 +875,10 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 // dd($data->id_kategori_2);
 
                 HistoryAppReject::insert([

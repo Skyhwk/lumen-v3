@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services;
+
 use App\Models\OrderDetail;
 use App\Models\Parameter;
 use App\Models\LhpsAirHeader;
@@ -9,6 +10,9 @@ use App\Models\LhpsLingHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
+use App\Models\LhpsEmisiIsokinetikHeader;
+use App\Models\LhpsEmisiIsokinetikDetail;
+use App\Models\MasterBakumutu;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 
@@ -24,7 +28,7 @@ class LhpTemplate
     private $showKan = 'false';
     private $filename;
     private $custom;
-    private $prefix ='LHP';
+    private $prefix = 'LHP';
 
     private $stylesheet;
     private $lampiran = false;
@@ -127,7 +131,7 @@ class LhpTemplate
         self::$instance->view = $value;
         return self::$instance;
     }
-    
+
     public static function setFilename($value)
     {
         if (!self::$instance) {
@@ -153,9 +157,9 @@ class LhpTemplate
 
         self::$instance->mode = $value;
         $view = $this->directory . '.' . $this->view;
-        
-        self::$instance->showKan = $this->cekAkreditasi( $this->header->no_lhp);
-            
+
+        self::$instance->showKan = $this->cekAkreditasi($this->header->no_lhp);
+
         $modes = [
             'downloadWSDraft',
             'downloadLHP',
@@ -164,14 +168,14 @@ class LhpTemplate
 
         if (!$value) {
             $resultName = '';
-            foreach ($modes as $mode) { 
+            foreach ($modes as $mode) {
                 $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $mode, $this->lampiran);
             }
 
             self::$instance = null;
             return $resultName;
         }
-        
+
         $resultName = $this->execute($this->header, $this->detail, $this->prefix, $view, $this->custom, $value, $this->lampiran);
 
         self::$instance = null;
@@ -179,7 +183,7 @@ class LhpTemplate
     }
 
     private function execute($header, $detail, $prefix, $view, $customs, $mode, $lampiran)
-    {   
+    {
         $namaFile = '';
         if ($this->filename) {
             $namaFile = $this->filename;
@@ -188,7 +192,7 @@ class LhpTemplate
         }
 
         $header->sub_kategori = $this->ReplaceAlias($header->sub_kategori);
-        
+
         $dir = $this->folderLocation($mode);
 
         if (!file_exists($dir)) {
@@ -198,20 +202,20 @@ class LhpTemplate
         $this->generateStylesheet();
         $last = true;
 
-        if(!empty($customs)) {
+        if (!empty($customs)) {
             $last = false;
         }
 
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
         $filePath = $dir . '/' . $filename;
-        
+
         $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
         $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
         $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
 
-        if(!empty($customs)) {
+        if (!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
                 $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
@@ -222,23 +226,14 @@ class LhpTemplate
         }
 
         if ($lampiran) {
-            $pdfLampiran = view($view . '.lampiran', [
+            $pdfLampiran = view($this->directoryDefault . '.lampiran', [
                 'header' => $header,
                 'custom' => false,
-                'page'   => null
+                'page'   => null,
+                'sub_kategori' => $header->sub_kategori ?? ''
             ])->render();
 
             $lampiranHeader = view($this->directoryDefault . '.lampiranHeader', compact('header', 'showKan', 'mode'))->render();
-
-            if (!empty($customs)) {
-                foreach ($customs as $page => $custom) {
-                    $pdfLampiranCustom[$page] = view($view . '.lampiran', [
-                        'header' => $header,
-                        'custom' => true,
-                        'page'   => $page
-                    ])->render();
-                }
-            }
         }
 
         $defaultConfig = (new ConfigVariables())->getDefaults();
@@ -246,7 +241,7 @@ class LhpTemplate
 
         $defaultFontConfig = (new FontVariables())->getDefaults();
         $fontData = $defaultFontConfig['fontdata'];
-        
+
         $mpdf = new \Mpdf\Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
@@ -274,7 +269,7 @@ class LhpTemplate
             ],
         ]);
 
-        
+
         $mpdf->SetProtection(
             ['print'], // hanya boleh print
             '',        // user password kosong (bisa dibuka tanpa password)
@@ -293,22 +288,22 @@ class LhpTemplate
         );
 
         if ($mode == 'downloadWSDraft') {
-            $mpdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0,0), 200);
+            $mpdf->SetWatermarkImage(public_path() . '/watermark-draft.png', 0.05, '', array(0, 0), 200);
             $mpdf->showWatermarkImage = true;
-        } 
+        }
 
         if ($mode == 'downloadLHPFinal') {
             $mpdf->SetWatermarkImage(public_path() . "/logo-watermark.png", -1, "", [110, 35]);
             $mpdf->showWatermarkImage = true;
         }
-        
+
         $mpdf->SetHTMLHeader($htmlHeader);
         $mpdf->SetHTMLFooter($htmlFooter);
         $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML($htmlBody);
         $mpdf->SetHTMLFooter($htmlLastFooter);
 
-        if(isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
+        if (isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
             foreach ($htmlCustomBody as $page => $custom) {
                 $mpdf->SetHTMLHeader($htmlCustomHeader[$page]);
                 $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
@@ -317,11 +312,11 @@ class LhpTemplate
             }
         }
 
-        if(isset($pdfLampiran) && isset($lampiranHeader)) {
+        if (isset($pdfLampiran) && isset($lampiranHeader)) {
             $mpdf->SetHTMLHeader($lampiranHeader);
             $mpdf->WriteHTML($pdfLampiran);
             $mpdf->SetHTMLFooter($htmlFooter);
-            if(isset($pdfLampiranCustom)) {
+            if (isset($pdfLampiranCustom)) {
                 foreach ($pdfLampiranCustom as $page => $custom) {
                     $mpdf->WriteHTML($pdfLampiranCustom[$page]);
                 }
@@ -347,18 +342,19 @@ class LhpTemplate
 
         return $paths[$mode];
     }
-    
+
     private function cekAkreditasi($no_lhp)
     {
 
         $parameterAkreditasi = 0;
         $parameterNonAkreditasi = 0;
-        
+
         $orderDetail = OrderDetail::where('cfr', $no_lhp)->where('is_active', 1)->get();
         foreach ($orderDetail as  $value) {
             $kategori = explode('-', $value->kategori_2)[0];
             $sub_kategori = explode('-', $value->kategori_3)[0];
             $dataDecode = json_decode($value->parameter);
+            $dataRegulasi = json_decode($value->regulasi, true)[0] ?? '';
             $sub_kategori = intval(strval($sub_kategori));
             $kategori = intval(strval($kategori));
             if ($kategori === 1) {
@@ -371,10 +367,15 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11)) {
+            } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
+                return in_array(
+                    strtolower($item),
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)']
+                );
+            })) {
                 $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-                
+
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
@@ -383,9 +384,19 @@ class LhpTemplate
                     }
                 }
             } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
-                $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-                
+                if(collect($dataDecode)->contains(function ($item) {
+                    return in_array(
+                        $item,
+                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
+                    );
+                })){
+                    $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
+                } else {
+                    $header = LhpsEmisiCHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+                }
+
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
@@ -393,25 +404,21 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            }
-            else {
+            } else {
                 foreach ($dataDecode as $val) {
-                    $parameter = Parameter::where('nama_lab', explode(";",$val)[1])->where('id_kategori', $kategori)->first();
-                    if ($parameter->status == 'AKREDITASI') {
+                    $bakumutu = MasterBakumutu::where('id_regulasi', explode("-", $dataRegulasi)[0])->where('parameter', explode(";", $val)[1])->first();
+                    if ($bakumutu && str_contains($bakumutu->akreditasi, 'AKREDITASI')) {
                         $parameterAkreditasi++;
                     } else {
                         $parameterNonAkreditasi++;
                     }
-
                 }
             }
-      
-            
         }
         if ($parameterAkreditasi == 0) {
             return false;
         }
-        if(($parameterAkreditasi / ($parameterAkreditasi + $parameterNonAkreditasi)) >= 0.6) {
+        if (($parameterAkreditasi / ($parameterAkreditasi + $parameterNonAkreditasi)) >= 0.6) {
             return true;
         } else {
             return false;
@@ -579,5 +586,4 @@ class LhpTemplate
 
         return isset($ketentuan[$data]) ? $ketentuan[$data] : $data;
     }
-
 }

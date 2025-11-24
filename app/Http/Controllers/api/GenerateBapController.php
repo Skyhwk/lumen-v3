@@ -197,18 +197,40 @@ class GenerateBapController extends Controller
 
     public function store(Request $request)
     {
+        $romanMonths = [
+            1 => 'I',
+            2 => 'II',
+            3 => 'III',
+            4 => 'IV',
+            5 => 'V',
+            6 => 'VI',
+            7 => 'VII',
+            8 => 'VIII',
+            9 => 'IX',
+            10 => 'X',
+            11 => 'XI',
+            12 => 'XII'
+        ];
+
         DB::beginTransaction();
         try {
             $periode = $request->periode ?? '';
             $bulan = $periode ? (int) substr($periode, 5, 2) : null;
-
+            
             $orderHeader = OrderHeader::where('no_order', $request->no_order)->first();
+            
+            // Tahun (ambil dari tanggal_rilis)
+            $tahun = Carbon::parse($request->tanggal_rilis)->format('y');
+    
+            // Bulan romawi (dari bulan sekarang)
+            $bulanRomawi = $romanMonths[Carbon::now()->month];
 
             $bap = new DokumenBap();
             $bap->id_order = $orderHeader->id;
             $bap->periode = $request->periode;
-            $bap->no_document = 'ISL/BAP/' . $orderHeader->no_order . ($bulan ? '-' . $bulan : '');
+            $bap->no_document = "ISL/BAP/{$tahun}{$bulanRomawi}{$orderHeader->no_order}" . ($bulan ? '-' . $bulan : '');
             $bap->tanggal_rilis = $request->tanggal_rilis;
+            $bap->no_quotation = $orderHeader->no_document;
             $bap->nama_perusahaan = $request->nama_perusahaan;
             $bap->alamat_perusahaan = $request->alamat_perusahaan;
             $bap->nama_penanggung_jawab = $request->nama_penanggung_jawab;
@@ -247,9 +269,9 @@ class GenerateBapController extends Controller
                 'message' => $th->getMessage(),
             ], 401);
         }
-    } 
-    
-    public function handlePrintBap(Request $request) 
+    }
+
+    public function handlePrintBap(Request $request)
     {
         DB::beginTransaction();
         try {
@@ -267,9 +289,8 @@ class GenerateBapController extends Controller
         } catch (\Exception $th) {
             DB::rollBack();
             return response()->json([
-                'message' => 'Error download file '.$th->getMessage(),
+                'message' => 'Error download file ' . $th->getMessage(),
             ], 401);
         }
-        
     }
 }

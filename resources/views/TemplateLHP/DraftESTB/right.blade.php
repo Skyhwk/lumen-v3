@@ -3,11 +3,14 @@
     use App\Models\MasterRegulasi;
     use App\Models\DataLapanganEmisiCerobong;
     use App\Models\WsValueEmisiCerobong;
+    use App\Models\EmisiCerobongHeader;
     use Carbon\Carbon;
     use Illuminate\Support\Str;
 
     $wsvalue = WsValueEmisiCerobong::where('no_sampel', $header->no_sampel)->get();
     $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $header->no_sampel)->first();
+    $emisiCerobongHeader = EmisiCerobongHeader::with('ws_value')->where('no_sampel', $header->no_sampel)->where('parameter', 'Velocity')->first();
+    
 
     $keterangan_koreksi = [];
     foreach ($wsvalue as $k => $v) {
@@ -21,26 +24,10 @@
     }
     
     $laju_velocity = '-';
-    if ($dataLapangan != null) {
-        if (!empty($dataLapangan->velocity)) {
-            $decoded = json_decode($dataLapangan->velocity, true);
-            $str = is_array($decoded) ? $decoded[0] : $decoded;
-
-            // Ambil angka setelah tanda ':' (bisa desimal)
-            preg_match_all('/:\s*([\d.]+)/', $str, $matches);
-
-            $values = array_map('floatval', $matches[1]); // hasil angka setelah ':'
-
-            if (count($values) === 0) {
-                $rata2 = 0;
-                $total = 0;
-            } else {
-                $total = array_sum($values);
-                $rata2 = round($total / count($values), 1);
-            }
-            $laju_velocity = $rata2;
-        }
+    if ($emisiCerobongHeader) {
+        $laju_velocity = round($emisiCerobongHeader->ws_value->C9, 2);
     }
+    
 
 @endphp
 
@@ -50,7 +37,7 @@
             <td>
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
-                        <td class="custom" width="120">No. LHP</td>
+                        <td class="custom" width="120">No. LHP {!! $showKan ? '<sup><u>a</u></sup>' : '' !!}</td>
                         <td class="custom" width="120">No. SAMPEL</td>
                         <td class="custom" width="200">JENIS SAMPEL</td>
                     </tr>
@@ -149,12 +136,12 @@
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ ucwords($dataLapangan->keterangan) }}</td>
+                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Titik Koordinat</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ $dataLapangan->titik_koordinat }}</td>
+                        <td class="custom5">{{ $header->titik_koordinat }}</td>
                     </tr>
                     @if ($laju_velocity != '-')
                         <tr>
@@ -173,7 +160,7 @@
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         @foreach (json_decode($header->regulasi) as $t => $y)
                             <tr>
-                                <td class="custom5" colspan="3">{{ $bintang }}{{ $y }}</td>
+                                <td class="custom5" colspan="3"><strong>{{ $bintang }}{{ $y }}</strong></td>
                             </tr>
                             @php
                                 $bintang .= '*';
@@ -185,13 +172,14 @@
                     @php
                         // Bersihkan nilai kosong & spasi berlebih
                         $items = array_map('trim', array_filter($keterangan_koreksi));
-
+                        
                         // Inisialisasi variabel hasil
                         $bagian_standar = '';
                         $bagian_o2 = '';
                         $bagian_kering = '';
                         $bagian_semua = '';
                         $bagian_angka = '';
+                        $bagian_khusus = '';
 
                         // Deteksi bagian berdasarkan isi teks
                         foreach ($items as $v) {
@@ -204,23 +192,31 @@
                                 $bagian_kering = 'dalam keadaan kering';
                             } elseif (Str::contains(strtolower($v), 'parameter')) {
                                 $bagian_semua = 'untuk semua parameter';
-                            } elseif (Str::contains(strtolower($v), 'angka') || Str::contains(strtolower($v), '15')) {
-                                $bagian_angka = 'sebesar 15%';
+                            } elseif (Str::contains(strtolower($v), 'angka')) {
+                                // Cari angka persen (misalnya 6%, 15%, dst)
+                                if (preg_match('/(\d+(?:[\.,]\d+)?)\s*%/', $v, $matches)) {
+                                    $bagian_angka = 'sebesar ' . $matches[1] . '%';
+                                } else {
+                                    // fallback jika tidak ada angka
+                                    $bagian_angka = 'sebesar 15%';
+                                }
+                            } elseif (Str::contains(strtolower($v), 'partikulat')) {
+                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
+                            } elseif (Str::contains(strtolower($v), 'NO2') || Str::contains(strtolower($v), 'SO2')) {
+                                $bagian_khusus = 'khusus untuk Nitrogen Oksida (NO2) dan Sulfur Dioksida (SO2)';
                             }
                         }
 
                         // Gabungkan secara berurutan
                         $gabungKeterangan = trim(
-                            implode(
-                                ' ',
-                                array_filter([
-                                    $bagian_standar,
-                                    $bagian_o2,
-                                    $bagian_angka,
-                                    $bagian_kering,
-                                    $bagian_semua,
-                                ]),
-                            ),
+                            implode(' ', array_filter([
+                                $bagian_standar,
+                                $bagian_o2,
+                                $bagian_angka,
+                                $bagian_kering,
+                                $bagian_semua,
+                                $bagian_khusus, // diletakkan paling akhir
+                            ]))
                         );
 
                         // Tambahkan titik di akhir jika belum ada

@@ -2785,6 +2785,34 @@ class BasOnlineController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "E. coli (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "S. aureus (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Salmonella (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Shigella sp. (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Iso-Combust",
                 "requiredCount" => 1,
                 "category" => "5-Emisi",
