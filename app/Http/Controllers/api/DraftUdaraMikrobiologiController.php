@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Helpers\EmailLhpRilisHelpers;
@@ -183,6 +184,9 @@ class DraftUdaraMikrobiologiController extends Controller
         $id_category = explode('-', $request->kategori_3)[0];
 
         try {
+            //Ambil spesifikasi method udara
+            $spekMeth = Parameter::where('is_active', true)->where('nama_kategori', 'Udara')->pluck('method')->toArray();
+
             // Ambil LHP yang sudah ada
             $cekLhp = LhpsMicrobiologiHeader::where('no_lhp', $request->cfr)
                 ->where('id_kategori_3', $id_category)
@@ -310,6 +314,9 @@ class DraftUdaraMikrobiologiController extends Controller
                 $mappedData[] = [
                     "id_regulasi"   => $id_regulasi,
                     "nama_regulasi" => $nama_regulasi,
+                    "methode"           => [],
+                    "method_suhu"       => Parameter::where('is_active', true)->where('nama_lab', 'suhu')->where('id_kategori', 4)->first()->method ?? '',
+                    "method_kelembapan" => Parameter::where('is_active', true)->where('nama_lab', 'kelembaban')->where('id_kategori', 4)->first()->method ?? '',
                     "detail"        => $detailList,
                 ];
             }
@@ -329,9 +336,23 @@ class DraftUdaraMikrobiologiController extends Controller
                     $items = $detail->filter(function ($d) use ($i) {
                         return $d->page == ($i + 1);
                     });
-
+                    $methode = [];
+                    $method_suhu = '';
+                    $method_kelembapan = '';
                     // Convert item DB ke array detail
-                    $convertedDetails = $items->map(function ($d) {
+                    $convertedDetails = $items->map(function ($d) use ($i, &$methode, &$method_suhu, &$method_kelembapan) {
+                        
+                        $methode[str_replace(' ', '_', $d->parameter)] = $d->methode ?? '';
+                        $method_suhu = $d->method_suhu ?? '';
+                        $method_kelembapan = $d->method_kelembapan ?? '';
+                    
+                        if ($method_suhu === '' || $method_suhu == null) {
+                            $method_suhu = $d->method_suhu;
+                        }
+                        if ($method_kelembapan === '' || $method_kelembapan == null) {
+                            $method_kelembapan = $d->method_kelembapan;
+                        }
+                        
                         return [
                             "no_sampel"         => $d->no_sampel,
                             "suhu"              => $d->suhu,
@@ -350,9 +371,12 @@ class DraftUdaraMikrobiologiController extends Controller
 
                     // Push ke hasil
                     $grouped[] = [
-                        "nama_regulasi" => explode('-', $regulasi)[1],
-                        "id_regulasi"   => explode('-', $regulasi)[0],
-                        "detail"        => $convertedDetails,
+                        "methode"           => $methode,
+                        "method_suhu"       => $method_suhu ?? Parameter::where('is_active', true)->where('nama_lab', 'suhu')->where('id_kategori', 4)->first()->method ?? '',
+                        "method_kelembapan" => $method_kelembapan ?? Parameter::where('is_active', true)->where('nama_lab', 'kelembaban')->where('id_kategori', 4)->first()->method ?? '',
+                        "nama_regulasi"     => explode('-', $regulasi)[1],
+                        "id_regulasi"       => explode('-', $regulasi)[0],
+                        "detail"            => $convertedDetails,
                     ];
                 }
                 // dd($grouped);
@@ -386,9 +410,12 @@ class DraftUdaraMikrobiologiController extends Controller
                     }
 
                     $final[] = [
-                        "id_regulasi"   => $group['id_regulasi'],
-                        "nama_regulasi" => $group['nama_regulasi'],
-                        "detail"        => array_values($result),
+                        "id_regulasi"       => $group['id_regulasi'],
+                        "nama_regulasi"     => $group['nama_regulasi'],
+                        "methode"           => $group['methode'],
+                        "method_suhu"       => $group['method_suhu'],
+                        "method_kelembapan" => $group['method_kelembapan'],
+                        "detail"            => array_values($result),
                     ];
                 }
 
@@ -403,6 +430,7 @@ class DraftUdaraMikrobiologiController extends Controller
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                         'ẍ Parameter belum terakreditasi.',
                     ],
+                    'spekmeth'  => $spekMeth
                 ], 201);
             }
 
@@ -428,6 +456,7 @@ class DraftUdaraMikrobiologiController extends Controller
                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                     'ẍ Parameter belum terakreditasi.',
                 ],
+                'spekmeth'  => $spekMeth
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -441,6 +470,7 @@ class DraftUdaraMikrobiologiController extends Controller
 
     public function store(Request $request)
     {
+        // dd($request->metode, $request->pivot);
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
         try {
@@ -525,59 +555,59 @@ class DraftUdaraMikrobiologiController extends Controller
                 LhpsMicrobiologiDetail::where('id_header', $header->id)->delete();
             }
             $pivot             = $request->pivot ?? [];
-            $methode           = $this->cleanArrayKeys($request->methode ?? []);
-            $methodeSuhu       = $this->cleanArrayKeys($request->methode_suhu ?? []);
-            $methodeKelembapan = $this->cleanArrayKeys($request->methode_kelembapan ?? []);
+            $methode           = $request->metode ?? [];
 
-            foreach ($pivot as $noSampel => $row) {
+            foreach ($pivot as $key => $page) {
+                foreach ($page as $noSampel => $row) {
 
-                $suhu         = $row['suhu'] ?? null;
-                $keterangan   = $row['keterangan'] ?? null;
-                $kelembapan   = $row['kelembapan'] ?? null;
-                $satuan       = $row['satuan'] ?? null;
-                $tglSampling  = $row['tanggal_sampling'] ?? null;
-                $parameterLab = $row['parameter_lab'] ?? null;
-                $akr          = $row['akr'] ?? null;
+                    $suhu         = $row['suhu'] ?? null;
+                    $keterangan   = $row['keterangan'] ?? null;
+                    $kelembapan   = $row['kelembapan'] ?? null;
+                    $satuan       = $row['satuan'] ?? null;
+                    $tglSampling  = $row['tanggal_sampling'] ?? null;
+                    $parameterLab = $row['parameter_lab'] ?? null;
+                    $akr          = $row['akr'] ?? null;
 
-                // loop semua parameter di hasil_uji
-                foreach ($row['hasil_uji'] as $paramName => $hasilUji) {
+                    // loop semua parameter di hasil_uji
+                    foreach ($row['hasil_uji'] as $paramName => $hasilUji) {
 
-                    // cari baku mutu dgn key yg sama
-                    $bakuMutu = $row['nilai_persyaratan'][$paramName] ?? null;
+                        // cari baku mutu dgn key yg sama
+                        $bakuMutu = $row['nilai_persyaratan'][$paramName] ?? null;
 
-                    // metode – setelah cleanArrayKeys:
-                    $metodeParam       = $methode[$noSampel][$paramName] ?? null;
-                    $metodeSuhuParam   = $methodeSuhu[$noSampel][$paramName] ?? null;
-                    $metodeKelembParam = $methodeKelembapan[$noSampel][$paramName] ?? null;
+                        // metode – setelah cleanArrayKeys:
+                        $metodeParam       = $methode[$key][str_replace(' ', '_', $paramName)] ?? null;
+                        $metodeSuhuParam   = $methode[str_replace(' ', '_', $paramName)] ?? null;
+                        $metodeKelembParam = $methode[str_replace(' ', '_', $paramName)] ?? null;
 
-                    $detail                   = new LhpsMicrobiologiDetail;
-                    $detail->id_header        = $header->id;
-                    $detail->no_lhp           = $header->no_lhp;
-                    $detail->akr              = $akr;
-                    $detail->no_sampel        = $noSampel;
-                    $detail->parameter        = $paramName;    // <-- sekarang: "Jumlah Bakteri Total", "Jumlah Jamur Total"
-                    $detail->parameter_lab    = $parameterLab; // "T. Bakteri (KUDR - 8 Jam)"
-                    $detail->keterangan       = $keterangan;
-                    $detail->baku_mutu        = $bakuMutu;
-                    $detail->hasil_uji        = (string) $hasilUji;
-                    $detail->satuan           = $satuan;
-                    $detail->suhu             = $suhu;
-                    $detail->kelembapan       = $kelembapan;
-                    $detail->tanggal_sampling = $tglSampling;
-                    $detail->page             = 1;
+                        $detail                   = new LhpsMicrobiologiDetail;
+                        $detail->id_header        = $header->id;
+                        $detail->no_lhp           = $header->no_lhp;
+                        $detail->akr              = $akr;
+                        $detail->no_sampel        = $noSampel;
+                        $detail->parameter        = $paramName;    // <-- sekarang: "Jumlah Bakteri Total", "Jumlah Jamur Total"
+                        $detail->parameter_lab    = $parameterLab; // "T. Bakteri (KUDR - 8 Jam)"
+                        $detail->keterangan       = $keterangan;
+                        $detail->baku_mutu        = $bakuMutu;
+                        $detail->hasil_uji        = (string) $hasilUji;
+                        $detail->satuan           = $satuan;
+                        $detail->suhu             = $suhu;
+                        $detail->kelembapan       = $kelembapan;
+                        $detail->tanggal_sampling = $tglSampling;
+                        $detail->page             = $key + 1;
 
-                    $detail->methode            = $metodeParam;
-                    $detail->methode_suhu       = $metodeSuhuParam;
-                    $detail->methode_kelembapan = $metodeKelembParam;
+                        $detail->methode            = $metodeParam;
+                        $detail->methode_suhu       = $metodeSuhuParam;
+                        $detail->methode_kelembapan = $metodeKelembParam;
 
-                    $detail->save();
+                        $detail->save();
+                    }
                 }
             }
             // $dataPage1     = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
             // $groupedByPage = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())
             //     ->groupBy('page')
             //     ->toArray();
-
+            // dd('done');
             if ($header != null) {
                 $file_qr = new GenerateQrDocumentLhp;
                 $file_qr = $file_qr->insert('LHP_MIKROBIO', $header, $this->karyawan);
@@ -587,10 +617,11 @@ class DraftUdaraMikrobiologiController extends Controller
                 }
 
                 $id_regulasii     = explode('-', (json_decode($header->regulasi)[0]))[0];
-                $detailCollection = LhpsMicrobiologiDetail::where('id_header', $header->id)->get();
-
+                $detailCollection = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
+                $detailCollectionCustom = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftMicrobio')
                     ->render('downloadLHPFinal');
@@ -826,7 +857,6 @@ class DraftUdaraMikrobiologiController extends Controller
                     'periode'         => $cekDetail->periode,
                     'karyawan'        => $this->karyawan,
                 ]);
-
             } else {
                 DB::rollBack();
                 return response()->json([
