@@ -10,15 +10,15 @@ class SwabTest
 			$f = floatval($data->jumlah_pengencer);
 			$d = floatval($data->volume);
 			$a = floatval($data->luas);
+			$fp = isset($data->fp) && !empty($data->fp) ? floatval($data->fp) : 1;
 			// Lakukan perhitungan terlebih dahulu
-			$rumus = (($n * $f) / $a) * $d;
+			$rumus = ((($n * $f) / $a) * $d) * $fp;
 
-            $hasil2 = (($n * $f) / ($a / 100)) * $d;
+            $hasil2 = ((($n * $f) / ($a / 100)) * $d) * $fp;
 
-            $hasil3 = (($n * $f) / ($a / 25)) * $d;
+            $hasil3 = ((($n * $f) / ($a / 25)) * $d) * $fp;
 
-            $hasil4 = (($n * $f) / ($a / 10000)) * $d;
-
+            $hasil4 = ((($n * $f) / ($a / 10000)) * $d) * $fp;
 			// Cek apakah id_param sesuai dan rumus kurang dari 1
 			// if ($id_parameter == 227 || $id_parameter == 337) {
 				// if ($rumus < 1) {

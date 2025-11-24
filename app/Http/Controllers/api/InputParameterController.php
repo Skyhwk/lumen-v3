@@ -3929,7 +3929,7 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = $request->jumlah_pengencer;
+					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;
