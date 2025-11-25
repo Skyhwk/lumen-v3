@@ -1,4 +1,5 @@
 @php
+    use App\Models\TabelRegulasi;
     $data = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
 
     $data = collect($data)->map(fn($r) => (array) $r);
