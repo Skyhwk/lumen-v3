@@ -3961,7 +3961,6 @@ class InputParameterController extends Controller
 				}
 				WsValueUdara::create($data_udara);
 
-                dd('masuk');
 				// Commit transaksi jika semua berhasil
 				DB::commit();
 
