@@ -184,11 +184,11 @@
         }
 
         .signature-left {
-            width: 65%;
+            width: 60%;
         }
 
         .signature-right {
-            width: 35%;
+            width: 40%;
             text-align: center;
         }
 
@@ -357,7 +357,7 @@
                     <td class="text-left">Diperlukan tindakan karena rawan terkena cedera</td>
                 </tr>
                 <tr>
-                    <td class="text-center">>5</td>
+                    <td class="text-center">&ge; 5</td>
                     <td class="text-center">Tinggi</td>
                     <td class="text-left">Diperlukan tindakan secara ergonomis sesegera mungkin</td>
                 </tr>
