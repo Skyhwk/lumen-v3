@@ -21,7 +21,8 @@
         foreach (json_decode($header->regulasi, true) as $reg) {
             $id_reg[] = explode('-', $reg)[0];
         }
-        $isTable = TabelRegulasi::whereIn('id_regulasi', $id_reg)->where('is_active', 1)->get();
+        $isTable = TabelRegulasi::whereJsonContains('id_regulasi', $id_reg)
+            ->where('is_active', 1)->get();
 
         $isUsingTable = !$isTable->isEmpty();
         $isNotUsingTable = !$isUsingTable;
