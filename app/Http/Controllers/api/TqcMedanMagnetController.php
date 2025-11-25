@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\LhpsKebisinganDetail;
 use App\Models\LhpsKebisinganHeader;
+use App\Models\MedanLmHeader;
 use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -168,6 +169,13 @@ class TqcMedanMagnetController extends Controller
                     ->addSelect(DB::raw("'direct' as data_type"))
                     ->get();
 
+                $medanlmData = MedanLmHeader::with(['ws_udara'])
+                    ->where('no_sampel', $request->no_sampel)
+                    ->where('is_approve', 1)
+                    ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                    ->addSelect(DB::raw("'medanlm' as data_type"))
+                    ->get();
+
                 $subkontrak = Subkontrak::with(['ws_value_linkungan'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approve', 1)
@@ -182,10 +190,11 @@ class TqcMedanMagnetController extends Controller
                 //     ->addSelect(DB::raw("'psikologi' as data_type"))
                 //     ->get();
 
-                $combinedData = $lingkunganData->merge($directData)->merge($subkontrak);
+                $combinedData = $lingkunganData->merge($directData)->merge($medanlmData)->merge($subkontrak);
 
                 $processedData = $combinedData->map(function ($item) {
-                    $item->source = $item->data_type === 'lingkungan' ? 'Lingkungan' : ($item->data_type === 'direct' ? 'Direct Lain' : 'Subkontrak');
+                    $item->source = $item->data_type === 'lingkungan' ? 'Lingkungan' : ($item->data_type === 'direct' ? 'Direct Lain' : ($item->data_type === 'medanlm' ? 'Medan LM' : 'Subkontrak'));
+                    if($item->source == 'Medan LM') $item->ws_udara->hasil1 = json_decode($item->ws_udara->hasil1); 
                     return $item;
                 });
 
@@ -340,11 +349,12 @@ class TqcMedanMagnetController extends Controller
                 ->pluck('hasil_uji')
                 ->toArray();
 
+            $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1 ?? '-';
             $data[] = [
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
                 'history' => $lhpsPencahayaanDetail,
-                'hasil' => WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1 ?? '-',
+                'hasil' => json_decode($hasil, true) ?? '-',
                 'analyst' => optional($lhpsPencahayaanHeader)->created_by,
                 'approved_by' => optional($lhpsPencahayaanHeader)->approved_by
             ];
