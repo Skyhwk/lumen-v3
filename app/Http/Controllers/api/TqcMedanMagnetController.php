@@ -3,26 +3,12 @@
 namespace App\Http\Controllers\api;
 
 use App\Models\HistoryAppReject;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsPencahayaanHeader;
+use App\Models\LhpsMedanLMDetail;
+use App\Models\LhpsMedanLMHeader;
 use App\Models\OrderDetail;
-use App\Models\WsValueLingkungan;
-use App\Models\DetailLingkunganHidup;
-use App\Models\DataLapanganIklimPanas;
-use App\Models\DataLapanganIklimDingin;
-use App\Models\DetailLingkunganKerja;
-use App\Models\DataLapanganKebisingan;
-use App\Models\DataLapanganGetaran;
-use App\Models\DataLapanganGetaranPersonal;
-use App\Models\DataLapanganCahaya;
+use App\Models\WsValueUdara;
 
-use App\Models\IklimHeader;
-use App\Models\GetaranHeader;
-use App\Models\PsikologiHeader;
-use App\Models\KebisinganHeader;
-use App\Models\PencahayaanHeader;
-use App\Models\LingkunganHeader;
-use App\Models\DirectLainHeader;
+use App\Models\MedanLmHeader;
 use App\Models\Subkontrak;
 
 use Illuminate\Http\Request;
@@ -30,8 +16,6 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\LhpsKebisinganDetail;
 use App\Models\LhpsKebisinganHeader;
-use App\Models\MedanLmHeader;
-use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -51,6 +35,7 @@ class TqcMedanMagnetController extends Controller
             DB::raw('GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ", ") as tanggal_terima'),
             'kategori_1',
             'konsultan',
+            'parameter'
         )
             ->where('is_active', true)
             ->where('status', 1)
@@ -65,7 +50,7 @@ class TqcMedanMagnetController extends Controller
         });
 
 
-        $data->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
+        $data->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan','parameter')
             ->orderBy('max_id', 'desc');
 
         return Datatables::of($data)->make(true);
@@ -103,29 +88,6 @@ class TqcMedanMagnetController extends Controller
             ]);
         }
     }
-
-    // public function rejectData(Request $request)
-    // {
-    //     DB::beginTransaction();
-    //     try {
-    //         $data = OrderDetail::where('id', $request->id)->first();
-    //         if ($data) {
-    //             $data->status = 0;
-    //             $data->save();
-    //             DB::commit();
-    //             return response()->json([
-    //                 'status' => 'success',
-    //                 'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil direject'
-    //             ]);
-    //         }
-    //     } catch (\Throwable $th) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Terjadi kesalahan ' . $th->getMessage()
-    //         ]);
-    //     }
-    // }
     public function rejectData(Request $request)
     {
         DB::beginTransaction();
@@ -153,22 +115,6 @@ class TqcMedanMagnetController extends Controller
         try {
 
             if ($request->kategori == 11 || $request->kategori == 27) {
-
-                $lingkunganData = LingkunganHeader::with('ws_value_linkungan')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', 1)
-                    ->where('status', 0)
-                    ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-                    ->addSelect(DB::raw("'lingkungan' as data_type"))
-                    ->get();
-
-                $directData = DirectLainHeader::with(['ws_udara'])
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approve', 1)
-                    ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
-                    ->addSelect(DB::raw("'direct' as data_type"))
-                    ->get();
-
                 $medanlmData = MedanLmHeader::with(['ws_udara'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approve', 1)
@@ -183,17 +129,10 @@ class TqcMedanMagnetController extends Controller
                     ->addSelect(DB::raw("'subkontrak' as data_type"))
                     ->get();
 
-                // $psikologi = PsikologiHeader::with(['data_lapangan'])
-                //     ->where('no_sampel', $request->no_sampel)
-                //     ->where('is_approve', 1)
-                //     ->select('id', 'no_sampel', 'parameter', 'lhps', 'is_approve', 'approved_by', 'approved_at', 'created_by', 'created_at', 'is_active')
-                //     ->addSelect(DB::raw("'psikologi' as data_type"))
-                //     ->get();
-
-                $combinedData = $lingkunganData->merge($directData)->merge($medanlmData)->merge($subkontrak);
-
+                $combinedData = $medanlmData->merge($subkontrak);
+                
                 $processedData = $combinedData->map(function ($item) {
-                    $item->source = $item->data_type === 'lingkungan' ? 'Lingkungan' : ($item->data_type === 'direct' ? 'Direct Lain' : ($item->data_type === 'medanlm' ? 'Medan LM' : 'Subkontrak'));
+                    $item->source = $item->data_type === 'medanlm' ? 'Medan LM' : 'Subkontrak';
                     if($item->source == 'Medan LM') $item->ws_udara->hasil1 = json_decode($item->ws_udara->hasil1); 
                     return $item;
                 });
@@ -340,23 +279,33 @@ class TqcMedanMagnetController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('no_lhp', $request->cfr)->first();
+        $lhpsMedanLmHeader = LhpsMedanLMHeader::where('no_lhp', $request->cfr)->first();
         $data = [];
         foreach ($orderDetails as $orderDetail) {
 
-            $lhpsPencahayaanHeader = LhpsPencahayaanHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
-            $lhpsPencahayaanDetail = LhpsPencahayaanDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
-                ->pluck('hasil_uji')
+            $lhpsMedanLmHeader = LhpsMedanLMHeader::where('nama_pelanggan', $orderDetail->nama_perusahaan)->first();
+            $lhpsMedanLmDetail = LhpsMedanLMDetail::where('lokasi_keterangan', $orderDetail->keterangan_1)
+                ->pluck('hasil')
                 ->toArray();
 
-            $hasil = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first()->hasil1 ?? '-';
+            $ws = WsValueUdara::where('no_sampel', $orderDetail->no_sampel)->orderByDesc('id')->first();
+            $header = MedanLmHeader::where('no_sampel', $orderDetail->no_sampel)->first();
+            $hasilWs = json_decode($ws->hasil1, true);
             $data[] = [
                 'no_sampel' => $orderDetail->no_sampel,
                 'titik' => $orderDetail->keterangan_1,
-                'history' => $lhpsPencahayaanDetail,
-                'hasil' => json_decode($hasil, true) ?? '-',
-                'analyst' => optional($lhpsPencahayaanHeader)->created_by,
-                'approved_by' => optional($lhpsPencahayaanHeader)->approved_by
+                'history' => $lhpsMedanLmDetail,
+                'parameter' => $header->parameter ?? null,
+                'nab' => $ws->nab ?? null,
+                'hasil_mwatt' => $hasilWs['hasil_mwatt'] ?? null,
+                'rata_magnet' => $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null,
+                'rata_listrik' => $hasilWs['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null,
+                'rata_frekuensi' => $hasilWs['rata_frekuensi'] ?? null,
+                'nab_power_density' => $ws->nab_power_density ?? null,
+                'nab_medan_listrik' => $ws->nab_medan_listrik ?? null,
+                'nab_medan_magnet' => $ws->nab_medan_magnet ?? null,
+                'analyst' => optional($lhpsMedanLmHeader)->created_by,
+                'approved_by' => optional($lhpsMedanLmHeader)->approved_by
             ];
         }
 
