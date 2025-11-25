@@ -3923,6 +3923,8 @@ class InputParameterController extends Controller
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
 					$volume_shift = json_encode($volume);
+				}elseif(count($fdl) == 1){
+					$data_shift = json_encode($request->jumlah_coloni);
 				}
                 if(isset($request->jumlah_coloni)){
                     $data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
@@ -3930,7 +3932,7 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = $request->jumlah_pengencer;
+					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;

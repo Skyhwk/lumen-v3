@@ -1035,10 +1035,9 @@ class DraftAirController extends Controller
 
             $periode = $cekDetail->periode ?? null;
 
-
-            $cekLink = LinkLhp::where('no_order', $header->no_order)
-                ->where('periode', $periode)
-                ->first();
+            $cekLink = LinkLhp::where('no_order', $header->no_order);
+            if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+            $cekLink = $cekLink->first();
 
             if ($cekLink) {
                 $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);

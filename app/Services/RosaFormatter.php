@@ -121,17 +121,14 @@ class RosaFormatter
         // bagian ringkasan / nilai numerik yang mungkin juga ingin disimpan
         
         $summary = [
-            'skor_mouse' => $skor_mouse['score'] ?? null,
-            'skor_monitor' => $skor_monitor['score'] ?? null,
-            'skor_telepon' => $skor_telepon['score'] ?? null,
-            'skor_keyboard' => $skor_keyboard['score'] ?? null,
-            'skor_tinggi_kursi' =>$score_tinggi_kursi['score'] ?? null,
-            'skor_lebar_kursi' => $score_lebar_dudukan['score'] ?? null,
-            'skor_sandaran_lengan' => $score_sandaran_lengan['score'] ?? null,
-            'skor_sandaran_punggung' => $score_sandaran_punggung['score'] ?? null,
-            'skor_monitor' => $skor_monitor['score'] ?? null,
-            'skor_telepon' => $skor_telepon['score'] ?? null,
-            'skor_keyboard' => $skor_keyboard['score'] ?? null,
+            'skor_mouse' =>$skor_mouse['score'] + $penyesuaian['mouse']['beda_permukaan'] + $penyesuaian['mouse']['menekuk'] + $penyesuaian['mouse']['ada_palmrest'],
+            'skor_monitor' => $skor_monitor['score'] + $penyesuaian['monitor']['leher_putar'] + $penyesuaian['monitor']['pantulan'] + $penyesuaian['monitor']['no_holder'] + $penyesuaian['monitor']['terlalu_jauh'],
+            'skor_telepon' => $skor_telepon['score'] + $penyesuaian['telepon']['penopang_leher'] + $penyesuaian['telepon']['tangan_tidak_bebas'],
+            'skor_keyboard' => $skor_keyboard['score'] + $penyesuaian['keyboard']['deviasi'] + $penyesuaian['keyboard']['terlalu_tinggi'] + $penyesuaian['keyboard']['diatas_kepala'] + $penyesuaian['keyboard']['tidak_bisa_atur'],
+            'skor_tinggi_kursi' =>($score_tinggi_kursi['score'] + $penyesuaian['kursi']['sempit'] + $penyesuaian['kursi']['tidak_bisa_atur']),
+            'skor_lebar_kursi' => ($score_lebar_dudukan['score'] + $penyesuaian['dudukan']['tidak_bisa_atur']),
+            'skor_sandaran_lengan' => ($score_sandaran_lengan['score'] + $penyesuaian['sandaran_lengan']['keras'] + $penyesuaian['sandaran_lengan']['lebar'] +$penyesuaian['sandaran_lengan']['tidak_bisa_atur'] ),
+            'skor_sandaran_punggung' => ($score_sandaran_punggung['score'] + $penyesuaian['sandaran_punggung']['meja_tinggi'] + $penyesuaian['sandaran_punggung']['tidak_bisa_atur'] ),
             'total_skor_monitor' => $skor_monitor['score'] + $penyesuaian['monitor']['leher_putar'] + $penyesuaian['monitor']['pantulan'] + $penyesuaian['monitor']['no_holder'] + $penyesuaian['monitor']['terlalu_jauh'],
             'total_skor_telepon' => $skor_telepon['score'] + $penyesuaian['telepon']['penopang_leher'] + $penyesuaian['telepon']['tangan_tidak_bebas'],
             'total_skor_keyboard' => $skor_keyboard['score'] + $penyesuaian['keyboard']['deviasi'] + $penyesuaian['keyboard']['terlalu_tinggi'] + $penyesuaian['keyboard']['diatas_kepala'] + $penyesuaian['keyboard']['tidak_bisa_atur'],
@@ -153,6 +150,39 @@ class RosaFormatter
             'skor_durasi_kerja_mouse' => $score_durasi_kerja_mouse['score'],
             'skor_durasi_kerja_keyboard' => $score_durasi_kerja_keyboard['score']
         ];
+        // $summary = [
+        //     'skor_mouse' => $skor_mouse['score'] ?? null,
+        //     'skor_monitor' => $skor_monitor['score'] ?? null,
+        //     'skor_telepon' => $skor_telepon['score'] ?? null,
+        //     'skor_keyboard' => $skor_keyboard['score'] ?? null,
+        //     'skor_tinggi_kursi' =>$score_tinggi_kursi['score'] ?? null,
+        //     'skor_lebar_kursi' => $score_lebar_dudukan['score'] ?? null,
+        //     'skor_sandaran_lengan' => $score_sandaran_lengan['score'] ?? null,
+        //     'skor_sandaran_punggung' => $score_sandaran_punggung['score'] ?? null,
+        //     'skor_monitor' => $skor_monitor['score'] ?? null,
+        //     'skor_telepon' => $skor_telepon['score'] ?? null,
+        //     'skor_keyboard' => $skor_keyboard['score'] ?? null,
+        //     'total_skor_monitor' => $skor_monitor['score'] + $penyesuaian['monitor']['leher_putar'] + $penyesuaian['monitor']['pantulan'] + $penyesuaian['monitor']['no_holder'] + $penyesuaian['monitor']['terlalu_jauh'],
+        //     'total_skor_telepon' => $skor_telepon['score'] + $penyesuaian['telepon']['penopang_leher'] + $penyesuaian['telepon']['tangan_tidak_bebas'],
+        //     'total_skor_keyboard' => $skor_keyboard['score'] + $penyesuaian['keyboard']['deviasi'] + $penyesuaian['keyboard']['terlalu_tinggi'] + $penyesuaian['keyboard']['diatas_kepala'] + $penyesuaian['keyboard']['tidak_bisa_atur'],
+        //     'total_skor_mouse' => $skor_mouse['score'] + $penyesuaian['mouse']['beda_permukaan'] + $penyesuaian['mouse']['menekuk'] + $penyesuaian['mouse']['ada_palmrest'],
+        //     'final_skor_rosa' => isset($data['final_skor_rosa']) ? (int)$data['final_skor_rosa'] : null,
+        //     'kategori' => $data['kategori'] ?? null,
+        //     'tindakan' => $data['tindakan'] ?? null,
+        //     'kesimpulan' => $data['kesimpulan'] ?? null,
+        //     'total_section_a' => isset($data['total_section_a']) ? (int)$data['total_section_a'] : null,
+        //     'total_section_b' => isset($data['total_section_b']) ? (int)$data['total_section_b'] : null,
+        //     'total_section_c' => isset($data['total_section_c']) ? (int)$data['total_section_c'] : null,
+        //     'total_section_d' => isset($data['total_section_d']) ? (int)$data['total_section_d'] : null,
+        //     'nilai_table_a' => isset($data['nilai_table_a']) ? (int)$data['nilai_table_a'] : null,
+        //     'skor_total_sandaran_lengan_dan_punggung' => ($score_sandaran_lengan['score'] + $penyesuaian['sandaran_lengan']['keras'] + $penyesuaian['sandaran_lengan']['lebar'] +$penyesuaian['sandaran_lengan']['tidak_bisa_atur'] ) + ($score_sandaran_punggung['score'] + $penyesuaian['sandaran_punggung']['meja_tinggi'] + $penyesuaian['sandaran_punggung']['tidak_bisa_atur'] ),
+        //     'skor_total_tinggi_kursi_dan_lebar_dudukan' => ($score_tinggi_kursi['score'] + $penyesuaian['kursi']['sempit'] + $penyesuaian['kursi']['tidak_bisa_atur']) + ($score_lebar_dudukan['score'] + $penyesuaian['dudukan']['tidak_bisa_atur']),
+        //     'skor_durasi_kerja_bagian_kursi' => $score_durasi_kerja_kursi['score'],
+        //     'skor_durasi_kerja_monitor' => $score_durasi_kerja_monitor['score'],
+        //     'skor_durasi_kerja_telepon' => $score_durasi_kerja_telepon['score'],
+        //     'skor_durasi_kerja_mouse' => $score_durasi_kerja_mouse['score'],
+        //     'skor_durasi_kerja_keyboard' => $score_durasi_kerja_keyboard['score']
+        // ];
         // gabungkan
         return array_merge(
             [

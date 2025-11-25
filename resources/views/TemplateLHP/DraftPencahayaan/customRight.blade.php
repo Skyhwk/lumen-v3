@@ -51,13 +51,13 @@
                                 style="font-weight: bold; border-bottom: 1px solid #000">Informasi Sampling</span></td>
                     </tr>
                         @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling : [];
-                    @endphp
+                            $methode_sampling = $header->metode_samplin != null ? json_decode($header->metode_sampling) : [];
+                        @endphp
                     <tr>
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>
                         <td class="custom5">
-                             <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
+                            <table width="100%" style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
                                 @foreach($methode_sampling as $index => $item)
                                     <tr>
                                         @if (count($methode_sampling) > 1)
@@ -70,7 +70,6 @@
                                 @endforeach
                             </table>
                         </td>
-                       
                     </tr>
                 </table>
 
@@ -101,7 +100,6 @@
                                 </tr>
                         </table>
                         @endif
-                    
                 @endif
             </td>
         </tr>
