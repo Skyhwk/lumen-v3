@@ -194,7 +194,7 @@
 
         .signature-date {
             margin-bottom: 8px;
-            font-size: 8px;
+            font-size: 9px;
         }
 
         .signature-qr {
@@ -415,6 +415,16 @@
                             <td style="width: 2%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
+                        </tr>
                     </table>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
@@ -440,25 +450,6 @@
                             <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
-                    <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <table class="info-table">
-                            <tr>
-                                <td style="width: 25%; text-align:start;">Jenis Analisa</td>
-                                <td style="width: 3%;">:</td>
-                                <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <table class="info-table">
-                            <tr>
-                                <td style="width: 25%; text-align:start;">Metode Analisa*</td>
-                                <td style="width: 3%;">:</td>
-                                <td style="width: 72%;text-align:start;">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
-                            </tr>
-                        </table>
-                    </div>
                 </div>
 
             <!-- Notes -->
