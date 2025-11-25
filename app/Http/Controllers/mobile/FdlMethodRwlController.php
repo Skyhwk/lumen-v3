@@ -730,14 +730,14 @@ class FdlMethodRwlController extends Controller
 
             // Respond based on whether the data already exists
             if ($check) {
-                if ($data) {
-                    return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-                } else {
+                // if ($data) {
+                //     return response()->json(['message' => 'No. Sample sudah di input.'], 401);
+                // } else {
                     return response()->json([
                         'message' => 'Successful.',
                         'data' => $fdl
                     ], 200);
-                }
+                // }
             } else {
                 return response()->json(['message' => 'Tidak ada parameter Ergonomi berdasarkan No. Sample tersebut.'], 401);
             }

@@ -31,7 +31,8 @@ class LhpKebisinganController extends Controller
             ->where('is_approve', 1)
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
-            ->where('kategori_3', 'LIKE', '%-Kebisingan%')
+            ->whereIn('kategori_3', ["23-Kebisingan", '24-Kebisingan (24 Jam)', '25-Kebisingan (Indoor)', '26-Kualitas Udara Dalam Ruang'])
+            ->whereJsonDoesntContain('parameter', '271;Kebisingan (P8J)')
             ->where('status', 3)
             ->groupBy('cfr')
             ->get();

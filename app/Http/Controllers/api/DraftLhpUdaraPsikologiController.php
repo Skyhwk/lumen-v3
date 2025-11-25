@@ -335,6 +335,8 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
 				$data->approved_by = $this->karyawan;
 
+                $data->save();
+
 				HistoryAppReject::insert([
 					'no_lhp' => $data->no_cfr,
 					'no_sampel' => $request->noSampel,
@@ -354,27 +356,30 @@ class DraftLhpUdaraPsikologiController extends Controller
 					$qr->data = json_encode($dataQr);
 					$qr->save();
 				}
+				$cekDetail = OrderDetail::where('cfr', $data->no_cfr)
+					->where('is_active', true)
+					->first();
+				$periode = $cekDetail->periode ?? null;
 
-				$cekDetail = OrderDetail::where('cfr', $data->no_cfr)->where('is_active', true)->first();
-				
-				$cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
-
-                if($cekLink) {
+				$cekLink = LinkLhp::where('no_order', $data->no_order);
+				if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+				$cekLink = $cekLink->first();
+				if ($cekLink) {
 					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $this->karyawan, $cekDetail->periode);
 					$this->dispatch($job);
-                }
+				}
 
 				$orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                    EmailLhpRilisHelpers::run([
-                        'cfr'              => $data->no_cfr,
-                        'no_order'         => $data->no_order,
-                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
-                        'nama_perusahaan'  => $data->nama_pelanggan,
-                        'periode'          => $cekDetail->periode,
-                        'karyawan'         => $this->karyawan
-                    ]);
+				EmailLhpRilisHelpers::run([
+					'cfr'              => $data->no_cfr,
+					'no_order'         => $data->no_order,
+					'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+					'nama_perusahaan'  => $data->nama_pelanggan,
+					'periode'          => $periode,
+					'karyawan'         => $this->karyawan
+				]);
 			} else {
 				DB::rollBack();
 				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);

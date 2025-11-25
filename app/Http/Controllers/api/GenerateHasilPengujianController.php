@@ -28,9 +28,7 @@ class GenerateHasilPengujianController extends Controller
 
         return Datatables::of($linkLhp)
             ->filterColumn('is_completed', function ($query, $keyword) {
-                if ($keyword != '') {
-                    $query->where('is_completed', $keyword);
-                }
+                if ($keyword) $query->where('is_completed', $keyword);
             })
             ->make(true);
     }
@@ -125,6 +123,7 @@ class GenerateHasilPengujianController extends Controller
                     'lhps_emisi_c',
                     'lhps_getaran',
                     'lhps_kebisingan',
+                    'lhps_kebisingan_personal',
                     'lhps_ling',
                     'lhps_medanlm',
                     'lhps_pencahayaan',
@@ -154,6 +153,7 @@ class GenerateHasilPengujianController extends Controller
                         $item->lhps_emisi_c,
                         $item->lhps_getaran,
                         $item->lhps_kebisingan,
+                        $item->lhps_kebisingan_personal,
                         $item->lhps_ling,
                         $item->lhps_medanlm,
                         $item->lhps_pencahayaan,
@@ -174,11 +174,12 @@ class GenerateHasilPengujianController extends Controller
                             : (($lhps->created_at ?? null)
                                 ? 'Direct'
                                 : ($item->tanggal_terima ? 'Sampling' : null)));
-                    $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
+
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
-
+                                
+                    $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
                     if (in_array($item->kategori_3, $kategori_validation)) {
                         $steps['analisa']['date'] = $tglSampling;
                     } else {

@@ -518,6 +518,15 @@ class InputParameterController extends Controller
                         ->orderBy('no_sampel', 'asc')
                         ->get();
 
+                    $dustfallData = DustFallHeader::with('TrackingSatu')
+					->whereHas('TrackingSatu', function($q) use ($request) {
+						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
+					})
+                        ->where('parameter', $parameter)
+                        ->where('is_active', true)
+                        ->orderBy('no_sampel', 'asc')
+                        ->get();
+
                     // Get data for DebuPersonal
                     $debuData = DebuPersonalHeader::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
@@ -529,7 +538,9 @@ class InputParameterController extends Controller
                         ->get();
 
                     // Combine data from both sources
-                    $combinedData = $linghidupData->concat($debuData);
+                    $combinedData = $linghidupData
+						->concat($dustfallData)
+						->concat($debuData);
 
                     // Map sample data
                     $tes1[$k] = $combinedData->map(function($item) {
@@ -3649,9 +3660,10 @@ class InputParameterController extends Controller
 
 	public function HelperDustFall($request, $stp, $order_detail, $header){
 		if($header) {
-			return response()->json([
-				'message' => 'Parameter sudah diinput..!!'
-			], 401);
+			return (object)[
+				'message' => 'Parameter sudah diinput..!!',
+				'status' => 401
+			];
 		}else{
 			$id_po = '';
 			$tgl_terima = '';
@@ -3725,7 +3737,7 @@ class InputParameterController extends Controller
 					'berat_kosong_dengan_isi_1' => $request->bki1,
 					'berat_kosong_dengan_isi_2' => $request->bki2,
 					'volume_filtrat' => $request->vl,
-					'luas_botol' => $request->luas_botol / 10000, // dari cm2 ke m2
+					'luas_botol' => (0.25 * 3.14 * pow($request->luas_botol, 2)) / 10000, // dari cm2 ke m2
 					'selisih_hari' => $selisih_hari
 				];
 
@@ -3910,6 +3922,8 @@ class InputParameterController extends Controller
 				if(count($fdl) > 1){
 					$data_shift = json_encode($request->jumlah_coloni);
 					$volume_shift = json_encode($volume);
+				}elseif(count($fdl) == 1){
+					$data_shift = json_encode($request->jumlah_coloni);
 				}
                 if(isset($request->jumlah_coloni)){
                     $data_pershift = isset($data_kalkulasi['data_pershift']) ? json_encode($data_kalkulasi['data_pershift']) : null;
@@ -3917,7 +3931,7 @@ class InputParameterController extends Controller
 				if(!is_null($swab)){
 					$header->luas = $luas;
 					$header->jumlah_mikroba = $request->jumlah_mikroba;
-					$header->fp = $request->jumlah_pengencer;
+					$header->fp = isset($request->fp) ? $request->fp : $request->jumlah_pengencer;
 				}
 				$header->data_shift = $data_shift;
 				$header->data_pershift = $data_pershift;

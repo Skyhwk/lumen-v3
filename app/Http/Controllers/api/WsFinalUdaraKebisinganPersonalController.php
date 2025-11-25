@@ -88,9 +88,14 @@ class WsFinalUdaraKebisinganPersonalController extends Controller
 					->where('status', 0)
 					->where('is_active', 1)
 					->first();
+				if($data) {
+					$data = [$data];
+				} else {
+					$data = [];
+				}
 
 				return response()->json([
-					'data' => [$data],
+					'data' => $data,
 					'message' => 'Berhasil mendapatkan data',
 					'success' => true,
 					'status' => 200,
