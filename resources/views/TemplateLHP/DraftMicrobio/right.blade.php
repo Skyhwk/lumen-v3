@@ -16,6 +16,19 @@
     $isMultiSampelOneParam = $totalSampel > 1 && $totalParam === 1;
     $isMultiSampelMultiParam = $totalSampel > 1 && $totalParam > 1;
 
+    $isMultipleParameter = $totalParam > 1;
+    $id_reg = [];
+    if(!$isMultipleParameter){
+        foreach (json_decode($header->regulasi, true) as $reg) {
+            $id_reg[] = explode('-', $reg)[0];
+        }
+        $isTable = TabelRegulasi::whereJsonContains('id_regulasi', $id_reg)
+            ->where('is_active', 1)
+            ->get();
+        $isUsingTable = !$isTable->isEmpty();
+        $isNotUsingTable = !$isUsingTable;
+    }
+
     $periodeAnalisa = $header->periode_analisa ?? null;
 
     // Area swab: aku asumsikan dar keterangan (bisa dimodif kalau ada field khusus)
@@ -120,7 +133,7 @@
                         </td>
                     </tr>
 
-                    @if ($isSingleSampel)
+                    @if ($isMultipleParameter)
 
                         <tr>
                             <td class="custom5" width="120">Spesifikasi Metode</td>
@@ -163,7 +176,7 @@
 
 
                         {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
-                    @elseif ($isMultiSampelOneParam)
+                    @elseif ($isUsingTable)
                         {{-- parameter pengujian --}}
                         {{-- spesifikasi metode (hardcode / dari header kalau ada) --}}
                         <tr>
@@ -212,7 +225,7 @@
                             </td>
                         </tr>
                         {{-- KONDISI 3: banyak no sampel, banyak parameter --}}
-                    @elseif ($isMultiSampelMultiParam)
+                    @elseif ($isNotUsingTable)
                         {{-- metode sampling (array) --}}
                         <tr>
                             <td class="custom5" width="120">Metode Sampling</td>
