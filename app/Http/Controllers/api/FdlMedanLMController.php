@@ -217,7 +217,7 @@ class FdlMedanLMController extends Controller
                 $ws->id_medan_lm_header = $headuv->id;
                 $ws->no_sampel = $no_sample;
                 $ws->id_po = $po->id;
-                if($parameter->nama_lab == 'Power Density'){
+                if($parameter->nama_lab == 'Power Density' || $parameter->nama_lab == 'Gelombang Elektro'){
                     // $ws->hasil1 = $hasil['hasil_mwatt'];
                     $ws->hasil1 = json_encode($hasil);
                     $ws->satuan = 'mWatt/Cm²';
