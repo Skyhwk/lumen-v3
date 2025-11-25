@@ -24,7 +24,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         $data = OrderDetail::with(['dataLapanganEmisiKendaraan', 'dataLapanganEmisiCerobong'])->where('is_active', $request->is_active)
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
-        	// ->where('parameter', 'not like', '%Iso-%')
+        	->where('parameter', 'not like', '%Iso-%')
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
             ->whereMonth('tanggal_terima', explode('-', $request->date)[1])
