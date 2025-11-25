@@ -3795,13 +3795,15 @@ class InputParameterController extends Controller
 			->get();
 
         $swab = null;
-        $swab_parameter = [
-            'E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)',
-            'Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)',
-            'Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)',
-            'E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'
-        ];
-        if(in_array($request->parameter, $swab_parameter)){
+        // $swab_parameter = [
+        //     'E.Coli (Swab Test)','Enterobacteriaceae (Swab Test)','Bacillus C (Swab Test)','Kapang Khamir (Swab Test)','Listeria M (Swab Test)',
+        //     'Pseu Aeruginosa (Swab Test)','S.Aureus (Swab Test)','Salmonella (Swab Test)','Shigella Sp. (Swab Test)','T.Coli (Swab Test)',
+        //     'Total Kuman (Swab Test)','TPC (Swab Test)','Vibrio Ch (Swab Test)','V. cholerae (SWAB)','Vibrio sp (SWAB)','B. cereus (SWAB)',
+        //     'E. coli (SWAB)','Enterobacteriaceae (SWAB)','Kapang & Khamir (SWAB)','L. monocytogenes (SWAB)'
+        // ];
+		
+        // if(in_array($request->parameter, $swab_parameter)){
+		if(str_contains($request->parameter, 'Swab') || str_contains($request->parameter, 'SWAB')){
             $swab = DataLapanganSwab::where('no_sampel', $request->no_sample)->first();
         }
 
@@ -3959,6 +3961,7 @@ class InputParameterController extends Controller
 				}
 				WsValueUdara::create($data_udara);
 
+                dd('masuk');
 				// Commit transaksi jika semua berhasil
 				DB::commit();
 
