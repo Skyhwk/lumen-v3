@@ -2749,14 +2749,14 @@ class DraftUlkErgonomiController extends Controller
                             <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
                                 <tr>
                                     <td width="30%" style="vertical-align: top; font-size: 6px; line-height: 1.1; padding: 0; text-align: left; border:none;">
-                                        PT Inti Surya Laboratorium<br>
-                                        Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341<br>
-                                        021-5089-8988/89 contact@intilab.com
+                                        <div>PT Inti Surya Laboratorium</div>
+                                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                                        <div>021-5089-8988/89 contact@intilab.com</div>
                                     </td>
                                     <td width="45%" style="font-size: 6px; vertical-align: top; text-align: center; line-height: 1.1; padding: 0; border:none">
-                                        Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.<br>
+                                        Laporan hasil pengujian ini hanya berlaku bagi sampel yang tercantum di atas. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak Laboratorium..<br>
                                     </td>
-                                    <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">
+                                    <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none font-family: roboto; font-weight: bold;">
                                         <b>Halaman {PAGENO} dari {nbpg}</b>
                                     </td>
                                 </tr>
@@ -2769,19 +2769,26 @@ class DraftUlkErgonomiController extends Controller
                         $pdf->showWatermarkImage = true;
                         $file_qr = public_path('qr_documents/' . $pdfFile->file_qr . '.svg');
                         $footerHtml = '
-                            <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
+                            <table width="100%" border="0" style="border:none; border-collapse:collapse; margin: 0; padding: 0;">
                                 <tr>
-                                    <td width="30%" style="vertical-align: top; font-size: 6px; line-height: 1.1; padding: 0; text-align: left; border:none;">
-                                        PT Inti Surya Laboratorium<br>
-                                        Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341<br>
-                                        021-5089-8988/89 contact@intilab.com
+                                    <!-- Kolom 1: Alamat -->
+                                    <!-- Pindahkan font-size ke sini. Gunakan 7pt atau 8pt untuk ukuran kecil yang terbaca -->
+                                    <td width="30%" style="font-size: 7pt; font-family: Arial, sans-serif; vertical-align: top; line-height: 1.2; padding: 0; text-align: left; border:none;">
+                                        <div>PT Inti Surya Laboratorium</div>
+                                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                                        <div>021-5089-8988/89 contact@intilab.com</div>
                                     </td>
-                                    <td width="45%" style="font-size: 6px; vertical-align: top; text-align: center; line-height: 1.1; padding: 0; border:none">
-                                        Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.<br>
+
+                                    <!-- Kolom 2: Disclaimer -->
+                                    <td width="45%" style="font-size: 7pt; font-family: Roboto, sans-serif; vertical-align: top; text-align: center; line-height: 1.2; padding: 0; border:none;">
+                                        Laporan hasil pengujian ini hanya berlaku bagi sampel yang tercantum di atas. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak Laboratorium.<br>
                                         <b>Halaman {PAGENO} dari {nbpg}</b>
                                     </td>
-                                    <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">
 
+                                    <!-- Kolom 3: Kode Dokumen -->
+                                    <!-- PERHATIKAN: Tanda titik koma (;) telah ditambahkan setelah border:none -->
+                                    <td width="25%" style="font-size: 7pt; font-family: Roboto, sans-serif; font-weight: bold; text-align: right; vertical-align: top; padding: 0; border:none;">
+                                        DP/7.8.1/ISL; Rev 3; 08 November 2022
                                     </td>
                                 </tr>
                             </table>';
@@ -2793,15 +2800,15 @@ class DraftUlkErgonomiController extends Controller
                         $pdf->showWatermarkImage = true;
                         $file_qr = public_path('qr_documents/' . $pdfFile->file_qr . '.svg');
                         $footerHtml = '
-                            <table width="100%" border="0" style="border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
+                            <table width="100%" border="0" style="font-size: 6px; border:none; border-collapse:collapse; font-family: Arial, sans-serif; margin: 0; padding: 0;">
                                 <tr>
                                     <td width="30%" style="vertical-align: top; font-size: 6px; line-height: 1.1; padding: 0; text-align: left; border:none;">
-                                        PT Inti Surya Laboratorium<br>
-                                        Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341<br>
-                                        021-5089-8988/89 contact@intilab.com
+                                        <div>PT Inti Surya Laboratorium</div>
+                                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                                        <div>021-5089-8988/89 contact@intilab.com</div>
                                     </td>
-                                    <td width="45%" style="font-size: 6px; vertical-align: top; text-align: center; line-height: 1.1; padding: 0; border:none">
-                                        Hasil uji ini hanya berlaku untuk kondisi sampel yang tercantum pada lembar ini dan tidak dapat digeneralisasikan untuk sampel lain. Lembar ini tidak dapat di gandakan tanpa izin dari laboratorium.<br>
+                                    <td width="45%" style="vertical-align: top; text-align: center; line-height: 1.1; padding: 0; border:none; min-height:100px; font-family: roboto;">
+                                        Laporan hasil pengujian ini hanya berlaku bagi sampel yang tercantum di atas. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak Laboratorium.<br>
                                         <b>Halaman {PAGENO} dari {nbpg}</b>
                                     </td>
                                     <td width="25%" style="text-align: right; vertical-align: top; padding: 0; border:none">

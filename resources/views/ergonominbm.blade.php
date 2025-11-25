@@ -702,7 +702,7 @@
                     <div class="info-header">Informasi Sampling</div>
                     <table class="info-table">
                         <tr>
-                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
@@ -798,7 +798,7 @@
                                         {{ $ttd->tanggal }}
                                     </div><br>
                                     <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            <img src="{{ $ttd->qr_path }}" width="50" height="50" alt="ttd">
                                     </div>
                                 </td>
                             </tr>

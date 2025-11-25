@@ -474,10 +474,10 @@
                                 <td class="signature-left"></td>
                                 <td class="signature-right">
                                     <div class="signature-date">
-                                        {{ $ttd->tanggal }}
+                                       Tangerang, {{ $ttd->tanggal }}
                                     </div><br>
                                     <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            <img src="{{ $ttd->qr_path }}" width="50" height="50" alt="ttd">
                                     </div>
                                 </td>
                             </tr>
