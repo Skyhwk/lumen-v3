@@ -12,6 +12,8 @@ use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
 use App\Models\LhpsEmisiIsokinetikHeader;
 use App\Models\LhpsEmisiIsokinetikDetail;
+use App\Models\LhpsSinarUVDetail;
+use App\Models\LhpsSinarUVHeader;
 use App\Models\MasterBakumutu;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
@@ -373,8 +375,13 @@ class LhpTemplate
                     ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)']
                 );
             })) {
-                $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
-                $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+                if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
+                    $header = LhpsSinarUVHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsSinarUVDetail::where('id_header', $header->id)->get();
+                } else {
+                    $header = LhpsLingHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                    $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+                }
 
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
@@ -489,6 +496,20 @@ class LhpTemplate
                         .custom9 {
                             padding: 3px;
                             text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
+                        .pd-3-dot {
+                            padding: 3px;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
+                        .pd-3-solid {
+                            padding: 3px;
                             border-left: 1px solid #000000;
                             border-right: 1px solid #000000;
                             border-bottom: 1px solid #000000;

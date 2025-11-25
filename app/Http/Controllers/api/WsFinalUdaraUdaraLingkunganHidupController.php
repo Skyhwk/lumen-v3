@@ -33,6 +33,7 @@ use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
 use App\Models\DebuPersonalHeader;
+use App\Models\DustFallHeader;
 
 class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 {
@@ -83,6 +84,14 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
+			$dustfallData = DustFallHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approved', 1)
+				->where('is_active', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->addSelect(DB::raw("'dustfall' as data_type"))
+				->get();
 			$subkontrak = Subkontrak::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
@@ -102,6 +111,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			$combinedData = collect()
 				->merge($lingkunganData)
+				->merge($dustfallData)
 				->merge($subkontrak)
 				->merge($directData)
 				->merge($partikulat);
@@ -120,6 +130,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						break;
 					case 'partikulat':
 						$item->source = 'Partikulat';
+						break;
+					case 'dustfall':
+						$item->source = 'Dust Fall';
 						break;
 				}
 				return $item;

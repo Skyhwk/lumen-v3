@@ -2,6 +2,8 @@
 namespace App\Http\Controllers\api;
 
 //models
+
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Helpers\HelperSatuan;use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;
 use App\Models\EmisiCerobongHeader;
 use App\Models\GenerateLink;
@@ -918,6 +920,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $data->is_approve  = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
+
+                $data->save();
                 // if ($data->count_print < 1) {
                 //     $data->is_printed = 1;
                 //     $data->count_print = $data->count_print + 1;
@@ -944,13 +948,27 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     $qr->save();
                 }
 
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
 
                 if ($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->cfr,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
                 // $servicePrint = new PrintLhp();
                 // $servicePrint->printByFilename($data->file_lhp, $detail);
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
+// Models
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
@@ -24,6 +25,8 @@ use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
+use App\Models\DetailSenyawaVolatile;
+// Services
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Helpers\EmailLhpRilisHelpers;
@@ -853,14 +856,19 @@ class DraftUlkController extends Controller
                     $qr->save();
                 }
 
-                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first();
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $cekDetail->periode)->first();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
 
                 if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
-
+                
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 

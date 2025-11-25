@@ -40,7 +40,8 @@ class DustFall {
 		$w2 = array_sum([$data->bki1, $data->bki2]) / 2;
 		$w1 = array_sum([$data->bk1, $data->bk2]) / 2;
 		$vl = $data->vl;
-		$a = $data->luas_botol / 10000;
+        // A= (1/4×3.14x5²)/10000
+		$a = (0.25 * 3.14 * pow($data->luas_botol, 2)) / 10000;
 		$t = $data->selisih_hari;
         // C13 (Ton/Km²/Bulan) = (((W2-W1)*30*V)/(A*T*0.250))
 		$rumus = number_format(((($w2-$w1) * 30 * $vl) / ($a * $t * 0.250)), 4);
