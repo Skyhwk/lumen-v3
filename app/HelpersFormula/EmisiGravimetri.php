@@ -57,6 +57,9 @@ class EmisiGravimetri
         $C1 = round(($A / $B) * 1000, 4);
         $C = round($C1 * 1000, 4);
 
+        $C3 = $C;
+        $C4 = $C1;
+
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => null,
