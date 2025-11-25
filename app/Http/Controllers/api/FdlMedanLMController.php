@@ -219,8 +219,11 @@ class FdlMedanLMController extends Controller
                 $ws->id_po = $po->id;
                 if($parameter->nama_lab == 'Power Density' || $parameter->nama_lab == 'Gelombang Elektro'){
                     // $ws->hasil1 = $hasil['hasil_mwatt'];
-                    $ws->hasil1 = json_encode($hasil);
+                    $ws->hasil1 = json_encode($hasil['hasilWs']);
                     $ws->satuan = 'mWatt/Cm²';
+                    $ws->nab_medan_listrik = $hasil['nab']['nab_medan_listrik'];
+                    $ws->nab_medan_magnet = $hasil['nab']['nab_medan_magnet'];
+                    $ws->nab_power_density = $hasil['nab']['nab_power_density'];
                 }else{
                     $ws->hasil1 = json_encode($hasil);
                 }
@@ -229,7 +232,6 @@ class FdlMedanLMController extends Controller
                 $dataL->is_approve = true;
                 $dataL->approved_by = $this->karyawan;
                 $dataL->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                // dd($dataL, $headuv, $ws);
                 $dataL->save();
 
                 app(NotificationFdlService::class)->sendApproveNotification('Medan Listrik & Magnet', $dataL->no_sampel, $this->karyawan, $data->created_by);
