@@ -576,8 +576,8 @@ class DraftUdaraMikrobiologiController extends Controller
 
                         // metode – setelah cleanArrayKeys:
                         $metodeParam       = $methode[$key][str_replace(' ', '_', $paramName)] ?? null;
-                        $metodeSuhuParam   = $methode[str_replace(' ', '_', $paramName)] ?? null;
-                        $metodeKelembParam = $methode[str_replace(' ', '_', $paramName)] ?? null;
+                        $metodeSuhuParam   = $methode[$key][str_replace(' ', '_', $paramName)] ?? null;
+                        $metodeKelembParam = $methode[$key][str_replace(' ', '_', $paramName)] ?? null;
 
                         $detail                   = new LhpsMicrobiologiDetail;
                         $detail->id_header        = $header->id;
