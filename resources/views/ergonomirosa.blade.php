@@ -184,17 +184,17 @@
         }
 
         .signature-left {
-            width: 65%;
+            width: 60%;
         }
 
         .signature-right {
-            width: 35%;
+            width: 40%;
             text-align: center;
         }
 
         .signature-date {
             margin-bottom: 8px;
-            font-size: 8px;
+            font-size: 9px;
         }
 
         .signature-qr {
@@ -357,7 +357,7 @@
                     <td class="text-left">Diperlukan tindakan karena rawan terkena cedera</td>
                 </tr>
                 <tr>
-                    <td class="text-center">>5</td>
+                    <td class="text-center">&ge; 5</td>
                     <td class="text-center">Tinggi</td>
                     <td class="text-left">Diperlukan tindakan secara ergonomis sesegera mungkin</td>
                 </tr>
@@ -415,6 +415,16 @@
                             <td style="width: 2%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
+                        </tr>
                     </table>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
@@ -440,25 +450,6 @@
                             <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
-                    <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <table class="info-table">
-                            <tr>
-                                <td style="width: 25%; text-align:start;">Jenis Analisa</td>
-                                <td style="width: 3%;">:</td>
-                                <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <div style="margin-bottom: 2px; font-size: 9pt;">
-                        <table class="info-table">
-                            <tr>
-                                <td style="width: 25%; text-align:start;">Metode Analisa*</td>
-                                <td style="width: 3%;">:</td>
-                                <td style="width: 72%;text-align:start;">Pengamatan Langsung - ROSA (Rapid Office Restrain Assessment)</td>
-                            </tr>
-                        </table>
-                    </div>
                 </div>
 
             <!-- Notes -->

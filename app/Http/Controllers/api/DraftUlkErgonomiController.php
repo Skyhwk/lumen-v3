@@ -2777,22 +2777,23 @@ class DraftUlkErgonomiController extends Controller
                             <table width="100%" border="0" style="border:none; border-collapse:collapse; margin: 0; padding: 0;">
                                 <tr>
                                     <!-- Kolom 1: Alamat -->
-                                    <!-- Pindahkan font-size ke sini. Gunakan 7pt atau 8pt untuk ukuran kecil yang terbaca -->
-                                    <td width="30%" style="font-size: 7pt; font-family: Arial, sans-serif; vertical-align: top; line-height: 1.2; padding: 0; text-align: left; border:none;">
+                                    <!-- Pindahkan font-size ke sini. Gunakan 5pt atau 8pt untuk ukuran kecil yang terbaca -->
+                                    <td width="30%" style="font-size: 5pt; font-family: Arial, sans-serif; vertical-align: top; line-height: 1.2; padding: 0; text-align: left; border:none; font-weight: bold;">
                                         <div>PT Inti Surya Laboratorium</div>
-                                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City, Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
+                                        <div>Ruko Icon Business Park Blok O No.5-6 BSD City,</div>
+                                        <div>Jl. BSD Raya Utama, Cisauk, Sampora Kab. Tangerang 15341</div>
                                         <div>021-5089-8988/89 contact@intilab.com</div>
                                     </td>
 
                                     <!-- Kolom 2: Disclaimer -->
-                                    <td width="45%" style="font-size: 7pt; font-family: Roboto, sans-serif; vertical-align: top; text-align: center; line-height: 1.2; padding: 0; border:none;">
+                                    <td width="45%" style="font-size: 5pt; font-family: Roboto, sans-serif; vertical-align: top; text-align: center; line-height: 1.2; padding: 0; border:none; font-weight: bold;">
                                         Laporan hasil pengujian ini hanya berlaku bagi sampel yang tercantum di atas. Lembar ini tidak boleh diubah ataupun digandakan tanpa izin tertulis dari pihak Laboratorium.<br>
-                                        <b>Halaman {PAGENO} dari {nbpg}</b>
+                                        Halaman {PAGENO} dari {nbpg}
                                     </td>
 
                                     <!-- Kolom 3: Kode Dokumen -->
                                     <!-- PERHATIKAN: Tanda titik koma (;) telah ditambahkan setelah border:none -->
-                                    <td width="25%" style="font-size: 7pt; font-family: Roboto, sans-serif; font-weight: bold; text-align: right; vertical-align: top; padding: 0; border:none;">
+                                    <td width="25%" style="font-size: 5pt; font-family: Roboto, sans-serif; font-weight: bold; text-align: right; vertical-align: top; padding: 0; border:none;">
                                         DP/7.8.1/ISL; Rev 3; 08 November 2022
                                     </td>
                                 </tr>
