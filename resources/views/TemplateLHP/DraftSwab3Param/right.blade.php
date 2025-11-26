@@ -121,13 +121,17 @@
                     </tr>
 
                     {{-- area swab (kalau mau dipisah) --}}
-                    <tr>
-                        <td class="custom5" width="120">Area Swab</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                            {{ $header->deskripsi_titik ?? '-' }}
-                        </td>
-                    </tr>
+                    @foreach (json_decode($header->deskripsi_titik) as $i => $y)
+                        @if ($i === 0)
+                            <tr>
+                                <td class="custom5" width="120">Area Swab</td>
+                                <td class="custom5" width="12">:</td>
+                                <td class="custom5">
+                                    {{ $y }}
+                                </td>
+                            </tr>
+                        @endif
+                    @endforeach
 
                     <tr>
                         <td class="custom5" width="120">Periode Analisa</td>
