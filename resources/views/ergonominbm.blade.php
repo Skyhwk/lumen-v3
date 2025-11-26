@@ -657,7 +657,13 @@
                                 <th style="width: 28%;">DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
                                 <td colspan="2" height="60" style="vertical-align: top; text-align:center;">
                                     {{$personal->divisi}} <br>
-                                    {{$personal->aktivitas_ukur}}
+                                    @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
+                                        @foreach($personal->aktivitas_ukur as $item)
+                                            <p style="margin: 2px 0;">
+                                                {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
+                                            </p>
+                                        @endforeach
+                                    @endif
                                 </td>
                             </tr>
                     </table>
