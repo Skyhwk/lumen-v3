@@ -45,6 +45,71 @@
 </head>
 <body>
     <div class="clearfix">
+        <div class="konten-kiri">
+            <div class="sectionP">
+                <table class="table-potensi-bahaya">
+                    <thead>
+                        <tr>
+                            <th rowspan=4>I. Daftar Periksa Potensi Bahaya Tubuh Bagian Atas</th>
+                        </tr>
+                        <tr>
+                            <th>No</th>
+                            <th>Kategori</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                    </tbody>
+                </table>
+            </div>
+            <div class="sectionP">
+                <table class="table-potensi-bahaya">
+                        <thead><tr><th style="width: 24%">Kategori</th><th>Potensi Bahaya</th><th style="width:10%">Skor</th></tr></thead>
+                    <tbody>
+                        @foreach($groupedBawah as $kategori => $rows)
+                            @foreach($rows as $i => $row)
+                                <tr>
+                                    @if($i === 0)<td rowspan="{{ count($rows) }}">{{ $kategori }}</td>@endif
+                                    <td>{{ $row['potensi'] }}</td>
+                                    <td style="font-weight: bold; text-align: center;">{{ $row['skor'] }}</td>
+                                </tr>
+                            @endforeach
+                        @endforeach
+                    </tbody>
+                </table>
+                <table class="total-score-table">
+                    <tr>
+                        <td>Total Skor I dan II</td>
+                        <td style="width: 25%"></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="sectionP">
+                <div class="section-titleP">III. Daftar Periksa Pengamatan Beban Secara Manual</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Jarak Pengangkatan</th>
+                            <th>Berat Beban</th>
+                            <th>Skor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Skor Langkah 1</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <table style="margin-top: 5px;"><thead><tr><th>Faktor Risiko</th><th>Pengangkatan</th><th>Skor</th></tr></thead><tbody><tr><td>Skor Langkah 2</td><td></td><td></td></tr></tbody></table>
+            </div>
+            <div class="sectionP"><table class="total-score-table"><tr><td>Skor Langkah Akhir</td><td style="width: 25%"></td></tr></table></div>
+            <div class="sectionP"><div class="section-titleP">IV. Rekapitulasi Penilaian Potensi Bahaya</div><table class="rekap-table"><tr><td>Total Skor Akhir :</td><td style="width: 25%"></td></tr></table></div>
+            <div class="sectionP"><div class="section-titleP">V. Kesimpulan</div><div style="min-height: 50px; border: 1px solid #ddd; padding: 5px;"></div></div>
+        </div>
         <div class="konten-kanan">
             <table class="lhp-info-table">
                             <thead>
@@ -206,69 +271,7 @@
                             @endif
                         </div>
         </div>
-        <div class="konten-kiri">
-            <div class="sectionP">
-                <table class="table-potensi-bahaya">
-                    <thead><tr><th style="width: 24%">Kategori</th><th>Potensi Bahaya</th><th style="width:10%">Skor</th></tr></thead>
-                    <tbody>
-                        @foreach($groupedAtas as $kategori => $rows)
-                            @foreach($rows as $i => $row)
-                                <tr>
-                                    @if($i === 0)<td rowspan="{{ count($rows) }}">{{ $kategori }}</td>@endif
-                                    <td>{{ $row['potensi'] }}</td>
-                                    <td style="font-weight: bold; text-align: center;">{{ $row['skor'] }}</td>
-                                </tr>
-                            @endforeach
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            <div class="sectionP">
-                <table class="table-potensi-bahaya">
-                        <thead><tr><th style="width: 24%">Kategori</th><th>Potensi Bahaya</th><th style="width:10%">Skor</th></tr></thead>
-                    <tbody>
-                        @foreach($groupedBawah as $kategori => $rows)
-                            @foreach($rows as $i => $row)
-                                <tr>
-                                    @if($i === 0)<td rowspan="{{ count($rows) }}">{{ $kategori }}</td>@endif
-                                    <td>{{ $row['potensi'] }}</td>
-                                    <td style="font-weight: bold; text-align: center;">{{ $row['skor'] }}</td>
-                                </tr>
-                            @endforeach
-                        @endforeach
-                    </tbody>
-                </table>
-                <table class="total-score-table">
-                    <tr>
-                        <td>Total Skor I dan II</td>
-                        <td style="width: 25%"></td>
-                    </tr>
-                </table>
-            </div>
-            <div class="sectionP">
-                <div class="section-titleP">III. Daftar Periksa Pengamatan Beban Secara Manual</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Jarak Pengangkatan</th>
-                            <th>Berat Beban</th>
-                            <th>Skor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Skor Langkah 1</td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                    </tbody>
-                </table>
-                <table style="margin-top: 5px;"><thead><tr><th>Faktor Risiko</th><th>Pengangkatan</th><th>Skor</th></tr></thead><tbody><tr><td>Skor Langkah 2</td><td></td><td></td></tr></tbody></table>
-            </div>
-            <div class="sectionP"><table class="total-score-table"><tr><td>Skor Langkah Akhir</td><td style="width: 25%"></td></tr></table></div>
-            <div class="sectionP"><div class="section-titleP">IV. Rekapitulasi Penilaian Potensi Bahaya</div><table class="rekap-table"><tr><td>Total Skor Akhir :</td><td style="width: 25%"></td></tr></table></div>
-            <div class="sectionP"><div class="section-titleP">V. Kesimpulan</div><div style="min-height: 50px; border: 1px solid #ddd; padding: 5px;"></div></div>
-        </div>
+        
     </div>
 </body>
 </html>
