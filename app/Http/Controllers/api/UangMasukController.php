@@ -36,11 +36,13 @@ class UangMasukController extends Controller
             ->orderBy('no_document', 'ASC')
             ->get(['no_document', 'no_order', 'nama_perusahaan', 'biaya_akhir'])
             ->map(function ($item) {
-                if (!$item->biaya_akhir) return null;
-                if ($item->getInvoice->isEmpty()) return null;
+                if (!$item->biaya_akhir)
+                    return null;
+                if ($item->getInvoice->isEmpty())
+                    return null;
 
                 $filteredInvoices = $item->getInvoice->filter(function ($inv) {
-                    $tagihan   = floatval($inv->nilai_tagihan ?? 0);
+                    $tagihan = floatval($inv->nilai_tagihan ?? 0);
                     $totalWithdraw = $inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0;
                     $pelunasan = $totalWithdraw > 0 ? floatval($totalWithdraw) + floatval($inv->nilai_pelunasan ?? 0) : floatval($inv->nilai_pelunasan ?? 0);
 
@@ -86,7 +88,7 @@ class UangMasukController extends Controller
                 $getNilai = RecordPembayaranInvoice::select(DB::raw('SUM(nilai_pembayaran) AS nilai_pembayaran'))
                     ->where('no_invoice', $no_invoice)
                     ->where('is_active', true)
-                    ->groupBy('no_invoice',)
+                    ->groupBy('no_invoice', )
                     ->first();
 
                 if ($getNilai) {
@@ -172,13 +174,16 @@ class UangMasukController extends Controller
         DB::beginTransaction();
         try {
             $salesInDetail = SalesInDetail::find($request->id);
-            if (!$salesInDetail) return response()->json(['message' => 'Sales In Detail Not Found'], 404);
+            if (!$salesInDetail)
+                return response()->json(['message' => 'Sales In Detail Not Found'], 404);
 
             $invoice = Invoice::find($salesInDetail->id_invoice);
-            if (!$invoice) return response()->json(['message' => 'Invoice Not Found'], 404);
+            if (!$invoice)
+                return response()->json(['message' => 'Invoice Not Found'], 404);
 
             $salesIn = SalesIn::find($salesInDetail->id_header);
-            if (!$salesIn) return response()->json(['message' => 'Sales In Not Found'], 404);
+            if (!$salesIn)
+                return response()->json(['message' => 'Sales In Not Found'], 404);
 
             // UPDATE INVOICE
             $newNilaiPelunasan = (float) $invoice->nilai_pelunasan - (float) $salesInDetail->nominal_pelunasan;
@@ -189,7 +194,8 @@ class UangMasukController extends Controller
                 $invoice->tgl_pelunasan = null;
                 $invoice->nilai_pelunasan = null;
             }
-            if ($salesInDetail->lebih_bayar) $invoice->lebih_bayar = null;
+            if ($salesInDetail->lebih_bayar)
+                $invoice->lebih_bayar = null;
             $invoice->updated_by = $this->karyawan;
             $invoice->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $invoice->save();
@@ -221,7 +227,8 @@ class UangMasukController extends Controller
             // DELETE WITHDRAW
             if ($salesInDetail->nilai_pengurangan && $salesInDetail->nilai_pengurangan > 0) {
                 $withdraw = Withdraw::where('id_sales_in_detail', $salesInDetail->id)->first();
-                if (!$withdraw) return response()->json(['message' => 'Withdraw Record Not Found'], 404);
+                if (!$withdraw)
+                    return response()->json(['message' => 'Withdraw Record Not Found'], 404);
 
                 // $withdraw->is_active = false;
                 // $withdraw->save();
@@ -230,7 +237,12 @@ class UangMasukController extends Controller
 
             // DELETE RECORD PEMBAYARAN INVOICE + RECALCULATION
             $recordPembayaranInvoice = RecordPembayaranInvoice::where('id_sales_in_detail', $salesInDetail->id)->first();
-            if (!$recordPembayaranInvoice) return response()->json(['message' => 'Record Pembayaran Invoice Not Found'], 404);
+            if (!$recordPembayaranInvoice) {
+                $recordPembayaranInvoice = RecordPembayaranInvoice::where('no_invoice', $salesInDetail->no_invoice)->where('nilai_pembayaran', $salesInDetail->nominal_pelunasan)->first();
+                if (!$recordPembayaranInvoice)
+                    return response()->json(['message' => 'Record Pembayaran Invoice Not Found'], 404);
+            }
+            ;
 
             $recordPembayaranInvoice->is_active = false;
             $recordPembayaranInvoice->deleted_by = $this->karyawan;
@@ -238,7 +250,7 @@ class UangMasukController extends Controller
             $recordPembayaranInvoice->save();
 
             $penguranganRestore = (float) $recordPembayaranInvoice->nilai_pengurangan;
-            $pembayaranRestore  = (float) $recordPembayaranInvoice->nilai_pembayaran;
+            $pembayaranRestore = (float) $recordPembayaranInvoice->nilai_pembayaran;
 
             $recordsAfter = RecordPembayaranInvoice::where('no_invoice', $recordPembayaranInvoice->no_invoice)
                 ->where('is_active', true)
@@ -255,7 +267,8 @@ class UangMasukController extends Controller
                     }
                 }
 
-                if ($pembayaranRestore > 0) $rec->sisa_pembayaran += $pembayaranRestore;
+                if ($pembayaranRestore > 0)
+                    $rec->sisa_pembayaran += $pembayaranRestore;
 
                 $rec->save();
             }
@@ -267,7 +280,7 @@ class UangMasukController extends Controller
             $salesInDetail->save();
 
             $penguranganRestore = (float) $salesInDetail->nilai_pengurangan;
-            $pembayaranRestore  = (float) $salesInDetail->nominal_pelunasan;
+            $pembayaranRestore = (float) $salesInDetail->nominal_pelunasan;
 
             $recordsAfter = SalesInDetail::where('no_invoice', $salesInDetail->no_invoice)
                 ->where('is_active', true)
@@ -284,7 +297,8 @@ class UangMasukController extends Controller
                     }
                 }
 
-                if ($pembayaranRestore > 0) $rec->kurang_bayar += $pembayaranRestore;
+                if ($pembayaranRestore > 0)
+                    $rec->kurang_bayar += $pembayaranRestore;
 
                 $rec->save();
             }
