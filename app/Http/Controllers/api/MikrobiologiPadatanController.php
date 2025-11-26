@@ -2,32 +2,27 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Models\EmisiCerobongHeader;
+use App\Models\Colorimetri;
 use App\Models\OrderDetail;
-use App\Models\WsValueEmisiCerobong;
+use App\Models\WsValueAir;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
-class GravimetriEmisiCerobongController extends Controller
+class MikrobiologiPadatanController extends Controller
 {
     // public function index(Request $request){
-    //     $data = EmisiCerobongHeader::with('ws_value', 'order_detail')
-    //     ->where('is_approved', $request->approve)
-    //     ->where('is_active', true)
-    //     ->where('template_stp', $request->template_stp);
-    //     // ->orderBy('id', 'desc');
+    //     $data = Colorimetri::with('ws_value', 'order_detail')->where('is_approved', $request->approve)->where('is_active', true)->where('template_stp', $request->template_stp)->orderBy('created_at', 'desc');
     //     return Datatables::of($data)->make(true);
     // }
 
     // 20-03-2025
     public function index(Request $request){
-        $data = EmisiCerobongHeader::with('ws_value', 'order_detail')
-            ->where('is_approved', $request->approve)
-            ->where('emisi_cerobong_header.is_active', true)
-            ->where('template_stp', $request->template_stp);
+        $data = Colorimetri::with('ws_value', 'order_detail')->where('is_approved', $request->approve)
+        ->where('is_active', true)
+        ->where('template_stp', $request->template_stp);
         return Datatables::of($data)
             ->orderColumn('tanggal_terima', function ($query, $order) {
                 $query->orderBy('tanggal_terima', $order);
@@ -37,9 +32,6 @@ class GravimetriEmisiCerobongController extends Controller
             })
             ->orderColumn('no_sampel', function ($query, $order) {
                 $query->orderBy('no_sampel', $order);
-            })
-            ->editColumn('data_analis', function($item){
-                return json_decode($item->data_analis, true) ?? [];
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
@@ -73,18 +65,17 @@ class GravimetriEmisiCerobongController extends Controller
                     }
                 }
             })
-        ->make(true);
+            ->make(true);
     }
 
     public function approveData(Request $request){
-        
         DB::beginTransaction();
         try {
-            $data = EmisiCerobongHeader::where('id', $request->id)->where('is_active', true)->first();
+            $data = Colorimetri::where('id', $request->id)->where('is_active', true)->first();
             if($data->is_approved == 1){
                 return response()->json([
                     'status' => false,
-                    'message' => 'Data emisi cerobong no sample ' . $data->no_sampel . ' sudah di approve'
+                    'message' => 'Data colorimetri no sample ' . $data->no_sampel . ' berhasil di approve'
                 ],401);
             }
             $data->is_approved = 1;
@@ -96,12 +87,11 @@ class GravimetriEmisiCerobongController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Data emisi cerobong no sample ' . $data->no_sampel . ' berhasil di approve'
+                'message' => 'Data colorimetri no sample ' . $data->no_sampel . ' berhasil di approve'
             ],200);
 
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan! ' . $th->getMessage()
@@ -112,13 +102,14 @@ class GravimetriEmisiCerobongController extends Controller
     public function deleteData(Request $request){
         DB::beginTransaction();
         try {
-            $data = EmisiCerobongHeader::where('id', $request->id)->first();
+            $data = Colorimetri::where('id', $request->id)->first();
             $data->is_active = false;
             $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->deleted_by = $this->karyawan;
+            $data->is_retest = false;
             $data->save();
 
-            $ws_value = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $request->id)->where('is_active', true)->first();
+            $ws_value = WsValueAir::where('id_colorimetri', $request->id)->where('is_active', true)->first();
             if($ws_value){
                 $ws_value->is_active = false;
                 $ws_value->save();
@@ -128,7 +119,7 @@ class GravimetriEmisiCerobongController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Data emisi cerobong no sample ' . $data->no_sampel . ' berhasil dihapus .!'
+                'message' => 'Data colorimetri no sample ' . $data->no_sampel . ' berhasil dihapus .!'
             ],200);
 
         } catch (\Throwable $th) {

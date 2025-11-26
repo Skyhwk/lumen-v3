@@ -443,7 +443,7 @@ class InputParameterController extends Controller
                     }
                 }
             }else if(
-                ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'Direct Reading A' || $stp->name == 'Direct Reading B' || $stp->name == 'Direct Reading C' || $stp->name == 'Direct Reading D' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'SPEKTRO A' || $stp->name == 'SPEKTRO B' || $stp->name == 'SPEKTRO C' ||  $stp->name == 'SPEKTRO D' ||  $stp->name == 'SPEKTRO E' ||  $stp->name == 'SPEKTRO F' ||  $stp->name == 'COLORIMETER' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'KIMIA PANGAN A')
+                ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'Direct Reading A' || $stp->name == 'Direct Reading B' || $stp->name == 'Direct Reading C' || $stp->name == 'Direct Reading D' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'SPEKTRO A' || $stp->name == 'SPEKTRO B' || $stp->name == 'SPEKTRO C' ||  $stp->name == 'SPEKTRO D' ||  $stp->name == 'SPEKTRO E' ||  $stp->name == 'SPEKTRO F' ||  $stp->name == 'COLORIMETER' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'KIMIA PANGAN A' || $stp->name == 'Mikrobiologi Padatan')
                 &&
                 ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan' || $stp->sample->nama_kategori == 'Pangan')
             ) {
@@ -1291,7 +1291,7 @@ class InputParameterController extends Controller
 				], 403);
 			}
 		} else if (
-			($stp->name == 'ICP' || $stp->name == 'COLORIMETER' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
+			($stp->name == 'ICP' || $stp->name == 'COLORIMETER' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'Mikrobiologi Padatan')
 			&&
 			$stp->sample->nama_kategori == 'Padatan'
 		) {
@@ -2774,15 +2774,15 @@ class InputParameterController extends Controller
 						];
 					}
 
-					$data_kalkulasi['lingkungan_header_id'] = $header->id;
-					$data_kalkulasi['no_sampel'] = $request->no_sample;
-					$data_kalkulasi['created_by'] = $this->karyawan;
+					// $data_kalkulasi['lingkungan_header_id'] = $header->id;
+					// $data_kalkulasi['no_sampel'] = $request->no_sample;
+					// $data_kalkulasi['created_by'] = $this->karyawan;
 					$satuan = $data_kalkulasi['satuan'];
-					unset($data_kalkulasi['satuan']);
-					WsValueLingkungan::create($data_kalkulasi);
+					// unset($data_kalkulasi['satuan']);
+					// WsValueLingkungan::create($data_kalkulasi);
 
 					$data_udara = array();
-					$data_udara['id_lingkungan_header'] = $header->id;
+					$data_udara['id_debu_personal_header'] = $header->id;
 					$data_udara['no_sampel'] = $request->no_sample;
 					$data_udara['hasil16'] = $data_kalkulasi['C15'];
 					$data_udara['hasil17'] = $data_kalkulasi['C16'];
@@ -3961,7 +3961,6 @@ class InputParameterController extends Controller
 				}
 				WsValueUdara::create($data_udara);
 
-                dd('masuk');
 				// Commit transaksi jika semua berhasil
 				DB::commit();
 

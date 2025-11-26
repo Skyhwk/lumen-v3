@@ -206,14 +206,18 @@ class TemplateLhpErgonomi
                     $pengukuran->$waktu = $dataTemp;
                 }
             }
-           
+            $uraianAktivitasK3 =null;
+            if($dataRwl->input_k3 != null){
+                $aktivitasK3 =json_decode($dataRwl->input_k3);
+                $uraianAktivitasK3=$aktivitasK3->uraian;
+            }
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
                 "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
-                "aktivitas_ukur" => $dataRwl->aktivitas_uku,
+                "aktivitas_ukur" => ($uraianAktivitasK3 != null) ? $uraianAktivitasK3 : $dataRwl->aktivitas_ukur,
                 "divisi" => $dataRwl->divisi,
                 "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
@@ -367,6 +371,11 @@ class TemplateLhpErgonomi
                 // $result = null;
             }
             // $pengukuran->tingkat_resiko = $tingkatResiko;
+            $uraianAktivitasK3 =null;
+            if($dataRosa->input_k3 != null){
+                $aktivitasK3 =json_decode($dataRosa->input_k3);
+                $uraianAktivitasK3=$aktivitasK3->uraian;
+            }
             $pengukuran->kategori_resiko = $kategoriResiko;
             $pengukuran->tindakan = $tindakan;
             $pengukuran->result = $result;
@@ -379,7 +388,9 @@ class TemplateLhpErgonomi
                 "tanggal_sampling" => isset($dataRosa->detail) ? Carbon::parse($dataRosa->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "periode_analisis" => '-',
                 "nama_pekerja" => $dataRosa->nama_pekerja,
-                "aktivitas_ukur" => $dataRosa->aktivitas_ukur,
+                "aktivitas_ukur" => ($uraianAktivitasK3 != null)
+                    ? ($uraianAktivitasK3[0]->Uraian.' - '.$uraianAktivitasK3[0]->jam.' jam, '.$uraianAktivitasK3[0]->menit.' menit.')
+                    : $dataRosa->aktivitas_ukur,
                 "usia" => $dataRosa->usia,
                 "lama_kerja" => json_decode($dataRosa->lama_kerja),
                 "divisi" => $dataRosa->divisi,

@@ -131,19 +131,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 		// , %, -, m/s, mg/Mm³, mg/m³, mg/Nm3, mg/Nm³, ppm, °C
 		return Datatables::of($data)
 			->addColumn('nilai_uji', function ($item) {
-				// $satuanIndexMap = [
-				// 	"ug/nm3" => 1,
-				// 	"mg/Nm3" => 2,
-				// 	"ppm"    => 3,
-				// 	"%"      => 4,
-				// 	"°C"     => 5,
-				// 	"g/gmol" => 6,
-				// 	"m3/s"   => 7,
-				// 	"m/s"    => 8,
-				// 	"kg/tahun" => 9,
-				// 	"mg/m³" => 10,
-
-				// ];
 				$satuanIndexMap = [
 					"μg/Nm³" => "",
 					"μg/Nm3" => "",
@@ -173,27 +160,24 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					"kg/tahun" => 10,
 				];
 
-
+				
 				$satuan = $item['satuan'] ?? '-';
-
-				// // lowercase UTF-8
-				// $satuan = mb_strtolower($satuan, 'UTF-8');
-
-				// // normalisasi karakter pangkat & mikro
-				// $satuan = str_replace(
-				// 	['³', 'μg', 'µg', 'µ', 'nm³', 'm³'],
-				// 	['3', 'ug', 'ug', 'ug', 'nm3', 'm3'],
-				// 	$satuan
-				// );
-
-
-				// // buang spasi
-				// $satuan = str_replace(' ', '', $satuan);
 				
 				$index = $satuanIndexMap[$satuan] ?? null;
+				// Prioritas 1: ws_value_cerobong
+				$wsCerobong = $item['ws_value_cerobong'] ?? null;
 
-				$ws = $item['ws_value_cerobong'] ?? null;
-				if (!$ws) return "noWs";
+				// Prioritas 2: ws_value['C5']
+				$c5 = $item['ws_value']['C5'] ?? null;
+
+				if (!empty($wsCerobong)) {
+					$ws = (array) $wsCerobong;
+				} elseif (!empty($c5)) {
+					$ws = (array) $item['ws_value'];
+					$index = 5;
+				} else {
+					return "noWs";
+				}
 
 				$ws = (array) $ws; // pastikan array
 				if ($index === null) {

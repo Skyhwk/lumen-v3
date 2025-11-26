@@ -494,8 +494,8 @@ class GenerateHasilPengujianController extends Controller
             if (!$linkLhp) return response()->json(['message' => 'Data Link LHP tidak ditemukan.'], 404);
 
             $listCfrRilis = json_decode($linkLhp->list_lhp_rilis);
-            $finalFilename = $linkLhp->filename;
-            if (empty($listCfrRilis) || !$finalFilename) return response()->json(['message' => 'Record ini tidak memiliki list LHP rilis atau nama file. Tidak ada yang bisa di-render ulang.'], 400);
+            // $finalFilename = $linkLhp->filename;
+            // if (empty($listCfrRilis) || !$finalFilename) return response()->json(['message' => 'Record ini tidak memiliki list LHP rilis atau nama file. Tidak ada yang bisa di-render ulang.'], 400);
 
             $finalDirectoryPath = public_path('laporan/hasil_pengujian');
             $finalFilename = $linkLhp->periode ? $linkLhp->no_order . '_' . $linkLhp->periode . '.pdf' : $linkLhp->no_order . '.pdf';
