@@ -1291,7 +1291,7 @@ class InputParameterController extends Controller
 				], 403);
 			}
 		} else if (
-			($stp->name == 'ICP' || $stp->name == 'COLORIMETER' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
+			($stp->name == 'ICP' || $stp->name == 'COLORIMETER' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'Mikrobiologi Padatan')
 			&&
 			$stp->sample->nama_kategori == 'Padatan'
 		) {
