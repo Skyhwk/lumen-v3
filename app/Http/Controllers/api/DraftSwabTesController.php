@@ -1,8 +1,8 @@
 <?php
 namespace App\Http\Controllers\api;
 
-use App\Helpers\HelperSatuan;
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
 use App\Models\DataLapanganSwab;
@@ -300,6 +300,8 @@ class DraftSwabTesController extends Controller
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
                 $grouped         = [];
 
+                $deskripsi_titik = json_decode($cekLhp->deskripsi_titik, true);
+
                 foreach (json_decode($cekLhp->regulasi, true) as $i => $regulasi) {
                     $items = $detail->filter(function ($d) use ($i) {
                         return $d->page == ($i + 1);
@@ -337,9 +339,10 @@ class DraftSwabTesController extends Controller
                     })->values()->toArray();
 
                     $grouped[] = [
-                        "nama_regulasi" => explode('-', $regulasi)[1],
-                        "id_regulasi"   => explode('-', $regulasi)[0],
-                        "detail"        => $convertedDetails,
+                        "nama_regulasi"   => explode('-', $regulasi)[1],
+                        "id_regulasi"     => explode('-', $regulasi)[0],
+                        "deskripsi_titik" => $deskripsi_titik[$i] ?? null, // <-- ini dia
+                        "detail"          => $convertedDetails,
                     ];
 
                 }
@@ -375,6 +378,7 @@ class DraftSwabTesController extends Controller
                     $final[] = [
                         "id_regulasi"   => $group['id_regulasi'],
                         "nama_regulasi" => $group['nama_regulasi'],
+                        "deskripsi_titik" => $group['deskripsi_titik'],
                         "detail"        => array_values($result),
                     ];
                 }
@@ -505,6 +509,11 @@ class DraftSwabTesController extends Controller
                 $mergeRegulasi[] = $data['regulasi_id'] . '-' . $data['regulasi'];
             }
 
+            $mergeDeskripsiTitik = [];
+            foreach ($request->data as $data) {
+                $mergeDeskripsiTitik[] = $data['deskripsi_titik'];
+            }
+
             $parameter                      = $request->parameter;
             $header->no_order               = $request->no_order != '' ? $request->no_order : null;
             $header->no_sampel              = $request->no_sampel != '' ? $request->noSampel : null;
@@ -523,7 +532,7 @@ class DraftSwabTesController extends Controller
             $header->tanggal_analisa_akhir  = $request->tanggal_analisa_akhir != '' ? $request->tanggal_analisa_akhir : null;
             $header->alamat_sampling        = $request->alamat_sampling != '' ? $request->alamat_sampling : null;
             $header->sub_kategori           = $request->jenis_sampel != '' ? $request->jenis_sampel : null;
-            $header->deskripsi_titik        = $request->keterangan_1 != '' ? $request->keterangan_1 : null;
+            $header->deskripsi_titik        = json_encode($mergeDeskripsiTitik) ?? null;
             $header->metode_sampling        = $request->metode_sampling ? json_encode($request->metode_sampling) : null;
             $header->tanggal_sampling       = $request->tanggal_terima != '' ? $request->tanggal_terima : null;
             $header->nama_karyawan          = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
@@ -559,10 +568,10 @@ class DraftSwabTesController extends Controller
                     $keterangan       = $row['keterangan'];
 
                     foreach ($row['hasil_uji'] as $paramName => $hasilUji) {
-                        $bakumutu = $row['bakumutu'][$paramName] ?? null;
+                        $bakumutu     = $row['bakumutu'][$paramName] ?? null;
                         $parameterLab = $row['parameter_lab'][$paramName] ?? null;
-                        $satuan = $row['satuan'][$paramName] ?? null;
-                        $akr = $row['akr'][$paramName] ?? null;
+                        $satuan       = $row['satuan'][$paramName] ?? null;
+                        $akr          = $row['akr'][$paramName] ?? null;
 
                         $metodeParam = $methode[$key][$noSampel][$paramName] ?? null;
 
@@ -846,7 +855,10 @@ class DraftSwabTesController extends Controller
                     ->first();
 
                 $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                if ($cekDetail && $cekDetail->periode) {
+                    $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                }
+
                 $cekLink = $cekLink->first();
 
                 if ($cekLink) {
