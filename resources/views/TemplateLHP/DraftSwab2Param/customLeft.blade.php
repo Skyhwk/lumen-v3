@@ -7,7 +7,7 @@
 
     $parameters = $data->pluck('parameter')->filter()->unique();
 
-    $satuan = $data->pluck('satuan')->filter()->first();
+    // $satuan = $data->pluck('satuan')->filter()->first();
 
 @endphp
 
