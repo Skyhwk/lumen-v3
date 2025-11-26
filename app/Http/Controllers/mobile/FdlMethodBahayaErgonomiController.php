@@ -249,10 +249,9 @@ class FdlMethodBahayaErgonomiController extends Controller
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')->first();
-                InsertActivityFdl::by($this->user_id)->action('input')->target("Bahaya Ergonomi pada nomor sampel $data->no_sample")->save();
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)->first();
+
+            InsertActivityFdl::by($this->user_id)->action('input')->target("Bahaya Ergonomi pada nomor sampel $data->no_sample")->save();
 
             if($orderDetail->tanggal_terima == null) {
                 $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
