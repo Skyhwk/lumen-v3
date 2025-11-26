@@ -246,19 +246,21 @@
                         }
                     }
                 @endphp
-                @if (!empty($header->keterangan))
-                    <table style="padding: 5px 0px 0px 10px;" width="100%">
-                        @foreach (json_decode($header->keterangan) as $vx)
-                            @foreach ($temptArrayPush as $symbol)
-                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
-                                    <tr>
-                                        <td class="custom5" colspan="3">{{ $vx }}</td>
-                                    </tr>
-                                    @break
-                                @endif
+                @if (!$isManyNoSampel)
+                    @if (!empty($header->keterangan))
+                        <table style="padding: 5px 0px 0px 10px;" width="100%">
+                            @foreach (json_decode($header->keterangan) as $vx)
+                                @foreach ($temptArrayPush as $symbol)
+                                    @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                        <tr>
+                                            <td class="custom5" colspan="3">{{ $vx }}</td>
+                                        </tr>
+                                        @break
+                                    @endif
+                                @endforeach
                             @endforeach
-                        @endforeach
-                    </table>
+                        </table>
+                    @endif
                 @endif
             </td>
         </tr>
