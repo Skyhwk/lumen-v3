@@ -238,7 +238,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 			if ($header != null) {
 				$qr = new GenerateQrDocumentLhpp();
 				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
-				if ($header->file_qr == null && $file_qr) {
+				if ($file_qr) {
 					$header->file_qr = $file_qr . '.svg';
 					$header->save();
 				}
@@ -250,12 +250,11 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$fileName = 'LHP-' . str_replace("/", "-", $request->cfr) . '.pdf';
 
 				// $fileName = 'LHPP-' . str_replace("/", "-", $request->cfr) . '.pdf';
-				if($header->no_dokumen == null && $fileName){
-					$header->no_dokumen = $fileName;
-					$header->save();
-				}
+				// if($header->no_dokumen == null && $fileName){
+				$header->no_dokumen = $fileName;
+				$header->save();
+				// }
 			}
-
 			DB::commit();
 			return response()->json([
 				'message' => 'success',
@@ -264,7 +263,6 @@ class DraftLhpUdaraPsikologiController extends Controller
 			], 200);
 		} catch (Exception $e) {
 			DB::rollBack();
-			dd($e);
 			return response()->json([
 				'message' => $e->getMessage(),
 				'line' => $e->getLine(),
