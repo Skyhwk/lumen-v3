@@ -174,7 +174,7 @@
                             @endif
                         </td>
                     </tr>
-                    @if(!$$manyNoSampel)
+                    @if(!$isManyNoSampel)
                         <tr>
                             <td class="custom5">Keterangan</td>
                             <td class="custom5">:</td>
