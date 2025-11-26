@@ -310,7 +310,7 @@
 
         .signature-date {
             margin-bottom: 8px;
-            font-size: 8px;
+            font-size: 9px;
         }
 
         .signature-qr {
@@ -619,51 +619,56 @@
                     </tbody>
                 </table>
             <div class="section-title" style="margin-top: 15px;">B. KELUHAN SUBJEKTIF</div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>JENIS PENGUKURAN</th>
-                        <th>TOTAL SKOR</th>
-                        <th>TINGKAT RISIKO</th>
-                        <th>KATEGORI RISIKO</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style="text-align: left;">SEBELUM BEKERJA</td>
-                        <td>{{$pengukuran->sebelum->total_skor}}</td>
-                        <td>{{$pengukuran->sebelum->tingkat_resiko}}</td>
-                        <td>{{$pengukuran->sebelum->kategori_risiko}}</td>
-                    </tr>
-                    <tr>
-                        <td style="text-align: left;">SETELAH BEKERJA</td>
-                        <td>{{$pengukuran->setelah->total_skor}}</td>
-                        <td>{{$pengukuran->setelah->tingkat_resiko}}</td>
-                        <td>{{$pengukuran->setelah->kategori_risiko}}</td>
-                    </tr>
-                    <tr>
-                     <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
-                     <td colspan="3" height="40">
-                        Berdasarkan hasil analisa yang telah dilakukan, didapatkan skor NBM setelah bekerja yaitu {{$pengukuran->setelah->total_skor}}. <br>
-                        Hasil skor tersebut masuk dalam tingkat resiko {{$pengukuran->setelah->tingkat_risiko}} dengan kategori resiko {{$pengukuran->setelah->kategori_risiko}}.<br>
-                        Sehingga {{$pengukuran->setelah->tindakan_perbaikan}}.
-                     </td>
-                    </tr>
-                </tbody>
-            </table>
-            <div class="job-description">
-                <table>
+                <table width="100%">
+                    <thead>
                         <tr>
-                            <th>DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
-                            <td colspan="2" height="60" style="vertical-align: top; text-align:center;">
-                                {{$personal->divisi}} <br>
-                                {{$personal->aktivitas_ukur}}
-                            </td>
+                            <th style="width: 28%;">JENIS PENGUKURAN</th>
+                            <th>TOTAL SKOR</th>
+                            <th>TINGKAT RISIKO</th>
+                            <th>KATEGORI RISIKO</th>
                         </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: left;">SEBELUM BEKERJA</td>
+                            <td>{{$pengukuran->sebelum->total_skor}}</td>
+                            <td>{{$pengukuran->sebelum->tingkat_resiko}}</td>
+                            <td>{{$pengukuran->sebelum->kategori_risiko}}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">SETELAH BEKERJA</td>
+                            <td>{{$pengukuran->setelah->total_skor}}</td>
+                            <td>{{$pengukuran->setelah->tingkat_resiko}}</td>
+                            <td>{{$pengukuran->setelah->kategori_risiko}}</td>
+                        </tr>
+                        <tr>
+                        <td>KESIMPULAN AKHIR KELUHAN SUBJEKTIF</td>
+                        <td colspan="3" height="40">
+                            Berdasarkan hasil analisa yang telah dilakukan, didapatkan skor NBM setelah bekerja yaitu {{$pengukuran->setelah->total_skor}}. <br>
+                            Hasil skor tersebut masuk dalam tingkat resiko {{$pengukuran->setelah->tingkat_risiko}} dengan kategori resiko {{$pengukuran->setelah->kategori_risiko}}.<br>
+                            Sehingga {{$pengukuran->setelah->tindakan_perbaikan}}.
+                        </td>
+                        </tr>
+                    </tbody>
                 </table>
+                <div class="job-description">
+                    <table width="100%">
+                            <tr>
+                                <th style="width: 28%;">DESKRIPSI SINGKAT PEKERJAAN PEKERJA</th>
+                                <td colspan="2" height="60" style="vertical-align: top; text-align:center;">
+                                    {{$personal->divisi}} <br>
+                                    @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
+                                        @foreach($personal->aktivitas_ukur as $item)
+                                            <p style="margin: 2px 0;">
+                                                {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
+                                            </p>
+                                        @endforeach
+                                    @endif
+                                </td>
+                            </tr>
+                    </table>
+                </div> 
             </div>
-            
-        </div>
         <div class="right-section">
             <div class="section-title">&nbsp;</div>
             <div>
@@ -702,7 +707,7 @@
                     <div class="info-header">Informasi Sampling</div>
                     <table class="info-table">
                         <tr>
-                            <td style="width: 25%; text-align:start;">Tanggal</td>
+                            <td style="width: 25%; text-align:start;">Tanggal Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
@@ -795,10 +800,10 @@
                                 <td class="signature-left"></td>
                                 <td class="signature-right">
                                     <div class="signature-date">
-                                        {{ $ttd->tanggal }}
+                                       Tangerang, {{ $ttd->tanggal }}
                                     </div><br>
                                     <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
+                                            <img src="{{ $ttd->qr_path }}" width="50" height="50" alt="ttd">
                                     </div>
                                 </td>
                             </tr>

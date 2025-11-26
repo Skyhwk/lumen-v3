@@ -123,12 +123,19 @@ class TqcUdaraLingkunganKerjaController extends Controller
                 ->addSelect(DB::raw("'subKontrak' as data_type"))
                 ->get();
 
-
+            $debuPersonal = DebuPersonalHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('is_active', 1)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'debu_personal' as data_type"))
+                ->get();
 
             $combinedData = collect()
                 ->merge($lingkunganData)
                 ->merge($subkontrak)
-                ->merge($directData);
+                ->merge($directData)
+                ->merge($debuPersonal);
 
 
             $processedData = $combinedData->map(function ($item) {
@@ -141,6 +148,9 @@ class TqcUdaraLingkunganKerjaController extends Controller
                         break;
                     case 'direct':
                         $item->source = 'Direct Lain';
+                        break;
+                    case 'debu_personal':
+                        $item->source = 'Debu Personal';
                         break;
                 }
                 return $item;

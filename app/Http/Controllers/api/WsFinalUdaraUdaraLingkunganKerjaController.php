@@ -175,12 +175,21 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 ->addSelect(DB::raw("'microbio' as data_type"))
                 ->get();
 
+            $debuPersonal = DebuPersonalHeader::with(['ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approved', 1)
+                ->where('is_active', 1)
+                ->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+                ->addSelect(DB::raw("'debu_personal' as data_type"))
+                ->get();
+
             $combinedData = collect()
                 ->merge($lingkunganData)
                 ->merge($subkontrak)
                 ->merge($partikulat)
                 ->merge($directData)
-                ->merge($microbio);
+                ->merge($microbio)
+                ->merge($debuPersonal);
 
             $processedData = $combinedData->map(function ($item) {
                 switch ($item->data_type) {
@@ -198,6 +207,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                         break;
                     case 'microbio':
                         $item->source = 'Mikrobiologi';
+                        break;
+                    case 'debu_personal':
+                        $item->source = 'Debu Personal';
                         break;
                 }
                 return $item;

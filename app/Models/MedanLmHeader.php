@@ -17,7 +17,7 @@ class MedanLmHeader extends Sector
     }
     public function datalapangan()
     {
-        return $this->belongsTo('App\Models\DataLapanganSinarUV', 'no_sampel', 'no_sampel');
+        return $this->belongsTo('App\Models\DataLapanganMedanLM', 'no_sampel', 'no_sampel');
     }
     public function orderDetail()
     {
