@@ -42,7 +42,7 @@ class WsFinalUdaraKebisinganController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "26-Kualitas Udara Dalam Ruang"])
+			->whereIn('kategori_3', ["23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereJsonDoesntContain('parameter', [
