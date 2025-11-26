@@ -13,7 +13,7 @@ class MasterKuotaTargetController extends Controller
 {
     public function index(Request $request)
     {
-        $data = MasterKuotaTarget::where('is_active', true);
+        $data = MasterKuotaTarget::where('is_active', true)->where('created_by', $this->karyawan);
 
         return Datatables::of($data)->make(true);
     }
