@@ -171,11 +171,13 @@
                             @endif
                         </td>
                     </tr>
-                    <tr>
-                        <td class="custom5">Keterangan</td>
-                        <td class="custom5">:</td>
-                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
-                    </tr>
+                    @if(!$$manyNoSampel)
+                        <tr>
+                            <td class="custom5">Keterangan</td>
+                            <td class="custom5">:</td>
+                            <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                        </tr>
+                    @endif
                     {{-- <tr>
                         <td class="custom5">Titik Koordinat</td>
                         <td class="custom5">:</td>
@@ -246,21 +248,19 @@
                         }
                     }
                 @endphp
-                @if (!$isManyNoSampel)
-                    @if (!empty($header->keterangan))
-                        <table style="padding: 5px 0px 0px 10px;" width="100%">
-                            @foreach (json_decode($header->keterangan) as $vx)
-                                @foreach ($temptArrayPush as $symbol)
-                                    @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
-                                        <tr>
-                                            <td class="custom5" colspan="3">{{ $vx }}</td>
-                                        </tr>
-                                        @break
-                                    @endif
-                                @endforeach
+                @if (!empty($header->keterangan))
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        @foreach (json_decode($header->keterangan) as $vx)
+                            @foreach ($temptArrayPush as $symbol)
+                                @if (\Illuminate\Support\Str::startsWith($vx, $symbol))
+                                    <tr>
+                                        <td class="custom5" colspan="3">{{ $vx }}</td>
+                                    </tr>
+                                    @break
+                                @endif
                             @endforeach
-                        </table>
-                    @endif
+                        @endforeach
+                    </table>
                 @endif
             </td>
         </tr>
