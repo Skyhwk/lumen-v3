@@ -656,12 +656,12 @@ class DraftUlkController extends Controller
                 $manyNoSampel = count($validasi) > 1 ? true : false;
                 $listData = collect(); // <- PENTING: pakai collect
 
-                foreach ($validasi as $item) {
-                    $lingkungan = $item->udaraLingkungan;
-                    $microbio   = $item->udaraMicrobio;
-                    $subKontrak = $item->udaraSubKontrak;
-                    $direct     = $item->udaraDirect;
-                    $partikulat = $item->udaraPartikulat;
+                foreach ($validasi as $items) {
+                    $lingkungan = $items->udaraLingkungan;
+                    $microbio   = $items->udaraMicrobio;
+                    $subKontrak = $items->udaraSubKontrak;
+                    $direct     = $items->udaraDirect;
+                    $partikulat = $items->udaraPartikulat;
 
                     $detail = collect()
                         ->merge($lingkungan)
@@ -678,18 +678,17 @@ class DraftUlkController extends Controller
                                 ->where('is_active', true)
                                 ->first();
                                 // dump($item->no_sampel);
-
                             return [
                                 'id'            => $item->id,
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
                                 'nama_lab'      => $item->parameter,
-                                'penamaan_titik'    => $item->ws_value_linkungan->detailLingkunganKerja->keterangan,
-                                'tanggal_sampling'    => $item->ws_value_linkungan->detailLingkunganKerja->created_at,
+                                'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
+                                'tanggal_sampling'    => $item->ws_udara->detailLingkunganKerja->created_at ?? null,
                                 'satuan'        => $newQuery->satuan,
                                 'method'        => $newQuery->method,
                                 'status'        => $newQuery->status,
                                 'no_sampel'     => $item->no_sampel,
-                                'durasi'        => $item->ws_value_linkungan->durasi ?? null,
+                                'durasi'        => $item->ws_udara->durasi ?? null,
                                 'ws_udara'      => collect($item->ws_udara)->toArray(),
                                 'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
                             ];
