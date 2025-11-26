@@ -140,6 +140,13 @@ class DraftUlkController extends Controller
         $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
         $parameterAllowed = json_decode($parameterAllowed->parameters, true);
         $parameterAllowed[] = 'Sinar UV';
+        $parameterAllowed[] = 'Ergonomi';
+        $parameterAllowed[] = 'Gelombang Elektro';
+        $parameterAllowed[] = 'Medan Listrik';
+        $parameterAllowed[] = 'Medan Magnit Statis';
+        $parameterAllowed[] = 'Power Density';
+
+        
         
         $data = OrderDetail::selectRaw('
             max(id) as id,
