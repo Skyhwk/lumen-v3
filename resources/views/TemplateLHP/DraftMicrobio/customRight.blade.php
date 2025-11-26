@@ -230,7 +230,7 @@
                         {{-- KONDISI 3: banyak no sampel, banyak parameter --}}
                     @elseif ($isNotUsingTable)
                         {{-- metode sampling (array) --}}
-                        <tr>
+                        {{-- <tr>
                             <td class="custom5" width="120">Metode Sampling</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
@@ -252,7 +252,7 @@
                                     @endforelse
                                 </table>
                             </td>
-                        </tr>
+                        </tr> --}}
 
                         {{-- spesifikasi metode per parameter --}}
                         <tr>
@@ -295,13 +295,13 @@
                             </td>
                         </tr>
 
-                        <tr>
+                        {{-- <tr>
                             <td class="custom5" width="120">Area Swab</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
                                 {{ $header->deskripsi_titik ?? '-' }}
                             </td>
-                        </tr>
+                        </tr> --}}
                     @endif
                 </table>
 
