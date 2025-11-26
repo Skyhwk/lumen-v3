@@ -476,12 +476,13 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     foreach ($data as $val) {
                         if($model === IsokinetikHeader::class){
                             $hasilIsokinetik = json_decode($val->ws_value_cerobong->hasil_isokinetik, true);
+                            dump($hasilIsokinetik);
 
                             // berat_molekul_kering
-                            if (array_key_exists('berat_molekul_kering', $hasilIsokinetik)) {
+                            if (array_key_exists('berat_molekul_kering_method5', $hasilIsokinetik)) {
                                 $dataPage2[] = [
                                     'parameter' => 'Berat Molekul Kering',
-                                    'hasil_uji' => $hasilIsokinetik['berat_molekul_kering'],
+                                    'hasil_uji' => $hasilIsokinetik['berat_molekul_kering_method5'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'g/gmol',
                                     'spesifikasi_metode' => 'SNI 7177.15:2009',
@@ -507,11 +508,11 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'spesifikasi_metode' => 'SNI 7177.14:2009',
                                 ];
                             }
-                            // traverse_poin_partikulat_1
-                            if (array_key_exists('traverse_poin_partikulat_1', $hasilIsokinetik)) {
+                            // traverse_poin_partikulat
+                            if (array_key_exists('traverse_poin_partikulat', $hasilIsokinetik)) {
                                 $dataPage2[] = [
                                     'parameter' => 'Lokasi dan Titik - Titik Lintas (Traverse Point)',
-                                    'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat_1'],
+                                    'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat'],
                                     'baku_mutu' => '-',
                                     'satuan' => '-',
                                     'spesifikasi_metode' => 'SNI 7177.13:2009',
@@ -683,7 +684,18 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             'uap_air_dalam_aliran_gas_hide',
             'konstanta_2',
             'konstanta_4',
-            'konstanta_5'
+            'konstanta_5',
+            'konsentrasi_co',
+            'konsentrasi_co2',
+            'konsentrasi_o2',
+            'konsentrasi_nox',
+            'konsentrasi_so2',
+            'co_method3',
+            'co2_method3',
+            'o2_method3',
+            'n2_method3',
+            'rata_rata_tekanan_pitot_method_2',
+            'rata_rata_tekanan_pitot_method_5',
         ];
 
         // Cleanup unwanted keys
