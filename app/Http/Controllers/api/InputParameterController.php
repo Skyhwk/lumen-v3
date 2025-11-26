@@ -443,7 +443,7 @@ class InputParameterController extends Controller
                     }
                 }
             }else if(
-                ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'Direct Reading A' || $stp->name == 'Direct Reading B' || $stp->name == 'Direct Reading C' || $stp->name == 'Direct Reading D' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'SPEKTRO A' || $stp->name == 'SPEKTRO B' || $stp->name == 'SPEKTRO C' ||  $stp->name == 'SPEKTRO D' ||  $stp->name == 'SPEKTRO E' ||  $stp->name == 'SPEKTRO F' ||  $stp->name == 'COLORIMETER' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'KIMIA PANGAN A')
+                ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'Direct Reading A' || $stp->name == 'Direct Reading B' || $stp->name == 'Direct Reading C' || $stp->name == 'Direct Reading D' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'SPEKTRO A' || $stp->name == 'SPEKTRO B' || $stp->name == 'SPEKTRO C' ||  $stp->name == 'SPEKTRO D' ||  $stp->name == 'SPEKTRO E' ||  $stp->name == 'SPEKTRO F' ||  $stp->name == 'COLORIMETER' || $stp->name == 'MERCURY ANALYZER' || $stp->name == 'KIMIA PANGAN A' || $stp->name == 'Mikrobiologi Padatan')
                 &&
                 ($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan' || $stp->sample->nama_kategori == 'Pangan')
             ) {
