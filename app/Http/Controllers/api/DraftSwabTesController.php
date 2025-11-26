@@ -614,7 +614,7 @@ class DraftSwabTesController extends Controller
                 $totalParam      = $parameters->count();
 
                 $isSingleSampelMultiParam = $totalSampel === 1 && $totalParam > 2;
-                $isMultiSampelOneParam    = $totalSampel > 1 && $totalParam === 1;
+                $isMultiSampelOneParam    = $totalSampel >= 1 && $totalParam === 1;
 
                 if ($isSingleSampelMultiParam) {
                     $fileName = LhpTemplate::setDataDetail($detailCollection)
@@ -722,8 +722,9 @@ class DraftSwabTesController extends Controller
             $parameters      = $validasi->pluck('parameter')->filter()->unique();
             $totalParam      = $parameters->count();
 
+
             $isSingleSampelMultiParam = $totalSampel === 1 && $totalParam > 2;
-            $isMultiSampelOneParam    = $totalSampel > 1 && $totalParam === 1;
+            $isMultiSampelOneParam    = $totalSampel >= 1 && $totalParam === 1;
 
             if ($isSingleSampelMultiParam) {
                 $fileName = LhpTemplate::setDataDetail($detail)

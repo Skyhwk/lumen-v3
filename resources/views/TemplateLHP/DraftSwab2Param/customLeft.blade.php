@@ -34,25 +34,35 @@
                     TANGGAL SAMPLING </th>
             </tr>
             <tr>
-                {{-- HASIL UJI - PARAMETER --}}
                 @foreach ($parameters as $param)
                     <th class="pd-5-solid-top-center" style="white-space: nowrap;">
                         @php
-                            foreach ($custom as $row) {
+                            foreach ($detail as $row) {
                                 if ($row['parameter'] === $param) {
                                     $akr = $row['akr'];
+                                    $satuan = $row['satuan'];
                                     break;
                                 }
                             }
                         @endphp
-                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
+                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }} <br> ({{ $satuan }})
                     </th>
                 @endforeach
 
                 {{-- BAKU MUTU - PARAMETER --}}
                 @foreach ($parameters as $param)
+                    @php
+                        foreach ($detail as $row) {
+                            if ($row['parameter'] === $param) {
+                                $akr = $row['akr'];
+                                $satuan = $row['satuan'];
+                                break;
+                            }
+                        }
+                    @endphp
                     <th class="pd-5-solid-top-center" style="white-space: nowrap;">
-                        {{ $param }}
+                        {{ $param }}<br>
+                        ({{ $satuan }})
                     </th>
                 @endforeach
             </tr>
