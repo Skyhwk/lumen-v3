@@ -17,13 +17,13 @@ class DataLapanganIsokinetikHasil extends Sector
         ->where('is_active', true);
     }
 
-    public function method5(){
-        return $this->belongsTo(DataLapanganIsokinetikPenentuanPartikulat::class, 'no_sampel', 'no_sampel')
-        ->where('is_active', true);
-    }
-    
     public function method3(){
         return $this->belongsTo(DataLapanganIsokinetikBeratMolekul::class, 'no_sampel', 'no_sampel')
+        ->where('is_active', true);
+    }
+
+    public function method5(){
+        return $this->belongsTo(DataLapanganIsokinetikPenentuanPartikulat::class, 'no_sampel', 'no_sampel')
         ->where('is_active', true);
     }
 

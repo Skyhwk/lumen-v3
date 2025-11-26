@@ -170,10 +170,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				// Prioritas 2: ws_value['C5']
 				$c5 = $item['ws_value']['C5'] ?? null;
 
-				// LOGIKA:
-				// 1. Kalau cerobong ADA → pakai cerobong.
-				// 2. Kalau cerobong TIDAK ADA tapi C5 ada → pakai ws_value.
-				// 3. Kalau dua-duanya kosong → return "noWs".
 				if (!empty($wsCerobong)) {
 					$ws = (array) $wsCerobong;
 				} elseif (!empty($c5)) {

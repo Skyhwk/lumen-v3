@@ -902,7 +902,6 @@ class FdlPartikulatIsokinetikController extends Controller
                         "401;Iso-Combust",
                         "402;Iso-ResTime"
                     ];
-
                     foreach ($listParameters as $item) {
                         [$id_param, $nama_param] = explode(';', $item);
                         

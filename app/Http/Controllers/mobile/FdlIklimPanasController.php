@@ -153,6 +153,7 @@ class FdlIklimPanasController extends Controller
                     'wb_out'     => formatDesimal($request->wb_out[$i]),
                 ];
             }
+            
             // $nilai_pengukuran = array();
             // for ($i = 0; $i < $a; $i++) {
             //     $no = $i + 1;
