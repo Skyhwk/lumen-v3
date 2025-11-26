@@ -19,13 +19,15 @@ class MedanLmHeader extends Sector
     {
         return $this->belongsTo('App\Models\DataLapanganMedanLM', 'no_sampel', 'no_sampel');
     }
-    public function orderDetail()
-    {
-        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
-    }
+    
     public function master_parameter()
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab');
+    }
+
+    public function orderDetail()
+    {
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
     }
 
 }
