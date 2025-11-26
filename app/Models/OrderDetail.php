@@ -203,7 +203,7 @@ class OrderDetail extends Sector
     }
     public function lhps_ling()
     {
-        return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
+        return $this->belongsTo(LhpsLingHeader::class, 'cfr', 'no_lhp')->with('lhpsLingDetail')->where('is_active', true);
     }
     public function lhps_medanlm()
     {
