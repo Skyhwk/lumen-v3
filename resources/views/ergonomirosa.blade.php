@@ -442,7 +442,12 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->divisi}}</td>
+                            <td style="text-align:start;">
+                                {{$personal->divisi}}
+                                @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
+                                    , {{$personal->aktivitas_ukur}}
+                                @endif
+                            </td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
