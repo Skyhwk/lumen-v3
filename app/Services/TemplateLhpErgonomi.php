@@ -473,7 +473,7 @@ class TemplateLhpErgonomi
             
             $groupedAtas  = $this->groupByKategori($dataAtas);
             $groupedBawah  = $this->groupByKategori($dataBawah);
-            // dd($personal);
+            dd($pengukuran);
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
