@@ -7,7 +7,7 @@
 
     $parameters = $data->pluck('parameter')->filter()->unique();
 
-    $satuan = $data->pluck('satuan')->filter()->first();
+    // $satuan = $data->pluck('satuan')->filter()->unique();
 
 @endphp
 
@@ -41,21 +41,33 @@
                             foreach ($detail as $row) {
                                 if ($row['parameter'] === $param) {
                                     $akr = $row['akr'];
+                                    $satuan = $row['satuan'];
                                     break;
                                 }
                             }
                         @endphp
-                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
+                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }} <br> ({{ $satuan }})
                     </th>
                 @endforeach
 
                 {{-- BAKU MUTU - PARAMETER --}}
                 @foreach ($parameters as $param)
+                    @php
+                        foreach ($detail as $row) {
+                            if ($row['parameter'] === $param) {
+                                $akr = $row['akr'];
+                                $satuan = $row['satuan'];
+                                break;
+                            }
+                        }
+                    @endphp
                     <th class="pd-5-solid-top-center" style="white-space: nowrap;">
-                        {{ $param }}
+                        {{ $param }}<br>
+                        ({{ $satuan }})
                     </th>
                 @endforeach
             </tr>
+
         </thead>
 
         <tbody>
