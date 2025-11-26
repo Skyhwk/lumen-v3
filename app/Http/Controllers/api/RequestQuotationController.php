@@ -2941,25 +2941,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -3066,12 +3066,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4316,25 +4316,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4441,12 +4441,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;

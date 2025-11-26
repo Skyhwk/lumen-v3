@@ -10,12 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Datatables;
 use Carbon\Carbon;
 
-use App\Models\HistoryAppReject;
-use App\Models\OrderDetail;
-use App\Models\DataLapanganErgonomi;
-use App\Models\MasterKaryawan;
-use App\Models\WsValueErgonomi;
-use App\Models\ErgonomiHeader;
+use App\Models\{HistoryAppReject,OrderDetail,DataLapanganErgonomi,MasterKaryawan,WsValueErgonomi,ErgonomiHeader};
 
 use App\Services\{RosaFormatter,RebaFormatter,RulaFormatter,RlwFormatter};
 
@@ -188,24 +183,23 @@ class WsFinalUdaraErgonomiController extends Controller
 
 	public function rejectAnalys(Request $request)
 	{
+		DB::beginTransaction();
 		try {
-		
-				
-					$data = ErgonomiHeader::where('id', $request->id)->update([
-						'is_approved' => 0,
-						'notes_reject' => $request->note,
-						'rejected_by' => $this->karyawan,
-						'rejected_at' => Carbon::now(),
-
-					]);
-				
-
+					$data = ErgonomiHeader::where('id', $request->id)->first();
+					$data->is_approve = 0;
+					$data->notes_reject = $request->note;
+					$data->rejected_by = $this->karyawan;
+					$data->rejected_at = Carbon::now();
+					$data->save();
+					$dataLapangang = DataLapanganErgonomi::where('id',$data->id_lapangan)->update(['is_approve'=>0]);
 				if ($data) {
+					DB::commit();
 					return response()->json(['message' => 'Berhasil, Silahkan Cek di Analys!', 'success' => true, 'status' => 200]);
 				} else {
 					return response()->json(['message' => 'Gagal', 'success' => false, 'status' => 400]);
 				}
 		} catch (\Exception $ex) {
+			DB::rollback();
 			dd($ex);
 		}
 	}

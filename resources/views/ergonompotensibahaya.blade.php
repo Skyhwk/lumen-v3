@@ -82,7 +82,7 @@
                             <div class="section-titleP">Informasi Sampling</div>
                             <table class="info-table">
                                 <tr>
-                                    <td style="width:25%">Tanggal</td>
+                                    <td style="width:25%">Tanggal Sampling</td>
                                     <td style="width:3%">:</td>
                                     <td style="width: 72%;text-align:start;">{{ $personal->tanggal_sampling }}</td>
                                 </tr>
@@ -179,7 +179,7 @@
                                             <td class="signature-left"></td>
                                             <td class="signature-right">
                                                 <div class="signature-date">
-                                                    {{ $ttd->tanggal }}
+                                                   Tangerang, {{ $ttd->tanggal }}
                                                 </div><br>
                                                 <div class="signature-text">
                                                         <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">

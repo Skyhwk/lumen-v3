@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
 use App\Models\DataLapanganSwab;
