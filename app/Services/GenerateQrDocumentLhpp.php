@@ -33,6 +33,8 @@ class GenerateQrDocumentLhpp
                 $cek->created_at =Carbon::now()->format('Y-m-d H:i:s');
                 $cek->created_by = $generated_by;
                 $cek->save();
+
+                DB::commit();
                 return $cek->file;
             }
 
