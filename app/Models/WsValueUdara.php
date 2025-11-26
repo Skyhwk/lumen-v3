@@ -100,5 +100,9 @@ class WsValueUdara extends Sector
 
         return null;
     }
+
+    public function detailLingkunganKerja() {
+        return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
+    }
     
 }
