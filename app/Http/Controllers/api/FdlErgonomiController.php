@@ -1204,7 +1204,8 @@ class FdlErgonomiController extends Controller
             for ($i = 0; $i < count($uraians); $i++) {
                 $formattedUraian[] = [
                     'id' => $ids[$i],
-                    'Waktu' => ($jams[$i] ?? '0') . ' Jam, ' . ($menits[$i] ?? '0') . ' Menit',
+                    'jam' => ($jams[$i] ?? '0'),
+                    'menit' => ($menits[$i] ?? '0'),
                     'Uraian' => $uraians[$i] ?? ''
                 ];
             }
