@@ -1577,12 +1577,12 @@ class DraftUlkErgonomiController extends Controller
 
                     $cekDetail = $data_order;
 
-                    $cekLink = LinkLhp::where('no_order', $data->no_order);
+                    $cekLink = LinkLhp::where('no_order', $cekDetail->no_order);
                     if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
                     $cekLink = $cekLink->first();
 
                     if ($cekLink) {
-                        $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+                        $job = new CombineLHPJob($cekDetail->cfr, $data->name_file, $cekDetail->no_order, $this->karyawan, $cekDetail->periode);
                         $this->dispatch($job);
                     }
                     
