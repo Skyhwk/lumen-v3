@@ -73,11 +73,12 @@ class DirectLain {
                     // cek batas bawah di akhir
                     $c5 = number_format($c5, 2);
                 }else if (in_array($row->parameter, $paramCO2)) {
-                    $c3 = number_format($totalNilai / $jumlahElemen, 6);
-                    $c2 = (($c3 * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
+                    $rata_rata =$totalNilai / $jumlahElemen;
+                    $c2 = (($rata_rata * 44.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
                     $c1 = $c2 * 1000;
                     $c4 = number_format($c3 * 1000, 6);
                     $c5 = number_format($c3 / 10000, 6);
+                    $c3 = number_format($rata_rata, 6);
                     $c15 = $c3;
                     $c17 = number_format($c15 * 44.01 / 24.45, 6);
                     $c16 = number_format($c17 * 1000, 6);
