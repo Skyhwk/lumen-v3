@@ -723,8 +723,105 @@ class TemplateLhpErgonomi
             }
             $faktorResiko =$this->calculateSkorManual(optional($pengukuran->manual_handling));
             $manualHandling = $pengukuran->manual_handling;
-            dd($skorDataAtas);
-            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','personal','ttd'))->render();
+            $strukturTabel = [
+            [
+                'no' => 1, 
+                'kategori' => 'Postur Janggal', 
+                'label' => 'Leher: memuntir atau menekuk', 
+                'key' => 'leher' // <--- Ini kunci penghubung ke data skor
+            ],
+            [
+                'no' => 2, 
+                'kategori' => 'Postur Janggal', 
+                'label' => 'Bahu: Lengan / siku yang tak ditopang...', 
+                'key' => 'bahu'
+            ],
+            [
+                'no' => 3, 
+                'kategori' => 'Postur Janggal', 
+                'label' => 'Rotasi lengan bawah secara cepat', 
+                'key' => 'rotasi_lengan'
+            ],
+            [
+                'no' => 4, 
+                'kategori' => 'Postur Janggal', 
+                'label' => 'Pergelangan tangan: Menekuk ke depan...', 
+                'key' => 'pergelangan_tangan'
+            ],
+            [
+                'no' => 5, 
+                'kategori' => 'Gerakan Lengan', 
+                'label' => 'Sedang: Gerakan stabil dengan jeda teratur', 
+                'key' => 'gerakan_lengan_sedang' // Pastikan key ini ada di data
+            ],
+            [
+                'no' => 6, 
+                'kategori' => 'Gerakan Lengan', 
+                'label' => 'Intensif: Gerakan cepat yang stabil...', 
+                'key' => 'gerakan_lengan_intensif'
+            ],
+            [
+                'no' => 7, 
+                'kategori' => 'Penggunaan Keyboard', 
+                'label' => 'Mengetik secara berselang...', 
+                'key' => 'mengetik_berselang'
+            ],
+            [
+                'no' => 8, 
+                'kategori' => 'Penggunaan Keyboard', 
+                'label' => 'Mengetik secara Intensif', 
+                'key' => 'mengetik_intensif'
+            ],
+            [
+                'no' => 9, 
+                'kategori' => 'Usaha Tangan', 
+                'label' => 'Menggenggam dalam posisi "power grip"...', 
+                'key' => 'penggenggam_kuat'
+            ],
+            [
+                'no' => 10, 
+                'kategori' => 'Usaha Tangan', 
+                'label' => 'Memencet / Menjepit benda dengan jari...', 
+                'key' => 'memencet_atau_menjepit'
+            ],
+            [
+                'no' => 11, 
+                'kategori' => 'Tekanan Langsung', 
+                'label' => 'Kulit tertekan oleh benda yang keras...', 
+                'key' => 'kuliat_tertekan'
+            ],
+            [
+                'no' => 12, 
+                'kategori' => 'Tekanan Langsung', 
+                'label' => 'Menggunakan telapak... untuk memukul', 
+                'key' => 'menggunakan_telapak_tangan'
+            ],
+            [
+                'no' => 13, 
+                'kategori' => 'Getaran', 
+                'label' => 'Getaran lokal (tanpa peredam)', 
+                'key' => 'getaran_lokal'
+            ],
+            [
+                'no' => 14, 
+                'kategori' => 'Faktor Kontrol', 
+                'label' => 'Terdapat faktor yang membuat ritme kerja...', 
+                'key' => 'faktor_tidak_dapat_di_kontrol' // Atau 'faktor_kontrol' sesuaikan data
+            ],
+            [
+                'no' => 15, 
+                'kategori' => 'Lingkungan', 
+                'label' => 'Pencahayaan (kurang atau silau)', 
+                'key' => 'pencahayaan'
+            ],
+            [
+                'no' => 16, 
+                'kategori' => 'Lingkungan', 
+                'label' => 'Temperatur terlalu tinggi atau rendah', 
+                'key' => 'temperatur'
+            ],
+        ];
+            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','personal','ttd','strukturTabel'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
