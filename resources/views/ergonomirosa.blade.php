@@ -253,9 +253,9 @@
                     <td class="text-center" style="width: 8%;">1.</td>
                     <td style="width: 30%;">Tinggi Kursi & Lebar Kursi</td>
                     <td class="text-center" style="width: 10%;">{{$pengukuran->skor_total_tinggi_kursi_dan_lebar_dudukan}}</td>
-                    <td class="text-center" rowspan=2 style="width: 14%;">{{$pengukuran->total_section_a}}</td>
+                    <td class="text-center" rowspan=2 style="width: 14%;">{{$pengukuran->nilai_table_a}}</td>
                     <td class="text-center" rowspan=2 style="width: 28%;">{{$pengukuran->skor_durasi_kerja_bagian_kursi}}</td>
-                    <td class="text-center" rowspan=2 style="width: 10%;">{{($pengukuran->total_section_a + $pengukuran->skor_durasi_kerja_bagian_kursi )}}</td>
+                    <td class="text-center" rowspan=2 style="width: 10%;">{{($pengukuran->total_section_a)}}</td>
                 </tr>
                 <tr>
                     <td class="text-center" style="width: 8%;">2.</td>
