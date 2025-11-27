@@ -127,8 +127,17 @@ class Helper
         foreach ($data as $key => $value) {
             // 1. Convert the key to a string (if not already) and apply normalization rules.
             //    Rules: convert to lowercase and remove spaces and hyphens.
-            $newKey = strtolower(str_replace([' ', '-'], '_', (string) $key));
-
+            //$newKey = strtolower(str_replace([' ', '-'], '_', (string) $key));
+            $tempKey = strtolower((string) $key);
+            $replacements = [
+                '°' => '',        // Hapus derajat
+                '>' => '_gt_',    // ganti > jadi gt (greater than) atau bisa '_lebih_'
+                '<' => '_lt_',    // ganti < jadi lt (less than) atau bisa '_kurang_'
+                '=' => '_eq_',    // sama dengan
+            ];
+            $tempKey = strtr($tempKey, $replacements);
+            $tempKey = preg_replace('/[^a-z0-9]+/', '_', $tempKey);
+            $newKey = trim($tempKey, '_');
             // 2. Handle nested arrays recursively.
             if (is_array($value)) {
                 $value = self::normalize_format_key($value,$asObject); // Use 'self::' or 'static::' for static method calls.

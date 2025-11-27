@@ -12,24 +12,25 @@ class LhpsSwabTesHeader extends Sector
 
     protected $guarded = [];
 
-    public function lhpsSwabTesDetailSampel()
+    public function lhpsSwabTesDetail()
     {
-        return $this->hasMany(LhpsSwabTesDetailSampel::class, 'id_header', 'id');
+        return $this->hasMany(LhpsSwabTesDetail::class, 'id_header', 'id');
     }
 
-    public function lhpsSwabTesDetailParameter()
-    {
-        return $this->hasMany(LhpsSwabTesDetailParameter::class, 'id_header', 'id');
-    }
+    // public function lhpsSwabTesDetailParameter()
+    // {
+    //     return $this->hasMany(LhpsSwabTesDetailParameter::class, 'id_header', 'id');
+    // }
+    
 
-    public function lhpsSwabTesCustomSampel()
-    {
-        return $this->hasMany(LhpsSwabTesCustomSampel::class, 'id_header', 'id');
-    }
+    // public function lhpsSwabTesCustomSampel()
+    // {
+    //     return $this->hasMany(LhpsSwabTesCustomSampel::class, 'id_header', 'id');
+    // }
 
-    public function lhpsSwabTesCustomParameter()
-    {
-        return $this->hasMany(LhpsSwabTesCustomParameter::class, 'id_header', 'id');
-    }
+    // public function lhpsSwabTesCustomParameter()
+    // {
+    //     return $this->hasMany(LhpsSwabTesCustomParameter::class, 'id_header', 'id');
+    // }
 
 }

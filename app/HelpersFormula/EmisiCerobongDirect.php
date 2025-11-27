@@ -136,7 +136,7 @@ class EmisiCerobongDirect {
         } else if(in_array($id_parameter, $paramEffisiensiPembakaran)){
             $co2 = $data->CO2;
             $co = $data->CO / 10000;
-            $c6 = round(($co2 / ($co2 + $co)) * (100/100), 4);
+            $c6 = round(($co2 / ($co2 + $co)) * 100, 4);
             $satuan = '%';
         } else if(in_array($id_parameter, $paramNO)){
             $c3 = round($data->NO, 1);
