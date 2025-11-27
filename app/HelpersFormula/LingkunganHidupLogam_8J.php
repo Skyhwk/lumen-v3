@@ -27,6 +27,7 @@ class LingkunganHidupLogam_8J
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C14 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;

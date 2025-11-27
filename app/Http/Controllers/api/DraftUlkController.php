@@ -137,8 +137,9 @@ class DraftUlkController extends Controller
 
     public function index(Request $request)
     {
-        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+        $parameterAllowed = [];
+        // $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+        // $parameterAllowed = json_decode($parameterAllowed->parameters, true);
         $parameterAllowed[] = 'Sinar UV';
         $parameterAllowed[] = 'Ergonomi';
         $parameterAllowed[] = 'Gelombang Elektro';
@@ -650,11 +651,13 @@ class DraftUlkController extends Controller
                     'udaraSubKontrak',
                     'udaraDirect',
                     'udaraPartikulat',
+                    'udaraDebu'
                 ])
                     ->where('cfr', $request->cfr)
                     ->get();
                 $manyNoSampel = count($validasi) > 1 ? true : false;
                 $listData = collect(); // <- PENTING: pakai collect
+
 
                 foreach ($validasi as $items) {
                     $lingkungan = $items->udaraLingkungan;
@@ -662,13 +665,15 @@ class DraftUlkController extends Controller
                     $subKontrak = $items->udaraSubKontrak;
                     $direct     = $items->udaraDirect;
                     $partikulat = $items->udaraPartikulat;
+                    $debu       = $items->udaraDebu;
 
                     $detail = collect()
                         ->merge($lingkungan)
                         ->merge($microbio)
                         ->merge($subKontrak)
                         ->merge($direct)
-                        ->merge($partikulat);
+                        ->merge($partikulat)
+                        ->merge($debu);
 
                     // MERGE ke $listData, bukan replace
                     $listData = $listData->merge(
