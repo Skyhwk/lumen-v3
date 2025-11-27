@@ -612,9 +612,9 @@ class FdlPartikulatIsokinetikController extends Controller
                 $data = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
                 
                 if($data->bentuk_cerobong == "Persegi"){
-                    $data->luas_penampang = number_format($data->lfw * $data->lnw, 2, '.', ',');
+                    $data->luas_penampang = number_format($data->lfw * $data->lnw, 4, '.', ',');
                 }else{
-                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 2, '.', ',');
+                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 4, '.', ',');
                 }
                 $data->is_approve = true;
                 $data->approved_by = $this->karyawan;
@@ -897,8 +897,8 @@ class FdlPartikulatIsokinetikController extends Controller
                     $luasPenampang = number_format((($dnActual * $dnActual * 3.14) / 4), 8, '.', ''); // luas penampang nozzle in m2
 
                     // selisih tekanan barometer
-                    $selisihTekananBarometerMethod2 = abs($method2->Ps - $method2->tekanan_udara);
-                    $selisihTekananBarometerMethod5 = abs($data->Ps - $method2->tekanan_udara);
+                    $selisihTekananBarometerMethod2 = number_format(abs($method2->Ps - $method2->tekanan_udara), 1, '.', '');
+                    $selisihTekananBarometerMethod5 = number_format(abs($data->ps - $method2->tekanan_udara), 1, '.', '');
 
                     $listParameters = [
                         "395;Iso-Debu",
@@ -993,7 +993,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'tekanan_gas_buang' => $data->ps,
                                         'diameter_nozzle' => number_format($dnActual, 4, '.', ','),
                                         'luas_penampang_nozzle' => $luasPenampang,
-                                        'kecepatan_volumetrik_standar' => $data->qs_act,
+                                        'kecepatan_volumetrik_standar' => $data->qs,
                                     ];
                                     break;
 

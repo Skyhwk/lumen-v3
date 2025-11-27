@@ -13,6 +13,10 @@ class MedanMagnetListrik
         $totlistrik_30 = count(array_keys($listrik_30));
         $totlistrik_100 = count(array_keys($listrik_100));
 
+        $frekuensi_3 = json_decode($data->data_lapangan['frekuensi_3']);
+        $frekuensi_30 = json_decode($data->data_lapangan['frekuensi_30']);
+        $frekuensi_100 = json_decode($data->data_lapangan['frekuensi_100']);
+
         $nillistrik_3 = 0;
         $nillistrik_30 = 0;
         $nillistrik_100 = 0;
@@ -33,6 +37,11 @@ class MedanMagnetListrik
             }
         }
 
+        // Menjumlahkan hasil
+        $total_nilfrekuensi = $frekuensi_3 + $frekuensi_30 + $frekuensi_100;
+        // Menghitung rata-rata
+        $rata_rata_nilfrekuensi = number_format($total_nilfrekuensi / 3, 4, '.', '');
+
         $nillistrik_3_ = number_format($nillistrik_3 / $totlistrik_3, 4);
         $nillistrik_30_ = number_format($nillistrik_30 / $totlistrik_30, 4);
         $nillistrik_100_ = number_format($nillistrik_100 / $totlistrik_100, 4);
@@ -47,6 +56,7 @@ class MedanMagnetListrik
         // $hasil = json_encode(["Listrik_3" => $nillistrik_3_, "Listrik_30" => $nillistrik_30_, "Listrik_100" =>$nillistrik_100_]);
         return [
             'medan_listrik' => $rata_rata_nillistrik,
+            'rata_frekuensi' => $rata_rata_nilfrekuensi,
             // 'satuan' => 'V/m'
         ];
     }
