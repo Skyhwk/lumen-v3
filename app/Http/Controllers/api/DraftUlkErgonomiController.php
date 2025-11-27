@@ -2907,7 +2907,7 @@ class DraftUlkErgonomiController extends Controller
                 }
                 
                 // Simpan file
-                $namaFile = 'LHP-'.str_replace('/', '-', $noSampel).'.pdf';
+                $namaFile = 'LHP-'.str_replace('/', '-', $dataLHP->detail->cfr).'.pdf';
                 // $pathFile = $dir.'/'.$type.'/'.$namaFile;
                 $pathFile = $dir.'/'.'LHP_DOWNLOAD'.'/'.$namaFile;
                 $pdf->Output($pathFile, 'F');
