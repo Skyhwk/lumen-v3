@@ -119,6 +119,7 @@ class GenerateHasilPengujianController extends Controller
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
                     'lhps_air',
+                    'lhps_padatan',
                     'lhps_emisi',
                     'lhps_emisi_c',
                     'lhps_getaran',
@@ -149,6 +150,7 @@ class GenerateHasilPengujianController extends Controller
 
                     $lhps = collect([
                         $item->lhps_air,
+                        $item->lhps_padatan,
                         $item->lhps_emisi,
                         $item->lhps_emisi_c,
                         $item->lhps_getaran,
@@ -292,7 +294,7 @@ class GenerateHasilPengujianController extends Controller
 
                 foreach ($lhpRilis as $cfrItem) {
                     foreach ($cfrItem['order_details'] as $detailItem) {
-                        foreach (['lhps_air', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
+                        foreach (['lhps_air', 'lhps_padatan', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
                             $lhps = $detailItem[$lhpsKey] ?? null;
                             if (!$lhps || empty($lhps['file_lhp'])) continue;
 
