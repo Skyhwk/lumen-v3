@@ -845,7 +845,7 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $konstanta1 = $selisih;
 
-                    $ukuranLubang = $method1->ukuran_lubang / 100; // Convert cm to m
+                    $ukuranLubang = number_format($method1->ukuran_lubang / 100, 2, '.', ''); // Convert cm to m
                     $diameterCerobong = $method1->diameter_cerobong; // in m
 
                     $dataDp = $method5->dP;
