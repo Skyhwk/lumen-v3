@@ -238,7 +238,7 @@ class DraftLhpUdaraPsikologiController extends Controller
 			if ($header != null) {
 				$qr = new GenerateQrDocumentLhpp();
 				$file_qr = $qr->insert('LHP_PSIKOLOGI', $header, $this->karyawan, '');
-				if ($header->file_qr == null && $file_qr) {
+				if ($file_qr) {
 					$header->file_qr = $file_qr . '.svg';
 					$header->save();
 				}
@@ -250,12 +250,11 @@ class DraftLhpUdaraPsikologiController extends Controller
 				$fileName = 'LHP-' . str_replace("/", "-", $request->cfr) . '.pdf';
 
 				// $fileName = 'LHPP-' . str_replace("/", "-", $request->cfr) . '.pdf';
-				if($header->no_dokumen == null && $fileName){
-					$header->no_dokumen = $fileName;
-					$header->save();
-				}
+				// if($header->no_dokumen == null && $fileName){
+				$header->no_dokumen = $fileName;
+				$header->save();
+				// }
 			}
-
 			DB::commit();
 			return response()->json([
 				'message' => 'success',
@@ -264,7 +263,6 @@ class DraftLhpUdaraPsikologiController extends Controller
 			], 200);
 		} catch (Exception $e) {
 			DB::rollBack();
-			dd($e);
 			return response()->json([
 				'message' => $e->getMessage(),
 				'line' => $e->getLine(),
@@ -356,31 +354,30 @@ class DraftLhpUdaraPsikologiController extends Controller
 					$qr->data = json_encode($dataQr);
 					$qr->save();
 				}
-
-				$cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+				$cekDetail = OrderDetail::where('cfr', $data->no_cfr)
 					->where('is_active', true)
 					->first();
+				$periode = $cekDetail->periode ?? null;
 
 				$cekLink = LinkLhp::where('no_order', $data->no_order);
 				if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
 				$cekLink = $cekLink->first();
-
 				if ($cekLink) {
-					$job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
+					$job = new CombineLHPJob($data->no_cfr, $data->no_dokumen, $data->no_order, $this->karyawan, $cekDetail->periode);
 					$this->dispatch($job);
 				}
 
 				$orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 
-                    EmailLhpRilisHelpers::run([
-                        'cfr'              => $data->no_cfr,
-                        'no_order'         => $data->no_order,
-                        'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
-                        'nama_perusahaan'  => $data->nama_pelanggan,
-                        'periode'          => $cekDetail->periode,
-                        'karyawan'         => $this->karyawan
-                    ]);
+				EmailLhpRilisHelpers::run([
+					'cfr'              => $data->no_cfr,
+					'no_order'         => $data->no_order,
+					'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+					'nama_perusahaan'  => $data->nama_pelanggan,
+					'periode'          => $periode,
+					'karyawan'         => $this->karyawan
+				]);
 			} else {
 				DB::rollBack();
 				return response()->json(['message' => 'Data draft Psikologi no LHP ' . $no_lhp . ' berhasil diapprove', 'status' => '401'], 401);

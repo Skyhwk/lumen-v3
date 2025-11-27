@@ -27,6 +27,7 @@ class LingkunganHidupLogam_8J
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C14 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -41,7 +42,7 @@ class LingkunganHidupLogam_8J
         $data_pershift = null;
 
 
-        $C = $C1 = $C2 = $C14 = $C15 = $C16 = [];
+        $C = $C15 = $C16 = [];
 
         foreach($data->ks as $key => $value) {
             $Vstd = round(($data->array_qs[$key] * $data->durasi_array[$key]) / 1000, 4);

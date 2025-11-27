@@ -295,14 +295,15 @@ class DraftUdaraMikrobiologiController extends Controller
 
                     return [
                         'no_sampel'         => $val->no_sampel,
-                        'akr'               => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        // 'akr'               => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'akr'               => (!empty($bakumutu) ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ') : 'ẍ'),
                         'suhu'              => $lapangan->suhu ?? '-',
                         'kelembapan'        => $lapangan->kelembapan ?? '-',
                         'keterangan'        => $lapangan->keterangan ?? '-',
                         'parameter'         => $param->nama_lhp ?? $param->nama_regulasi ?? $val->parameter,
                         "parameter_lab"     => $val->parameter,
-                        'jenis_persyaratan' => $bakumutu->nama_header ?? '-',
-                        'nilai_persyaratan' => $bakumutu->baku_mutu ?? '-',
+                        'jenis_persyaratan' =>  (!empty($bakumutu) ? $bakumutu->nama_header ?? '-' : '-'),
+                        'nilai_persyaratan' =>  (!empty($bakumutu) ? $bakumutu->baku_mutu ?? '-' : '-'),
                         'satuan'            => $bakumutu->satuan ?? '-',
                         'hasil_uji'         => $nilai,
                         'tanggal_sampling'  => $tanggal_sampling,
@@ -576,8 +577,8 @@ class DraftUdaraMikrobiologiController extends Controller
 
                         // metode – setelah cleanArrayKeys:
                         $metodeParam       = $methode[$key][str_replace(' ', '_', $paramName)] ?? null;
-                        $metodeSuhuParam   = $methode[str_replace(' ', '_', $paramName)] ?? null;
-                        $metodeKelembParam = $methode[str_replace(' ', '_', $paramName)] ?? null;
+                        $metodeSuhuParam   = $methode[$key]['suhu'] ?? null;
+                        $metodeKelembParam = $methode[$key]['kelembapan'] ?? null;
 
                         $detail                   = new LhpsMicrobiologiDetail;
                         $detail->id_header        = $header->id;

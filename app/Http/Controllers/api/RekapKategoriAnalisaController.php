@@ -33,20 +33,13 @@ class RekapKategoriAnalisaController extends Controller
             $salesData = OrderDetail::query()
                 ->whereRaw('order_detail.tanggal_sampling >= ? AND order_detail.tanggal_sampling <= ?', [date('Y-m-01', strtotime($request->tanggal_awal)), date('Y-m-t', strtotime($request->tanggal_akhir))])
                 ->where('order_detail.is_active', true)
-                ->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
-                    $join->on('rqkh.no_document', '=', 'order_detail.no_quotation')
-                        ->whereNotNull('order_detail.periode');
-                })
-                ->leftJoin('request_quotation as rq', function ($join) {
-                    $join->on('rq.no_document', '=', 'order_detail.no_quotation')
-                        ->whereNull('order_detail.periode');
-                })
+                ->leftJoin('order_header as oh', 'oh.id', '=', 'order_detail.id_order_header')
                 ->select(
                     'order_detail.kategori_3',
-                    DB::raw("COALESCE(rqkh.sales_id, rq.sales_id) as sales_id"),
+                    DB::raw("COALESCE(oh.sales_id) as sales_id"),
                     DB::raw('COUNT(*) as total')
                 )
-                ->groupBy('order_detail.kategori_3', DB::raw("COALESCE(rqkh.sales_id, rq.sales_id)"))
+                ->groupBy('order_detail.kategori_3', DB::raw("COALESCE(oh.sales_id)"))
                 ->get();
 
             // Ambil semua sales_id unik dari hasil query
@@ -54,7 +47,7 @@ class RekapKategoriAnalisaController extends Controller
 
             // Ambil data karyawan untuk sales_id yang ditemukan
             $allSales = MasterKaryawan::whereIn('id', $allSalesIds)
-                ->pluck('nama_lengkap', 'user_id')
+                ->pluck('nama_lengkap', 'id')
                 ->toArray();
 
             // Fallback untuk sales yang tidak ditemukan di master

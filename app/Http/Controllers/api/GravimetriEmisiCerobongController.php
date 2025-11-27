@@ -38,6 +38,9 @@ class GravimetriEmisiCerobongController extends Controller
             ->orderColumn('no_sampel', function ($query, $order) {
                 $query->orderBy('no_sampel', $order);
             })
+            ->editColumn('data_analis', function($item){
+                return json_decode($item->data_analis, true) ?? [];
+            })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');

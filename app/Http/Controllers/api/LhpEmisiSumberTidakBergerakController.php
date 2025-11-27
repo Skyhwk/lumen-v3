@@ -1,32 +1,16 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
-use App\Models\LhpsAirHeader;
-use App\Models\LhpsAirDetail;
-use App\Models\LhpsAirCustom;
+use App\Http\Controllers\Controller;
 use App\Models\LhpsEmisiCCustom;
 use App\Models\LhpsEmisiCDetail;
 use App\Models\LhpsEmisiCHeader;
-use App\Models\LhpsEmisiCustom;
-use App\Models\LhpsEmisiDetail;
-use App\Models\LhpsEmisiHeader;
 use App\Models\OrderDetail;
-use App\Models\MetodeSampling;
-use App\Models\MasterBakumutu;
-use App\Models\Colorimetri;
-use App\Models\Gravimetri;
-use App\Models\Titrimetri;
-use App\Models\Parameter;
-use App\Models\GenerateLink;
-use App\Services\TemplateLhps;
-use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\Controller;
-use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class LhpEmisiSumberTidakBergerakController extends Controller
@@ -46,16 +30,17 @@ class LhpEmisiSumberTidakBergerakController extends Controller
     //     return Datatables::of($data)->make(true);
     // }
 
-
     public function index(Request $request)
     {
         $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'dataLapanganEmisiKendaraan', 'lhps_emisi_c')
-            // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
+        // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
             ->where('is_approve', true)
             ->where('is_active', true)
             ->where('status', 3)
             ->where('kategori_2', '5-Emisi')
-            ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak']);
+            ->whereIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
+            ->where('parameter', 'not like', '%Iso-%');
+
         // ->groupBy('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima');
 
         // if ($request->kategori == 'ESTB') {
@@ -68,8 +53,6 @@ class LhpEmisiSumberTidakBergerakController extends Controller
         // }
         return Datatables::of($data1)->make(true);
     }
-
-
 
     // public function index(Request $request)
     // {
@@ -104,8 +87,6 @@ class LhpEmisiSumberTidakBergerakController extends Controller
     //         ->make(true);
     // }
 
-
-
     public function handleReject(Request $request)
     {
         DB::beginTransaction();
@@ -113,7 +94,7 @@ class LhpEmisiSumberTidakBergerakController extends Controller
             $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             if ($header != null) {
 
-                $header->is_approve = 0;
+                $header->is_approve  = 0;
                 $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->rejected_by = $this->karyawan;
 
@@ -121,16 +102,16 @@ class LhpEmisiSumberTidakBergerakController extends Controller
                 $header->save();
 
                 OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
-                    'status' => 2,
-                    'is_approve' => 0,
+                    'status'      => 2,
+                    'is_approve'  => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'rejected_by' => $this->karyawan
+                    'rejected_by' => $this->karyawan,
                 ]);
             }
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel ' . $request->no_sampel . ' berhasil!'
+                'message' => 'Reject no sampel ' . $request->no_sampel . ' berhasil!',
             ]);
         } catch (Exception $e) {
             DB::rollBack();
@@ -143,13 +124,12 @@ class LhpEmisiSumberTidakBergerakController extends Controller
     public function handleDownload(Request $request)
     {
         try {
-            $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $header   = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
             $fileName = $header->file_lhp;
-
 
             return response()->json([
                 'file_name' => env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file ' . $request->no_sampel . ' berhasil!'
+                'message'   => 'Download file ' . $request->no_sampel . ' berhasil!',
             ]);
         } catch (\Throwable $th) {
             return response()->json([
@@ -162,10 +142,10 @@ class LhpEmisiSumberTidakBergerakController extends Controller
     public function rePrint(Request $request)
     {
         DB::beginTransaction();
-        $header = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+        $header              = LhpsEmisiCHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1;
-        $detail = LhpsEmisiCDetail::where('id_header', $header->id)->get();
-        $custom = LhpsEmisiCCustom::where('id_header', $header->id)
+        $detail              = LhpsEmisiCDetail::where('id_header', $header->id)->get();
+        $custom              = LhpsEmisiCCustom::where('id_header', $header->id)
             ->get()
             ->groupBy('page')
             ->toArray();
@@ -181,11 +161,10 @@ class LhpEmisiSumberTidakBergerakController extends Controller
         $header->file_lhp = $fileName;
         $header->save();
 
-
         $servicePrint = new PrintLhp();
         $servicePrint->printByFilename($fileName, $detail);
 
-        if (!$servicePrint) {
+        if (! $servicePrint) {
             DB::rollBack();
             return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
         }
@@ -193,7 +172,7 @@ class LhpEmisiSumberTidakBergerakController extends Controller
         DB::commit();
 
         return response()->json([
-            'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
+            'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!',
         ], 200);
     }
 }

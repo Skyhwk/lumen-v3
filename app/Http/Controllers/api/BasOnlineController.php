@@ -984,6 +984,7 @@ class BasOnlineController extends Controller
                 'no_order' => $request->no_order,
                 'no_quotation' => $request->no_document,
                 'tanggal_sampling' => $request->tanggal_sampling,
+                'is_active' =>1,
             ])->get();
            
             
@@ -1166,7 +1167,7 @@ class BasOnlineController extends Controller
 
         $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
 
-        // dd($detailDocuments);
+        
 
         $selectedDetail = [
             'catatan' => '',
@@ -1599,7 +1600,7 @@ class BasOnlineController extends Controller
 
             $pdf->WriteHTML('</table>');
         }
-
+        
         $catatan = $selectedDetail['catatan'] ?? '';
         $informasiTeknis = $selectedDetail['informasi_teknis'] ?? '';
         $tandaTangan = $selectedDetail['tanda_tangan'] ?? [];

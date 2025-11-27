@@ -3,12 +3,13 @@
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
                 <tr>
-                    <th width="8%" class="custom" rowspan="2">NO</th>
-                    <th width="25%" rowspan="2" class="custom">KETERANGAN</th>
-                    <th width="25%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
-                    <th width="15%" rowspan="2" class="custom">NAB (mW/cm²)</th>
+                    <th width="3%" class="custom" rowspan="2">NO</th>
+                    <th width="28%" rowspan="2" class="custom" colspan="2">KETERANGAN</th>
+                    <th width="10%" rowspan="2" class="custom">SUMBER RADIASI</th>
+                    <th width="22%" colspan="3" class="custom">HASIL UJI (mW/cm²)</th>
+                    <th width="7%" rowspan="2" class="custom">NAB (mW/cm²)</th>
                     <th width="15%" rowspan="2" class="custom">JUMLAH JAM PEMAPARAN PER HARI</th>
-                    <th width="17%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
+                    <th width="15%" rowspan="2" class="custom">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th class="custom">MATA</th>
@@ -31,12 +32,18 @@
                         $waktu_pemaparan = isset($v['waktu_pemaparan']) ? \App\Helpers\Helper::waktuPemaparan($v['waktu_pemaparan']) : '';
                         $nab = isset($v['nab']) ? $v['nab'] : '';
                         $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
-                        
+                        $sumber_radiasi = isset($v['sumber_radiasi']) ? $v['sumber_radiasi'] : '';
                       
                     @endphp
                     <tr>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $number }}</td>
-                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}"><sup>{!! $no_sampel !!}</sup>{{ $keterangan }}</td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-3-solid' : 'pd-3-dot' }}" width="7%" style="text-align: right; border-right: none;"> 
+                            <sup style="font-size: 5px; margin-top: -10px;">{{ $no_sampel }}</sup> 
+                        </td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-3-solid' : 'pd-3-dot' }}" width="23%" style="border-left: none; text-align: left;"> 
+                            {{ $keterangan }}
+                        </td>
+                        <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $sumber_radiasi }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $mata }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $siku }}</td>
                         <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $betis }}</td>

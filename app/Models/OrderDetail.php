@@ -207,7 +207,7 @@ class OrderDetail extends Sector
     }
     public function lhps_ling()
     {
-        return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
+        return $this->belongsTo(LhpsLingHeader::class, 'cfr', 'no_lhp')->with('lhpsLingDetail')->where('is_active', true);
     }
     public function lhps_medanlm()
     {
@@ -234,7 +234,7 @@ class OrderDetail extends Sector
 
     public function lhps_swab_udara()
     {
-        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetailSampel', 'lhpsSwabTesDetailParameter')->where('is_active', true);
+        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetail')->where('is_active', true);
     }
     public function lhps_microbiologi()
     {
@@ -563,6 +563,10 @@ class OrderDetail extends Sector
     public function udaraMicrobio()
     {
         return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
+    }
+    public function udaraDebu()
+    {
+        return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true);
     }
 
     // emisi isokinetik
