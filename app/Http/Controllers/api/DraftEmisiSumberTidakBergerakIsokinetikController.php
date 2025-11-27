@@ -619,15 +619,15 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
     private function buildPage3($data){
         // Mapping sesuai PDF
         $mapping = [
-            'traverse_poin_partikulat' => ['Titik Lintas Partikulat', '-', 'Perhitungan'],
-            'traverse_poin_kecepatan_linier' => ['Titik Lintas Kecepatan Linier', '-', 'Perhitungan'],
+            'traverse_poin_partikulat' => ['Titik Lintas Partikulat', 'Titik', 'Perhitungan'],
+            'traverse_poin_kecepatan_linier' => ['Titik Lintas Kecepatan Linier', 'Titik', 'Perhitungan'],
             'diameter_cerobong' => ['Diameter Cerobong', 'm', 'Pengukuran'],
             'ukuran_lubang_sampling' => ['Ukuran Lubang Sampling', 'm', 'Pengukuran'],
-            'jumlah_lubang_sampling' => ['Jumlah Lubang Sampling', '-', 'Pengukuran'],
+            'jumlah_lubang_sampling' => ['Jumlah Lubang Sampling', 'Unit', 'Pengukuran'],
             'jarak_upstream' => ['Jarak Upstream', 'm', 'Pengukuran'],
             'jarak_downstream' => ['Jarak Downstream', 'm', 'Pengukuran'],
-            'kategori_upstream' => ['Kategori Upstream', '-', 'Perhitungan'],
-            'kategori_downstream' => ['Kategori Downstream', '-', 'Perhitungan'],
+            'kategori_upstream' => ['Kategori Upstream', 'D', 'Perhitungan'],
+            'kategori_downstream' => ['Kategori Downstream', 'D', 'Perhitungan'],
             'kp' => ['Kp', '-', 'Ketetapan'],
             'cp' => ['Cp', '-', 'Ketetapan'],
             'selisih_tekanan_barometer_method_5' => ['Selisih Tekanan Udara Lingkungan dan Gas Buang', 'mmHg', 'Perhitungan'],
