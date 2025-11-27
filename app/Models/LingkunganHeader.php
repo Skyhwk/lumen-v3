@@ -28,7 +28,7 @@ class LingkunganHeader extends Sector
 
     public function ws_udara()
     {
-        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_lingkungan_header');
+        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_lingkungan_header')->with('detailLingkunganKerja')->where('is_active', true);
     }
 
     public function ws_value_linkungan()

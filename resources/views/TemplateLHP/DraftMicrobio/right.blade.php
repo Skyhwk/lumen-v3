@@ -16,6 +16,19 @@
     $isMultiSampelOneParam = $totalSampel > 1 && $totalParam === 1;
     $isMultiSampelMultiParam = $totalSampel > 1 && $totalParam > 1;
 
+    $isMultipleParameter = $totalParam > 1;
+    $id_reg = [];
+    if(!$isMultipleParameter){
+        foreach (json_decode($header->regulasi, true) as $reg) {
+            $id_reg[] = explode('-', $reg)[0];
+        }
+        $isTable = TabelRegulasi::whereJsonContains('id_regulasi', $id_reg)
+            ->where('is_active', 1)
+            ->get();
+        $isUsingTable = !$isTable->isEmpty();
+        $isNotUsingTable = !$isUsingTable;
+    }
+
     $periodeAnalisa = $header->periode_analisa ?? null;
 
     // Area swab: aku asumsikan dar keterangan (bisa dimodif kalau ada field khusus)
@@ -120,7 +133,7 @@
                         </td>
                     </tr>
 
-                    @if ($isSingleSampel)
+                    @if ($isMultipleParameter)
 
                         <tr>
                             <td class="custom5" width="120">Spesifikasi Metode</td>
@@ -146,11 +159,6 @@
                             </td>
                         </tr>
                         <tr>
-                            <td class="custom5" width="120">Tanggal Sampling</td>
-                            <td class="custom5" width="12">:</td>
-                            <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
-                        </tr>
-                        <tr>
                             <td class="custom5" width="120">Periode Analisa</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
@@ -168,7 +176,7 @@
 
 
                         {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
-                    @elseif ($isMultiSampelOneParam)
+                    @elseif ($isUsingTable)
                         {{-- parameter pengujian --}}
                         {{-- spesifikasi metode (hardcode / dari header kalau ada) --}}
                         <tr>
@@ -217,9 +225,9 @@
                             </td>
                         </tr>
                         {{-- KONDISI 3: banyak no sampel, banyak parameter --}}
-                    @elseif ($isMultiSampelMultiParam)
+                    @elseif ($isNotUsingTable)
                         {{-- metode sampling (array) --}}
-                        <tr>
+                        {{-- <tr>
                             <td class="custom5" width="120">Metode Sampling</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
@@ -241,7 +249,7 @@
                                     @endforelse
                                 </table>
                             </td>
-                        </tr>
+                        </tr> --}}
 
                         {{-- spesifikasi metode per parameter --}}
                         <tr>
@@ -284,13 +292,13 @@
                             </td>
                         </tr>
 
-                        <tr>
+                        {{-- <tr>
                             <td class="custom5" width="120">Area Swab</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
                                 {{ $header->deskripsi_titik ?? '-' }}
                             </td>
-                        </tr>
+                        </tr> --}}
                     @endif
                 </table>
 

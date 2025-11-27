@@ -1190,6 +1190,7 @@ class FdlErgonomiController extends Controller
 
     public function inputK3(Request $request)
     {
+        
         DB::beginTransaction();
         try {
             $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->first();
@@ -1203,26 +1204,19 @@ class FdlErgonomiController extends Controller
             for ($i = 0; $i < count($uraians); $i++) {
                 $formattedUraian[] = [
                     'id' => $ids[$i],
-                    'Waktu' => ($jams[$i] ?? '0') . ' Jam, ' . ($menits[$i] ?? '0') . ' Menit',
+                    'jam' => ($jams[$i] ?? '0'),
+                    'menit' => ($menits[$i] ?? '0'),
                     'Uraian' => $uraians[$i] ?? ''
                 ];
             }
-            if ($request->method == 8) {
-                $data->input_k3 = [
-                    'uraian' => $formattedUraian,
-                    'kesimpulan' => $request->kesimpulan ?? null,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $this->karyawan
-                ];
-            } else if ($request->method == 7) {
-                $data->input_k3 = [
-                    'uraian' => $formattedUraian,
-                    'kesimpulan_survey_lanjutan' => $request->kesimpulan_survey_lanjutan ?? null,
-                    'analisis_potensi_bahaya' => $request->analisis_potensi_bahaya ?? null,
-                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'created_by' => $this->karyawan
-                ];
-            }
+            
+            $data->input_k3 = json_encode([
+                'uraian' => $formattedUraian,
+                'kesimpulan_survey_lanjutan' => $request->kesimpulan_survey_lanjutan ?? null,
+                'analisis_potensi_bahaya' => $request->analisis_potensi_bahaya ?? null,
+                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                'created_by' => $this->karyawan
+            ]);
 
             $data->save();
             DB::commit();

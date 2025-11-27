@@ -203,7 +203,7 @@ class OrderDetail extends Sector
     }
     public function lhps_ling()
     {
-        return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
+        return $this->belongsTo(LhpsLingHeader::class, 'cfr', 'no_lhp')->with('lhpsLingDetail')->where('is_active', true);
     }
     public function lhps_medanlm()
     {
@@ -230,7 +230,7 @@ class OrderDetail extends Sector
 
     public function lhps_swab_udara()
     {
-        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetailSampel', 'lhpsSwabTesDetailParameter')->where('is_active', true);
+        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetail')->where('is_active', true);
     }
     public function lhps_microbiologi()
     {

@@ -12,32 +12,32 @@
         <thead>
             <tr>
                 <!-- NO: 2 baris -->
-                <th width="25" class="pd-5-solid-top-center" style="white-space: nowrap;" rowspan="2">
+                <th width="10%" class="pd-5-solid-top-center" rowspan="2">
                     NO
                 </th>
 
                 <!-- LOKASI / KETERANGAN SAMPEL: 2 baris -->
-                <th width="240" class="pd-5-solid-top-center" style="white-space: nowrap;" rowspan="2">
+                <th width="45%" class="pd-5-solid-top-center" rowspan="2" colspan="2">
                     LOKASI / KETERANGAN SAMPEL
                 </th>
 
                 <!-- HASIL UJI: baris 1 -->
-                <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                <th width="10%" class="pd-5-solid-top-center">
                     HASIL UJI
                 </th>
 
                 <!-- BAKU MUTU***: baris 1 -->
-                <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                <th width="15%" class="pd-5-solid-top-center">
                     BAKU MUTU
                 </th>
 
-                <th width="160" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                <th width="20%" rowspan="2" class="pd-5-solid-top-center">
                     Tanggal Sampling
                 </th>
             </tr>
 
             <tr>
-                <th colspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                <th colspan="2" class="pd-5-solid-top-center">
                     Satuan = {{ $satuan }}
                 </th>
             </tr>
@@ -70,19 +70,22 @@
                 @endphp
 
                 <tr>
-                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                    <td class="pd-5-{{ $rowClass }}-center">
                         {{ $rowNo }}
                     </td>
-                    <td class="pd-5-{{ $rowClass }}-left" style="white-space: nowrap;">
-                        <sup>{{ htmlspecialchars($noSampel) }}</sup>&nbsp;{{ htmlspecialchars($keterangan) }}
+                    <td class="pd-3-{{ $rowClass }}" width="8%" style="text-align: right; border-right: none;">
+                        <sup style="font-size: 5px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
-                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                    <td class="pd-3-{{ $rowClass }}" width="37%" style="border-left: none; text-align: left;">
+                        {{ htmlspecialchars($keterangan) }}
+                    </td>
+                    <td class="pd-5-{{ $rowClass }}-center">
                         {!! $hasilUji !!}
                     </td>
-                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                    <td class="pd-5-{{ $rowClass }}-center">
                         {{ htmlspecialchars($bakuMutu) }}
                     </td>
-                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                    <td class="pd-5-{{ $rowClass }}-center">
                         {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
                     </td>
                 </tr>
