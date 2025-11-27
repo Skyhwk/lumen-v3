@@ -8,6 +8,7 @@ class HelperSatuan
     public static function udara($satuan)
     {
         $satuanIndexMap = [
+            'kali/jam' => 18,
             "µg/m³" => 16,
             "µg/m3" => 16,
             "mg/m³" => 17,
