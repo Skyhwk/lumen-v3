@@ -640,18 +640,19 @@ class TemplateLhpErgonomi
 
             $mapPointBagianAtas =Helper::normalize_format_key($mapPointBagianAtas,true);
             $mapPointBagianBawah =Helper::normalize_format_key($mapPointBagianBawah,true);
-
-            dd($mapPointBagianAtas);
+            
+            
             
 
-            $skorDataAtasGetaran =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->getaran);
-            $skorDataAtasLingkungan =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->lingkungan);
-            $skorDataAtasUsahaTangan =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->usaha_tangan);
-            $skorDataAtasGerakanLengan =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->gerakan_lengan);
-            $skorDataAtasPosturJanggal =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->postur_janggal);
-            $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->penggunaan_keyboard);
-            $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->faktor_tidak_dapat_di_kontrol);
-            $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI($pengukuran->tubuh_bagian_atas->tekanan_langsung_ke_bagian_tubuh);
+            $skorDataAtasGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->getaran);
+            
+            $skorDataAtasLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->lingkungan);
+            $skorDataAtasUsahaTangan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->usaha_tangan);
+            $skorDataAtasGerakanLengan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->gerakan_lengan);
+            $skorDataAtasPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->postur_janggal);
+            $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->penggunaan_keyboard);
+            $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol);
+            $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->tekanan_langsung_ke_bagian_tubuh);
             
             $skorDataBawahGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->getaran);
             $skorDataBawahLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->lingkungan);
@@ -720,10 +721,9 @@ class TemplateLhpErgonomi
                     ];
                 }
             }
-
             $faktorResiko =$this->calculateSkorManual(optional($pengukuran->manual_handling));
             $manualHandling = $pengukuran->manual_handling;
-
+            dd($skorDataAtas);
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
@@ -895,7 +895,7 @@ class TemplateLhpErgonomi
             return [];
         }
         $data = json_decode(json_encode($pengukuran), true);
-    
+        
         // 2. Panggil fungsi pembantu untuk menyelam dan menghitung
         $this->hitungRecursive($data);
 
@@ -916,17 +916,52 @@ class TemplateLhpErgonomi
         // 3. JURUS ANDALAN: Ubah Object nested menjadi Array Murni
         // Ini mengubah struktur {#...} menjadi [...] agar mudah di-looping
         $dataArray = json_decode(json_encode($sourceData), true);
-
+        
         // 4. Panggil fungsi pengolah data (Pass by Reference)
         $this->parseSkorRecursive($dataArray);
 
         // 5. Cek Hasilnya
         return $dataArray;
     }
-    private function hitungRecursive(&$items)
+    private function hitungRecursive(&$items, $namaKey = null)
     {
         // Cek apakah level ini punya 'durasi_gerakan'?
         // Jika YA, langsung hitung skornya.
+
+        $arrayMap =[
+            "leher" =>"Leher: memuntir atau menekuk",
+            "bahu" =>"Bahu: Lengan / siku yang tak ditopang di atas tinggi perut",
+            "rotasi_lengan" =>"Rotasi lengan bawah secara cepat",
+            "pergelangan_tangan" =>"Pergelangan tangan: Menekuk ke depan atau ke samping",
+            "gerakan_lengan_sedang" =>"Sedang: Gerakan stabil dengan jeda teratur",
+            "gerakan_lengan_intensif" =>"Intensif: Gerakan cepat yang stabil tanpa jeda teratur",
+            "mengetik_berselang" =>"Mengetik secara berselang (diselingi aktifitas / istirahat)",
+            "mengetik_intensif" =>"Mengetik secara Intensif",
+            "penggenggam_kuat" =>"Menggenggam dalam posisi <i>power grip</i> gaya > 5 kg",
+            "memencet_atau_menjepit" =>"Memencet / Menjepit benda dengan jari gaya > 1 kg",
+            "kuliat_tertekan" =>"Kulit tertekan oleh benda yang keras atau runcing",
+            "menggunakan_telapak_tangan" =>"Menggunakan telapak atau pergelangan tangan untuk memukul",
+            "getaran_lokal" =>"Getaran lokal (tanpa peredam)",
+            "faktor_tidak_dapat_di_kontrol" =>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat",
+            "pencahayaan" =>"Pencahayaan (Pencahayaan yang kurang atau silau)",
+            "temperatur" =>"Temperatur terlalu tinggi atau rendah",
+            "tubuh_membungkuk_20_45" => "Tubuh membungkuk ke depan / menekuk ke samping 20 - 45°",
+            "tubuh_membungkuk_gt_45" => "Tubuh membungkuk ke depan > 45°",
+            "tubuh_menekuk_30" => "Tubuh menekuk ke belakang hingga 30°",
+            "tubuh_pemuntiran_torso" => "Pemuntira torso (batang tubuh)",
+            "gerakan_paha" => "Gerakan paha menjauhi tubuh ke samping secara berulang-ulang",
+            "posisi_berlutut" => "Posisi berlutut atau jongkok",
+            "pergelangan_kaki" => "Pergelangan kaki menekuk ke atas / ke bawah secara berulang",
+            "aktivitas_pergelangan_kaki" => "Aktivitas pergelangan kaki / berdiri dengan pijakan tidak memadai",
+            "duduk_tanpa_sandaran" => "Duduk dalam waktu yang lama tanpa sandaran yang memadai",
+            "duduk_tanpa_pijakan" => "Bekerja berdiri dalam waktu lama / duduk tanpa pijakan memadai",
+            "tubuh_tertekan_benda" => "Tubuh tertekan oleh benda yang keras / runcing",
+            "lutut_untuk_memukul" => "Menggunakan lutut untuk memukul / menendang",
+            "getaran_seluruh_tubuh" => "Getaran pada seluruh tubuh (tanpa peredam)",
+            "beban_sedang" => "Beban sedang",
+            "beban_berat" => "Beban berat",
+            "faktor_kontrol" => "Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja",
+        ];
         if (isset($items['durasi_gerakan'])) {
             
             $parts = explode(';', $items['durasi_gerakan']);
@@ -934,7 +969,9 @@ class TemplateLhpErgonomi
             $overtime = isset($items['overtime']) ? (float)$items['overtime'] : 0;
             
             $items['skor'] = $point + $overtime;
-            
+            if ($namaKey && isset($arrayMap[$namaKey])) {
+                $items['keterangan'] = $arrayMap[$namaKey]; // Masukkan ke array
+            }
             // Sudah ketemu, tidak perlu menyelam lebih dalam di cabang ini
             return;
         }
@@ -945,7 +982,7 @@ class TemplateLhpErgonomi
             foreach ($items as $key => &$subItem) {
                 // Panggil diri sendiri untuk mengecek si anak
                 if (is_array($subItem)) {
-                    $this->hitungRecursive($subItem);
+                    $this->hitungRecursive($subItem, $key);
                 }
             }
         }
