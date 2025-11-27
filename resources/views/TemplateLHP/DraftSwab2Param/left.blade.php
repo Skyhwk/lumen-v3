@@ -12,20 +12,20 @@
 @endphp
 
 <div class="left">
-    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;" width="100%">
         <thead>
             <tr>
-                <th width="10%" rowspan="2" class="pd-5-solid-top-center">NO</th>
-                <th width="45%" rowspan="2" colspan="2" class="pd-5-solid-top-center">
+                <th width="6%" rowspan="2" class="pd-5-solid-top-center">NO</th>
+                <th width="34%" rowspan="2" colspan="2" class="pd-5-solid-top-center">
                     LOKASI / KETERANGAN SAMPEL</th>
 
                 {{-- HASIL UJI: total kolom = jumlah parameter * (1 atau 2) --}}
-                <th width="10%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
+                <th width="20%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
                     HASIL UJI
                 </th>
 
                 {{-- BAKU MUTU: 1 kolom per parameter --}}
-                <th width="15%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
+                <th width="20%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
                     BAKU MUTU
                 </th>
                 <th width="20%" rowspan="2" class="pd-5-solid-top-center">
@@ -34,7 +34,7 @@
             <tr>
                 {{-- HASIL UJI - PARAMETER --}}
                 @foreach ($parameters as $param)
-                    <th class="pd-5-solid-top-center">
+                    <th class="pd-5-solid-top-center" style="white-space: nowrap;">
                         @php
                             foreach ($detail as $row) {
                                 if ($row['parameter'] === $param) {
@@ -44,7 +44,9 @@
                                 }
                             }
                         @endphp
-                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }} <br> ({{ $satuan }})
+                        <sup>{{ $akr }}</sup>&nbsp;{{ $param }}
+                        <br>
+                        ({{ $satuan }})
                     </th>
                 @endforeach
 
@@ -59,8 +61,9 @@
                             }
                         }
                     @endphp
-                    <th class="pd-5-solid-top-center">
-                        {{ $param }}<br>
+                    <th class="pd-5-solid-top-center" style="white-space: nowrap;">
+                        {{ $param }}
+                        <br>
                         ({{ $satuan }})
                     </th>
                 @endforeach
@@ -98,10 +101,10 @@
                     </td>
 
                     {{-- NO SAMPEL --}}
-                    <td class="pd-3-{{ $rowClass }}" width="8%" style="text-align: right; border-right: none;">
+                    <td class="pd-3-{{ $rowClass }}" width="7%" style="text-align: right; border-right: none;">
                         <sup style="font-size: 5px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
-                    <td class="pd-3-{{ $rowClass }}" width="37%" style="border-left: none; text-align: left;">
+                    <td class="pd-3-{{ $rowClass }}" width="27%" style="border-left: none; text-align: left;">
                         {{ htmlspecialchars($keterangan) }}
                     </td>
 
