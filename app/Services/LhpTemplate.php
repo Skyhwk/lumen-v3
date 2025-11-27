@@ -12,6 +12,8 @@ use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
 use App\Models\LhpsEmisiIsokinetikHeader;
 use App\Models\LhpsEmisiIsokinetikDetail;
+use App\Models\LhpsPadatanDetail;
+use App\Models\LhpsPadatanHeader;
 use App\Models\LhpsSinarUVDetail;
 use App\Models\LhpsSinarUVHeader;
 use App\Models\MasterBakumutu;
@@ -362,6 +364,16 @@ class LhpTemplate
             if ($kategori === 1) {
                 $header = LhpsAirHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                 $detail = LhpsAirDetail::where('id_header', $header->id)->get();
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
+            } else if ($kategori === 6) {
+                $header = LhpsPadatanHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsPadatanDetail::where('id_header', $header->id)->get();
                 foreach ($detail as $val) {
                     if ($val->akr != 'ẍ') {
                         $parameterAkreditasi++;
