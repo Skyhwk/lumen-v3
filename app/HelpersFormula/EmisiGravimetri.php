@@ -89,6 +89,8 @@ class EmisiGravimetri
             'C8' => $C8,
             'C9' => $C9,
             'C10' => $C10,
+            'massa_total_partikulat' => $A,
+            'vstd' => $B,
             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
         ];
         return $data;

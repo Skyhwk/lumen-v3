@@ -3604,7 +3604,7 @@ class InputParameterController extends Controller
 			}
 
             $data_analis = array_filter((array) $request->all(), function ($value, $key) {
-                $exlude = ['jenis_pengujian', 'note','no_sample', 'parameter', 'id_stp'];
+                $exlude = ['jenis_pengujian', 'note','no_sample', 'parameter', 'id_stp','tgl'];
                 return !in_array($key, $exlude);
             }, ARRAY_FILTER_USE_BOTH);
 
@@ -3622,6 +3622,15 @@ class InputParameterController extends Controller
                     $formatted_data_analis[$key] = $value;
                 }
             }
+
+			if(isset($data_kalkulasi['massa_total_partikulat'])){
+				$formatted_data_analis['massa_total_partikulat'] = $data_kalkulasi['massa_total_partikulat'];
+				unset($data_kalkulasi['massa_total_partikulat']);
+			}
+			if(isset($data_kalkulasi['vstd'])){
+				$formatted_data_analis['vstd'] = $data_kalkulasi['vstd'];
+				unset($data_kalkulasi['vstd']);
+			}
 
 			$data = new EmisiCerobongHeader;
 			$data->no_sampel = $request->no_sample;
