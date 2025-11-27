@@ -1575,9 +1575,7 @@ class DraftUlkErgonomiController extends Controller
                         'approved_by' => $this->karyawan
                     ]);
 
-                    $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
-                        ->where('is_active', true)
-                        ->first();
+                    $cekDetail = $data_order;
 
                     $cekLink = LinkLhp::where('no_order', $data->no_order);
                     if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
