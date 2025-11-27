@@ -64,212 +64,66 @@
                             <th style="border: 1px solid black; padding: 5px;">Potensi Bahaya</th>
                             <th style="border: 1px solid black; padding: 5px; width: 80px;">Skor</th>
                         </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">1</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Leher: memuntir atau menekuk</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">0</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">2</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Bahu: Lengan / siku yang tak ditopang di atas tinggi perut</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">1</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">3</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Rotasi lengan bawah secara cepat</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">4</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Pergelangan tangan: Menekuk ke depan atau ke samping</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">5</td>
-                            <td style="border: 1px solid black; padding: 5px;">Gerakan Lengan</td>
-                            <td style="border: 1px solid black; padding: 5px;">Sedang: Gerakan stabil dengan jeda teratur</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">6</td>
-                            <td style="border: 1px solid black; padding: 5px;">Gerakan Lengan</td>
-                            <td style="border: 1px solid black; padding: 5px;">Intensif: Gerakan cepat yang stabil tanpa jeda teratur</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">7</td>
-                            <td style="border: 1px solid black; padding: 5px;">Penggunaan Keyboard</td>
-                            <td style="border: 1px solid black; padding: 5px;">Mengetik secara berselang (diselingi aktifitas / istirahat)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">8</td>
-                            <td style="border: 1px solid black; padding: 5px;">Penggunaan Keyboard</td>
-                            <td style="border: 1px solid black; padding: 5px;">Mengetik secara Intensif</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">9</td>
-                            <td style="border: 1px solid black; padding: 5px;">Usaha Tangan (Repetitif maupun Statis)</td>
-                            <td style="border: 1px solid black; padding: 5px;">Menggenggam dalam posisi "<i>power grip</i>" gaya > 5 kg</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">10</td>
-                            <td style="border: 1px solid black; padding: 5px;">Usaha Tangan (Repetitif maupun Statis)</td>
-                            <td style="border: 1px solid black; padding: 5px;">Memencet / Menjepit benda dengan jari gaya > 1 kg</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">11</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tekanan Langsung ke bagian tubuh</td>
-                            <td style="border: 1px solid black; padding: 5px;">Kulit tertekan oleh benda yang keras atau runcing</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">12</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tekanan Langsung ke bagian tubuh</td>
-                            <td style="border: 1px solid black; padding: 5px;">Menggunakan telapak atau pergelangan tangan untuk memukul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">13</td>
-                            <td style="border: 1px solid black; padding: 5px;">Getaran</td>
-                            <td style="border: 1px solid black; padding: 5px;">Getaran lokal (tanpa peredam)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">14</td>
-                            <td style="border: 1px solid black; padding: 5px;">Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja</td>
-                            <td style="border: 1px solid black; padding: 5px;"></td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">15</td>
-                            <td style="border: 1px solid black; padding: 5px;">Lingkungan</td>
-                            <td style="border: 1px solid black; padding: 5px;">Pencahayaan (Pencahayaan yang kurang atau silau)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">16</td>
-                            <td style="border: 1px solid black; padding: 5px;">Lingkungan</td>
-                            <td style="border: 1px solid black; padding: 5px;">Temperatur terlalu tinggi atau rendah</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-
-                        <tr style="background-color: #ffffff;">
-                            <td colspan="4" style="border: 1px solid black; padding: 5px; font-weight: bold; text-decoration: underline;">
-                                II. Daftar Periksa Potensi Bahaya Tubuh Bagian Bawah
-                            </td>
-                        </tr>
-                        <tr style="text-align: center; font-weight: bold;">
-                            <td style="border: 1px solid black; padding: 5px;">No.</td>
-                            <td style="border: 1px solid black; padding: 5px;">Kategori</td>
-                            <td style="border: 1px solid black; padding: 5px;">Potensi Bahaya</td>
-                            <td style="border: 1px solid black; padding: 5px;">Skor</td>
-                        </tr>
-
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">17</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tubuh membungkuk ke depan / menekuk ke samping 20 - 45°</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">0</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">18</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tubuh membungkuk ke depan > 45°</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">1</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">19</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tubuh menekuk ke belakang hingga 30°</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">20</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Pemuntira torso (batang tubuh)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">21</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Gerakan paha menjauhi tubuh ke samping secara berulang-ulang</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">22</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Posisi berlutut atau jongkok</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">23</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Pergelangan kaki menekuk ke atas / ke bawah secara berulang</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">24</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Aktivitas pergelangan kaki / berdiri dengan pijakan tidak memadai</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">0</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">25</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Duduk dalam waktu yang lama tanpa sandaran yang memadai</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">26</td>
-                            <td style="border: 1px solid black; padding: 5px;">Postur Janggal</td>
-                            <td style="border: 1px solid black; padding: 5px;">Bekerja berdiri dalam waktu lama / duduk tanpa pijakan memadai</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">1</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">27</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tekanan Langsung ke bagian tubuh</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tubuh tertekan oleh benda yang keras / runcing</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">28</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tekanan Langsung ke bagian tubuh</td>
-                            <td style="border: 1px solid black; padding: 5px;">Menggunakan lutut untuk memukul / menendang</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">29</td>
-                            <td style="border: 1px solid black; padding: 5px;">Tekanan Langsung ke bagian tubuh</td>
-                            <td style="border: 1px solid black; padding: 5px;">Getaran pada seluruh tubuh (tanpa peredam)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">30</td>
-                            <td style="border: 1px solid black; padding: 5px;">Aktifitas Mendorong / Menarik beban</td>
-                            <td style="border: 1px solid black; padding: 5px;">Beban sedang</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">31</td>
-                            <td style="border: 1px solid black; padding: 5px;">Aktifitas Mendorong / Menarik beban</td>
-                            <td style="border: 1px solid black; padding: 5px;">Beban berat</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">32</td>
-                            <td style="border: 1px solid black; padding: 5px;">Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja</td>
-                            <td style="border: 1px solid black; padding: 5px;"></td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-
+                        @php $nomorUrut = 1; @endphp
+                        @if($skorDataAtas != [] || $skorDataAtas != null)
+                            @foreach(collect($skorDataAtas)->sortBy('index') as $key => $value)
+                                <tr>
+                                    {{-- 2. Gunakan $loop->iteration untuk penomoran tabel yang selalu urut (1, 2, 3..) --}}
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center;">
+                                        {{ $nomorUrut }} 
+                                    </td>
+                                    @if($value['label'] === 'faktor')
+                                        <td colspan=2 style="border: 1px solid black; padding: 5px;">
+                                            {{ $value['keterangan'] }}
+                                        </td>
+                                    @else
+                                        <td style="border: 1px solid black; padding: 5px;">
+                                            {{$value['label']}}
+                                            {{-- Catatan: Jika ingin kategori dinamis, sebaiknya jangan di-hardcode "Postur Janggal" --}}
+                                        </td>
+                                        <td style="border: 1px solid black; padding: 5px;">
+                                            {{ $value['keterangan'] }}
+                                        </td>
+                                    @endif
+                                    
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">
+                                        {{ $value['skor'] }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endif
+                        @if($skorDataBawah != [] || $skorDataBawah != null)
+                            <tr style="background-color: #ffffff;">
+                                <td colspan="4" style="border: 1px solid black; padding: 5px; font-weight: bold; text-decoration: underline;">
+                                    II. Daftar Periksa Potensi Bahaya Tubuh Bagian Bawah
+                                </td>
+                            </tr>
+                            @foreach(collect($skorDataBawah)->sortBy('index') as $key => $value)
+                                <tr>
+                                    {{-- 2. Gunakan $loop->iteration untuk penomoran tabel yang selalu urut (1, 2, 3..) --}}
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center;">
+                                        {{ $nomorUrut }} 
+                                    </td>
+                                    @if($value['label'] === 'faktor')
+                                        <td colspan=2 style="border: 1px solid black; padding: 5px;">
+                                            {{ $value['keterangan'] }}
+                                        </td>
+                                    @else
+                                        <td style="border: 1px solid black; padding: 5px;">
+                                            {{$value['label']}}
+                                            {{-- Catatan: Jika ingin kategori dinamis, sebaiknya jangan di-hardcode "Postur Janggal" --}}
+                                        </td>
+                                        <td style="border: 1px solid black; padding: 5px;">
+                                            {{ $value['keterangan'] }}
+                                        </td>
+                                    @endif
+                                    
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">
+                                        {{ $value['skor'] }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endif
                         <tr>
                             <td colspan="3" style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">Total Skor I dan II</td>
                             <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">3</td>
@@ -319,58 +173,24 @@
                                 Skor
                             </td>
                         </tr>
-
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">34 &nbsp; Batang tubuh memuntir saat mengangkat</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">35 &nbsp; Mengangkat dengan satu tangan</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">36 &nbsp; Mengangkat dengan beban tidak terduga / tidak diprediksi</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">37 &nbsp; Mengangkat 1 - 5 kali per menit</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">Sesekali (< 1 jam/shift)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">1</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">38 &nbsp; Mengangkat > 5 kali per menit</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">39 &nbsp; Posisi benda yang diangkat berada di atas bahu</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">40 &nbsp; Posisi benda yang diangkat berada di bawah posisi siku</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center;">Sering (> 1 jam/shift)</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">2</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">41 &nbsp; Mengangkut (membawa) benda dengan jarak 3 - 9 meter</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">42 &nbsp; Mengangkut (membawa) benda dengan jarak > 9 meter</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid black; padding: 5px;">43 &nbsp; Mengangkat benda saat duduk atau bertumpu pada lutut</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                            <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">gak muncul</td>
-                        </tr>
-
+                        
+                        @foreach($faktorResiko as $kategori => $listItem)
+                            {{-- Loop kedua untuk membuka index 0, 1, 2, dst --}}
+                            @foreach($listItem as $item)
+                                <tr>
+                                    <td style="border: 1px solid black; padding: 5px;">
+                                        {{-- Gunakan $item, bukan $value --}}
+                                        {{ $nomorUrut++ }}. &nbsp; {{ $item['raw_text'] }}
+                                    </td>
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">
+                                        {{ $item['keterangan'] }}
+                                    </td>
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; color: red;">
+                                        {{ $item['skor'] }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endforeach
                         <tr>
                             <td colspan="3" style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                 Skor Langkah Akhir
