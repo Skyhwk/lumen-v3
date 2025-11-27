@@ -487,7 +487,7 @@ class DraftUlkSinarUvController extends Controller
         $keterangan = '';
         if ($lapangan) {
             if ($lapangan->keterangan_2 === '-') {
-                $keterangan = $lapangan->aktivitas_pekerja ?? '';
+                $keterangan = $lapangan->keterangan ?? '';
             } else {
                 $keter = strpos($lapangan->keterangan_2, ':') !== false
                     ? explode(":", $lapangan->keterangan_2)
