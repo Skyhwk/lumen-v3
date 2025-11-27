@@ -993,7 +993,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'tekanan_gas_buang' => $data->ps,
                                         'diameter_nozzle' => number_format($dnActual, 4, '.', ','),
                                         'luas_penampang_nozzle' => $luasPenampang,
-                                        'kecepatam_volumetrik_standar' => $data->qs_act,
+                                        'kecepatan_volumetrik_standar' => $data->qs_act,
                                     ];
                                     break;
 
