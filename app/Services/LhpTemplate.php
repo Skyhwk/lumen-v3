@@ -372,7 +372,7 @@ class LhpTemplate
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)']
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis', '316;power density', '277;medan listrik','236;gelombang elektro']
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
@@ -523,8 +523,24 @@ class LhpTemplate
                             border-bottom: 1px dotted #000000;
                             font-size: 9px;
                         }
+                        .pd-3-dot-center {
+                            padding: 3px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-dot-left {
                             padding: 8px;
+                            text-align: left;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
+                        .pd-3-dot-left {
+                            padding: 3px;
                             text-align: left;
                             border-left: 1px solid #000000;
                             border-right: 1px solid #000000;
@@ -539,6 +555,14 @@ class LhpTemplate
                             border-bottom: 1px solid #000000;
                             font-size: 9px;
                         }
+                        .pd-3-solid-left {
+                            padding: 3px;
+                            text-align: left;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-solid-center {
                             padding: 8px;
                             text-align: center;
@@ -547,8 +571,26 @@ class LhpTemplate
                             border-bottom: 1px solid #000000;
                             font-size: 9px;
                         }
+                        .pd-3-solid-center {
+                            padding: 3px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-solid-top-center {
                             padding: 8px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            border-top: 1px solid #000000;
+                            font-size: 9px;
+                            font-weight: bold;
+                        }
+                        .pd-3-solid-top-center {
+                            padding: 3px;
                             text-align: center;
                             border-left: 1px solid #000000;
                             border-right: 1px solid #000000;
