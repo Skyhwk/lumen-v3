@@ -1033,7 +1033,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'konsentrasi_nox' => $method5->NOx,
                                         'konsentrasi_o2' => $method3->O2,
                                         'konsentrasi_co' => $method5->CO,
-                                        'konsentrasi_co2' => $method5->CO2,
+                                        'konsentrasi_co2' => $method3->CO2,
                                         'konsentrasi_so2' => $method5->SO2,
                                         'rata_suhu_cerobong_method3' => $method3->suhu_cerobong
                                     ];
