@@ -1856,7 +1856,7 @@ class DraftUlkErgonomiController extends Controller
             $dataMethod = null;
 
             // Fungsi helper untuk membuat PDF dengan konfigurasi tertentu
-            $createPDF = function($type) use ($mpdfConfig, $methodsToCombine, $noSampel, $dir,$pdfFile,$allHtmlContent) {
+            $createPDF = function($type) use ($mpdfConfig, $methodsToCombine, $noSampel, $dir,$pdfFile,$allHtmlContent,$dataLHP) {
                 $pdf = new PDF($mpdfConfig);
                 $render = new TemplateLhpErgonomi();
 
