@@ -1856,7 +1856,7 @@ class DraftUlkErgonomiController extends Controller
             $dataMethod = null;
 
             // Fungsi helper untuk membuat PDF dengan konfigurasi tertentu
-            $createPDF = function($type) use ($mpdfConfig, $methodsToCombine, $noSampel, $dir,$pdfFile,$allHtmlContent) {
+            $createPDF = function($type) use ($mpdfConfig, $methodsToCombine, $noSampel, $dir,$pdfFile,$allHtmlContent,$dataLHP) {
                 $pdf = new PDF($mpdfConfig);
                 $render = new TemplateLhpErgonomi();
 
@@ -2907,7 +2907,7 @@ class DraftUlkErgonomiController extends Controller
                 }
                 
                 // Simpan file
-                $namaFile = 'LHP-'.str_replace('/', '-', $noSampel).'.pdf';
+                $namaFile = 'LHP-'.str_replace('/', '-', $dataLHP->detail->cfr).'.pdf';
                 // $pathFile = $dir.'/'.$type.'/'.$namaFile;
                 $pathFile = $dir.'/'.'LHP_DOWNLOAD'.'/'.$namaFile;
                 $pdf->Output($pathFile, 'F');
