@@ -651,11 +651,13 @@ class DraftUlkController extends Controller
                     'udaraSubKontrak',
                     'udaraDirect',
                     'udaraPartikulat',
+                    'udaraDebu'
                 ])
                     ->where('cfr', $request->cfr)
                     ->get();
                 $manyNoSampel = count($validasi) > 1 ? true : false;
                 $listData = collect(); // <- PENTING: pakai collect
+
 
                 foreach ($validasi as $items) {
                     $lingkungan = $items->udaraLingkungan;
@@ -663,13 +665,15 @@ class DraftUlkController extends Controller
                     $subKontrak = $items->udaraSubKontrak;
                     $direct     = $items->udaraDirect;
                     $partikulat = $items->udaraPartikulat;
+                    $debu       = $items->udaraDebu;
 
                     $detail = collect()
                         ->merge($lingkungan)
                         ->merge($microbio)
                         ->merge($subKontrak)
                         ->merge($direct)
-                        ->merge($partikulat);
+                        ->merge($partikulat)
+                        ->merge($debu);
 
                     // MERGE ke $listData, bukan replace
                     $listData = $listData->merge(
