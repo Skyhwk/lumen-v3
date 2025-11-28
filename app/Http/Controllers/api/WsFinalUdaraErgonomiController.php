@@ -41,20 +41,20 @@ class WsFinalUdaraErgonomiController extends Controller
 	public function detail(Request $request)
 	{
 		try {
-			$data = ErgonomiHeader::with('datalapangan', 'ws_value_ergonomi')
+			$data = ErgonomiHeader::with('datalapangan')
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', true)
 				->where('is_active', true)
 				->select('*')
 				->addSelect(DB::raw("'ergonomi' as data_type"))
 				->get();
+			
 			foreach ($data as $key => $value) {
-				if ($value->ws_value_ergonomi) {
-					$value->datalapangan->pengukuran = json_decode($value->ws_value_ergonomi->pengukuran);
-				} else {
+				if ($value->datalapangan) {
 					$value->datalapangan->pengukuran = json_decode($value->datalapangan->pengukuran);
 				}
 			}
+			
 			return Datatables::of($data)->make(true);
 		} catch (\Throwable $th) {
 			return response()->json([
