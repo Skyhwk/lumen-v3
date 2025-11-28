@@ -35,18 +35,58 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
     public function index(Request $request)
     {
-        $data = OrderDetail::where('is_active', $request->is_active)
-            ->where('kategori_2', '4-Udara')
+		$data = OrderDetail::select(
+			DB::raw("MAX(id) as max_id"),
+			DB::raw("GROUP_CONCAT(DISTINCT id SEPARATOR ', ') as id"),
+			DB::raw("GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ', ') as no_sampel"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+			DB::raw("GROUP_CONCAT(DISTINCT no_order SEPARATOR ', ') as no_order"),
+			DB::raw("GROUP_CONCAT(DISTINCT no_quotation SEPARATOR ', ') as no_quotation"),
+			DB::raw("GROUP_CONCAT(DISTINCT nama_perusahaan SEPARATOR ', ') as nama_perusahaan"),
+			DB::raw("GROUP_CONCAT(DISTINCT konsultan SEPARATOR ', ') as konsultan"),
+			'cfr',
+			DB::raw("GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ', ') as kategori_1"),
+			DB::raw("GROUP_CONCAT(DISTINCT kategori_2 SEPARATOR ', ') as kategori_2"),
+			DB::raw("GROUP_CONCAT(DISTINCT kategori_3 SEPARATOR ', ') as kategori_3"),
+			DB::raw("GROUP_CONCAT(DISTINCT regulasi SEPARATOR '; ') as regulasi"),
+			DB::raw("GROUP_CONCAT(DISTINCT parameter SEPARATOR '; ') as parameter"),
+			DB::raw("GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ', ') as keterangan_1"),
+		)
+			->where('is_active', 1)
+			->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["27-Udara Lingkungan Kerja"])
-            ->where('status', 0)
-            ->whereNotNull('tanggal_terima')
+			->where('status', 0)
+			->whereNotNull('tanggal_terima')
             ->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-            ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-            ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-            ->orderBy('id', "desc");
+			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+			->groupBy('cfr')
+			->orderByDesc('max_id');
 
-        return Datatables::of($data)->make(true);
+		return Datatables::of($data)->make(true);
     }
+
+	public function getDetailCfr(Request $request)
+	{
+		$data = OrderDetail::where('cfr', $request->cfr)
+			->where('status', 0)
+			->orderByDesc('id')
+			->get()
+			->map(function ($item) {
+                $item->getAnyHeaderUdara();
+                return $item;
+            })->values()
+			->map(function ($item) {
+				$item->getAnyDataLapanganUdara();
+				return $item;
+			});
+
+		return response()->json([
+			'data' => $data,
+			'message' => 'Data retrieved successfully',
+		], 200);
+	}
 
     public function convertHourToMinute($hour)
     {
