@@ -535,12 +535,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
 
                         if ($request->other_regulasi) {
                             foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi);
+                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi, $methodsUsed);
                             }
                         }
                     }
                 }
-
                 $mainData = collect($mainData)->sortBy(function ($item) {
                     return mb_strtolower($item['parameter']);
                 })->values()->toArray();
