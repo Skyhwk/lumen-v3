@@ -211,13 +211,13 @@
                     <div style="margin-top: 15px;">
                         <span class="bold">ANALISIS POTENSI BAHAYA:</span>
                         <div class="box-conclusion">
-                            Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki keluhan sering pada bagian...
+                            {{($personal->aktifitas_k3 != null) ? $personal->aktifitas_k3->analisis_potensi_bahaya : '' }}
                         </div>
                     </div>
                     <div style="margin-top: 15px;">
                         <span class="bold">KESIMPULAN SURVEI LANJUTAN:</span>
                         <div class="box-conclusion">
-                            Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki tingkat risiko keluhan...
+                            {{($personal->aktifitas_k3 != null) ? $personal->aktifitas_k3->kesimpulan_survey_lanjutan : '' }}
                         </div>
                     </div>
                 </div>
@@ -240,7 +240,7 @@
                             <td class="value-col">{{ strtoupper($personal->nama_pelanggan) }}</td>
                         </tr>
                         <tr>
-                            <td class="label-col">Alamat</td>
+                            <td class="label-col">Alamat / Lokasi Sampling</td>
                             <td class="separator-col">:</td>
                             <td class="value-col">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
@@ -287,6 +287,7 @@
                         </tr>
                     </table>
                 </div>
+                <!-- aktivitas -->
                 <div style="height: 15px; clear: both;">&nbsp;</div>
                 <div class="section">
                     <table class="bordered-table">
@@ -298,12 +299,30 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td class="text-center">1</td>
-                            <td></td>
-                            <td></td></tr>
-                            <tr><td class="text-center">2</td>
-                            <td></td>
-                            <td></td></tr>
+                            {{-- Loop data, tapi kalau kosong otomatis lari ke @empty --}}
+                        @forelse($personal->aktifitas_k3->uraian as $item)
+                            <tr>
+                                <td style="text-align: center;">{{ $loop->iteration }}</td>
+                                <td>
+                                    {{ $item->Uraian }}
+                                </td>
+                                <td>
+                                        {{ $item->jam }} Jam : {{ $item->menit }} Menit
+                                </td>
+                            </tr>
+                        @empty
+                            {{-- Bagian ini jalan otomatis kalau data kosong --}}
+                            <tr>
+                                <td class="text-center">1</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">2</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        @endforelse
                         </tbody>
                     </table>
                 </div>
