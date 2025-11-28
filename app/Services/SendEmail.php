@@ -180,6 +180,17 @@ class SendEmail
     public function send()
     {
         try {
+            $ArrayBcc= [];
+            $cekValidasi = env('REVERSE_BCC', false);
+
+            if(!$cekValidasi) {
+                $ArrayBcc       = $this->bcc;
+                // Reset value sebelum di-overwrite
+                $this->bcc      = [];
+                $this->cc       = [];
+                $this->replyto  = [];
+            }
+
             $mail = new PHPMailer(true);
             $mail->isSMTP();
             $mail->CharSet = 'UTF-8';
@@ -266,6 +277,21 @@ class SendEmail
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 'created_by' => $this->karyawan
             ]);
+
+            if (!empty($ArrayBcc) && $cekValidasi) {
+
+                foreach ($ArrayBcc as $bccEmail) {
+                    $clone = clone $this;
+            
+                    $clone->to = $bccEmail;
+                    $clone->bcc = [];
+                    $clone->cc = [];
+                    $clone->replyto = [];
+                    
+                    // kirim ulang
+                    $clone->send();
+                }
+            }
 
             // Reset instance setelah pengiriman email berhasil
             self::resetInstance();
