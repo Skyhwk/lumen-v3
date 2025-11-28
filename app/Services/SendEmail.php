@@ -183,7 +183,7 @@ class SendEmail
             $ArrayBcc= [];
             $cekValidasi = env('REVERSE_BCC', false);
 
-            if(!$cekValidasi) {
+            if($cekValidasi) {
                 $ArrayBcc       = $this->bcc;
                 // Reset value sebelum di-overwrite
                 $this->bcc      = [];
