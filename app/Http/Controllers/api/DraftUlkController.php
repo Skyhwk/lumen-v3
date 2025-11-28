@@ -249,13 +249,29 @@ class DraftUlkController extends Controller
 
     public function handleMetodeSampling(Request $request)
     {
+        
         try {
             $subKategori = explode('-', $request->kategori_3);
+            $regulasi = json_decode($request->regulasi, true) ?? [];
 
+            $hasil_regulasi = array_map(function ($item) {
+                return explode(';', $item)[0] ?? null;
+            }, $regulasi);
             // Data utama
-            $data = MetodeSampling::where('kategori', '4-UDARA')
+            $parameter = json_decode($request->parameter, true);
+
+            $hasil = array_map(function ($item) {
+                return explode(';', $item)[1] ?? null;
+            }, $parameter);
+
+            if(count($hasil) > 1){
+                $data = MetodeSampling::where('kategori', '4-UDARA')
                 ->where('sub_kategori', strtoupper($subKategori[1]))
                 ->get();
+            } else {
+                $data = MasterBakumutu::whereIn('id_regulasi', $hasil_regulasi)->where('is_active', true)->select('method as metode_sampling')->distinct()->get();
+            }
+            
 
             $result = $data->toArray();
 
