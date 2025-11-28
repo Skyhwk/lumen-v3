@@ -644,7 +644,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             'delta_h_calibrate' => ['Δh Calibrate', 'mm H₂O', 'Kalibrasi'],
             'volume_sampel_dari_dry_gas' => ['Volume Sampel dari Dry Gas Meter', 'm³', 'Pengukuran'],
             'volume_sampel_gas_standar' => ['Volume Sampel Gas (Standar)', 'm³', 'Perhitungan'],
-            'rata_rata_suhu_gas_buang' => ['Rata-Rata Suhu Gas Buang', 'K', 'Perhitungan'],
+            'rata_rata_suhu_gas_buang' => ['Rata-Rata Suhu Gas Buang', '°C', 'Perhitungan'],
             'tekanan_gas_buang' => ['Tekanan Gas Buang', 'mmHg', 'Pengukuran'],
             'diameter_nozzle' => ['Diameter Nozzle', 'm', 'Pengukuran'],
             'luas_penampang_nozzle' => ['Luas Penampang Nozzle', 'm²', 'Perhitungan'],
