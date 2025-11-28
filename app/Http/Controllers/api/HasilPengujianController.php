@@ -155,7 +155,8 @@ class HasilPengujianController extends Controller
                     "lhps_ergonomi",
                     "lhps_iklim",
                     "lhps_swab_udara",
-                    "lhps_microbiologi"
+                    "lhps_microbiologi",
+                    "lhps_padatan"
                 ])
                 ->where([
                     'id_order_header' => $orderHeader->id,
@@ -188,6 +189,7 @@ class HasilPengujianController extends Controller
                         $item->lhps_iklim,
                         $item->lhps_swab_udara,
                         $item->lhps_microbiologi,
+                        $item->lhps_padatan,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     $tglSampling = optional($track)->ftc_verifier

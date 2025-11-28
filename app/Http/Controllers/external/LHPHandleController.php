@@ -141,7 +141,8 @@ class LHPHandleController extends BaseController
                     "lhps_ergonomi",
                     "lhps_iklim",
                     "lhps_swab_udara",
-                    "lhps_microbiologi"
+                    "lhps_microbiologi",
+                    "lhps_padatan"
                 ])
                 ->where([
                     'id_order_header' => $orderHeader->id,
@@ -174,6 +175,7 @@ class LHPHandleController extends BaseController
                         $item->lhps_iklim,
                         $item->lhps_swab_udara,
                         $item->lhps_microbiologi,
+                        $item->lhps_padatan,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     $tglSampling = optional($track)->ftc_verifier

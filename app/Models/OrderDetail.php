@@ -135,14 +135,7 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
-    public function lhps_air()
-    {
-        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
-    }
-    public function lhps_padatan()
-    {
-        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
-    }
+    
     public function lhpp_psikologi()
     {
         return $this->belongsTo(LhppUdaraPsikologiHeader::class, 'no_order', 'no_order');
@@ -180,6 +173,11 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
     }
+    public function lhps_padatan()
+    {
+        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
+    }
+
     public function lhps_emisi()
     {
         return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
