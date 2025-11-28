@@ -20,114 +20,6 @@ use Illuminate\Support\Facades\DB;
 
 class HasilPengujianController extends Controller
 {
-    // public function index()
-    // {
-    //     $orders = OrderHeader::with('orderDetail')->select('id', 'no_document', 'tanggal_penawaran', 'no_order', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'alamat_sampling')
-    //         ->where('is_active', true)
-    //         ->latest()
-    //         ->get()
-    //         ->map(function ($item) {
-    //             if ($item->orderDetail) {
-    //                 $details = $item->orderDetail;
-
-    //                 // timpa isi relasi orderDetail dengan hasil pluck
-    //                 $item->order_detail = [
-    //                     'periode'          => $details->pluck('periode')->filter()->unique()->values(),
-    //                     'tanggal_sampling' => $details->pluck('tanggal_sampling')->filter()->unique()->values(),
-    //                     'tanggal_terima'   => $details->pluck('tanggal_terima')->filter()->unique()->values(),
-    //                 ];
-
-    //                 unset($item->orderDetail);
-    //             }
-
-    //             return $item;
-    //         });
-
-    //     return DataTables::of($orders)->make(true);
-    // }
-
-
-    // public function index(Request $request)
-    // {
-    //     // Gunakan Eloquent atau Query Builder yang lebih efisien
-    //     $query = DB::table('order_header as oh')
-    //         ->join('order_detail as od', 'od.id_order_header', '=', 'oh.id')
-    //         ->where('oh.is_active', true)
-    //         ->select(
-    //             'oh.id',
-    //             'oh.no_document',
-    //             'oh.tanggal_penawaran',
-    //             'oh.no_order',
-    //             'oh.tanggal_order',
-    //             'oh.nama_perusahaan',
-    //             'oh.konsultan',
-    //             'oh.alamat_sampling',
-    //             'od.periode',
-    //             // Gunakan SEPARATOR untuk konsistensi
-    //             DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_sampling ORDER BY od.tanggal_sampling ASC SEPARATOR ",") as tanggal_sampling'),
-    //             DB::raw('GROUP_CONCAT(DISTINCT od.tanggal_terima ORDER BY od.tanggal_terima ASC SEPARATOR ",") as tanggal_terima')
-    //         )
-    //         ->groupBy(
-    //             'oh.id',
-    //             'oh.no_document',
-    //             'oh.tanggal_penawaran',
-    //             'oh.no_order',
-    //             'oh.tanggal_order',
-    //             'oh.nama_perusahaan',
-    //             'oh.konsultan',
-    //             'oh.alamat_sampling',
-    //             'od.periode'
-    //         )
-    //         ->orderByDesc('oh.created_at');
-
-    //     // Cache bulan mapping
-    //     $bulanMap = [
-    //         'januari' => '01',
-    //         'februari' => '02',
-    //         'maret' => '03',
-    //         'april' => '04',
-    //         'mei' => '05',
-    //         'juni' => '06',
-    //         'juli' => '07',
-    //         'agustus' => '08',
-    //         'september' => '09',
-    //         'oktober' => '10',
-    //         'november' => '11',
-    //         'desember' => '12'
-    //     ];
-
-    //     return DataTables::of($query)
-    //         ->filterColumn('no_document', function ($query, $keyword) {
-    //             $query->where('oh.no_document', 'LIKE', '%' . $keyword . '%');
-    //         })
-    //         ->filterColumn('no_order', function ($query, $keyword) {
-    //             $query->where('oh.no_order', 'LIKE', '%' . $keyword . '%');
-    //         })
-    //         ->filterColumn('tanggal_terima', function ($query, $keyword) use ($bulanMap) {
-    //             $this->filterTanggal($query, 'od.tanggal_terima', $keyword, $bulanMap);
-    //         })
-    //         ->filterColumn('tanggal_sampling', function ($query, $keyword) use ($bulanMap) {
-    //             $this->filterTanggal($query, 'od.tanggal_sampling', $keyword, $bulanMap);
-    //         })
-    //         ->filterColumn('periode', function ($query, $keyword) use ($bulanMap) {
-    //             $converted = $this->convertBulan($keyword, $bulanMap);
-    //             $query->where('od.periode', 'LIKE', '%' . $converted . '%');
-    //         })
-    //         ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-    //             $query->where('oh.nama_perusahaan', 'LIKE', '%' . $keyword . '%');
-    //         })
-    //         ->filterColumn('konsultan', function ($query, $keyword) {
-    //             $query->where('oh.konsultan', 'LIKE', '%' . $keyword . '%');
-    //         })
-    //         ->editColumn('tanggal_sampling', function ($row) {
-    //             return $row->tanggal_sampling ? explode(',', $row->tanggal_sampling) : [];
-    //         })
-    //         ->editColumn('tanggal_terima', function ($row) {
-    //             return $row->tanggal_terima ? explode(',', $row->tanggal_terima) : [];
-    //         })
-    //         ->make(true);
-    // }
-
     public function index(Request $request)
     {
         $subQuery = DB::table('order_detail')
@@ -249,17 +141,22 @@ class HasilPengujianController extends Controller
             $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
-                    'lhps_air',
-                    'lhps_emisi',
-                    'lhps_emisi_c',
-                    'lhps_getaran',
-                    'lhps_kebisingan',
-                    'lhps_ling',
-                    'lhps_medanlm',
-                    'lhps_pencahayaan',
-                    'lhps_sinaruv',
-                    'lhps_iklim',
-                    'lhps_ergonomi',
+                    "lhps_air",
+                    "lhps_emisi",
+                    "lhps_emisi_c",
+                    "lhps_emisi_isokinetik",
+                    "lhps_getaran",
+                    "lhps_kebisingan",
+                    "lhps_kebisingan_personal",
+                    "lhps_ling",
+                    "lhps_medanlm",
+                    "lhps_pencahayaan",
+                    "lhps_sinaruv",
+                    "lhps_ergonomi",
+                    "lhps_iklim",
+                    "lhps_swab_udara",
+                    "lhps_microbiologi",
+                    "lhps_padatan"
                 ])
                 ->where([
                     'id_order_header' => $orderHeader->id,
@@ -280,14 +177,19 @@ class HasilPengujianController extends Controller
                         $item->lhps_air,
                         $item->lhps_emisi,
                         $item->lhps_emisi_c,
+                        $item->lhps_emisi_isokinetik,
                         $item->lhps_getaran,
                         $item->lhps_kebisingan,
+                        $item->lhps_kebisingan_personal,
                         $item->lhps_ling,
                         $item->lhps_medanlm,
                         $item->lhps_pencahayaan,
                         $item->lhps_sinaruv,
-                        $item->lhps_iklim,
                         $item->lhps_ergonomi,
+                        $item->lhps_iklim,
+                        $item->lhps_swab_udara,
+                        $item->lhps_microbiologi,
+                        $item->lhps_padatan,
                     ])->first(fn($lhps) => $lhps !== null);
 
                     $tglSampling = optional($track)->ftc_verifier
@@ -302,7 +204,24 @@ class HasilPengujianController extends Controller
                             : (($lhps->created_at ?? null)
                                 ? 'Direct'
                                 : ($item->tanggal_terima ? 'Sampling' : null)));
-                    $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
+
+                    $kategori_validation = 
+                    [
+                        '13-Getaran', 
+                        "14-Getaran (Bangunan)", 
+                        '15-Getaran (Kejut Bangunan)', 
+                        '16-Getaran (Kenyamanan & Kesehatan)', 
+                        "17-Getaran (Lengan & Tangan)", 
+                        "18-Getaran (Lingkungan)", 
+                        "19-Getaran (Mesin)",  
+                        "20-Getaran (Seluruh Tubuh)", 
+                        "21-Iklim Kerja", 
+                        "23-Kebisingan", 
+                        "24-Kebisingan (24 Jam)",
+                        "25-Kebisingan (Indoor)", 
+                        "28-Pencahayaan"
+                    ];
+
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);

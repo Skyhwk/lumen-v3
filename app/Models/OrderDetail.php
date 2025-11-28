@@ -135,14 +135,7 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
-    public function lhps_air()
-    {
-        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
-    }
-    public function lhps_padatan()
-    {
-        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
-    }
+    
     public function lhpp_psikologi()
     {
         return $this->belongsTo(LhppUdaraPsikologiHeader::class, 'no_order', 'no_order');
@@ -151,22 +144,6 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpUdaraPsikologiHeader::class, 'no_order', 'no_order');
     }
-
-    public function lhps_emisi()
-    {
-        return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
-    }
-
-    public function lhps_emisi_c()
-    {
-        return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
-    }
-
-    public function lhps_emisi_isokinetik()
-    {
-        return $this->belongsTo(LhpsEmisiIsokinetikHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiIsokinetikDetail', 'lhpsEmisiIsokinetikCustom')->where('is_active', true);
-    }
-
     public function lingkunganHeader()
     {
         return $this->belongsTo(LingkunganHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
@@ -192,7 +169,29 @@ class OrderDetail extends Sector
         return $this->belongsTo(MasterKategori::class, 'kategori_2', 'id');
     }
 
-    //Udara
+    public function lhps_air()
+    {
+        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
+    }
+    public function lhps_padatan()
+    {
+        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
+    }
+
+    public function lhps_emisi()
+    {
+        return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
+    }
+    public function lhps_emisi_c()
+    {
+        return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
+    }
+
+    public function lhps_emisi_isokinetik()
+    {
+        return $this->belongsTo(LhpsEmisiIsokinetikHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiIsokinetikDetail', 'lhpsEmisiIsokinetikCustom')->where('is_active', true);
+    }
+
     public function lhps_getaran()
     {
         return $this->belongsTo(LhpsGetaranHeader::class, 'cfr', 'no_lhp')->with('lhpsGetaranDetail')->where('is_active', true);
