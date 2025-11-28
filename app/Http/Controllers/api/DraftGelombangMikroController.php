@@ -256,18 +256,32 @@ class DraftGelombangMikroController extends Controller
                             $nilai = $hasil[$fhasil];
                         }
                     }
+
+                    $nilaiDecode = json_decode($nilai, true);
+                    $hasil_uji   = '-';
+                    $nab         = '-';
+
+                    if ($val->id_parameter == 236) {
+                        $hasil_uji = $nilaiDecode['medan_magnet_am'];
+                        $nab       = $ws->nab_medan_magnet;
+                    } else if ($val->id_parameter == 316) {
+                        $hasil_uji = $nilaiDecode['hasil_m1'];
+                        $nab       = $ws->nab_power_density;
+                    } else if ($val->id_parameter == 277) {
+                        $hasil_uji = $nilaiDecode['rata_listrik'];
+                        $nab       = $ws->nab_medan_listrik;
+                    }
+
                     return [
-                        'no_sampel'         => $val->no_sampel ?? null,
-                        'parameter'         => $parameterLhp ?? $parameterRegulasi ?? null,
-                        'nama_lab'          => $parameterLab ?? null,
-                        'bakumutu'          => $bakumutu ? $bakumutu->baku_mutu : '-',
-                        'satuan'            => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
-                        'methode'           => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
-                        'hasil_uji'         => $nilai,
-                        'akr'               => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
-                        'nab_power_density' => $val->nab_power_density ?? null,
-                        'nab_medan_magnet'  => $val->nab_medan_magnet ?? null,
-                        'nab_medan_listrik' => $val->nab_medan_listrik ?? null,
+                        'no_sampel' => $val->no_sampel ?? null,
+                        'parameter' => $parameterLhp ?? $parameterRegulasi ?? null,
+                        'nama_lab'  => $parameterLab ?? null,
+                        'bakumutu'  => $bakumutu ? $bakumutu->baku_mutu : '-',
+                        'satuan'    => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
+                        'methode'   => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+                        'hasil_uji' => $hasil_uji ?? '-',
+                        'akr'       => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'nab'       => $nab ?? '-',
                     ];
                 })->toArray();
 
