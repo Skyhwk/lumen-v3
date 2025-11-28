@@ -298,7 +298,7 @@ class TqcMedanMagnetController extends Controller
                 'parameter' => $header->parameter ?? null,
                 'nab' => $ws->nab ?? null,
                 'hasil_mwatt' => $hasilWs['hasil_mwatt'] ?? null,
-                'rata_magnet' => $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null,
+                'rata_magnet' => $hasilWs['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null,
                 'rata_listrik' => $hasilWs['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null,
                 'rata_frekuensi' => $hasilWs['rata_frekuensi'] ?? null,
                 'nab_power_density' => $ws->nab_power_density ?? null,

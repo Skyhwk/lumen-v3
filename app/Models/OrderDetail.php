@@ -135,7 +135,14 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
-    
+    public function lhps_air()
+    {
+        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
+    }
+    public function lhps_padatan()
+    {
+        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
+    }
     public function lhpp_psikologi()
     {
         return $this->belongsTo(LhppUdaraPsikologiHeader::class, 'no_order', 'no_order');
@@ -557,6 +564,10 @@ class OrderDetail extends Sector
     public function udaraMicrobio()
     {
         return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
+    }
+    public function udaraDebu()
+    {
+        return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true);
     }
 
     // emisi isokinetik

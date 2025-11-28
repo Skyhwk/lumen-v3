@@ -45,7 +45,7 @@ class GenerateHasilPengujianController extends Controller
             ->map(function ($item) {
                 $linkLhp = LinkLhp::where('no_order', $item->no_order);
                 if ($linkLhp->exists()) {
-                    $listPeriode = $linkLhp->pluck('periode')->toArray();
+                    $listPeriode = $linkLhp->pluck('periode')->filter()->values()->toArray();
                     if (count($listPeriode) > 0) {
                         $filteredDetail = $item->orderDetail->filter(fn($detail) => !in_array($detail->periode, $listPeriode))->values();
                         $item->setRelation('order_detail', $filteredDetail);
@@ -119,6 +119,7 @@ class GenerateHasilPengujianController extends Controller
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
                     'lhps_air',
+                    'lhps_padatan',
                     'lhps_emisi',
                     'lhps_emisi_c',
                     'lhps_getaran',
@@ -149,6 +150,7 @@ class GenerateHasilPengujianController extends Controller
 
                     $lhps = collect([
                         $item->lhps_air,
+                        $item->lhps_padatan,
                         $item->lhps_emisi,
                         $item->lhps_emisi_c,
                         $item->lhps_getaran,
@@ -178,7 +180,7 @@ class GenerateHasilPengujianController extends Controller
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
-                                
+
                     $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
                     if (in_array($item->kategori_3, $kategori_validation)) {
                         $steps['analisa']['date'] = $tglSampling;
@@ -292,7 +294,7 @@ class GenerateHasilPengujianController extends Controller
 
                 foreach ($lhpRilis as $cfrItem) {
                     foreach ($cfrItem['order_details'] as $detailItem) {
-                        foreach (['lhps_air', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
+                        foreach (['lhps_air', 'lhps_padatan', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
                             $lhps = $detailItem[$lhpsKey] ?? null;
                             if (!$lhps || empty($lhps['file_lhp'])) continue;
 
@@ -420,7 +422,7 @@ class GenerateHasilPengujianController extends Controller
 
         $emailLhp = EmailLhp::where('no_order', $request->no_order)->first();
 
-        if($emailLhp) {
+        if ($emailLhp) {
             $emailCC = explode(',', $emailLhp->email_cc);
             $emailTo = $emailLhp->email_to;
         }
@@ -430,7 +432,9 @@ class GenerateHasilPengujianController extends Controller
                 'email_cc' => $emailCC,
                 'email_to' => $emailTo,
                 'email_bcc' => $emails,
-            ], 200);
+            ],
+            200
+        );
     }
 
     public function getUser()

@@ -198,68 +198,68 @@ class FdlLingkunganKerjaController extends Controller
                     $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
 
                     // Aktifkan kembali ketika sudah di approve rumusnya oleh TA di spreadsheet
-                    // if ($filtered->isNotEmpty()) {
-                    //     foreach ($filtered as $p) {
-                    //         $masterParameter = Parameter::where('nama_lab', $p->parameter)->first();   
-                    //     }
-                    //     if(!empty($masterParameter)) {
-                    //         $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
-                    //         $data_parsing = $request->all();
-                    //         $data_parsing = (object) $data_parsing;
-                    //         $data_parsing->data_lapangan = collect($filtered)->all();
-                    //         $hasil = AnalystFormula::where('function', $function)
-                    //             ->where('data', $data_parsing)
-                    //             ->where('id_parameter', $masterParameter->id)
-                    //             ->process();
+                    if ($filtered->isNotEmpty()) {
+                        foreach ($filtered as $p) {
+                            $masterParameter = Parameter::where('nama_lab', $p->parameter)->first();   
+                        }
+                        if(!empty($masterParameter)) {
+                            $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
+                            $data_parsing = $request->all();
+                            $data_parsing = (object) $data_parsing;
+                            $data_parsing->data_lapangan = collect($filtered)->all();
+                            $hasil = AnalystFormula::where('function', $function)
+                                ->where('data', $data_parsing)
+                                ->where('id_parameter', $masterParameter->id)
+                                ->process();
 
-                    //         // Simpan Header
-                    //         $header = LingkunganHeader::updateOrCreate(
-                    //             [
-                    //                 'no_sampel' => $data->no_sampel,
-                    //                 'parameter' => $masterParameter->nama_lab,
-                    //             ],
-                    //             [
-                    //                 'id_parameter' => $masterParameter->id ?? null,
-                    //                 'template_stp' => 30,
-                    //                 'tanggal_terima' => $tanggalTerima,
-                    //                 'created_by' => $this->karyawan,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'is_approved' => true,
-                    //                 'approved_by' => $this->karyawan,
-                    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
-                    //             ]
-                    //         );
+                            // Simpan Header
+                            $header = LingkunganHeader::updateOrCreate(
+                                [
+                                    'no_sampel' => $data->no_sampel,
+                                    'parameter' => $masterParameter->nama_lab,
+                                ],
+                                [
+                                    'id_parameter' => $masterParameter->id ?? null,
+                                    'template_stp' => 30,
+                                    'tanggal_terima' => $tanggalTerima,
+                                    'created_by' => $this->karyawan,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                    'is_approved' => true,
+                                    'approved_by' => $this->karyawan,
+                                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
+                                ]
+                            );
 
-                    //         // id header
-                    //         $id_header = $header->id;
+                            // id header
+                            $id_header = $header->id;
 
-                    //         // Simpan ke WsValueLingkungan
-                    //         WsValueLingkungan::updateOrCreate(
-                    //             [
-                    //                 'lingkungan_header_id' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
-                    //             ],
-                    //             [
-                    //                 'C' => $hasil['hasil'],
-                    //                 'tanggal_terima' =>$tanggalTerima,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'created_by' => $this->karyawan,
-                    //             ]
-                    //         );
+                            // Simpan ke WsValueLingkungan
+                            WsValueLingkungan::updateOrCreate(
+                                [
+                                    'lingkungan_header_id' => $id_header,
+                                    'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
+                                ],
+                                [
+                                    'C17' => $hasil['hasil'],
+                                    'tanggal_terima' =>$tanggalTerima,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                    'created_by' => $this->karyawan,
+                                ]
+                            );
 
-                    //         // Simpan ke WsValueUdara
-                    //         WsValueUdara::updateOrCreate(
-                    //             [
-                    //                 'id_lingkungan_header' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel,
-                    //             ],
-                    //             [
-                    //                 'hasil1' => $hasil['hasil'],
-                    //                 'satuan' => $hasil['satuan'],
-                    //             ]
-                    //         );
-                    //     }
-                    // }
+                            // Simpan ke WsValueUdara
+                            WsValueUdara::updateOrCreate(
+                                [
+                                    'id_lingkungan_header' => $id_header,
+                                    'no_sampel' => $data->no_sampel,
+                                ],
+                                [
+                                    'hasil18' => $hasil['hasil'],
+                                    'satuan' => $hasil['satuan'],
+                                ]
+                            );
+                        }
+                    }
 
                     if(!empty($foundParams)) {
                         // Loop setiap parameter
@@ -310,7 +310,8 @@ class FdlLingkunganKerjaController extends Controller
                                 'suhu' => ['lingkungan' => 'C11', 'udara' => 'hasil12', 'satuan' => '°C'],
                                 'kelembaban' => ['lingkungan' => 'C4', 'udara' => 'hasil5', 'satuan' => '%'],
                                 'laju ventilasi' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
-                                'kecepatan angin' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'km/jam'],
+                                'kecepatan angin' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
+                                // 'pertukaran udara' => ['lingkungan' => 'C17', 'udara' => 'hasil18', 'satuan' => 'km/jam'],
                             ];
 
                             // Default
