@@ -688,7 +688,7 @@ class DraftUlkController extends Controller
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
                                 'nama_lab'      => $item->parameter,
                                 'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
-                                'tanggal_sampling'    => $item->ws_udara->detailLingkunganKerja->created_at ?? null,
+                                'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
                                 'satuan'        => $newQuery->satuan,
                                 'method'        => $newQuery->method,
                                 'status'        => $newQuery->status,
@@ -712,7 +712,19 @@ class DraftUlkController extends Controller
                     }
                 }
                 // Sort mainData
-                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+                $mainData = collect($mainData)
+                ->sortBy(function ($item) {
+                    if (!empty($item['no_sampel'])) {
+                        $parts = explode('/', $item['no_sampel']);
+                        return (int) ltrim($parts[1] ?? '999999', '0');
+                    }
+
+                    // jika tidak ada no sampel → urut belakangan tapi tetap menurut parameter
+                    return 999999 . mb_strtolower($item['parameter']);
+                })
+                ->values()
+                ->toArray();
+
                 // Sort otherRegulations
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
