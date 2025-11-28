@@ -2,7 +2,7 @@
     use App\Models\DataLapanganMedanLM;
     use App\Models\WsValueUdara;
 
-    $data = is_object($detail) && method_exists($detail, 'toArray') ? $detail->toArray() : (array) $detail;
+    $data = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
 
     $data = collect($data)->map(fn($r) => (array) $r);
 
@@ -17,7 +17,7 @@
     $frekuensiMhz = $rata_frekuensi / 1000000;
 @endphp
 
-<div class="left">
+<div class="left" style="page-break-before: always;">
     {{-- ================== DATA HASIL PENGUKURAN ================== --}}
     <div style="margin-bottom: 30px">
         <p style="text-align: left; margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9px;"><strong>DATA
@@ -132,8 +132,8 @@
                     $extraRows = 3;
 
                     foreach ($observasiAll as $i => $value) {
-                        if ($i === 0) {
-                            $listObservasi = $observasiAll[0] ?? [];
+                        if ($i === $page - 1) {
+                            $listObservasi = $observasiAll[$i] ?? [];
                             $totalObservasi = count($listObservasi);
                             break;
                         }
@@ -179,8 +179,8 @@
                     $extraRowsKesimpulan = 3;
 
                     foreach ($kesimpulanAll as $i => $value) {
-                        if ($i === 0) {
-                            $listKesimpulan = $kesimpulanAll[0] ?? [];
+                        if ($i === $page - 1) {
+                            $listKesimpulan = $kesimpulanAll[$i] ?? [];
                             $totalKesimpulan = count($listKesimpulan);
                             break;
                         }
