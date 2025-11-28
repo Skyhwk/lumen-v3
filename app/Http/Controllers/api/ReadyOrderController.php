@@ -2640,9 +2640,19 @@ class ReadyOrderController extends Controller
             "316;Power Density",
             "563;Medan Magnit Statis",
             "2117;Frekuensi Radio (LK)",
-            "236;Gelombang Elektro",
             "324;Sinar UV",
-            "309;Pencahayaan"
+            "309;Pencahayaan",
+            "266;Jumlah Bakteri Total",
+            "337;Total Bakteri",
+            "338;Total Bakteri (KB)",
+            "578;T.Bakteri (8 Jam)",
+            "587;T. Bakteri (1 Jam)",
+            "619;T. Bakteri (KUDR - 8 Jam)",
+            "579;T. Jamur (8 Jam)",
+            "586;T. Jamur (1 Jam)",
+            "620;T. Jamur (KUDR - 8 Jam)",
+            "2221;Total Jamur SS",
+            "2280;Total Jamur 8J",
         ];
 
         return in_array($value, $array);

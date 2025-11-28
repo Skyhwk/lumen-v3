@@ -13,6 +13,7 @@
                     <th width="310" rowspan="2" class="pd-5-solid-top-center" >NO SAMPEL</th>
                     <th width="170" class="pd-5-solid-top-center" >HASIL UJI</th>
                     <th width="160" class="pd-5-solid-top-center" >BAKU MUTU</th>
+                    <th width="110" rowspan="2" class="pd-5-solid-top-center">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th width="110" colspan="2" class="pd-5-solid-top-center">{{$detail[0]['satuan']}}</th>
@@ -48,6 +49,7 @@
                             </td>
                             <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ str_replace('.', ',', $v['hasil_uji']) }}&nbsp;{{ $v['attr'] }}</td>
                             <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $v['baku_mutu'] }}</td>
+                            <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling'])}}</td>
                         </tr>
                     @endforeach
                 @else

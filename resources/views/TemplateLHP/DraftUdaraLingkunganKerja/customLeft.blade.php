@@ -12,6 +12,7 @@
                     <th width="310" rowspan="2" class="pd-5-solid-top-center" >NO SAMPEL</th>
                     <th width="170" class="pd-5-solid-top-center" >HASIL UJI</th>
                     <th width="160" class="pd-5-solid-top-center" >BAKU MUTU</th>
+                    <th width="110" rowspan="2" class="pd-5-solid-top-center">TANGGAL SAMPLING</th>
                 </tr>
                 <tr>
                     <th width="110" colspan="2" class="pd-5-solid-top-center">{{$custom[0]['satuan']}}</th>
@@ -43,6 +44,7 @@
                             $parameter = isset($v['parameter']) ? $v['parameter'] : '';
                             $baku_mutu = isset($v['baku_mutu']) ? $v['baku_mutu'] : '';
                             $nama_header = isset($v['nama_header']) ? $v['nama_header'] : '';
+                            $tanggal_sampling = isset($v['tanggal_sampling']) ? \App\Helpers\Helper::tanggal_indonesia($v['tanggal_sampling']) : '';
                         @endphp
                         <tr>
                             <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $number }}</td>
@@ -55,6 +57,7 @@
                             </td>
                             <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $hasilUji }}&nbsp;{{ $attr }}</td>
                             <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $baku_mutu }}</td>
+                            <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $tanggal_sampling }}</td>
                         </tr>
                     @endforeach
                 @else

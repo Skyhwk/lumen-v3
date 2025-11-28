@@ -59,11 +59,43 @@
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
                         <td class="custom" width="33%">No. LHP {!! $showKan ? '<sup><u>a</u></sup>' : '' !!}</td>
+                        @if (!$isManyNoSampel)
+                            <td class="custom" width="33%">No. SAMPEL</td>
+                        @endif
                         <td class="custom" width="33%">JENIS SAMPEL</td>
+                        @if ($isManyNoSampel)
+                            <td class="custom" width="33%">PARAMETER UJI</td>
+                        @endif
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
+                        @if (!$isManyNoSampel)
+                            <td class="custom">{{ $header->no_sampel }}</td>                            
+                        @endif
                         <td class="custom">Lingkungan Kerja</td>
+                        @if ($isManyNoSampel)
+                            <?php
+                                $param = [];
+                            ?>
+                            @foreach ($paramUnik as $idx => $p)
+                                @if ($idx > 0)
+                                    <br>
+                                @endif
+
+                                @php
+                                    $methode = '-';
+                                    foreach ($detail as $row) {
+                                        if ($row['parameter'] === $p) {
+                                            $akr = $row['akr'];
+                                            break;
+                                        }
+                                    }
+                                    array_push($param, '<sup>'.$akr.'</sup>&nbsp;'.$p);
+                                @endphp
+
+                            @endforeach
+                            <td class="custom">{!!  implode('<br>', $param) !!}</td>
+                        @endif
                     </tr>
                 </table>
             </td>
@@ -104,7 +136,7 @@
                         @php
                             $prameter = $header->parameter_uji ? json_decode($header->parameter_uji, true) : [];
                         @endphp
-                        <tr>
+                        {{-- <tr>
                             <td class="custom5" width="120">Parameter Pengujian</td>
                             <td class="custom5" width="12">:</td>
                             <td class="custom5">
@@ -121,7 +153,7 @@
                                     @endforeach
                                 </table>
                             </td>
-                        </tr>
+                        </tr> --}}
                         @php
                             $methode_sampling = $header->methode_sampling ? json_decode($header->methode_sampling, true) : [];
                         @endphp
@@ -144,34 +176,35 @@
                             </td>
                         </tr>        
                     @endif
-                    <tr>
-                        <td class="custom5" width="120">Tanggal Sampling</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                            @php
-                                echo $tanggal_sampling;
-                            @endphp
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="custom5">Periode Analisa</td>
-                        <td class="custom5">:</td>
-                        @php
-                            $periode1 = $header->tanggal_analisa_awal ?? '';
-                            $periode2 = $header->tanggal_analisa_akhir ?? '';
-                        @endphp
-                        <td class="custom5">
-                            @if ($periode2)
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
-                            @elseif ($periode1)
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
-                            @else
-                                -
-                            @endif
-                        </td>
-                    </tr>
+                    
                     @if(!$isManyNoSampel)
+                        <tr>
+                            <td class="custom5" width="120">Tanggal Sampling</td>
+                            <td class="custom5" width="12">:</td>
+                            <td class="custom5">
+                                @php
+                                    echo $tanggal_sampling;
+                                @endphp
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="custom5">Periode Analisa</td>
+                            <td class="custom5">:</td>
+                            @php
+                                $periode1 = $header->tanggal_analisa_awal ?? '';
+                                $periode2 = $header->tanggal_analisa_akhir ?? '';
+                            @endphp
+                            <td class="custom5">
+                                @if ($periode2)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                                @elseif ($periode1)
+                                    {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                                @else
+                                    -
+                                @endif
+                            </td>
+                        </tr>
                         <tr>
                             <td class="custom5">Keterangan</td>
                             <td class="custom5">:</td>
