@@ -12,7 +12,6 @@ use App\Models\LhpsMedanLMDetail;
 use App\Models\LhpsMedanLMDetailHistory;
 use App\Models\LhpsMedanLMHeader;
 use App\Models\LhpsMedanLMHeaderHistory;
-use App\Services\GenerateQrDocumentLhp;
 use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MedanLmHeader;
@@ -21,6 +20,7 @@ use App\Models\OrderHeader;
 use App\Models\Parameter;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
+use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -82,7 +82,7 @@ class DraftGelombangMikroController extends Controller
                 $maxDate = $lapangan->max('created_at');
             }
 
-            $lhps = $item->lhps_swab_udara;
+            $lhps = $item->lhps_medanlm;
 
             if (empty($lhps) || (
                 empty($lhps->tanggal_sampling_awal) &&
@@ -582,6 +582,7 @@ class DraftGelombangMikroController extends Controller
 
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftGelombangMikro')
                     ->render('downloadLHPFinal');
@@ -621,7 +622,7 @@ class DraftGelombangMikroController extends Controller
     {
         DB::beginTransaction();
         try {
-            $dataHeader = LhpsSwabTesHeader::find($request->id);
+            $dataHeader = LhpsMedanLMHeader::find($request->id);
 
             if (! $dataHeader) {
                 return response()->json([
@@ -650,51 +651,22 @@ class DraftGelombangMikroController extends Controller
             }
 
             // Render ulang file LHP
-            $detail = LhpsSwabTesDetail::where('id_header', $dataHeader->id)->where('page', 1)->get();
-            $custom = collect(LhpsSwabTesDetail::where('id_header', $dataHeader->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
+            $detail = LhpsMedanLMDetail::where('id_header', $dataHeader->id)->where('page', 1)->get();
+            $custom = collect(LhpsMedanLMDetail::where('id_header', $dataHeader->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
 
             $detail = collect($detail)->sortBy([
                 ['tanggal_sampling', 'asc'],
                 ['no_sampel', 'asc'],
             ])->values()->toArray();
 
-            $validasi        = LhpsSwabTesDetail::where('id_header', $dataHeader->id)->get();
-            $groupedBySampel = $validasi->groupBy('no_sampel');
-            $totalSampel     = $groupedBySampel->count();
-            $parameters      = $validasi->pluck('parameter')->filter()->unique();
-            $totalParam      = $parameters->count();
-
-            $isSingleSampelMultiParam = $totalSampel === 1 && $totalParam > 2;
-            $isMultiSampelOneParam    = $totalSampel >= 1 && $totalParam === 1;
-
-            if ($isSingleSampelMultiParam) {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->setDataCustom($custom)
-                    ->useLampiran(true)
-                    ->whereView('DraftSwab3Param')
-                    ->render('downloadLHPFinal');
-                $dataHeader->file_lhp = $fileName;
-                $dataHeader->save();
-            } else if ($isMultiSampelOneParam) {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->setDataCustom($custom)
-                    ->useLampiran(true)
-                    ->whereView('DraftSwab1Param')
-                    ->render('downloadLHPFinal');
-                $dataHeader->file_lhp = $fileName;
-                $dataHeader->save();
-            } else {
-                $fileName = LhpTemplate::setDataDetail($detail)
-                    ->setDataHeader($dataHeader)
-                    ->setDataCustom($custom)
-                    ->useLampiran(true)
-                    ->whereView('DraftSwab2Param')
-                    ->render('downloadLHPFinal');
-                $dataHeader->file_lhp = $fileName;
-                $dataHeader->save();
-            }
+            $fileName = LhpTemplate::setDataDetail($detail)
+                ->setDataHeader($dataHeader)
+                ->setDataCustom($custom)
+                ->useLampiran(true)
+                ->whereView('DraftGelombangMikro')
+                ->render('downloadLHPFinal');
+            $dataHeader->file_lhp = $fileName;
+            $dataHeader->save();
 
             DB::commit();
             return response()->json([
@@ -739,17 +711,17 @@ class DraftGelombangMikroController extends Controller
                 $konfirmasiLhp->save();
             }
 
-            $data = LhpsSwabTesHeader::where('no_lhp', $request->cfr)
+            $data = LhpsMedanLMHeader::where('no_lhp', $request->cfr)
                 ->where('is_active', true)
                 ->first();
 
             $noSampel = array_map('trim', explode(',', $request->noSampel));
             $no_lhp   = $data->no_lhp;
 
-            $detail = LhpsSwabTesDetail::where('id_header', $data->id)->get();
+            $detail = LhpsMedanLMDetail::where('id_header', $data->id)->get();
 
             $qr = QrDocument::where('id_document', $data->id)
-                ->where('type_document', 'LHP_SWAB_TES')
+                ->where('type_document', 'LHP_GELOMBANGMIKRO')
                 ->where('is_active', 1)
                 ->where('file', $data->file_qr)
                 ->orderBy('id', 'desc')
@@ -777,7 +749,7 @@ class DraftGelombangMikroController extends Controller
                     'no_sampel'   => $request->noSampel,
                     'kategori_2'  => $data->id_kategori_2,
                     'kategori_3'  => $data->id_kategori_3,
-                    'menu'        => 'Draft SWAB TES',
+                    'menu'        => 'Draft Gelombang Mikro',
                     'status'      => 'approved',
                     'approved_at' => Carbon::now(),
                     'approved_by' => $this->karyawan,
@@ -823,7 +795,7 @@ class DraftGelombangMikroController extends Controller
             } else {
                 DB::rollBack();
                 return response()->json([
-                    'message' => 'Data Draft Swab Tes no LHP ' . $no_lhp . ' tidak ditemukan',
+                    'message' => 'Data Draft Gelombang Mikro no LHP ' . $no_lhp . ' tidak ditemukan',
                     'status'  => false,
                 ], 404);
             }
@@ -832,7 +804,7 @@ class DraftGelombangMikroController extends Controller
             return response()->json([
                 'data'    => $data,
                 'status'  => true,
-                'message' => 'Data Draft Swab Tes no LHP ' . $no_lhp . ' berhasil diapprove',
+                'message' => 'Data Draft Gelombang Mikro no LHP ' . $no_lhp . ' berhasil diapprove',
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
@@ -848,7 +820,7 @@ class DraftGelombangMikroController extends Controller
         DB::beginTransaction();
         try {
 
-            $lhps = LhpsSwabTesHeader::where('id', $request->id)
+            $lhps = LhpsMedanLMHeader::where('id', $request->id)
                 ->where('is_active', true)
                 ->first();
 
@@ -858,14 +830,14 @@ class DraftGelombangMikroController extends Controller
                     'no_sampel'   => $request->noSampel,
                     'kategori_2'  => $lhps->id_kategori_2,
                     'kategori_3'  => $lhps->id_kategori_3,
-                    'menu'        => 'Draft SWAB TES',
+                    'menu'        => 'Draft Gelombang Mikro',
                     'status'      => 'rejected',
                     'rejected_at' => Carbon::now(),
                     'rejected_by' => $this->karyawan,
                 ]);
                 // History Header Kebisingan
                 $lhpsHistory = $lhps->replicate();
-                $lhpsHistory->setTable((new LhpsSwabTesHeaderHistory())->getTable());
+                $lhpsHistory->setTable((new LhpsMedanLMHeaderHistory())->getTable());
                 $lhpsHistory->created_at = $lhps->created_at;
                 $lhpsHistory->updated_at = $lhps->updated_at;
                 $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -873,10 +845,10 @@ class DraftGelombangMikroController extends Controller
                 $lhpsHistory->save();
 
                 // History Detail Kebisingan
-                $oldDetails = LhpsSwabTesDetail::where('id_header', $lhps->id)->get();
+                $oldDetails = LhpsMedanLMDetail::where('id_header', $lhps->id)->get();
                 foreach ($oldDetails as $detail) {
                     $detailHistory = $detail->replicate();
-                    $detailHistory->setTable((new LhpsSwabTesDetailHistory())->getTable());
+                    $detailHistory->setTable((new LhpsMedanLMDetailHistory())->getTable());
                     $detailHistory->created_by = $this->karyawan;
                     $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
                     $detailHistory->save();
@@ -900,7 +872,7 @@ class DraftGelombangMikroController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Data Draft Swab Tes no LHP ' . $request->no_lhp . ' berhasil direject',
+                'message' => 'Data Draft Gelombang Mikro no LHP ' . $request->no_lhp . ' berhasil direject',
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
