@@ -613,7 +613,7 @@ class LhpTemplate
                         }
                         .rightMiddle{
                             float: right;
-                            width: 50%;
+                            width: 49%;
                         }
                         .left2 {
                             float: left;

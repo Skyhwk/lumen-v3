@@ -137,7 +137,7 @@
                             <thead>
                                 <tr>
                                     <th width="25" class="pd-5-solid-top-center">NO</th>
-                                    <th width="280" class="pd-5-solid-top-center">INDIVIDU</th>
+                                    <th width="280" class="pd-5-solid-top-center">JENIS</th>
                                     <th width="80" class="pd-5-solid-top-center">HASIL UJI</th>
                                 </tr>
                             </thead>
@@ -228,7 +228,7 @@
                             <thead>
                                 <tr>
                                     <th width="25" class="pd-5-solid-top-center">NO</th>
-                                    <th width="280" class="pd-5-solid-top-center">INDIVIDU</th>
+                                    <th width="280" class="pd-5-solid-top-center">JENIS</th>
                                     <th width="80" class="pd-5-solid-top-center">HASIL UJI</th>
                                 </tr>
                             </thead>

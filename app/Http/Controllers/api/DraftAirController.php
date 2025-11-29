@@ -81,7 +81,7 @@ class DraftAirController extends Controller
 
     public function handleSubmitDraft(Request $request)
     {
-        // dd($request->kesimpulan_biota);
+        // dd($request->hasil_uji_json, $request->custom_hasil_uji_json);
         DB::beginTransaction();
         try {
             // === 1. Ambil header / buat baru ===
@@ -187,7 +187,6 @@ class DraftAirController extends Controller
                 if (isset($request->baku_mutu[$key]) && is_array($request->baku_mutu[$key])) {
                     $baku_mutu = array_slice($request->baku_mutu[$key], 0, count($table_header));
                 }
-
                 LhpsAirDetail::create([
                     'id_header'     => $header->id,
                     'akr'           => $request->akr[$key] ?? '',
@@ -205,20 +204,23 @@ class DraftAirController extends Controller
                     'kesimpulan' => $request->kesimpulan_biota[$key] ?? null
                 ]);
             }
-
+            // dd('--------------------');
             // === 6. Handle custom ===
             LhpsAirCustom::where('id_header', $header->id)->delete();
 
             if ($request->custom_parameter) {
-                foreach ($request->custom_hasil_uji as $page => $params) {
+                foreach ($request->custom_parameter as $page => $params) {
                     foreach ($params as $param => $hasil) {
+                        // if($param === 'Benthos'){
+                        //     dd($request->custom_hasil_uji_json[$page][$param]);
+                        // }
                         LhpsAirCustom::create([
                             'id_header'   => $header->id,
                             'page'        => $page,
                             'parameter_lab' => $request->custom_parameter[$page][$param] ?? '',
                             'akr'         => $request->custom_akr[$page][$param] ?? '',
                             'parameter'   => str_replace("'", '', htmlspecialchars_decode($param, ENT_QUOTES)),
-                            'hasil_uji'   => $hasil,
+                            'hasil_uji'   => $request->custom_hasil_uji[$page][$param] ?? '',
                             'hasil_uji_json' => isset($request->custom_hasil_uji_json[$page][$param]) ? $request->custom_hasil_uji_json[$page][$param] : null,
                             'attr'        => $request->custom_attr[$page][$param] ?? '',
                             'satuan'      => $request->custom_satuan[$page][$param] ?? '',
@@ -250,7 +252,7 @@ class DraftAirController extends Controller
                 ->whereView('DraftAir')
                 ->render('downloadLHPFinal');
 
-                dd($fileName);
+                // dd($fileName);
             $header->file_lhp = $fileName;
 
             // if ($header->is_revisi == 1) {
@@ -383,6 +385,7 @@ class DraftAirController extends Controller
     {
         try {
             $cek_lhp = LhpsAirHeader::with('lhpsAirDetail', 'lhpsAirCustom')->where('no_sampel', $request->no_sampel)->first();
+            // dd($cek_lhp->lhpsAirCustom);
             if ($cek_lhp) {
                 $data_entry = array();
                 $data_custom = array();
@@ -397,7 +400,7 @@ class DraftAirController extends Controller
                         'keterangan' => $val['parameter'],
                         'satuan' => $val['satuan'],
                         'hasil' => $val['hasil_uji'],
-                        'hasil_uji_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
+                        'hasil_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
                         'methode' => $val['methode'],
                         'baku_mutu' => json_decode($val['baku_mutu']),
                         'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
@@ -438,21 +441,21 @@ class DraftAirController extends Controller
                     foreach ($cek_lhp->lhpsAirCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
-
+                    // dd('-----------------------------');
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
                     usort($regulasi_custom, function ($a, $b) {
                         return $a['page'] <=> $b['page'];
                     });
-
+                    // dd($groupedCustom[1]);
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
+                        if (empty($item['page'])) continue;
+                        // $id_regulasi = (string)"id_" . $item['id'];
                         $page = $item['page'];
 
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
+                                $data_custom[$page][] = [
                                     'id' => $val['id'],
                                     'name' => $val['parameter_lab'],
                                     'no_sampel' => $request->no_sampel,
@@ -460,7 +463,7 @@ class DraftAirController extends Controller
                                     'keterangan' => $val['parameter'],
                                     'satuan' => $val['satuan'],
                                     'hasil' => $val['hasil_uji'],
-                                    'hasil_uji_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
+                                    'hasil_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
                                     'methode' => $val['methode'],
                                     'baku_mutu' => json_decode($val['baku_mutu']),
                                     'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
@@ -470,7 +473,7 @@ class DraftAirController extends Controller
                     }
                 }
 
-
+                // dd($data_custom);
                 $defaultMethods = Parameter::where('is_active', true)
                     ->where('id_kategori', 1)
                     ->whereNotNull('method')
@@ -482,7 +485,7 @@ class DraftAirController extends Controller
                 return response()->json([
                     'status' => true,
                     'data' => $data_entry,
-                    'next_page' => json_encode($data_custom),
+                    'next_page' => $data_custom,
                     'spesifikasi_method' => $defaultMethods,
                     'keterangan' => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
