@@ -28,32 +28,32 @@ class TemplateLhpErgonomi
             
             $pengukuran = json_decode($dataRula->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
-            $skor = 7;
+            $skor = $pengukuran->skor_rula;
             $tingkatResiko = '';
             $kategoriResiko = '';
             $tindakan = '';
             $result = '';
             if ($skor >= 1 && $skor <= 2) {
-                $tingkatResiko = 0;
+                $tingkatResiko = 1;
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Tidak ada tindakan yang diperlukan';
             } elseif ($skor >= 3 && $skor <= 4) {
-                $tingkatResiko = 1;
+                $tingkatResiko = 2;
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Mungkin diperlukan tindakan';
             } elseif ($skor >= 5 && $skor <= 6) {
-                $tingkatResiko = 2;
+                $tingkatResiko = 3;
                 $kategoriResiko = 'Tinggi';
                 $tindakan = 'Diperlukan tindakan';
             } elseif ($skor >= 7) {
-                $tingkatResiko = 3;
+                $tingkatResiko = 4;
                 $kategoriResiko = 'Sangat Tinggi';
                 $tindakan = 'Diperlukan tindakan sekarang';
             } else {
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor},Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko{$kategoriResiko}, sehingga kemungkinan {$tindakan} untuk mencegah terjadinya kecelakaan kerja dan penyakit akibat kerja.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
