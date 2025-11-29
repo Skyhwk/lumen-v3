@@ -1,4 +1,7 @@
 @if (!empty($custom))
+@php
+    $custom = collect($custom)->filter(fn($d) => empty($d->hasil_uji_json));
+@endphp
     <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>

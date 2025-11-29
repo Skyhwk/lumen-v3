@@ -2,7 +2,7 @@
     $totData = $header->header_table ? count(json_decode($header->header_table)) : 0;
     $colc = '';
     $rowc = 1;
-
+    $detail = $detail->filter(fn($d) => empty($d->hasil_uji_json));
     if ($totData > 1) {
         $colc = 'colspan="' . $totData . '"';
         $rowc = 2;

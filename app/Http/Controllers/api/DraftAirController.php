@@ -81,6 +81,7 @@ class DraftAirController extends Controller
 
     public function handleSubmitDraft(Request $request)
     {
+        // dd($request->hasil_uji_json, $request->custom_hasil_uji_json);
         DB::beginTransaction();
         try {
             // === 1. Ambil header / buat baru ===
@@ -186,37 +187,47 @@ class DraftAirController extends Controller
                 if (isset($request->baku_mutu[$key]) && is_array($request->baku_mutu[$key])) {
                     $baku_mutu = array_slice($request->baku_mutu[$key], 0, count($table_header));
                 }
-
                 LhpsAirDetail::create([
                     'id_header'     => $header->id,
                     'akr'           => $request->akr[$key] ?? '',
                     'parameter_lab' => str_replace("'", '', $key),
                     'parameter'     => $val,
                     'hasil_uji'     => $request->hasil_uji[$key] ?? '',
+                    'hasil_uji_json' => isset($request->hasil_uji_json[$key]) ? $request->hasil_uji_json[$key] : null,
                     'attr'          => $request->attr[$key] ?? '',
                     'satuan'        => $request->satuan[$key] ?? '',
                     'methode'       => $request->methode[$key] ?? '',
                     'baku_mutu'     => json_encode($baku_mutu),
+                    'metode_sampling' => isset($request->metode_sampling_biota[$key])
+                        ? $request->metode_sampling_biota[$key]
+                        : null,
+                    'kesimpulan' => $request->kesimpulan_biota[$key] ?? null
                 ]);
             }
-
+            // dd('--------------------');
             // === 6. Handle custom ===
             LhpsAirCustom::where('id_header', $header->id)->delete();
 
             if ($request->custom_parameter) {
-                foreach ($request->custom_hasil_uji as $page => $params) {
+                foreach ($request->custom_parameter as $page => $params) {
                     foreach ($params as $param => $hasil) {
+                        // if($param === 'Benthos'){
+                        //     dd($request->custom_hasil_uji_json[$page][$param]);
+                        // }
                         LhpsAirCustom::create([
                             'id_header'   => $header->id,
                             'page'        => $page,
                             'parameter_lab' => $request->custom_parameter[$page][$param] ?? '',
                             'akr'         => $request->custom_akr[$page][$param] ?? '',
                             'parameter'   => str_replace("'", '', htmlspecialchars_decode($param, ENT_QUOTES)),
-                            'hasil_uji'   => $hasil,
+                            'hasil_uji'   => $request->custom_hasil_uji[$page][$param] ?? '',
+                            'hasil_uji_json' => isset($request->custom_hasil_uji_json[$page][$param]) ? $request->custom_hasil_uji_json[$page][$param] : null,
                             'attr'        => $request->custom_attr[$page][$param] ?? '',
                             'satuan'      => $request->custom_satuan[$page][$param] ?? '',
                             'methode'     => $request->custom_methode[$page][$param] ?? '',
                             'baku_mutu'   => json_encode($request->custom_baku_mutu[$page][$param] ?? []),
+                            'metode_sampling' => $request->metode_sampling_biota_custom[$page][$param] ?? '',
+                            'kesimpulan' => $request->custom_kesimpulan_biota[$page][$param] ?? null
                         ]);
                     }
                 }
@@ -230,17 +241,18 @@ class DraftAirController extends Controller
                     $header->save();
                 }
             }
-
             $groupedByPage = collect(LhpsAirCustom::where('id_header', $header->id)->get())
                 ->groupBy('page')
                 ->toArray();
 
+            // dd($groupedByPage, LhpsAirDetail::where('id_header', $header->id)->get());
             $fileName = LhpTemplate::setDataDetail(LhpsAirDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
                 ->whereView('DraftAir')
                 ->render('downloadLHPFinal');
 
+                // dd($fileName);
             $header->file_lhp = $fileName;
 
             // if ($header->is_revisi == 1) {
@@ -262,7 +274,8 @@ class DraftAirController extends Controller
             DB::rollBack();
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
-                'status'  => false
+                'status'  => false,
+                'line'    => $th->getLine()
             ], 500);
         }
     }
@@ -372,6 +385,7 @@ class DraftAirController extends Controller
     {
         try {
             $cek_lhp = LhpsAirHeader::with('lhpsAirDetail', 'lhpsAirCustom')->where('no_sampel', $request->no_sampel)->first();
+            // dd($cek_lhp->lhpsAirCustom);
             if ($cek_lhp) {
                 $data_entry = array();
                 $data_custom = array();
@@ -386,6 +400,7 @@ class DraftAirController extends Controller
                         'keterangan' => $val['parameter'],
                         'satuan' => $val['satuan'],
                         'hasil' => $val['hasil_uji'],
+                        'hasil_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
                         'methode' => $val['methode'],
                         'baku_mutu' => json_decode($val['baku_mutu']),
                         'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
@@ -426,21 +441,21 @@ class DraftAirController extends Controller
                     foreach ($cek_lhp->lhpsAirCustom as $val) {
                         $groupedCustom[$val->page][] = $val;
                     }
-
+                    // dd('-----------------------------');
                     // Isi data_custom
                     // Urutkan regulasi_custom berdasarkan page
                     usort($regulasi_custom, function ($a, $b) {
                         return $a['page'] <=> $b['page'];
                     });
-
+                    // dd($groupedCustom[1]);
                     foreach ($regulasi_custom as $item) {
-                        if (empty($item['id']) || empty($item['page'])) continue;
-                        $id_regulasi = (string)"id_" . $item['id'];
+                        if (empty($item['page'])) continue;
+                        // $id_regulasi = (string)"id_" . $item['id'];
                         $page = $item['page'];
 
                         if (!empty($groupedCustom[$page])) {
                             foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
+                                $data_custom[$page][] = [
                                     'id' => $val['id'],
                                     'name' => $val['parameter_lab'],
                                     'no_sampel' => $request->no_sampel,
@@ -448,6 +463,7 @@ class DraftAirController extends Controller
                                     'keterangan' => $val['parameter'],
                                     'satuan' => $val['satuan'],
                                     'hasil' => $val['hasil_uji'],
+                                    'hasil_json' => $val['hasil_uji_json'] ? json_decode($val['hasil_uji_json'], true) : null,
                                     'methode' => $val['methode'],
                                     'baku_mutu' => json_decode($val['baku_mutu']),
                                     'status' => $val['akr'] == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI"
@@ -457,7 +473,7 @@ class DraftAirController extends Controller
                     }
                 }
 
-
+                // dd($data_custom);
                 $defaultMethods = Parameter::where('is_active', true)
                     ->where('id_kategori', 1)
                     ->whereNotNull('method')
@@ -469,7 +485,7 @@ class DraftAirController extends Controller
                 return response()->json([
                     'status' => true,
                     'data' => $data_entry,
-                    'next_page' => json_encode($data_custom),
+                    'next_page' => $data_custom,
                     'spesifikasi_method' => $defaultMethods,
                     'keterangan' => [
                         '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
@@ -578,7 +594,8 @@ class DraftAirController extends Controller
             'hasil_koreksi' => $val->ws_value->faktor_koreksi ?? null,
             'methode' => $param->method,
             'baku_mutu' => ["-"],
-            'status' => $param->status
+            'status' => $param->status,
+            'hasil_json' => $val->ws_value->hasil_json ? json_decode($val->ws_value->hasil_json, true) : null
         ];
 
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
@@ -852,7 +869,7 @@ class DraftAirController extends Controller
     //     try {
     //         if ($isManual) {
     //             $konfirmasiLhp = KonfirmasiLhp::where('no_lhp', $request->cfr)->first();
-    
+
     //             if (!$konfirmasiLhp) {
     //                 $konfirmasiLhp = new KonfirmasiLhp();
     //                 $konfirmasiLhp->created_by = $this->karyawan;
@@ -861,7 +878,7 @@ class DraftAirController extends Controller
     //                 $konfirmasiLhp->updated_by = $this->karyawan;
     //                 $konfirmasiLhp->updated_at = Carbon::now()->format('Y-m-d H:i:s');
     //             }
-    
+
     //             $konfirmasiLhp->no_lhp = $request->cfr;
     //             $konfirmasiLhp->is_nama_perusahaan_sesuai = $request->nama_perusahaan_sesuai;
     //             $konfirmasiLhp->is_alamat_perusahaan_sesuai = $request->alamat_perusahaan_sesuai;
@@ -870,7 +887,7 @@ class DraftAirController extends Controller
     //             $konfirmasiLhp->is_regulasi_sesuai = $request->regulasi_sesuai;
     //             $konfirmasiLhp->is_qr_pengesahan_sesuai = $request->qr_pengesahan_sesuai;
     //             $konfirmasiLhp->is_tanggal_rilis_sesuai = $request->tanggal_rilis_sesuai;
-    
+
     //             $konfirmasiLhp->save();
     //         };
 
@@ -923,7 +940,7 @@ class DraftAirController extends Controller
     //                 $job = new CombineLHPJob($header->no_lhp, $header->file_lhp, $header->no_order, $this->karyawan, $cekDetail->periode);
     //                 $this->dispatch($job);
     //             }
-                
+
     //             EmailLhpRilisHelpers::run([
     //                 'cfr' => $header->no_lhp,
     //                 'no_order' => $header->no_order,
@@ -1064,8 +1081,6 @@ class DraftAirController extends Controller
             return response()->json([
                 'message' => "Approve no sampel {$request->no_sampel} berhasil!"
             ], 200);
-
-
         } catch (\Throwable $e) {
 
             DB::rollBack();

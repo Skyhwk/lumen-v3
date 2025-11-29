@@ -218,7 +218,16 @@ class LhpTemplate
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
         $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
         $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
-
+        if ($header->getTable() === 'lhps_air_header') {
+            $biota = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
+            foreach ($biota as $key => $value) {
+                $is_custom = false;
+                $page = null;
+                $biotaBody[$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                $biotaHeader[$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
+                
+            }
+        }
         if (!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
@@ -226,6 +235,15 @@ class LhpTemplate
                 $htmlCustomHeader[$page] = view($this->directoryDefault . '.customHeader', compact('header', 'detail', 'mode', 'view', 'showKan', 'page'))->render();
                 $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
                 $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
+
+                if ($header->getTable() === 'lhps_air_header') {
+                    $biota_custom = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
+                    foreach ($biota_custom as $key => $value) {
+                        $is_custom = true;
+                        $biotaCustomBody[$page][$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                        $biotaCustomHeader[$page][$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
+                    }
+                }
             }
         }
 
@@ -306,13 +324,29 @@ class LhpTemplate
         $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML($htmlBody);
         $mpdf->SetHTMLFooter($htmlLastFooter);
-
+        if(isset($biotaBody) && isset($biotaHeader)) {
+            foreach ($biotaBody as $page => $custom) {
+                $mpdf->SetHTMLHeader($biotaHeader[$page]);
+                $mpdf->WriteHTML($biotaBody[$page]);
+                $mpdf->SetHTMLFooter($htmlFooter);
+                $mpdf->SetHTMLFooter($htmlLastFooter);
+            }
+        }
         if (isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
             foreach ($htmlCustomBody as $page => $custom) {
                 $mpdf->SetHTMLHeader($htmlCustomHeader[$page]);
                 $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
                 $mpdf->WriteHTML($htmlCustomBody[$page]);
                 $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
+
+                if(isset($biotaCustomBody[$page]) && isset($biotaCustomHeader[$page])) {
+                    foreach ($biotaCustomBody[$page] as $biotaPage => $biotaCustom) {
+                        $mpdf->SetHTMLHeader($biotaCustomHeader[$page][$biotaPage]);
+                        $mpdf->WriteHTML($biotaCustomBody[$page][$biotaPage]);
+                        $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
+                        $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
+                    }
+                }
             }
         }
 
@@ -403,12 +437,12 @@ class LhpTemplate
                     }
                 }
             } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
-                if(collect($dataDecode)->contains(function ($item) {
+                if (collect($dataDecode)->contains(function ($item) {
                     return in_array(
                         $item,
-                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
+                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW', '399;Iso-Moisture', '400;Iso-Percent']
                     );
-                })){
+                })) {
                     $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                     $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
                 } else {
@@ -626,6 +660,14 @@ class LhpTemplate
                         .left {
                             float: left;
                             width: 59%;
+                        }
+                        .leftMiddle{
+                            float: left;
+                            width: 50%;
+                        }
+                        .rightMiddle{
+                            float: right;
+                            width: 49%;
                         }
                         .left2 {
                             float: left;
