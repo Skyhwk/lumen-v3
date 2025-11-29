@@ -577,7 +577,7 @@ class DraftPadatanController extends Controller
             'name' => $val->parameter,
             'no_sampel' => $val->no_sampel,
             'akr' => optional($param)->status === "AKREDITASI" ? '' : 'ẍ',
-            'keterangan' => optional($param)->nama_regulasi,
+            'keterangan' => optional($param)->nama_lhp ?? optional($param)->nama_regulasi,
             'satuan' => optional($param)->satuan,
             'hasil' => \str_replace('_', ' ', $val->ws_value->hasil) ?? null,
             'hasil_koreksi' => $val->ws_value->faktor_koreksi ?? null,
