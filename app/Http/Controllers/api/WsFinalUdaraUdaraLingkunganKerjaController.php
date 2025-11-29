@@ -1281,26 +1281,16 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
         }
     }
 
-    
-    
 
 
+
+    
     public function handleApproveSelected(Request $request)
     {
-        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 2]);
+        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
 
         return response()->json([
             'message' => 'Data berhasil diapprove.',
-            'success' => true,
-        ], 200);
-    }
-
-    public function handleRejectSelected(Request $request)
-    {
-        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 0]);
-
-        return response()->json([
-            'message' => 'Data berhasil direject.',
             'success' => true,
         ], 200);
     }
