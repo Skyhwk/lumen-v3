@@ -492,7 +492,7 @@ class DraftAirController extends Controller
 
                 foreach ($models as $model) {
                     $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                    $data = $model::with('ws_value', 'master_parameter')
+                    $data = $model::with('ws_value', 'master_parameter_air')
                         ->where('no_sampel', $request->no_sampel)
                         ->where($approveField, 1)
                         ->where('is_active', true)
@@ -566,7 +566,7 @@ class DraftAirController extends Controller
 
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
-        $param = $val->master_parameter;
+        $param = $val->master_parameter_air;
         $entry = [
             'id' => $val->id,
             'name' => $val->parameter,
