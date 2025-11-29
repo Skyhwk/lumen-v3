@@ -198,7 +198,7 @@ class TqcUdaraLingkunganKerjaController extends Controller
                     ->where('parameter', $item->parameter)
                     ->first();
 
-                $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+                $bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
                     ->where('id_regulasi', $id_regulasi)
                     ->where('is_active', 1)
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
