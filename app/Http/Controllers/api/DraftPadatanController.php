@@ -497,7 +497,7 @@ class DraftPadatanController extends Controller
 
                 foreach ($models as $model) {
                     $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
-                    $data = $model::with('ws_value', 'master_parameter')
+                    $data = $model::with('ws_value', 'master_parameter_padatan')
                         ->where('no_sampel', $request->no_sampel)
                         ->where($approveField, 1)
                         ->where('is_active', true)
@@ -571,13 +571,13 @@ class DraftPadatanController extends Controller
 
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
-        $param = $val->master_parameter;
+        $param = $val->master_parameter_padatan;
         $entry = [
             'id' => $val->id,
             'name' => $val->parameter,
             'no_sampel' => $val->no_sampel,
             'akr' => optional($param)->status === "AKREDITASI" ? '' : 'ẍ',
-            'keterangan' => optional($param)->nama_regulasi,
+            'keterangan' => optional($param)->nama_lhp ?? optional($param)->nama_regulasi,
             'satuan' => optional($param)->satuan,
             'hasil' => \str_replace('_', ' ', $val->ws_value->hasil) ?? null,
             'hasil_koreksi' => $val->ws_value->faktor_koreksi ?? null,

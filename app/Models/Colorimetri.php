@@ -29,10 +29,15 @@ class Colorimetri extends Sector
         return $this->hasOne('App\Models\Ftc'::class, 'no_sample', 'no_sampel');
     }
 
-    public function master_parameter() {
+    public function master_parameter_air() {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')
             ->where('id_kategori', 1)
-            ->orWhere('id_kategori', 6)
+            ->where('is_active', true);
+    }
+
+    public function master_parameter_padatan() {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')
+            ->where('id_kategori', 6)
             ->where('is_active', true);
     }
     
