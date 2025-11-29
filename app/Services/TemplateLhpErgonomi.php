@@ -71,6 +71,7 @@ class TemplateLhpErgonomi
                 "tanggal_sampling" => isset($dataRula->detail) ? Carbon::parse($dataRula->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRula->divisi,
             ];
             
            
@@ -118,12 +119,13 @@ class TemplateLhpErgonomi
                 "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
-                "aktivitas" => $dataRwl->aktivita,
+                "aktivitas" => $dataRwl->aktivitas,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRwl->divisi,
             ];
             
         //    dd($pengukuran);
@@ -317,6 +319,7 @@ class TemplateLhpErgonomi
                 "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : null,
                 "periode_analisis" => '-',
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
+                "divisi" => $dataReba->divisi,
             ];
 
             
@@ -363,7 +366,7 @@ class TemplateLhpErgonomi
             if ($skor >= 1 && $skor <= 2) {
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Mungkin perlu dilakukan tindakan';
-            } else if ($skor >= 3 && $skor <= 5) {
+            } else if ($skor >= 3 && $skor <= 4) {
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Diperlukan tindakan karena rawan terkena cedera';
             } elseif ($skor >= 5) {
