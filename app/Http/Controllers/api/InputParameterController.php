@@ -4347,7 +4347,7 @@ class InputParameterController extends Controller
 
 				$data 						= new Subkontrak;
 				$data->no_sampel 			= trim($request->no_sample);
-				$data->category_id 			= 1;
+				$data->category_id 			= $stp->category_id;
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
 				$data->hp 					= $request->hp;
@@ -4364,7 +4364,7 @@ class InputParameterController extends Controller
 				$data_kalkulasi['id_subkontrak'] = $data->id;
 				$data_kalkulasi['no_sampel'] = trim($request->no_sample);
 
-				if($stp->sample->nama_kategori == 'Air'){
+				if($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan'){
                     $kalkulasi1 = WsValueAir::create($data_kalkulasi);
                 }else if($stp->sample->nama_kategori == 'Udara'){
                     $existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))
