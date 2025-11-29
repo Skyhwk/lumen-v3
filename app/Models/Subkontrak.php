@@ -36,8 +36,12 @@ class Subkontrak extends Sector
 
     public function master_parameter()
     {
-        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 1);
+        return \App\Models\Parameter::where('nama_lab', $this->parameter)
+            ->whereIn('id_kategori', [1, 6])
+            ->where('is_active', true)
+            ->first();
     }
+
     public function parameter_udara()
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 4);
