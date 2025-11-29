@@ -30,10 +30,17 @@ class Colorimetri extends Sector
     }
 
     public function master_parameter() {
-        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')
-            ->where('id_kategori', 1)
-            ->orWhere('id_kategori', 6)
+        $air = $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')
+        ->where('id_kategori', 1)
+        ->where('is_active', true);
+
+        if(!$air) {
+            $padatan = $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')
+            ->where('id_kategori', 6)
             ->where('is_active', true);
+        }
+
+        return $air ?? $padatan;
     }
     
     public function baku_mutu() {
