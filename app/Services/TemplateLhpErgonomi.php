@@ -299,6 +299,11 @@ class TemplateLhpErgonomi
                 // $result = null;
             }
     
+            $uraianAktivitasK3 =null;
+            if($dataReba->input_k3 != null){
+                $aktivitasK3 =json_decode($dataReba->input_k3);
+                $uraianAktivitasK3=$aktivitasK3->uraian;
+            }
             $pengukuran->tingkat_resiko = $tingkatResiko;
             $pengukuran->kategori_resiko = $kategoriResiko;
             $pengukuran->tindakan = $tindakan;
@@ -309,7 +314,9 @@ class TemplateLhpErgonomi
                 "usia" => $dataReba->usia,
                 "lama_kerja" => json_decode($dataReba->lama_kerja),
                 "jenis_kelamin" => $dataReba->jenis_kelamin,
-                "aktivitas_ukur" => $dataReba->aktivitas_ukur,
+                "aktivitas_ukur" => ($uraianAktivitasK3 != null)
+                    ? ($uraianAktivitasK3[0]->Uraian.' - '.$uraianAktivitasK3[0]->jam.' jam, '.$uraianAktivitasK3[0]->menit.' menit.')
+                    : '',
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataReba->detail) ? Carbon::parse($dataReba->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
