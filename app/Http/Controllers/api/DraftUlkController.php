@@ -249,13 +249,29 @@ class DraftUlkController extends Controller
 
     public function handleMetodeSampling(Request $request)
     {
+        
         try {
             $subKategori = explode('-', $request->kategori_3);
+            $regulasi = json_decode($request->regulasi, true) ?? [];
 
+            $hasil_regulasi = array_map(function ($item) {
+                return explode(';', $item)[0] ?? null;
+            }, $regulasi);
             // Data utama
-            $data = MetodeSampling::where('kategori', '4-UDARA')
+            $parameter = json_decode($request->parameter, true);
+
+            $hasil = array_map(function ($item) {
+                return explode(';', $item)[1] ?? null;
+            }, $parameter);
+
+            if(count($hasil) > 1){
+                $data = MetodeSampling::where('kategori', '4-UDARA')
                 ->where('sub_kategori', strtoupper($subKategori[1]))
                 ->get();
+            } else {
+                $data = MasterBakumutu::whereIn('id_regulasi', $hasil_regulasi)->where('is_active', true)->select('method as metode_sampling')->distinct()->get();
+            }
+            
 
             $result = $data->toArray();
 
@@ -651,11 +667,13 @@ class DraftUlkController extends Controller
                     'udaraSubKontrak',
                     'udaraDirect',
                     'udaraPartikulat',
+                    'udaraDebu'
                 ])
                     ->where('cfr', $request->cfr)
                     ->get();
                 $manyNoSampel = count($validasi) > 1 ? true : false;
                 $listData = collect(); // <- PENTING: pakai collect
+
 
                 foreach ($validasi as $items) {
                     $lingkungan = $items->udaraLingkungan;
@@ -663,13 +681,15 @@ class DraftUlkController extends Controller
                     $subKontrak = $items->udaraSubKontrak;
                     $direct     = $items->udaraDirect;
                     $partikulat = $items->udaraPartikulat;
+                    $debu       = $items->udaraDebu;
 
                     $detail = collect()
                         ->merge($lingkungan)
                         ->merge($microbio)
                         ->merge($subKontrak)
                         ->merge($direct)
-                        ->merge($partikulat);
+                        ->merge($partikulat)
+                        ->merge($debu);
 
                     // MERGE ke $listData, bukan replace
                     $listData = $listData->merge(
@@ -684,7 +704,7 @@ class DraftUlkController extends Controller
                                 'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
                                 'nama_lab'      => $item->parameter,
                                 'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
-                                'tanggal_sampling'    => $item->ws_udara->detailLingkunganKerja->created_at ?? null,
+                                'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
                                 'satuan'        => $newQuery->satuan,
                                 'method'        => $newQuery->method,
                                 'status'        => $newQuery->status,
@@ -708,7 +728,19 @@ class DraftUlkController extends Controller
                     }
                 }
                 // Sort mainData
-                $mainData = collect($mainData)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+                $mainData = collect($mainData)
+                ->sortBy(function ($item) {
+                    if (!empty($item['no_sampel'])) {
+                        $parts = explode('/', $item['no_sampel']);
+                        return (int) ltrim($parts[1] ?? '999999', '0');
+                    }
+
+                    // jika tidak ada no sampel → urut belakangan tapi tetap menurut parameter
+                    return 999999 . mb_strtolower($item['parameter']);
+                })
+                ->values()
+                ->toArray();
+
                 // Sort otherRegulations
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
@@ -949,21 +981,12 @@ class DraftUlkController extends Controller
         try {
             // $noSampel = array_map('trim', explode(',', $request->noSampel));
             $data = OrderDetail::where('cfr', $request->no_lhp)
-                ->where('no_sampel', $request->no_sampel)
-                ->first();
+                // ->where('no_sampel', $request->no_sampel)
+                ->where('is_active', true)
+                ->get();
 
-            if ($data) {
-                $orderDetailParameter = json_decode($data->parameter); // array of strings
-                foreach ($orderDetailParameter as $item) {
-                    $parts = explode(';', $item);
-                    if (isset($parts[1])) {
-                        $parsedParam[] = trim($parts[1]); // "Medan Magnit Statis"
-                    }
-                }
-                $id_kategori = explode('-', $data->kategori_3);
-                $lhps        = LhpsLingHeader::where('no_lhp', $data->cfr)
-                    ->where('no_order', $data->no_order)
-                    ->where('id_kategori_3', $id_kategori[0])
+            if ($data->isNotEmpty()) {
+                $lhps = LhpsLingHeader::where('no_lhp', $request->no_lhp)
                     ->where('is_active', true)
                     ->first();
 
@@ -992,13 +1015,17 @@ class DraftUlkController extends Controller
                     $lhps->delete();
                 }
             }
+            
+            $update = OrderDetail::where('cfr', $request->no_lhp)
+                ->where('is_active', true)
+                ->update([
+                    'status' => 1
+                ]);
 
-            $data->status = 1;
-            $data->save();
             DB::commit();
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Data draft Udara Ambient no LHP ' . $data->no_sampel . ' berhasil direject',
+                'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil direject',
             ]);
         } catch (\Exception $th) {
             DB::rollBack();

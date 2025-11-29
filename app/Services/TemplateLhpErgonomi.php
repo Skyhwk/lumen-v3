@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\View;
 use App\Models\{DataLapanganErgonomi};
 use Carbon\Carbon;
 use App\Helpers\Helper;
+use Illuminate\Support\Str;
 
 class TemplateLhpErgonomi
 {
@@ -22,36 +23,37 @@ class TemplateLhpErgonomi
             ];
             $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
+            ->orderBy('id','desc')
             ->first();
             
             $pengukuran = json_decode($dataRula->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
-            $skor = 7;
+            $skor = $pengukuran->skor_rula;
             $tingkatResiko = '';
             $kategoriResiko = '';
             $tindakan = '';
             $result = '';
             if ($skor >= 1 && $skor <= 2) {
-                $tingkatResiko = 0;
+                $tingkatResiko = 1;
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Tidak ada tindakan yang diperlukan';
             } elseif ($skor >= 3 && $skor <= 4) {
-                $tingkatResiko = 1;
+                $tingkatResiko = 2;
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Mungkin diperlukan tindakan';
             } elseif ($skor >= 5 && $skor <= 6) {
-                $tingkatResiko = 2;
+                $tingkatResiko = 3;
                 $kategoriResiko = 'Tinggi';
                 $tindakan = 'Diperlukan tindakan';
             } elseif ($skor >= 7) {
-                $tingkatResiko = 3;
+                $tingkatResiko = 4;
                 $kategoriResiko = 'Sangat Tinggi';
                 $tindakan = 'Diperlukan tindakan sekarang';
             } else {
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor},Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko{$kategoriResiko}, sehingga kemungkinan {$tindakan} untuk mencegah terjadinya kecelakaan kerja dan penyakit akibat kerja.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
@@ -69,6 +71,7 @@ class TemplateLhpErgonomi
                 "tanggal_sampling" => isset($dataRula->detail) ? Carbon::parse($dataRula->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRula->divisi,
             ];
             
            
@@ -96,6 +99,7 @@ class TemplateLhpErgonomi
             ];
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 5)
+                ->orderBy('id','desc')
                 ->first();
             // $pengukuran = json_decode($dataRwl->pengukuran);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
@@ -115,12 +119,13 @@ class TemplateLhpErgonomi
                 "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
-                "aktivitas" => $dataRwl->aktivita,
+                "aktivitas" => $dataRwl->aktivitas,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRwl->divisi,
             ];
             
         //    dd($pengukuran);
@@ -148,6 +153,7 @@ class TemplateLhpErgonomi
             // olah data:
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
+                ->orderBy('id','desc')
                 ->first();
 
             // $ws_ergo = DataLapanganErgonomi::where('id_data_lapangan', $data->id)->first();
@@ -256,6 +262,7 @@ class TemplateLhpErgonomi
             $dataReba = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 2)
+                ->orderBy('id','desc')
                 ->first();
     
             //$pengukuran = json_decode($dataReba->pengukuran);
@@ -294,6 +301,11 @@ class TemplateLhpErgonomi
                 // $result = null;
             }
     
+            $uraianAktivitasK3 =null;
+            if($dataReba->input_k3 != null){
+                $aktivitasK3 =json_decode($dataReba->input_k3);
+                $uraianAktivitasK3=$aktivitasK3->uraian;
+            }
             $pengukuran->tingkat_resiko = $tingkatResiko;
             $pengukuran->kategori_resiko = $kategoriResiko;
             $pengukuran->tindakan = $tindakan;
@@ -304,7 +316,9 @@ class TemplateLhpErgonomi
                 "usia" => $dataReba->usia,
                 "lama_kerja" => json_decode($dataReba->lama_kerja),
                 "jenis_kelamin" => $dataReba->jenis_kelamin,
-                "aktivitas_ukur" => $dataReba->aktivitas_ukur,
+                "aktivitas_ukur" => ($uraianAktivitasK3 != null)
+                    ? ($uraianAktivitasK3[0]->Uraian.' - '.$uraianAktivitasK3[0]->jam.' jam, '.$uraianAktivitasK3[0]->menit.' menit.')
+                    : '',
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataReba->detail) ? Carbon::parse($dataReba->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
@@ -312,6 +326,7 @@ class TemplateLhpErgonomi
                 "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : null,
                 "periode_analisis" => '-',
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
+                "divisi" => $dataReba->divisi,
             ];
 
             
@@ -344,6 +359,7 @@ class TemplateLhpErgonomi
             $dataRosa = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 4)
+                ->orderBy('id','desc')
                 ->first();
     
             // $pengukuran = json_decode($dataRosa->pengukuran);
@@ -357,7 +373,7 @@ class TemplateLhpErgonomi
             if ($skor >= 1 && $skor <= 2) {
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Mungkin perlu dilakukan tindakan';
-            } else if ($skor >= 3 && $skor <= 5) {
+            } else if ($skor >= 3 && $skor <= 4) {
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Diperlukan tindakan karena rawan terkena cedera';
             } elseif ($skor >= 5) {
@@ -444,7 +460,10 @@ class TemplateLhpErgonomi
             $pdf = new PDF($mpdfConfig);
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
                 ->where('method', 8)
+                ->orderBy('id','desc')
                 ->first();
+            $dataJson = json_decode($dataRwl->input_k3);
+            
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
@@ -458,23 +477,301 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
-                'aktifitas_k3' =>json_decode($dataRwl->input_k3)
+                'aktifitas_k3' =>json_decode($dataRwl->input_k3) ?? (object) ['uraian' => [], 'analisis_potensi_bahaya' => '', 'kesimpulan_survey_lanjutan' => '']
             ];
+            
+            
+
+
              
     
             // $pengukuran = json_decode($dataRwl->pengukuran,true);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
 
+            $mapPointBagianAtas=[
+                'Leher'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Bahu'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Rotasi Lengan'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Pergelangan Tangan'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Gerakan Lengan Sedang'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Gerakan Lengan Intensif'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Mengetik Berselang'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>0,
+                    '50%-100%'=>1
+                ],
+                'Mengetik Intensif'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>3
+                ],
+                'Penggenggam Kuat'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>3
+                ],
+                'Memencet atau Menjepit'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Kuliat Tertekan'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Menggunakan Telapak Tangan'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Getaran Lokal'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Faktor Tidak Dapat Di Kontrol'=>[
+                    'Ditemukan 1 faktor Kontrol'=>1,
+                    'Ditemukan 2 atau lebih faktor kontrol'=>2
+                ],
+                'Pencahayaan'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>0,
+                    '50%-100%'=>1
+                ],
+                'Temperatur'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>0,
+                    '50%-100%'=>1
+                ]
+            ];
+
+            $mapPointBagianBawah=[
+                'Tubuh Membungkuk 20°-45°'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Tubuh Membungkuk >45°'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Tubuh Menekuk 30°'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Tubuh Pemuntiran Torso'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Gerakan Paha'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Posisi Berlutut'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Pergelangan Kaki'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Aktivitas Pergelangan Kaki'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Duduk Tanpa Sandaran'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Duduk Tanpa Pijakan'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>0,
+                    '50%-100%'=>1
+                ],
+                'Tubuh Tertekan Benda'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Lutut Untuk Memukul'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Getaran Seluruh Tubuh'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Beban Sedang'=>[
+                    '0%-25%'=>0,
+                    '25%-50%'=>1,
+                    '50%-100%'=>2
+                ],
+                'Beban Berat'=>[
+                    '0%-25%'=>1,
+                    '25%-50%'=>2,
+                    '50%-100%'=>3
+                ],
+                'Faktor Kontrol'=>[
+                    'Ditemukan 1 faktor Kontrol'=>1,
+                    'Ditemukan 2 atau lebih faktor kontrol'=>2,
+                ]
+            ];
+
+            $mapPointBagianAtas =Helper::normalize_format_key($mapPointBagianAtas,true);
+            $mapPointBagianBawah =Helper::normalize_format_key($mapPointBagianBawah,true);
             
-            $dataAtas  = $this->flattenPengukuran("Tubuh Bagian Atas", $pengukuran->tubuh_bagian_atas);
             
-            $dataBawah = $this->flattenPengukuran("Tubuh Bagian Bawah", $pengukuran->tubuh_bagian_bawah);
             
-            $groupedAtas  = $this->groupByKategori($dataAtas);
-            $groupedBawah  = $this->groupByKategori($dataBawah);
-            // dd($personal);
-            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','dataAtas','groupedAtas','groupedBawah','personal','ttd'))->render();
+
+            $skorDataAtasGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->getaran);
+            
+            $skorDataAtasLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->lingkungan);
+            $skorDataAtasUsahaTangan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->usaha_tangan);
+            $skorDataAtasGerakanLengan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->gerakan_lengan);
+            $skorDataAtasPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->postur_janggal);
+            $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->penggunaan_keyboard);
+            $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol);
+            $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->tekanan_langsung_ke_bagian_tubuh);
+            
+            $skorDataBawahGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->getaran);
+            $skorDataBawahLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->lingkungan);
+            $skorDataBawahUsahaTangan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->usaha_tangan);
+            $skorDataBawahGerakanLengan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->gerakan_lengan);
+            $skorDataBawahPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->postur_janggal);
+            $skorDataBawahPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->penggunaan_keyboard);
+            $skorDataBawahPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol);
+            $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_ke_bagian_tubuh);
+            //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
+            
+            $skorDataAtas = array_merge(
+                $skorDataAtasGetaran,
+                $skorDataAtasLingkungan,
+                $skorDataAtasUsahaTangan,
+                $skorDataAtasGerakanLengan,
+                $skorDataAtasPosturJanggal,
+                $skorDataAtasPosturPenggunaanKeyboard,
+                $skorDataAtasPosturFaktorTidakDapatDiKontrol,
+                $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
+            );
+           
+            $skorDataBawah = array_merge(
+                (array) $skorDataBawahGetaran,
+                (array) $skorDataBawahLingkungan,
+                (array) $skorDataBawahUsahaTangan,
+                (array) $skorDataBawahGerakanLengan,
+                (array) $skorDataBawahPosturJanggal,
+                (array) $skorDataBawahPosturPenggunaanKeyboard,
+                (array) $skorDataBawahPosturFaktorTidakDapatDiKontrol,
+                (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh
+            );
+            // clearData
+            foreach($skorDataAtas as $key => $value){
+                if(is_array($value) && empty($value)){
+                    unset($skorDataAtas[$key]);
+                    continue; // Lanjut ke item berikutnya
+                }
+                if($value === "Tidak"){
+                    unset($skorDataAtas[$key]);
+                    continue; // Lanjut ke item berikutnya
+                }
+                //buat key baru
+                if($value == 'Ditemukan 1 faktor Kontrol'){
+                    $skorDataAtas[$key] = [
+                        'rawTax' => $value, // Simpan teks aslinya (opsional)
+                        'skor'       => 1,
+                        'keterangan'     =>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat",
+                        'index'      =>14,
+                        'label'      =>"faktor"
+                         // Masukkan skornya
+                    ];
+                }else if($value == 'Ditemukan 2 atau lebih faktor kontrol'){
+                    $skorDataAtas[$key] = [
+                        'rawTax' => $value,
+                        'skor'       => 2,
+                        'keterangan'     =>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat",
+                        'index'      =>14,
+                        'label'      =>"faktor"
+                    ];
+                }
+            }
+            
+            foreach($skorDataBawah as $key => $value){
+                if(is_array($value) && empty($value)){
+                    unset($skorDataBawah[$key]);
+                    continue; // Lanjut ke item berikutnya
+                }
+                if($value === "Tidak"){
+                    unset($skorDataBawah[$key]);
+                    continue; // Lanjut ke item berikutnya
+                }
+                //buat key baru
+                if($value == 'Ditemukan 1 faktor Kontrol'){
+                    $skorDataBawah[$key] = [
+                        'rawTax' => $value, // Simpan teks aslinya (opsional)
+                        'skor'       => 1,
+                        'keterangan'     =>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja",
+                        'index'      =>32,
+                        'label'      =>"faktor"       // Masukkan skornya
+                    ];
+                }else if($value == 'Ditemukan 2 atau lebih faktor kontrol'){
+                    $skorDataBawah[$key] = [
+                        'rawTax' => $value,
+                        'skor'       => 2,
+                        'keterangan'     =>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja",
+                        'index'      =>32,
+                        'label'      =>"faktor"
+                    ];
+                }
+            }
+            $faktorResiko =$this->calculateSkorManual(optional($pengukuran->manual_handling));
+            $manualHandling = $pengukuran->manual_handling;
+           
+            if(optional($manualHandling)->posisi_angkat_beban != null && optional($manualHandling)->estimasi_berat_benda){
+                $hasilResikoBeban = $this->hitungResikoBeban(
+                    $manualHandling->posisi_angkat_beban, 
+                    $manualHandling->estimasi_berat_benda
+                );
+            }else{
+                $hasilResikoBeban =null;
+            }
+            
+            $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','hasilResikoBeban','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
             return "<p style='color:red'>View <b>ergonomgontrak</b> tidak ditemukan!</p>";
@@ -505,6 +802,7 @@ class TemplateLhpErgonomi
             // $pengukuran = json_decode($dataRwl->pengukuran);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
+            
             $sebelumKerja = json_decode($dataRwl->sebelum_kerja);
             $setelahKerja = json_decode($dataRwl->setelah_kerja);
             $personal = (object) [
@@ -520,7 +818,7 @@ class TemplateLhpErgonomi
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
                 'jabatan' =>$dataRwl->divisi,
-                'aktifitas_k3' =>json_decode($dataRwl->input_k3)
+                'aktifitas_k3' =>json_decode($dataRwl->input_k3) ?? (object) ['uraian' => [], 'analisis_potensi_bahaya' => '', 'kesimpulan_survey_lanjutan' => '']
             ];
 
             
@@ -635,6 +933,325 @@ class TemplateLhpErgonomi
 
 
         return $result;
+    }
+
+    private function calculateSkorSNI($pengukuran)
+    {
+        // 1. Ubah SEMUA jadi Array murni biar tidak pusing Object vs Array
+        if($pengukuran == null ||$pengukuran == "Tidak"){
+            return [];
+        }
+        $data = json_decode(json_encode($pengukuran), true);
+        
+        // 2. Panggil fungsi pembantu untuk menyelam dan menghitung
+        $this->hitungRecursive($data);
+
+        // 3. Lihat hasilnya
+        return $data;
+    }
+    private function calculateSkorManual($pengukuran)
+    {
+        
+        if (empty($pengukuran)) {
+            return [];
+        }
+
+        // 2. Ambil bagian faktor_resiko (sesuaikan dengan struktur object Anda)
+        // Jika $pengukuran itu sendiri sudah isinya faktor_resiko, hapus property aksesnya.
+        $sourceData = isset($pengukuran->faktor_resiko) ? $pengukuran->faktor_resiko : $pengukuran;
+
+        // 3. JURUS ANDALAN: Ubah Object nested menjadi Array Murni
+        // Ini mengubah struktur {#...} menjadi [...] agar mudah di-looping
+        $dataArray = json_decode(json_encode($sourceData), true);
+        
+        // 4. Panggil fungsi pengolah data (Pass by Reference)
+        $this->parseSkorRecursive($dataArray);
+        $urutanSesuaiTabel = [
+            'batang_tubuh_memuntir_saat_mengangkat',
+            'mengangkat_dengan_satu_tangan',
+            'mengangkat_dengan_beban_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
+            'mengangkat_1_5_kali_per_menit',
+            'mengangkat_lebih_dari_5_kali_per_menit',
+            'posisi_benda_yang_diangkat_berada_di_atas_bahu',
+            'posisi_benda_yang_diangkat_berada_di_bawah_posisi_siku',
+            'mengangkut_membawa_benda_dengan_jarak_3_9_meter',
+            'mengangkut_membawa_benda_dengan_jarak_lebih_9_meter',
+            'mengangkat_benda_saat_duduk_atau_bertumpu_pada_lutut'
+        ];
+        $dataSudahUrut = [];
+        foreach ($urutanSesuaiTabel as $kunci) {
+            if (isset($dataArray[$kunci])) {
+                $dataSudahUrut[$kunci] = $dataArray[$kunci];
+                // Hapus dari array lama biar ketahuan mana sisa yang belum masuk (opsional)
+                unset($dataArray[$kunci]); 
+            }
+        }
+        // if (!empty($dataArray)) {
+        //     $dataSudahUrut = array_merge($dataSudahUrut, $dataArray);
+        // }
+        // 5. Cek Hasilnya
+        return $dataSudahUrut;
+    }
+    
+    private function hitungRecursive(&$items, $namaKey = null)
+    {
+        // 1. GUARD CLAUSE: Jika items bukan array (misal string "Tidak"), stop dan return array kosong.
+        if (!is_array($items)) {
+            return [];
+        }
+      
+
+        $hasilKalkulasi = [];
+
+        // 2. CEK APAKAH INI NODE TARGET? (Yang punya nilai durasi)
+        // Sesuaikan key dengan JSON Anda: "Durasi Gerakan" atau "durasi_gerakan"
+        $keyDurasi = isset($items['Durasi Gerakan']) ? 'Durasi Gerakan' : (isset($items['durasi_gerakan']) ? 'durasi_gerakan' : null);
+        $keyOvertime = isset($items['Overtime Status']) ? 'Overtime Status' : (isset($items['overtime']) ? 'overtime' : null);
+
+        $arrayMap =[
+            "leher" =>["ket"=>"Leher: memuntir atau menekuk","index"=>1,"label"=>"Postur Janggal"],
+            "bahu" =>["ket"=>"Bahu: Lengan / siku yang tak ditopang di atas tinggi perut","index"=>2,"label"=>"Postur Janggal"],
+            "rotasi_lengan" =>["ket"=>"Rotasi lengan bawah secara cepat","index"=>3,"label"=>"Postur Janggal"],
+            "pergelangan_tangan" =>["ket"=>"Pergelangan tangan: Menekuk ke depan atau ke samping","index"=>4,"label"=>"Postur Janggal"],
+            "gerakan_lengan_sedang" =>["ket"=>"Sedang: Gerakan stabil dengan jeda teratur","index"=>5,"label"=>"Gerakan Lengan"],
+            "gerakan_lengan_intensif" =>["ket"=>"Intensif: Gerakan cepat yang stabil tanpa jeda teratur","index"=>6,"label"=>"Gerakan Lengan"],
+            "mengetik_berselang" =>["ket"=>"Mengetik secara berselang (diselingi aktifitas / istirahat)","index"=>7,"label"=>"Penggunaan Keyboard"],
+            "mengetik_intensif" =>["ket"=>"Mengetik secara Intensif","index"=>8,"label"=>"Penggunaan Keyboard"],
+            "penggenggam_kuat" =>["ket"=>"Menggenggam dalam posisi <i>power grip</i> gaya > 5 kg","index"=>9,"label"=>"Usaha Tangan (Repetitif maupun Statis)"],
+            "memencet_atau_menjepit" =>["ket"=>"Memencet / Menjepit benda dengan jari gaya > 1 kg","index"=>10,"label"=>"Usaha Tangan (Repetitif maupun Statis)"],
+            "kuliat_tertekan" =>["ket"=>"Kulit tertekan oleh benda yang keras atau runcing","index"=>11,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "menggunakan_telapak_tangan" =>["ket"=>"Menggunakan telapak atau pergelangan tangan untuk memukul","index"=>12,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "getaran_lokal" =>["ket"=>"Getaran lokal (tanpa peredam)","index"=>13,"label"=>"Getaran"],
+            "faktor_tidak_dapat_di_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat","index"=>14,"label"=>"faktor"],
+            "pencahayaan" =>["ket"=>"Pencahayaan (Pencahayaan yang kurang atau silau)","index"=>15,"label"=>"Lingkungan"],
+            "temperatur" =>["ket"=>"Temperatur terlalu tinggi atau rendah","index"=>16,"label"=>"Lingkungan"],
+            "tubuh_membungkuk_20_45" =>["ket"=>"Tubuh membungkuk ke depan / menekuk ke samping 20 - 45°","index"=>17,"label"=>"Postur Janggal"],
+            "tubuh_membungkuk_gt_45" =>["ket"=>"Tubuh membungkuk ke depan > 45°","index"=>18,"label"=>"Postur Janggal"],
+            "tubuh_menekuk_30" =>["ket"=>"Tubuh menekuk ke belakang hingga 30°","index"=>19,"label"=>"Postur Janggal"],
+            "tubuh_pemuntiran_torso" =>["ket"=>"Torso (batang tubuh) Pemuntiran","index"=>20,"label"=>"Postur Janggal"],
+            "gerakan_paha" =>["ket"=>"Gerakan paha menjauhi tubuh ke samping secara berulang-ulang","index"=>21,"label"=>"Postur Janggal"],
+            "posisi_berlutut" =>["ket"=>"Posisi berlutut atau jongkok","index"=>22,"label"=>"Postur Janggal"],
+            "pergelangan_kaki" =>["ket"=>"Pergelangan kaki menekuk ke atas / ke bawah secara berulang","index"=>23,"label"=>"Postur Janggal"],
+            "aktivitas_pergelangan_kaki" =>["ket"=>"Aktivitas pergelangan kaki / berdiri dengan pijakan tidak memadai","index"=>24,"label"=>"Postur Janggal"],
+            "duduk_tanpa_sandaran" =>["ket"=>"Duduk dalam waktu yang lama tanpa sandaran yang memadai","index"=>25,"label"=>"Postur Janggal"],
+            "duduk_tanpa_pijakan" =>["ket"=>"Bekerja berdiri dalam waktu lama / duduk tanpa pijakan memadai","index"=>26,"label"=>"Postur Janggal"],
+            "tubuh_tertekan_benda" =>["ket"=>"Tubuh tertekan oleh benda yang keras / runcing","index"=>27,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "lutut_untuk_memukul" =>["ket"=>"Menggunakan lutut untuk memukul / menendang","index"=>28,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "getaran_seluruh_tubuh" =>["ket"=>"Getaran pada seluruh tubuh (tanpa peredam)","index"=>29,"label"=>"Getaran"],
+            "beban_sedang" =>["ket"=>"Beban sedang","index"=>30,"label"=>"Aktifitas Mendorong / Menarik beban"],
+            "beban_berat" =>["ket"=>"Beban berat","index"=>31,"label"=>"Aktifitas Mendorong / Menarik beban"],
+            "faktor_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol pekerja", "index"=>32,"label"=>"x"],
+        ];
+
+        if ($keyDurasi) {
+            // --- PROSES HITUNG SKOR ---
+            $parts = explode(';', $items[$keyDurasi]);
+            $point = isset($parts[0]) ? (int)$parts[0] : 0;
+            
+            // Cek overtime (handle jika string "Tidak" dianggap 0)
+            $valOvertime = $items[$keyOvertime] ?? 0;
+            $overtime = (is_numeric($valOvertime)) ? (float)$valOvertime : 0;
+            
+            $items['skor'] = $point + $overtime;
+
+            // --- AMBIL DATA DARI MAP ARRAY ---
+            // Asumsi $this->arrayMap tersedia di class ini
+            if ($namaKey && isset($arrayMap[$namaKey])) {
+                $items['keterangan'] = $arrayMap[$namaKey]['ket'] ?? '-';
+                $items['index']      = $arrayMap[$namaKey]['index'] ?? 0;
+                $items['label']      = $arrayMap[$namaKey]['label'] ?? $namaKey;
+            }
+
+            // Kembalikan item ini sebagai array tunggal agar bisa di-merge
+            return [$items];
+        }
+
+        // 3. JIKA BUKAN TARGET, CARI KE DALAM ANAKNYA (REKURSIF)
+        foreach ($items as $key => &$subItem) {
+            // Panggil fungsi ini untuk anak-anaknya
+            
+            if (is_string($subItem) && $subItem != "" && $key !== 'skor' && $key !== 'keterangan') {
+                $subItem = []; // Mengganti string "Tidak" menjadi [] melalui referensi
+                continue; // Lanjut ke item berikutnya
+            }
+            // 3. Lanjut Rekursi ke anak yang array
+            if (is_array($subItem)) { // Pastikan hanya array yang direkursi
+                $hasilAnak = $this->hitungRecursive($subItem, $key);
+                
+                if (!empty($hasilAnak)) {
+                    $hasilKalkulasi = array_merge($hasilKalkulasi, $hasilAnak);
+                }
+            }
+        }
+
+        // 4. KEMBALIKAN KUMPULAN HASIL
+        return $hasilKalkulasi;
+    }
+    private function parseSkorRecursive(&$items,$parentKey = null)
+    {
+        foreach ($items as $key => &$value) {
+            
+            // KASUS 1: Apakah ini String target? (Contoh: "2-Pengangkatan sering...")
+            // Cirinya: Berupa String DAN punya tanda strip "-"
+            if (is_string($value) && strpos($value, '-') !== false) {
+                
+                // Pecah berdasarkan strip pertama saja
+                // "2-Pengangkatan" -> Jadi ["2", "Pengangkatan"]
+                $parts = explode('-', $value, 2); 
+                
+                $skor = isset($parts[0]) ? (int) $parts[0] : 0;
+                $ket  = isset($parts[1]) ? $parts[1] : '';
+
+                // UBAH format string tadi menjadi Array yang punya skor
+                $value = [
+                    'raw_text'   => Str::headline($parentKey), // Simpan teks asli
+                    'skor'       => $skor,  // Ini angka 2 nya
+                    'keterangan' => $ket    // Ini keterangannya
+                ];
+            }
+
+            // KASUS 2: Masih berupa Array/Container? (Menyelam lagi)
+            // Ini akan menangani key "0", "1", dst.
+            elseif (is_array($value)) {
+                $this->parseSkorRecursive($value,$key);
+            }
+        }
+    }
+
+    private function hitungResikoBeban($inputJarakString, $inputBeratString) {
+    
+        // --- 1. PARSING INPUT JARAK ---
+        // Ubah kalimat "Pengangkatan dengan jarak dekat" menjadi "jarak_dekat"
+        $jarakKey = '';
+        if (stripos($inputJarakString, 'dekat') !== false) {
+            $jarakKey = 'jarak_dekat';
+        } elseif (stripos($inputJarakString, 'sedang') !== false) {
+            $jarakKey = 'jarak_sedang';
+        } elseif (stripos($inputJarakString, 'jauh') !== false) {
+            $jarakKey = 'jarak_jauh';
+        } else {
+            return ['zona' => 'Tidak Diketahui', 'poin' => 0, 'color' => 'grey'];
+        }
+
+        // --- 2. PARSING INPUT BERAT ---
+        // Ubah "Berat benda Sekitar 7 - 23 Kg" menjadi angka.
+        // Kita ambil angka TERBESAR dalam string untuk keamanan (Safety Factor)
+        // Contoh: "7 - 23" -> Kita ambil 23 agar masuk range "Hati-hati"
+        preg_match_all('/[\d\.]+/', $inputBeratString, $matches);
+        $angkaDitemukan = $matches[0] ?? [0];
+        $berat = max($angkaDitemukan); // Ambil angka terbesar (misal 23)
+
+        // --- 3. DEFINISI RULES (Sesuai Tabel) ---
+        $mapArray = [
+            'jarak_dekat' => [
+                'label' => 'Pengangkatan dengan jarak dekat',
+                'rules' => [
+                    [
+                        'zona'      => 'Zona Berbahaya',
+                        'color'     => 'red',
+                        'operator'  => '>',    
+                        'limit'     => 23,
+                        'poin'      => 5 
+                    ],
+                    [
+                        'zona'      => 'Zona Hati-Hati',
+                        'color'     => 'yellow',
+                        'operator'  => 'between', 
+                        'min'       => 7,
+                        'max'       => 23,
+                        'poin'      => 3
+                    ],
+                    [
+                        'zona'      => 'Zona Aman',
+                        'color'     => 'green',
+                        'operator'  => '<',    
+                        'limit'     => 7,
+                        'poin'      => 0
+                    ]
+                ]
+            ],
+            'jarak_sedang' => [
+                'label' => 'Pengangkatan dengan jarak sedang',
+                'rules' => [
+                    [
+                        'zona'      => 'Zona Berbahaya',
+                        'color'     => 'red',
+                        'operator'  => '>',
+                        'limit'     => 16,
+                        'poin'      => 6
+                    ],
+                    [
+                        'zona'      => 'Zona Hati-Hati',
+                        'color'     => 'yellow',
+                        'operator'  => 'between',
+                        'min'       => 5,
+                        'max'       => 16,
+                        'poin'      => 3
+                    ],
+                    [
+                        'zona'      => 'Zona Aman',
+                        'color'     => 'green',
+                        'operator'  => '<',
+                        'limit'     => 5,
+                        'poin'      => 0
+                    ]
+                ]
+            ],
+            'jarak_jauh' => [
+                'label' => 'Pengangkatan dengan jarak jauh',
+                'rules' => [
+                    [
+                        'zona'      => 'Zona Berbahaya',
+                        'color'     => 'red',
+                        'operator'  => '>',
+                        'limit'     => 13,
+                        'poin'      => 6
+                    ],
+                    [
+                        'zona'      => 'Zona Hati-Hati',
+                        'color'     => 'yellow',
+                        'operator'  => 'between',
+                        'min'       => 4.5,
+                        'max'       => 13,
+                        'poin'      => 3
+                    ],
+                    [
+                        'zona'      => 'Zona Aman',
+                        'color'     => 'green',
+                        'operator'  => '<',
+                        'limit'     => 4.5,
+                        'poin'      => 0
+                    ]
+                ]
+            ]
+        ];
+
+        // --- 4. LOGIKA PENCOCOKAN ---
+
+        if (!isset($mapArray[$jarakKey])) { // Perbaikan: Gunakan $mapArray bukan $map
+            return "Kategori jarak tidak ditemukan.";
+        }
+
+        $rules = $mapArray[$jarakKey]['rules'];
+
+        foreach ($rules as $rule) {
+            if ($rule['operator'] === '>') {
+                if ($berat > $rule['limit']) {
+                    return $rule;
+                }
+            } elseif ($rule['operator'] === '<') {
+                if ($berat < $rule['limit']) {
+                    return $rule;
+                }
+            } elseif ($rule['operator'] === 'between') {
+                // Gunakan >= dan <= agar angka batas (misal 23) masuk ke sini
+                if ($berat >= $rule['min'] && $berat <= $rule['max']) {
+                    return $rule;
+                }
+            }
+        }
+        
+        return null;
     }
     
     private function groupByKategori($data)

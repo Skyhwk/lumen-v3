@@ -14,6 +14,7 @@ class Necton
         return [
             [
                 'data' => $nectonResult['data'],
+                'name' => 'Necton',
                 'result' => [
                     'individu' => $nectonResult['individu'],
                     'taxa' => $nectonResult['taxa'],

@@ -490,7 +490,7 @@
                     </table>
                 </div>
 
-                <div style="padding: 5px;">
+                <div style="padding: 2px;">
                     <div class="info-header">Informasi Pelanggan</div>
                     <table class="info-table">
                         <tr>
@@ -504,6 +504,7 @@
                             <td style="width: 72%;text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
+                    <!-- informasi sampling -->
                     <div class="info-header">Informasi Sampling</div>
                     <table class="info-table">
                         <tr>
@@ -511,7 +512,18 @@
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%;text-align:start; ">{{$personal->tanggal_sampling}}</td>
                         </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;"></td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;"></td>
+                        </tr>
                     </table>
+                    <!-- individu -->
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
                     <table class="info-table">
                         <tr>
@@ -520,9 +532,19 @@
                             <td style="width: 72%;text-align:start; ">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
+                            <td style="width: 25%; text-align:start;">Usia</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->divisi}}</td>
+                            <td style="text-align:start;">
+                                {{$personal->divisi}}
+                                @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
+                                    , {{$personal->aktivitas_ukur}}
+                                @endif
+                            </td>
                         </tr>
                     </table>
                 </div>
@@ -572,40 +594,29 @@
                     ** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Peraturan Menteri Ketenagakerjaan Republik
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
-                <div class="signature-section">
-                    @if($ttd != null)
-                        @if($ttd->qr_path != null)
-                            <table class="signature-table">
-                                <tr>
-                                    <td class="signature-left"></td>
-                                    <td class="signature-right">
-                                        <div class="signature-date">
-                                           Tangerang, {{ $ttd->tanggal }}
-                                        </div><br>
-                                        <div class="signature-text">
-                                                <img src="{{ $ttd->qr_path }}" width="50" height="50" alt="ttd">
-                                        </div>
-                                    </td>
-                                </tr>
-                            </table>
-                        @else
-                            <table class="signature-table">
-                                <tr>
-                                    <td class="signature-left"></td>
-                                    <td class="signature-right" style="text-align: center;">
-                                        <div class="signature-date">
-                                            Tangerang, 13 Agustus 2025
-                                        </div><br><br><br>
-                                        <div class="signature-text">
-                                            <strong>(Abidah Walfathiyyah)</strong><br>
-                                            <span>Technical Control Supervisor</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </table>
-                        @endif
-                    @endif
-                </div>
+                <!-- <table style="width: 100%; margin-top: 10px; border: none;">
+                        <tr>
+                        <td style="width: 50%; border: none;"></td>
+
+                        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+                            
+                            <div style="margin-bottom: 5px;">
+                                Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
+                            </div>
+
+                            @if($ttd && $ttd->qr_path)
+                                <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
+                            @else
+                                <br><br><br>
+                                <div style="font-weight: bold; text-decoration: underline;">
+                                    (Abidah Walfathiyyah)
+                                </div>
+                                <div>Technical Control Supervisor</div>
+                            @endif
+
+                        </td>
+                    </tr>
+                </table> -->
             </div>
         </div>
     </div>

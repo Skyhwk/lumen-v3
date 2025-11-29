@@ -38,30 +38,29 @@ class WsFinalUdaraErgonomiController extends Controller
 		return $minutes;
 	}
 
-	public function detail(Request $request)
-	{
-		try {
-			$data = ErgonomiHeader::with('datalapangan', 'ws_value_ergonomi')
-				->where('no_sampel', $request->no_sampel)
-				->where('is_approve', true)
-				->where('is_active', true)
-				->select('*')
-				->addSelect(DB::raw("'ergonomi' as data_type"))
-				->get();
-			foreach ($data as $key => $value) {
-				if ($value->ws_value_ergonomi) {
-					$value->datalapangan->pengukuran = json_decode($value->ws_value_ergonomi->pengukuran);
-				} else {
-					$value->datalapangan->pengukuran = json_decode($value->datalapangan->pengukuran);
-				}
+		public function detail(Request $request)
+		{
+			try {
+				$data = ErgonomiHeader::with('datalapangan')
+					->where('no_sampel', $request->no_sampel)
+					->where('is_approve', true)
+					->where('is_active', true)
+					->select('*')
+					->addSelect(DB::raw("'ergonomi' as data_type"))
+					->get()->map(function ($item) {
+						if ($item->datalapangan) {
+							$item->datalapangan->pengukuran = json_decode($item->datalapangan->pengukuran);
+						}
+						return $item;
+					});
+				
+				return Datatables::of($data)->make(true);
+			} catch (\Throwable $th) {
+				return response()->json([
+					'message' => $th->getMessage(),
+				], 401);
 			}
-			return Datatables::of($data)->make(true);
-		} catch (\Throwable $th) {
-			return response()->json([
-				'message' => $th->getMessage(),
-			], 401);
 		}
-	}
 
 	public function detailLapangan(Request $request)
 	{
