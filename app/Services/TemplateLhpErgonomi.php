@@ -366,7 +366,7 @@ class TemplateLhpErgonomi
             if ($skor >= 1 && $skor <= 2) {
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Mungkin perlu dilakukan tindakan';
-            } else if ($skor >= 3 && $skor <= 5) {
+            } else if ($skor >= 3 && $skor <= 4) {
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Diperlukan tindakan karena rawan terkena cedera';
             } elseif ($skor >= 5) {
