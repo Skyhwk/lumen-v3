@@ -243,11 +243,11 @@
                         <td colspan="5" width="65%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
                     </tr>
                     <tr>
-                        <td>Nilai</td>
-                        <td>Skoring (1)</td>
-                        <td>Beban (2)</td>
-                        <td>Otot (3)</td>
-                        <td>Total Skor Tabel A (1+2+3)</td>
+                        <td width="15%">Nilai</td>
+                        <td width="15%">Skoring (1)</td>
+                        <td width="15%">Beban (2)</td>
+                        <td width="15%">Otot (3)</td>
+                        <td width="40%">Total Skor Tabel A (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
@@ -273,21 +273,20 @@
                         <td class="text-left">Pergelangan Tangan Memuntir</td>
                         <td>{{$pengukuran->tangan_memuntir}}</td>
                     </tr>
-                </table>
-
-                <!-- Tabel B -->
-                <table cellpadding="3" cellspacing="0">
+                    <tr>
+                        <td colspan="7" style="border-left: none; border-right: none;"></td>
+                    </tr>
                     <tr>
                         <td rowspan="2" width="5%">No</td>
                         <td rowspan="2" width="30%">Jenis Skoring</td>
                         <td colspan="5" width="65%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
                     </tr>
                     <tr>
-                        <td>Nilai</td>
-                        <td>Skoring (1)</td>
-                        <td>Beban (2)</td>
-                        <td>Otot (3)</td>
-                        <td>Total Skor Tabel B (1+2+3)</td>
+                        <td width="15%">Nilai</td>
+                        <td width="15%">Skoring (1)</td>
+                        <td width="15%">Beban (2)</td>
+                        <td width="15%">Otot (3)</td>
+                        <td width="40%">Total Skor Tabel B (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
@@ -314,7 +313,7 @@
                     <!-- Skor RULA Box -->
                     <table style="width: 100%; float: left;" cellpadding="3" cellspacing="0">
                         <tr>
-                            <td>SKOR RULA</td>
+                            <td><b>SKOR RULA</b></td>
                         </tr>
                         <tr>
                             <td>Skoring Tabel A & Tabel B</td>
@@ -339,7 +338,7 @@
                 <!-- Tabel Acuan Skor Risiko -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td colspan="6" class="text-left">Tabel Acuan Skor Risiko dan Tindakan Penanganan**</td>
+                        <td colspan="6" class="text-left">Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</td>
                     </tr>
                     <tr>
                         <td>Skor RULA</td>
@@ -349,25 +348,25 @@
                     </tr>
                     <tr>
                         <td>1 - 2</td>
-                        <td>0</td>
+                        <td>1</td>
                         <td>Rendah</td>
                         <td colspan="3">Tidak ada tindakan yang diperlukan</td>
                     </tr>
                     <tr>
                         <td>3 - 4</td>
-                        <td>1</td>
+                        <td>2</td>
                         <td>Sedang</td>
                         <td colspan="3">Mungkin diperlukan tindakan</td>
                     </tr>
                     <tr>
                         <td>5 - 6</td>
-                        <td>2</td>
+                        <td>3</td>
                         <td>Tinggi</td>
                         <td colspan="3">Diperlukan tindakan</td>
                     </tr>
                     <tr>
                         <td>7</td>
-                        <td>3</td>
+                        <td>4</td>
                         <td>Sangat Tinggi</td>
                         <td colspan="3">Diperlukan tindakan saat ini</td>
                     </tr>
@@ -422,6 +421,16 @@
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - RULA (Rapid Upper Limb Assessment)</td>
+                        </tr>
                     </table>
 
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
@@ -446,22 +455,12 @@
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - RULA</td>
-                        </tr>
                     </table>
                     <div class="info-note">
                         * Metode Analisa Mengacu kepada Jenis Metode yang Direkomendasikan pada
                         Pedoman Teknis Pemeriksaan K3 Pengelolaan Tambahan Peraturan Menteri
                         Ketenagakerjaan RI No.5 Tahun 2018.<br>
-                        ** Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and Ergonomic
+                        ** Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and Ergonomics Methods by Neville Stanton et al, 2005.</i>
                     </div>
                 </div>
             </div>
