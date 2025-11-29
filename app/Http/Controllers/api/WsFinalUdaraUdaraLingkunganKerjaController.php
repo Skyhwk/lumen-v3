@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 use App\Helpers\HelperSatuan;
@@ -35,58 +36,58 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
     public function index(Request $request)
     {
-		$data = OrderDetail::select(
-			DB::raw("MAX(id) as max_id"),
-			DB::raw("GROUP_CONCAT(DISTINCT id SEPARATOR ', ') as id"),
-			DB::raw("GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ', ') as no_sampel"),
-			DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
-			DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
-			DB::raw("GROUP_CONCAT(DISTINCT no_order SEPARATOR ', ') as no_order"),
-			DB::raw("GROUP_CONCAT(DISTINCT no_quotation SEPARATOR ', ') as no_quotation"),
-			DB::raw("GROUP_CONCAT(DISTINCT nama_perusahaan SEPARATOR ', ') as nama_perusahaan"),
-			DB::raw("GROUP_CONCAT(DISTINCT konsultan SEPARATOR ', ') as konsultan"),
-			'cfr',
-			DB::raw("GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ', ') as kategori_1"),
-			DB::raw("GROUP_CONCAT(DISTINCT kategori_2 SEPARATOR ', ') as kategori_2"),
-			DB::raw("GROUP_CONCAT(DISTINCT kategori_3 SEPARATOR ', ') as kategori_3"),
-			DB::raw("GROUP_CONCAT(DISTINCT regulasi SEPARATOR '; ') as regulasi"),
-			DB::raw("GROUP_CONCAT(DISTINCT parameter SEPARATOR '; ') as parameter"),
-			DB::raw("GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ', ') as keterangan_1"),
-		)
-			->where('is_active', 1)
-			->where('kategori_2', '4-Udara')
+        $data = OrderDetail::select(
+            DB::raw("MAX(id) as max_id"),
+            DB::raw("GROUP_CONCAT(DISTINCT id SEPARATOR ', ') as id"),
+            DB::raw("GROUP_CONCAT(DISTINCT no_sampel SEPARATOR ', ') as no_sampel"),
+            DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
+            DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
+            DB::raw("GROUP_CONCAT(DISTINCT no_order SEPARATOR ', ') as no_order"),
+            DB::raw("GROUP_CONCAT(DISTINCT no_quotation SEPARATOR ', ') as no_quotation"),
+            DB::raw("GROUP_CONCAT(DISTINCT nama_perusahaan SEPARATOR ', ') as nama_perusahaan"),
+            DB::raw("GROUP_CONCAT(DISTINCT konsultan SEPARATOR ', ') as konsultan"),
+            'cfr',
+            DB::raw("GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ', ') as kategori_1"),
+            DB::raw("GROUP_CONCAT(DISTINCT kategori_2 SEPARATOR ', ') as kategori_2"),
+            DB::raw("GROUP_CONCAT(DISTINCT kategori_3 SEPARATOR ', ') as kategori_3"),
+            DB::raw("GROUP_CONCAT(DISTINCT regulasi SEPARATOR '; ') as regulasi"),
+            DB::raw("GROUP_CONCAT(DISTINCT parameter SEPARATOR '; ') as parameter"),
+            DB::raw("GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ', ') as keterangan_1"),
+        )
+            ->where('is_active', 1)
+            ->where('kategori_2', '4-Udara')
             ->whereIn('kategori_3', ["27-Udara Lingkungan Kerja"])
-			->where('status', 0)
-			->whereNotNull('tanggal_terima')
+            ->where('status', 0)
+            ->whereNotNull('tanggal_terima')
             ->whereJsonDoesntContain('parameter', ["318;Psikologi"])
-			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->groupBy('cfr')
-			->orderByDesc('max_id');
+            ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
+            ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+            ->groupBy('cfr')
+            ->orderByDesc('max_id');
 
-		return Datatables::of($data)->make(true);
+        return Datatables::of($data)->make(true);
     }
 
-	public function getDetailCfr(Request $request)
-	{
-		$data = OrderDetail::where('cfr', $request->cfr)
-			->where('status', 0)
-			->orderByDesc('id')
-			->get()
-			->map(function ($item) {
+    public function getDetailCfr(Request $request)
+    {
+        $data = OrderDetail::where('cfr', $request->cfr)
+            ->where('status', 0)
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($item) {
                 $item->getAnyHeaderUdara();
                 return $item;
             })->values()
-			->map(function ($item) {
-				$item->getAnyDataLapanganUdara();
-				return $item;
-			});
+            ->map(function ($item) {
+                $item->getAnyDataLapanganUdara();
+                return $item;
+            });
 
-		return response()->json([
-			'data' => $data,
-			'message' => 'Data retrieved successfully',
-		], 200);
-	}
+        return response()->json([
+            'data' => $data,
+            'message' => 'Data retrieved successfully',
+        ], 200);
+    }
 
     public function convertHourToMinute($hour)
     {
@@ -308,7 +309,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                             if ($has($k)) {
                                 return $hasil[$k];
                             }
-
                         }
 
                         // 2) C (tanpa nomor) lalu C1..C16
@@ -321,7 +321,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                             if ($has($k)) {
                                 return $hasil[$k];
                             }
-
                         }
 
                         // 3) f_koreksi_1..f_koreksi_17
@@ -330,7 +329,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                             if ($has($k)) {
                                 return $hasil[$k];
                             }
-
                         }
 
                         // 4) hasil1..hasil17
@@ -339,7 +337,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                             if ($has($k)) {
                                 return $hasil[$k];
                             }
-
                         }
 
                         // kalau semua gagal
@@ -369,7 +366,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                                 }
                             }
                         }
-                    }if ($index == 15) {
+                    }
+                    if ($index == 15) {
                         foreach ($keysToTry as $k) {
                             if ($has($k)) {
                                 if ($hasil[$k] != null) {
@@ -384,7 +382,8 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                                 }
                             }
                         }
-                    }if ($index == 16) {
+                    }
+                    if ($index == 16) {
                         foreach ($keysToTry as $k) {
                             if ($has($k)) {
                                 if ($hasil[$k] != null) {
@@ -1054,7 +1053,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 if ($hasil['hasilc2'] < 0.00007) {
                     $hasil['hasilc2'] = '<0.00007';
                 }
-
             }
 
             return $hasil;
@@ -1284,14 +1282,30 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
 
 
 
-    
+
     public function handleApproveSelected(Request $request)
     {
-        OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
-
-        return response()->json([
-            'message' => 'Data berhasil diapprove.',
-            'success' => true,
-        ], 200);
+        DB::beginTransaction();
+        try {
+            OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 1]);
+    
+            foreach ($request->no_sampel_list as $no_sampel) {
+                LingkunganHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+                Subkontrak::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+                DirectLainHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+                MicrobioHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+                DebuPersonalHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+                PartikulatHeader::where('no_sampel', $no_sampel)->update(['lhps' => 1]);
+            }
+    
+            DB::commit();
+            return response()->json([
+                'message' => 'Data berhasil diapprove.',
+                'success' => true,
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            dd($th);
+        }
     }
 }
