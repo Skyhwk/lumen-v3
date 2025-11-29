@@ -257,12 +257,12 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
             $id_regulasi = $request->regulasi;
             foreach ($processedData as $item) {
-
+                
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
                     ->where('parameter', $item->parameter)
                     ->first();
-                $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+                $bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
                     ->where('id_regulasi', $id_regulasi)
                     ->where('is_active', 1)
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
