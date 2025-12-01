@@ -606,8 +606,9 @@
                             DESKRIPSI SINGKAT PEKERJAAN PEKERJA
                         </td>
                         <td style="text-align: justify; vertical-align: top; font-size: 8pt; line-height: 1.2;">
-                            @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
-                                @foreach($personal->aktivitas_ukur as $item)
+                            {{$personal->divisi}} : <br>
+                            @if($personal->aktifitas_k3->uraian != null && $personal->aktifitas_k3->uraian != [])
+                                @foreach($personal->aktifitas_k3->uraian as $item)
                                     <p style="margin: 2px 0;">
                                         {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
                                     </p>
