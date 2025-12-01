@@ -610,11 +610,12 @@ class FdlPartikulatIsokinetikController extends Controller
         if (isset($request->id) && $request->id != null) {
             if ($request->method == 1) {
                 $data = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
-                
+                $panjang = $data->lfw / 100; // cm ke meter
+                $lebar = $data->lnw / 100; // cm ke meter
                 if($data->bentuk_cerobong == "Persegi"){
-                    $data->luas_penampang = number_format($data->lfw * $data->lnw, 4, '.', ',');
+                    $data->luas_penampang = number_format($panjang * $lebar, 4, '.', '');
                 }else{
-                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 4, '.', ',');
+                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 4, '.', '');
                 }
                 $data->is_approve = true;
                 $data->approved_by = $this->karyawan;
@@ -754,7 +755,7 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $hitung = $lastValue - $data->dgmAwal;
 
-                    $gas_vol = number_format($hitung / 1000, 4, '.', ',');
+                    $gas_vol = number_format($hitung / 1000, 4, '.', '');
                     
                     $method6->gas_vol = $gas_vol;
                     $method6->save();
@@ -991,7 +992,7 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'volume_sampel_gas_standar' => $data->v_gas,
                                         'rata_rata_suhu_gas_buang' => $rata_suhu_gas,
                                         'tekanan_gas_buang' => $data->ps,
-                                        'diameter_nozzle' => number_format($dnActual, 4, '.', ','),
+                                        'diameter_nozzle' => number_format($dnActual, 4, '.', ''),
                                         'luas_penampang_nozzle' => $luasPenampang,
                                         'kecepatan_volumetrik_standar' => $data->qs,
                                     ];
@@ -1001,14 +1002,13 @@ class FdlPartikulatIsokinetikController extends Controller
                                 case 'Iso-Traverse':
                                     $header->ukuran_lubang = $ukuranLubang;
                                     $header->diameter_cerobong = $diameterCerobong;
-
                                     $hasilIso = [
                                         'traverse_poin_partikulat' => $method1->lintas_partikulat,
                                         'traverse_poin_kecepatan_linier' => $method1->titik_lintas_kecepatan_linier_s,
                                         'diameter_cerobong' => $diameterCerobong,
                                         'ukuran_lubang_sampling' => $ukuranLubang,
                                         'jumlah_lubang_sampling' => $method1->jumlah_lubang_sampling,
-                                        'luas_penampang_cerobong' => number_format($method1->luas_penampang, 4, '.', ','),
+                                        'luas_penampang_cerobong' => $method1->luas_penampang,
                                         'jarak_upstream' => $method1->jarak_upstream,
                                         'jarak_downstream' => $method1->jarak_downstream,
                                         'kategori_upstream' => $method1->kategori_upstream,
@@ -1027,9 +1027,9 @@ class FdlPartikulatIsokinetikController extends Controller
                                         'berat_molekul_kering_method3' => $method3->MdMole,
                                         'berat_molekul_kering_method5' => $method3->MdMole,
                                         'co2_method3' => $method3->CO2Mole,
-                                        'co_method3' => number_format($method3->COMole, 8, '.', ','),
+                                        'co_method3' => number_format($method3->COMole, 8, '.', ''),
                                         'o2_method3' => $method3->O2Mole,
-                                        'n2_method3' => number_format($method3->N2Mole, 4, '.', ','),
+                                        'n2_method3' => number_format($method3->N2Mole, 4, '.', ''),
                                         'konsentrasi_nox' => $method5->NOx,
                                         'konsentrasi_o2' => $method3->O2,
                                         'konsentrasi_co' => $method5->CO,
@@ -1041,9 +1041,9 @@ class FdlPartikulatIsokinetikController extends Controller
                                 case 'Iso-Moisture':
                                     $hasilIso = [
                                         'durasi_waktu' => $method5->Total_time,
-                                        'kadar_air' => number_format($method4->kadar_air, 2, '.', ','),
-                                        'berat_molekul_basah_method4' => number_format($method4->ms, 2, '.', ','),
-                                        'berat_molekul_basah_method5' => number_format($berat_molekul_basah_method6, 2, '.', ','),
+                                        'kadar_air' => number_format($method4->kadar_air, 2, '.', ''),
+                                        'berat_molekul_basah_method4' => number_format($method4->ms, 2, '.', ''),
+                                        'berat_molekul_basah_method5' => number_format($berat_molekul_basah_method6, 2, '.', ''),
                                         // 'volume_uap_air' => $gas_vol,
                                         'volume_uap_air' => $data->v_wtr,
                                         'uap_air_dalam_aliran_gas' => $data->bws_aktual,
@@ -1068,7 +1068,6 @@ class FdlPartikulatIsokinetikController extends Controller
                             $header->save();
                         }
                     }
-
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
                     $data->approved_at = Carbon::now();
