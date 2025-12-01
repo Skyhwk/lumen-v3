@@ -21,7 +21,7 @@ class Colorimetri extends Sector
     }
 
     public function order_detail() {
-        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->where('is_active', true);
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
     }
 
     public function TrackingSatu()

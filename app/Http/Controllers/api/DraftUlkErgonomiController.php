@@ -1765,6 +1765,8 @@ class DraftUlkErgonomiController extends Controller
 
     public function generatePdf(Request $request)
     {
+
+        DB::beginTransaction();
         try {
             Carbon::setLocale('id');
             
@@ -2920,9 +2922,10 @@ class DraftUlkErgonomiController extends Controller
             //$pdfLhpDigital = $createPDF('lhp_digital')[0];
             $pdfFile->name_file = $createPDF('lhp')[1];
             $pdfFile->save();
-
+            DB::commit();
             return response()->json('data berhasil di render',200);
         } catch (\Throwable $th) {
+            DB::rollback();
             return response()->json([
                 "message" => $th->getMessage(),
                 'line' => $th->getLine(),

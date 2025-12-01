@@ -49,6 +49,8 @@ class TestApi extends Controller
             $pdfFile->jabatan_karyawan = $jabatan_perilis;
             $pdfFile->create_by =$this->karyawan;
             $pdfFile->save();
+
+           
             
             /* prepare Qr Document */
             $file_qr = new GenerateQrDocumentLhp();
@@ -60,7 +62,7 @@ class TestApi extends Controller
                     'no_lhp' => $dataLHP->detail->cfr,
                     'nama_pelanggan' => $dataLHP->detail->nama_perusahaan,
                     'no_order' => substr($dataLHP->detail->no_order, 0, 6),
-                    'tanggal_lhp' => Carbon::parse($tanggalLhp)->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'tanggal_lhp' => $tanggalLhp,
                     'nama_karyawan' => $pengesahan->nama_karyawan,
                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan
                 ];
@@ -70,6 +72,7 @@ class TestApi extends Controller
                 $pdfFile->file_qr = $pathQr;
                 $pdfFile->save();
             }
+           
             
             // Definisikan metode yang ingin digabungkan dan ID methodnya
             $methodsToCombine = [
