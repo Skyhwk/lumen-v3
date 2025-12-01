@@ -26,60 +26,54 @@ class IcpController extends Controller
     public function index(Request $request)
     {
         try {
-            $data = Colorimetri::with('ws_value', 'order_detail')
+            // --- QUERY UTAMA (tanpa join, pakai with) ---
+            $data = Colorimetri::with(['ws_value', 'order_detail'])
                 ->where('is_approved', $request->approve)
                 ->where('colorimetri.is_active', true)
                 ->where('colorimetri.is_total', false)
                 ->where('template_stp', $request->template_stp)
-                ->select('colorimetri.*', 'order_detail.tanggal_terima', 'order_detail.no_sampel','order_detail.kategori_3');
-                
+                ->select('colorimetri.*'); // <- WAJIB, tidak boleh select kolom relasi
+
             return Datatables::of($data)
-                ->orderColumn('order_detail.tanggal_terima', function ($query, $order) {
-                    $query->orderBy('order_detail.tanggal_terima', $order);
+
+                // --- TAMPILKAN KOLOM RELASI ---
+                ->addColumn('tanggal_terima', function ($item) {
+                    return $item->order_detail->tanggal_terima ?? '-';
                 })
-                ->orderColumn('colorimetri.created_at', function ($query, $order) {
-                    $query->orderBy('colorimetri.created_at', $order);
+
+                ->addColumn('kategori_3', function ($item) {
+                    return $item->order_detail->kategori_3 ?? '-';
                 })
-                ->orderColumn('order_detail.no_sampel', function ($query, $order) {
-                    $query->orderBy('order_detail.no_sampel', $order);
-                })
+                
                 ->filter(function ($query) use ($request) {
+
                     if ($request->has('columns')) {
                         $columns = $request->get('columns');
+
                         foreach ($columns as $column) {
-                            if (isset($column['search']) && !empty($column['search']['value'])) {
+
+                            if (!empty($column['search']['value'])) {
+
                                 $columnName = $column['name'] ?: $column['data'];
                                 $searchValue = $column['search']['value'];
-    
-                                // Skip columns that aren't searchable
-                                if (isset($column['searchable']) && $column['searchable'] === 'false') {
-                                    continue;
+
+                                // HANYA BOLEH FILTER KOLOM colorimetri
+                                if (in_array($columnName, [
+                                    'parameter',
+                                    'jenis_pengujian',
+                                    'created_at'
+                                ])) {
+                                    $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                                 }
-    
-                                // Special handling for date fields
-                                if ($columnName === 'tanggal_terima') {
-                                    // Assuming the search value is a date or part of a date
-                                    $query->whereDate('order_detail.tanggal_terima', 'like', "%{$searchValue}%");
-                                }
-                                // Handle created_at separately if needed
-                                elseif ($columnName === 'created_at') {
-                                    $query->whereDate('colorimetri.created_at', 'like', "%{$searchValue}%");
-                                }
-                                // Standard text fields
-                                elseif (
-                                    in_array($columnName, [
-                                        'no_sampel',
-                                        'parameter',
-                                        'jenis_pengujian'
-                                    ])
-                                ) {
-                                    $query->where($columnName, 'like', "%{$searchValue}%");
-                                }
+
+                                // Kolom relasi TIDAK boleh difilter di query (jika dipaksa → error)
                             }
                         }
                     }
                 })
+
                 ->make(true);
+
         } catch (\Throwable $th) {
             return response()->json([
                 'data' => [],
@@ -87,6 +81,7 @@ class IcpController extends Controller
             ], 401);
         }
     }
+
 
     public function approveData(Request $request)
     {
