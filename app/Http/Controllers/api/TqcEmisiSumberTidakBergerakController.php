@@ -22,7 +22,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '34-Emisi Sumber Tidak Bergerak')
             ->where('parameter', 'not like', '%Iso-%')
-            ->orderBy('id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return DataTables::of($data)
             ->filter(function ($query) {

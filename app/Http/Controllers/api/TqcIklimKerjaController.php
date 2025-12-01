@@ -37,7 +37,7 @@ class TqcIklimKerjaController extends Controller
             ->where('kategori_2', '4-Udara')
 			->whereIn('kategori_3', ["21-Iklim Kerja"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)
             ->filter(function ($query) {

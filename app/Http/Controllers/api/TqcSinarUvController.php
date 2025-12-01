@@ -43,7 +43,7 @@ class TqcSinarUvController extends Controller
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             ->whereJsonContains('parameter', ["324;Sinar UV"])
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }

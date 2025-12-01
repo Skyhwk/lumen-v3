@@ -48,7 +48,7 @@ class WsFinalUdaraIklimKerjaController extends Controller
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderByDesc('tanggal_terima');
+			->orderBy('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}

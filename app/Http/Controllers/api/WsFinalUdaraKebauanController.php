@@ -63,7 +63,7 @@ class WsFinalUdaraKebauanController extends Controller
 			])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderByDesc('tanggal_terima');
+			->orderBy('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}
