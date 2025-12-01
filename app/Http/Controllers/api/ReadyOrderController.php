@@ -895,7 +895,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -1329,7 +1329,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -1793,7 +1793,7 @@ class ReadyOrderController extends Controller
                                     return isset($parts[1]) ? $parts[1] : '';
                                 }, $value->parameter);
 
-                                if ($value->kategori_1 == '1-Air') {
+                                if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                                     $no++;
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -2201,7 +2201,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {

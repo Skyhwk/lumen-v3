@@ -178,10 +178,12 @@ class LHPHandleController extends BaseController
                         $item->lhps_padatan,
                     ])->first(fn($lhps) => $lhps !== null);
 
-                    $tglSampling = optional($track)->ftc_verifier
-                        ?? optional($track)->ftc_sd
-                        ?? ($lhps->created_at ?? null)
-                        ?? $item->tanggal_terima;
+                    // $tglSampling = optional($track)->ftc_verifier
+                    //     ?? optional($track)->ftc_sd
+                    //     ?? ($lhps->created_at ?? null)
+                    //     ?? $item->tanggal_terima;
+                    
+                    $tglSampling = $item->tanggal_sampling ?? null;
 
                     $labelSampling = optional($track)->ftc_verifier
                         ? 'Sampling'
