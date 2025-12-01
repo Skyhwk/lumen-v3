@@ -98,7 +98,7 @@ class WsFinalUdaraGetaranController extends Controller
 		}
 
 		$data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderByDesc('max_id');
+			->orderByDesc('tanggal_terima');
 
 		return Datatables::of($data)
 			->make(true);

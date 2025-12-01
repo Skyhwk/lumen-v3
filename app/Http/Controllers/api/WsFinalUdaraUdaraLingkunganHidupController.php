@@ -49,7 +49,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->orderByDesc('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}
