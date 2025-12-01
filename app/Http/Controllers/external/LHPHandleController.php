@@ -97,7 +97,7 @@ class LHPHandleController extends BaseController
     private function initializeSteps($orderDate)
     {
         return [
-            'order' => ['label' => 'Order', 'date' => $orderDate],
+            'order' => ['label' => 'Order', 'date' => Carbon::parse($orderDate)->format('Y-m-d')],
             'sampling' => ['label' => 'Sampling', 'date' => null],
             'analisa' => ['label' => 'Analisa', 'date' => null],
             'drafting' => ['label' => 'Drafting', 'date' => null],
@@ -155,7 +155,7 @@ class LHPHandleController extends BaseController
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
             $periodGroups->map(function ($itemGroup) use ($orderHeader) {
                 $mappedDetails = $itemGroup->map(function ($item) use ($orderHeader) {
-                    $steps = $this->initializeSteps($orderHeader->tanggal_order);
+                    $steps = $this->initializeSteps($orderHeader->created_at);
 
                     $track = $item->TrackingSatu;
 
