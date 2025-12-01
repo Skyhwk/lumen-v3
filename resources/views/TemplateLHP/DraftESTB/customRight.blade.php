@@ -198,6 +198,15 @@
                             if (Str::contains(strtolower($v), 'standar')) {
                                 $bagian_standar =
                                     'Volume Gas diukur dalam keadaan standar (25°C dan 1 tekanan atmosfer)';
+                            } elseif (
+                                Str::contains(strtolower($v), 'nitrogen oksida') ||
+                                Str::contains(strtolower($v), 'sulfur dioksida') ||
+                                Str::contains(strtolower($v), 'no2') ||
+                                Str::contains(strtolower($v), 'so2')
+                            ) {
+                                $bagian_khusus = 'khusus untuk Nitrogen Oksida (NO2) dan Sulfur Dioksida (SO2)';
+                            } elseif (Str::contains(strtolower($v), 'partikulat')) {
+                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
                             } elseif (Str::contains(strtolower($v), 'o2')) {
                                 $bagian_o2 = 'dengan O₂ terkoreksi';
                             } elseif (Str::contains(strtolower($v), 'kering')) {
@@ -212,12 +221,6 @@
                                     // fallback jika tidak ada angka
                                     $bagian_angka = 'sebesar 15%';
                                 }
-                            } elseif (Str::contains(strtolower($v), 'partikulat')) {
-                                // Tambahan: khusus untuk partikulat
-                                $bagian_khusus = 'Khusus untuk konsentrasi partikulat';
-                            } elseif (Str::contains(strtolower($v), 'NO2') || Str::contains(strtolower($v), 'SO2')) {
-                                // Tambahan: khusus untuk NO2 dan SO2
-                                $bagian_khusus = 'khusus untuk Nitrogen Oksida (NO2) dan Sulfur Dioksida (SO2)';
                             }
                         }
 
