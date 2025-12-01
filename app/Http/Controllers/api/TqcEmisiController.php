@@ -14,7 +14,7 @@ class TqcEmisiController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('dataLapanganEmisiKendaraan')->where('is_active', true)->where('status', 1)->where('kategori_2', '5-Emisi')->orderBy('id', 'desc');
+        $data = OrderDetail::with('dataLapanganEmisiKendaraan')->where('is_active', true)->where('status', 1)->where('kategori_2', '5-Emisi')->orderBy('tanggal_terima');
         return Datatables::of($data)->make(true);
     }
 

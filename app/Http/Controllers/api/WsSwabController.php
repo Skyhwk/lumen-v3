@@ -55,7 +55,7 @@ class WsSwabController extends Controller
 			->whereNotNull('tanggal_terima')
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->orderBy('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}

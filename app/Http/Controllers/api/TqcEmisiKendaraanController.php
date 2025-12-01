@@ -38,7 +38,7 @@ class TqcEmisiKendaraanController extends Controller
             ->where('kategori_2', '5-Emisi')
             ->where('kategori_3', '!=', '34-Emisi Sumber Tidak Bergerak')
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan')
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return DataTables::of($data)
             ->filter(function ($query) {

@@ -29,7 +29,8 @@ class TqcUdaraLingkunganHidupController extends Controller
         $data = OrderDetail::where('is_active', true)
             ->where('status', 1)
             ->where('kategori_2', '4-Udara')
-            ->whereIn('kategori_3', ["11-Udara Ambient"]);
+            ->whereIn('kategori_3', ["11-Udara Ambient"])
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }
