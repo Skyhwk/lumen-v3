@@ -12,6 +12,8 @@ use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\Invoice;
 
+use Carbon\Carbon;
+
 class LHPHandleController extends BaseController
 {
     public function cekLHP(Request $request)
@@ -156,7 +158,8 @@ class LHPHandleController extends BaseController
             $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
             $periodGroups->map(function ($itemGroup) use ($orderHeader) {
                 $mappedDetails = $itemGroup->map(function ($item) use ($orderHeader) {
-                    $steps = $this->initializeSteps($orderHeader->tanggal_order);
+                    $tanggal_order = Carbon::parse($orderHeader->created_at)->format('Y-m-d');
+                    $steps = $this->initializeSteps($tanggal_order);
 
                     $track = $item->TrackingSatu;
 
@@ -235,7 +238,8 @@ class LHPHandleController extends BaseController
                     return $item;
                 });
 
-                $stepsByCFR = $this->initializeSteps($orderHeader->tanggal_order);
+                $tanggal_order = Carbon::parse($orderHeader->created_at)->format('Y-m-d');
+                $stepsByCFR = $this->initializeSteps($tanggal_order);
                 foreach (['sampling', 'analisa', 'drafting', 'lhp_release'] as $step) {
                     // Cek SEMUA detail sudah punya tanggal untuk step ini
                     $allCompleted = $mappedDetails->every(function ($detail) use ($step) {
