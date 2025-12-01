@@ -378,7 +378,7 @@ class TemplateLhpErgonomi
                 $tindakan = 'Diperlukan tindakan karena rawan terkena cedera';
             } elseif ($skor >= 5) {
                 $kategoriResiko = ' Tinggi';
-                $tindakan = 'Diperlukan tindakan segera';
+                $tindakan = 'Diperlukan tindakan secara ergonomis sesegera mungkin';
             } else {
                 $result = 'Belum ada Penilaian';
             }
