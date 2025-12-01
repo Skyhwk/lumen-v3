@@ -233,7 +233,7 @@ class LHPHandleController extends BaseController
                     return $item;
                 });
 
-                $stepsByCFR = $this->initializeSteps($orderHeader->tanggal_order);
+                $stepsByCFR = $this->initializeSteps($orderHeader->created_at);
                 foreach (['sampling', 'analisa', 'drafting', 'lhp_release'] as $step) {
                     // Cek SEMUA detail sudah punya tanggal untuk step ini
                     $allCompleted = $mappedDetails->every(function ($detail) use ($step) {
