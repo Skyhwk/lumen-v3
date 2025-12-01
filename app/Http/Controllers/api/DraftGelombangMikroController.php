@@ -262,28 +262,79 @@ class DraftGelombangMikroController extends Controller
                     $nab         = '-';
 
                     if ($val->id_parameter == 236) {
-                        $hasil_uji = $nilaiDecode['medan_magnet_am'];
-                        $nab       = $ws->nab_medan_magnet;
+                        $hasil_uji      = $nilaiDecode['hasil_mwatt']; //hasil mwat
+                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab            = $ws->nab_medan_magnet;
                     } else if ($val->id_parameter == 316) {
-                        $hasil_uji = $nilaiDecode['hasil_m1'];
-                        $nab       = $ws->nab_power_density;
+                        $hasil_uji      = $nilaiDecode['hasil_m1'];
+                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab            = $ws->nab_power_density;
                     } else if ($val->id_parameter == 277) {
-                        $hasil_uji = $nilaiDecode['rata_listrik'];
-                        $nab       = $ws->nab_medan_listrik;
+                        $hasil_uji      = $nilaiDecode['rata_listrik'];
+                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab            = $ws->nab_medan_listrik;
                     }
 
                     return [
-                        'no_sampel' => $val->no_sampel ?? null,
-                        'parameter' => $parameterLhp ?? $parameterRegulasi ?? null,
-                        'nama_lab'  => $parameterLab ?? null,
-                        'bakumutu'  => $bakumutu ? $bakumutu->baku_mutu : '-',
-                        'satuan'    => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
-                        'methode'   => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
-                        'hasil_uji' => $hasil_uji ?? '-',
-                        'akr'       => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
-                        'nab'       => $nab ?? '-',
+                        'no_sampel'      => $val->no_sampel ?? null,
+                        'parameter'      => $parameterLhp ?? $parameterRegulasi ?? null,
+                        'nama_lab'       => $parameterLab ?? null,
+                        'bakumutu'       => $bakumutu ? $bakumutu->baku_mutu : '-',
+                        'satuan'         => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
+                        'methode'        => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+                        'hasil_uji'      => $hasil_uji ?? '-',
+                        'medan_magnet'   => $medan_magnet ?? '-',
+                        'rata_listrik'   => $rata_listrik ?? '-',
+                        'rata_frekuensi' => $rata_frekuensi ?? '-',
+                        'akr'            => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'nab'            => $nab ?? '-',
                     ];
                 })->toArray();
+
+                $tmpData = collect($tmpData)->flatMap(function ($item) {
+
+                    return [
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Power Density',
+                            'hasil_uji' => $item['hasil_uji'],
+                            'nama_lab'  => $item['nama_lab'],
+                            'bakumutu'  => $item['bakumutu'],
+                            'satuan'    => $item['satuan'],
+                            'methode'   => $item['methode'],
+                            'akr'       => $item['akr'],
+                            'nab'       => $item['nab'],
+                        ],
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Kekuatan Medan Magnet',
+                            'hasil_uji' => $item['medan_magnet'],
+                            'nama_lab'  => $item['nama_lab'],
+                            'bakumutu'  => $item['bakumutu'],
+                            'satuan'    => $item['satuan'],
+                            'methode'   => $item['methode'],
+                            'akr'       => $item['akr'],
+                            'nab'       => $item['nab'],
+                        ],
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Kekuatan Medan Listrik',
+                            'hasil_uji' => $item['rata_listrik'],
+                            'nama_lab'  => $item['nama_lab'],
+                            'bakumutu'  => $item['bakumutu'],
+                            'satuan'    => $item['satuan'],
+                            'methode'   => $item['methode'],
+                            'akr'       => $item['akr'],
+                            'nab'       => $item['nab'],
+                        ],
+                    ];
+                })->values()->toArray();
 
                 $mappedData[] = [
                     "id_regulasi"   => $id_regulasi,
@@ -323,15 +374,18 @@ class DraftGelombangMikroController extends Controller
                         }
 
                         return [
-                            'id'        => $d->id,
-                            'no_sampel' => $d->no_sampel ?? null,
-                            'parameter' => $d->parameter ?? null,
-                            'nama_lab'  => $d->parameter_lab ?? null,
-                            'satuan'    => $d->satuan ?? null,
-                            'methode'   => $d->methode ?? null,
-                            'hasil_uji' => $d->hasil_uji ?? null,
-                            'akr'       => $d->akr ?? null,
-                            'nab'       => $d->nab ?? null,
+                            'id'             => $d->id,
+                            'no_sampel'      => $d->no_sampel ?? null,
+                            'parameter'      => $d->parameter ?? null,
+                            'nama_lab'       => $d->parameter_lab ?? null,
+                            'satuan'         => $d->satuan ?? null,
+                            'methode'        => $d->methode ?? null,
+                            'hasil_uji'      => $d->hasil_uji ?? null,
+                            'medan_magnet'   => $d->medan_magnet ?? null,
+                            'rata_listrik'   => $d->rata_listrik ?? null,
+                            'rata_frekuensi' => $d->rata_frekuensi ?? null,
+                            'akr'            => $d->akr ?? null,
+                            'nab'            => $d->nab ?? null,
                         ];
                     })->values()->toArray();
 

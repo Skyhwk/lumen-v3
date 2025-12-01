@@ -13,8 +13,11 @@
     $wsValue = WsValueUdara::where('no_sampel', $data[0]['no_sampel'])->where('is_active', true)->first();
 
     $decodeHasil = json_decode($wsValue->hasil1);
-    $rata_frekuensi = $decodeHasil->rata_frekuensi ?? 0;
-    $frekuensiMhz = $rata_frekuensi / 1000000;
+    $rata_frekuensi_raw = $decodeHasil->rata_frekuensi ?? 0;
+    $rata_frekuensi_clean = str_replace(',', '', $rata_frekuensi_raw);
+
+    $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
+
 @endphp
 
 <div class="left">

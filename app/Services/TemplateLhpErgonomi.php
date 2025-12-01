@@ -28,32 +28,32 @@ class TemplateLhpErgonomi
             
             $pengukuran = json_decode($dataRula->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
-            $skor = 7;
+            $skor = $pengukuran->skor_rula;
             $tingkatResiko = '';
             $kategoriResiko = '';
             $tindakan = '';
             $result = '';
             if ($skor >= 1 && $skor <= 2) {
-                $tingkatResiko = 0;
+                $tingkatResiko = 1;
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Tidak ada tindakan yang diperlukan';
             } elseif ($skor >= 3 && $skor <= 4) {
-                $tingkatResiko = 1;
+                $tingkatResiko = 2;
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Mungkin diperlukan tindakan';
             } elseif ($skor >= 5 && $skor <= 6) {
-                $tingkatResiko = 2;
+                $tingkatResiko = 3;
                 $kategoriResiko = 'Tinggi';
                 $tindakan = 'Diperlukan tindakan';
             } elseif ($skor >= 7) {
-                $tingkatResiko = 3;
+                $tingkatResiko = 4;
                 $kategoriResiko = 'Sangat Tinggi';
                 $tindakan = 'Diperlukan tindakan sekarang';
             } else {
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor},Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko{$kategoriResiko}, sehingga kemungkinan {$tindakan} untuk mencegah terjadinya kecelakaan kerja dan penyakit akibat kerja.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
@@ -71,6 +71,7 @@ class TemplateLhpErgonomi
                 "tanggal_sampling" => isset($dataRula->detail) ? Carbon::parse($dataRula->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRula->divisi,
             ];
             
            
@@ -118,12 +119,13 @@ class TemplateLhpErgonomi
                 "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_uku,
-                "aktivitas" => $dataRwl->aktivita,
+                "aktivitas" => $dataRwl->aktivitas,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
+                "divisi" => $dataRwl->divisi,
             ];
             
         //    dd($pengukuran);
@@ -299,6 +301,11 @@ class TemplateLhpErgonomi
                 // $result = null;
             }
     
+            $uraianAktivitasK3 =null;
+            if($dataReba->input_k3 != null){
+                $aktivitasK3 =json_decode($dataReba->input_k3);
+                $uraianAktivitasK3=$aktivitasK3->uraian;
+            }
             $pengukuran->tingkat_resiko = $tingkatResiko;
             $pengukuran->kategori_resiko = $kategoriResiko;
             $pengukuran->tindakan = $tindakan;
@@ -309,7 +316,9 @@ class TemplateLhpErgonomi
                 "usia" => $dataReba->usia,
                 "lama_kerja" => json_decode($dataReba->lama_kerja),
                 "jenis_kelamin" => $dataReba->jenis_kelamin,
-                "aktivitas_ukur" => $dataReba->aktivitas_ukur,
+                "aktivitas_ukur" => ($uraianAktivitasK3 != null)
+                    ? ($uraianAktivitasK3[0]->Uraian.' - '.$uraianAktivitasK3[0]->jam.' jam, '.$uraianAktivitasK3[0]->menit.' menit.')
+                    : '',
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : null,
                 "tanggal_sampling" => isset($dataReba->detail) ? Carbon::parse($dataReba->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
@@ -317,6 +326,7 @@ class TemplateLhpErgonomi
                 "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : null,
                 "periode_analisis" => '-',
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
+                "divisi" => $dataReba->divisi,
             ];
 
             
@@ -363,12 +373,12 @@ class TemplateLhpErgonomi
             if ($skor >= 1 && $skor <= 2) {
                 $kategoriResiko = 'Rendah';
                 $tindakan = 'Mungkin perlu dilakukan tindakan';
-            } else if ($skor >= 3 && $skor <= 5) {
+            } else if ($skor >= 3 && $skor <= 4) {
                 $kategoriResiko = 'Sedang';
                 $tindakan = 'Diperlukan tindakan karena rawan terkena cedera';
             } elseif ($skor >= 5) {
                 $kategoriResiko = ' Tinggi';
-                $tindakan = 'Diperlukan tindakan segera';
+                $tindakan = 'Diperlukan tindakan secara ergonomis sesegera mungkin';
             } else {
                 $result = 'Belum ada Penilaian';
             }
