@@ -32,11 +32,10 @@ class IcpController extends Controller
                 ->where('colorimetri.is_active', true)
                 ->where('colorimetri.is_total', false)
                 ->where('template_stp', $request->template_stp)
-                ->select('colorimetri.*'); // <- WAJIB, tidak boleh select kolom relasi
+                ->select('colorimetri.*');
 
             return Datatables::of($data)
 
-                // --- TAMPILKAN KOLOM RELASI ---
                 ->addColumn('tanggal_terima', function ($item) {
                     return $item->order_detail->tanggal_terima ?? '-';
                 })
@@ -56,7 +55,7 @@ class IcpController extends Controller
                         $query->where('kategori_3', 'like', "%{$keyword}%");
                     });
                 })
-                
+
                 ->filter(function ($query) use ($request) {
 
                     if ($request->has('columns')) {
@@ -78,7 +77,6 @@ class IcpController extends Controller
                                     $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                                 }
 
-                                // Kolom relasi TIDAK boleh difilter di query (jika dipaksa → error)
                             }
                         }
                     }
