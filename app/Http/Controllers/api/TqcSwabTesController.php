@@ -42,6 +42,7 @@ class TqcSwabTesController extends Controller
             ->where('kategori_3', '46-Udara Swab Test')
             ->where('status', 1)
             ->groupBy('cfr')
+            ->orderBy('tanggal_terima')
             ->get();
 
         return Datatables::of($data)->make(true);

@@ -27,6 +27,7 @@ class WsFinalUdaraKebisinganController extends Controller
     {
         $data = OrderDetail::select(
             DB::raw("MAX(id) as max_id"),
+            DB::raw("MAX(parameter) as parameter"),
             DB::raw("GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ', ') as tanggal_sampling"),
             DB::raw("GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ', ') as tanggal_terima"),
             'no_order',
@@ -34,6 +35,7 @@ class WsFinalUdaraKebisinganController extends Controller
             'cfr',
             'kategori_2',
             'kategori_3',
+
         )
             ->where('is_active', $request->is_active)
             ->where('kategori_2', '4-Udara')
@@ -59,7 +61,7 @@ class WsFinalUdaraKebisinganController extends Controller
             ->whereMonth('tanggal_terima', explode('-', $request->date)[1])
             ->whereYear('tanggal_terima', explode('-', $request->date)[0])
             ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-            ->orderByDesc('max_id');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }
