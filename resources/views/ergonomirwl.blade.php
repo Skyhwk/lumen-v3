@@ -287,19 +287,17 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:30%;">VARIABEL PENGUKURAN</td>
-                            <td style="width:10%;">AWAL</td>
-                            <td style="width:10%;">AKHIR</td>
+                            <td style="width:20%;">SATUAN</td>
                             <td style="width:45%;">KETERANGAN</td>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
+                            @dd($pengukuran)
                             <td>1</td>
-                            <td class="text-left">Jarak Tangan Horizontal (cm)</td>
-                            <td>{{ $pengukuran->lokasi_tangan->horizontal_awal  }}</td>
-                            <td>{{ $pengukuran->lokasi_tangan->horizontal_akhir }}</td>
-                            <td class="text-left">Jarak horizontal/proyeksi tangan yang memegang beban dengan titik
-                                pusat tubuh</td>
+                            <td class="text-left">Jarak Angkut Vertikal</td>
+                            <td class="text-center">cm</td>
+                            <td class="text-center"></td>
                         </tr>
                         <tr>
                             <td>2</td>

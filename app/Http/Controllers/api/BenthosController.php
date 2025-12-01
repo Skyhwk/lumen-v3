@@ -19,16 +19,17 @@ class BenthosController extends Controller
             ->where('is_approve', $request->approve)
             ->where('subkontrak.is_active', true)
             ->where('subkontrak.is_total', false)
-            ->orderBy('subkontrak.created_at', 'desc');
+            ->orderBy('subkontrak.created_at', 'desc')
+            ->select('subkontrak.*', 'order_detail.tanggal_terima', 'order_detail.no_sampel','order_detail.kategori_3');
         return Datatables::of($data)
             ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+                $query->orderBy('order_detail.tanggal_terima', $order);
             })
             ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+                $query->orderBy('subkontrak.created_at', $order);
             })
             ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+                $query->orderBy('order_detail.no_sampel', $order);
             })
             ->editColumn('hasil_json', function ($item) {
                 $hasil = json_decode($item->ws_value->hasil_json ?? '{}', true);
