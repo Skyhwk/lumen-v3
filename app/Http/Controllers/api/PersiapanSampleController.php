@@ -30,7 +30,7 @@ use App\Models\{
 };
 
 use App\Http\Controllers\api\RekapSampelController;
-
+use App\Services\SyncPersiapanService;
 
 class PersiapanSampleController extends Controller
 {
@@ -288,21 +288,25 @@ class PersiapanSampleController extends Controller
                     fn($q) => $q->where('no_sampel', $request->no_sampel)
                 );
 
-            // --- 4. Cek jika ada persiapan kosong ---
-            $queryCek = OrderDetail::where('is_active', 1)
-                ->where('no_order', $request->no_order)
-                ->when($request->periode, fn($q) => $q->where('periode', $request->periode))
-                ->whereNotIn('parameter', ['309;Pencahayaan', '268;Kebisingan', '318;Psikologi', '230;Ergonomi'])
-                ->where('persiapan', '[]');
+            // Sync Persiapan
+            $syncPersiapan = new SyncPersiapanService();
+            $syncPersiapan->sync($request->no_sampel);
 
-            if ($queryCek->exists()) {
-                $newRequest = new Request([
-                    'no_order' => $request->no_order,
-                    'periode' => $request->periode,
-                    'collectionContain' => $queryCek->get()
-                ]);
-                $orderD = RekapSampelController::generatePersiapan($newRequest);
-            }
+            // --- 4. Cek jika ada persiapan kosong ---
+            // $queryCek = OrderDetail::where('is_active', 1)
+            //     ->where('no_order', $request->no_order)
+            //     ->when($request->periode, fn($q) => $q->where('periode', $request->periode))
+            //     ->whereNotIn('parameter', ['309;Pencahayaan', '268;Kebisingan', '318;Psikologi', '230;Ergonomi'])
+            //     ->where('persiapan', '[]');
+
+            // if ($queryCek->exists()) {
+            //     $newRequest = new Request([
+            //         'no_order' => $request->no_order,
+            //         'periode' => $request->periode,
+            //         'collectionContain' => $queryCek->get()
+            //     ]);
+            //     $orderD = RekapSampelController::generatePersiapan($newRequest);
+            // }
 
             $orderD = $orderD->whereIn('no_sampel', (array)$request->no_sampel)->get();
 
