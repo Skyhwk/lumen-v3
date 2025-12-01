@@ -646,12 +646,14 @@ class DraftUlkController extends Controller
 
                 $data_entry = collect($data_entry)->sortBy([
                     ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
                 ])->values()->toArray();
 
                 $data_custom = collect($data_custom)->sortBy([
                     ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
                 ])->values()->toArray();
 
                 return response()->json([
@@ -740,7 +742,8 @@ class DraftUlkController extends Controller
                 // Sort mainData
                 $mainData = collect($mainData)->sortBy([
                     ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc']
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
                 ])->values()->toArray();
 
                 // Sort otherRegulations
