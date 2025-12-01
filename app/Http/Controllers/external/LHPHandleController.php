@@ -124,7 +124,7 @@ class LHPHandleController extends BaseController
     private function getGroupedCFRs($orderHeader, $periode)
     {
         try {
-            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
+            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_sampling', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
                     "lhps_air",
@@ -182,7 +182,7 @@ class LHPHandleController extends BaseController
                     //     ?? optional($track)->ftc_sd
                     //     ?? ($lhps->created_at ?? null)
                     //     ?? $item->tanggal_terima;
-                    
+
                     $tglSampling = $item->tanggal_sampling ?? null;
 
                     $labelSampling = optional($track)->ftc_verifier
