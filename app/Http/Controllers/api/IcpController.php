@@ -44,6 +44,18 @@ class IcpController extends Controller
                 ->addColumn('kategori_3', function ($item) {
                     return $item->order_detail->kategori_3 ?? '-';
                 })
+
+                ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                    $query->whereHas('order_detail', function ($query) use ($keyword) {
+                        $query->where('tanggal_terima', 'like', "%{$keyword}%");
+                    });
+                })
+
+                ->filterColumn('kategori_3', function ($query, $keyword) {
+                    $query->whereHas('order_detail', function ($query) use ($keyword) {
+                        $query->where('kategori_3', 'like', "%{$keyword}%");
+                    });
+                })
                 
                 ->filter(function ($query) use ($request) {
 
