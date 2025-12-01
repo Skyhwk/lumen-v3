@@ -29,18 +29,18 @@ class DirectReadingController extends Controller
             ->where('is_approved', $request->approve)
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
-            ->where('template_stp', $request->template_stp);
-
+            ->where('template_stp', $request->template_stp)
+            ->select('colorimetri.*', 'order_detail.tanggal_terima', 'order_detail.no_sampel','order_detail.kategori_3');
         // Filter pencarian
         return Datatables::of($data)
             ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+                $query->orderBy('order_detail.tanggal_terima', $order);
             })
             ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+                $query->orderBy('colorimetri.created_at', $order);
             })
             ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+                $query->orderBy('order_detail.no_sampel', $order);
             })
             ->filter(function ($query) use ($request) {
                 if ($request->has('columns')) {
