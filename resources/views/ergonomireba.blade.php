@@ -607,17 +607,11 @@
                         </td>
                         <td style="text-align: justify; vertical-align: top; font-size: 8pt; line-height: 1.2;">
                             @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
-                                @if(!is_array($personal->aktivitas_ukur))
+                                @foreach($personal->aktivitas_ukur as $item)
                                     <p style="margin: 2px 0;">
-                                        {{ $personal->aktivitas_ukur }}
+                                        {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
                                     </p>
-                                @else
-                                    @foreach($personal->aktivitas_ukur as $item)
-                                        <p style="margin: 2px 0;">
-                                            {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
-                                        </p>
-                                    @endforeach
-                                @endif
+                                @endforeach
                             @endif
                         </td>
                     </tr>

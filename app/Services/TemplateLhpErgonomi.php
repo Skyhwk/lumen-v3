@@ -333,6 +333,7 @@ class TemplateLhpErgonomi
                 "periode_analisis" => '-',
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
                 "divisi" => $dataReba->divisi,
+                'aktifitas_k3' =>json_decode($dataRwl->input_k3) ?? (object) ['uraian' => [], 'analisis_potensi_bahaya' => '', 'kesimpulan_survey_lanjutan' => '']
             ];
 
             
