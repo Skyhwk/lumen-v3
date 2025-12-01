@@ -132,6 +132,7 @@ class AuthController extends BaseController
             'strukture_menu' => $strukture_menu,
             'name' => $karyawan->nama_lengkap,
             'pos' => $karyawan->jabatan,
+            'grade' => $karyawan->grade,
             'role' => $karyawan->role,
             'join' => $karyawan->join_date,
             'impersonate' => ($karyawan->id == 1 || $karyawan->id == 127 || $karyawan->id == 152) || $userToken->is_impersonate,
