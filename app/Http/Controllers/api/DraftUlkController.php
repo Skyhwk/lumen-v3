@@ -644,6 +644,18 @@ class DraftUlkController extends Controller
                     ->values()
                     ->toArray();
 
+                $data_entry = collect($data_entry)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
+                ])->values()->toArray();
+
+                $data_custom = collect($data_custom)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
+                ])->values()->toArray();
+
                 return response()->json([
                     'status'             => true,
                     'data'               => $data_entry,
@@ -728,18 +740,11 @@ class DraftUlkController extends Controller
                     }
                 }
                 // Sort mainData
-                $mainData = collect($mainData)
-                ->sortBy(function ($item) {
-                    if (!empty($item['no_sampel'])) {
-                        $parts = explode('/', $item['no_sampel']);
-                        return (int) ltrim($parts[1] ?? '999999', '0');
-                    }
-
-                    // jika tidak ada no sampel → urut belakangan tapi tetap menurut parameter
-                    return 999999 . mb_strtolower($item['parameter']);
-                })
-                ->values()
-                ->toArray();
+                $mainData = collect($mainData)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
+                ])->values()->toArray();
 
                 // Sort otherRegulations
                 foreach ($otherRegulations as $id => $regulations) {
