@@ -32,14 +32,15 @@ class IcpController extends Controller
                 ->where('colorimetri.is_total', false)
                 ->where('template_stp', $request->template_stp)
                 ->select('colorimetri.*', 'order_detail.tanggal_terima', 'order_detail.no_sampel','order_detail.kategori_3');
+                
             return Datatables::of($data)
-                ->orderColumn('tanggal_terima', function ($query, $order) {
+                ->orderColumn('order_detail.tanggal_terima', function ($query, $order) {
                     $query->orderBy('order_detail.tanggal_terima', $order);
                 })
-                ->orderColumn('created_at', function ($query, $order) {
+                ->orderColumn('colorimetri.created_at', function ($query, $order) {
                     $query->orderBy('colorimetri.created_at', $order);
                 })
-                ->orderColumn('no_sampel', function ($query, $order) {
+                ->orderColumn('order_detail.no_sampel', function ($query, $order) {
                     $query->orderBy('order_detail.no_sampel', $order);
                 })
                 ->filter(function ($query) use ($request) {
@@ -58,11 +59,11 @@ class IcpController extends Controller
                                 // Special handling for date fields
                                 if ($columnName === 'tanggal_terima') {
                                     // Assuming the search value is a date or part of a date
-                                    $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
+                                    $query->whereDate('order_detail.tanggal_terima', 'like', "%{$searchValue}%");
                                 }
                                 // Handle created_at separately if needed
                                 elseif ($columnName === 'created_at') {
-                                    $query->whereDate('created_at', 'like', "%{$searchValue}%");
+                                    $query->whereDate('colorimetri.created_at', 'like', "%{$searchValue}%");
                                 }
                                 // Standard text fields
                                 elseif (
