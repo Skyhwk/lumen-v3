@@ -26,7 +26,7 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
                 '119-Emisi Isokinetik',
             ])
             ->where('parameter', 'like', '%Iso-%')
-            ->orderBy('id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return DataTables::of($data)
             ->filter(function ($query) {

@@ -61,7 +61,7 @@ class TqcUdaraMicrobiologiController extends Controller
                 }
             })
             ->groupBy('cfr', 'nama_perusahaan', 'no_quotation', 'no_order', 'kategori_1', 'konsultan', "regulasi", "parameter")
-            ->orderBy('max_id', 'desc');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)
             ->filter(function ($query) {

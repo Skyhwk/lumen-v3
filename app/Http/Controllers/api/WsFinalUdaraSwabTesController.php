@@ -54,7 +54,7 @@ class WsFinalUdaraSwabTesController extends Controller
             ->whereMonth('tanggal_sampling', $date[1])
             ->whereYear('tanggal_sampling', $date[0])
             ->groupBy('cfr')
-            ->get();
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)->make(true);
     }
