@@ -213,6 +213,7 @@ class DraftGelombangMikroController extends Controller
                     $parameterLhp      = Parameter::where('id', $val->id_parameter)->first()->nama_lhp ?? null;
                     $ws                = $val->ws_udara;
                     $hasil             = $ws->toArray();
+                    $dataLapangan      = DataLapanganMedanLM::where('no_sampel', $val->no_sampel)->where('is_approve', true)->first();
                     $orderRow          = OrderDetail::where('no_sampel', $val->no_sampel)
                         ->where('is_active', 1)
                         ->first();
@@ -257,47 +258,63 @@ class DraftGelombangMikroController extends Controller
                         }
                     }
 
-                    $nilaiDecode = json_decode($nilai, true);
-                    $hasil_uji   = '-';
-                    $nab         = '-';
+                    $nilaiDecode          = json_decode($nilai, true);
+                    $hasil_uji            = '-';
+                    $nab                  = '-';
+                    $rata_frekuensi_raw   = $nilaiDecode['rata_frekuensi'] ?? 0;
+                    $rata_frekuensi_clean = str_replace(',', '', $rata_frekuensi_raw);
+
+                    $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
 
                     if ($val->id_parameter == 236) {
-                        $hasil_uji      = $nilaiDecode['hasil_mwatt']; //hasil mwat
-                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
-                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
-                        $nab            = $ws->nab_medan_magnet;
+                        $hasil_uji            = $nilaiDecode['hasil_mwatt'];
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab                  = $ws->nab_medan_magnet;
+                        $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
+                        $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
+                        $frekuensi_area       = $frekuensiMhz ?? null;
                     } else if ($val->id_parameter == 316) {
-                        $hasil_uji      = $nilaiDecode['hasil_m1'];
-                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
-                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
-                        $nab            = $ws->nab_power_density;
+                        $hasil_uji            = $nilaiDecode['hasil_m1'];
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab                  = $ws->nab_power_density;
+                        $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
+                        $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
+                        $frekuensi_area       = $frekuensiMhz ?? null;
                     } else if ($val->id_parameter == 277) {
-                        $hasil_uji      = $nilaiDecode['rata_listrik'];
-                        $medan_magnet   = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik   = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
-                        $rata_frekuensi = $nilaiDecode['rata_frekuensi'] ?? null;
-                        $nab            = $ws->nab_medan_listrik;
+                        $hasil_uji            = $nilaiDecode['rata_listrik'];
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
+                        $nab                  = $ws->nab_medan_listrik;
+                        $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
+                        $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
+                        $frekuensi_area       = $frekuensiMhz ?? null;
                     }
 
                     return [
-                        'no_sampel'      => $val->no_sampel ?? null,
-                        'parameter'      => $parameterLhp ?? $parameterRegulasi ?? null,
-                        'nama_lab'       => $parameterLab ?? null,
-                        'bakumutu'       => $bakumutu ? $bakumutu->baku_mutu : '-',
-                        'satuan'         => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
-                        'methode'        => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
-                        'hasil_uji'      => $hasil_uji ?? '-',
-                        'medan_magnet'   => $medan_magnet ?? '-',
-                        'rata_listrik'   => $rata_listrik ?? '-',
-                        'rata_frekuensi' => $rata_frekuensi ?? '-',
-                        'akr'            => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
-                        'nab'            => $nab ?? '-',
+                        'no_sampel'            => $val->no_sampel ?? null,
+                        'parameter'            => $parameterLhp ?? $parameterRegulasi ?? null,
+                        'nama_lab'             => $parameterLab ?? null,
+                        'bakumutu'             => $bakumutu ? $bakumutu->baku_mutu : '-',
+                        'satuan'               => (! empty($bakumutu->satuan)) ? $bakumutu->satuan : '-',
+                        'methode'              => (! empty($bakumutu->method)) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
+                        'hasil_uji'            => $hasil_uji ?? '-',
+                        'medan_magnet'         => $medan_magnet ?? '-',
+                        'rata_listrik'         => $rata_listrik ?? '-',
+                        'rata_frekuensi'       => $rata_frekuensi ?? '-',
+                        'hasil_sumber_radiasi' => $hasil_sumber_radiasi ?? '-',
+                        'waktu_pemaparan'      => $waktu_pemaparan ?? '-',
+                        'frekuensi_area'       => $frekuensi_area ?? '-',
+                        'akr'                  => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'nab'                  => $nab ?? '-',
                     ];
                 })->toArray();
 
-                $tmpData = collect($tmpData)->flatMap(function ($item) {
+                $data_detail = collect($tmpData)->flatMap(function ($item) {
 
                     return [
                         [
@@ -336,10 +353,32 @@ class DraftGelombangMikroController extends Controller
                     ];
                 })->values()->toArray();
 
+                $informasi_sampling = collect($tmpData)->flatMap(function ($item) {
+
+                    return [
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Sumber Radiasi',
+                            'data'      => $item['hasil_sumber_radiasi'],
+                        ],
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Waktu Pemaparan(Per menit)',
+                            'data'      => $item['waktu_pemaparan'],
+                        ],
+                        [
+                            'no_sampel' => $item['no_sampel'],
+                            'parameter' => 'Frekuensi Area(MHz)',
+                            'data'      => $item['frekuensi_area'],
+                        ],
+                    ];
+                })->values()->toArray();
+
                 $mappedData[] = [
-                    "id_regulasi"   => $id_regulasi,
-                    "nama_regulasi" => $nama_regulasi,
-                    "detail"        => $tmpData,
+                    "id_regulasi"        => $id_regulasi,
+                    "nama_regulasi"      => $nama_regulasi,
+                    "detail"             => $data_detail,
+                    "informasi_sampling" => $informasi_sampling,
                 ];
             }
 
@@ -350,10 +389,9 @@ class DraftGelombangMikroController extends Controller
                 $existingSamples = $detail->pluck('no_sampel')->toArray();
                 $grouped         = [];
 
-                $deskripsi_titik = json_decode($cekLhp->deskripsi_titik, true);
-
-                $observasi  = json_decode($cekLhp->hasil_observasi, true);
-                $kesimpulan = json_decode($cekLhp->kesimpulan, true);
+                $observasi         = json_decode($cekLhp->hasil_observasi, true);
+                $kesimpulan        = json_decode($cekLhp->kesimpulan, true);
+                $informasiSampling = json_decode($cekLhp->informasi_sampling, true);
 
                 foreach (json_decode($cekLhp->regulasi, true) as $i => $regulasi) {
                     $items = $detail->filter(function ($d) use ($i) {
@@ -390,12 +428,12 @@ class DraftGelombangMikroController extends Controller
                     })->values()->toArray();
 
                     $grouped[] = [
-                        "nama_regulasi"   => explode('-', $regulasi)[1],
-                        "id_regulasi"     => explode('-', $regulasi)[0],
-                        "detail"          => $convertedDetails,
-                        'observasi'       => $observasi[$i] ?? null,
-                        'kesimpulan'      => $kesimpulan[$i] ?? null,
-                        'deskripsi_titik' => $deskripsi_titik[$i] ?? null,
+                        "nama_regulasi"      => explode('-', $regulasi)[1],
+                        "id_regulasi"        => explode('-', $regulasi)[0],
+                        "detail"             => $convertedDetails,
+                        'observasi'          => $observasi[$i] ?? null,
+                        'kesimpulan'         => $kesimpulan[$i] ?? null,
+                        'informasi_sampling' => $informasiSampling[$i] ?? null,
                     ];
 
                 }
@@ -429,12 +467,12 @@ class DraftGelombangMikroController extends Controller
                     }
 
                     $final[] = [
-                        "id_regulasi"     => $group['id_regulasi'],
-                        "nama_regulasi"   => $group['nama_regulasi'],
-                        "observasi"       => $group['observasi'],
-                        "kesimpulan"      => $group['kesimpulan'],
-                        "deskripsi_titik" => $group['deskripsi_titik'],
-                        "detail"          => array_values($result),
+                        "id_regulasi"        => $group['id_regulasi'],
+                        "nama_regulasi"      => $group['nama_regulasi'],
+                        "observasi"          => $group['observasi'],
+                        "kesimpulan"         => $group['kesimpulan'],
+                        "informasi_sampling" => $group['informasi_sampling'],
+                        "detail"             => array_values($result),
                     ];
                 }
 
@@ -564,9 +602,9 @@ class DraftGelombangMikroController extends Controller
                 $mergeRegulasi[] = $data['regulasi_id'] . '-' . $data['regulasi'];
             }
 
-            $mergeDeskripsiTitik = [];
+            $mergeInformasiSampling = [];
             foreach ($request->data as $data) {
-                $mergeDeskripsiTitik[] = $data['deskripsi_titik'];
+                $mergeInformasiSampling[] = $data['informasi_sampling'];
             }
 
             $parameter                      = $request->parameter;
@@ -595,7 +633,8 @@ class DraftGelombangMikroController extends Controller
             $header->regulasi               = $request->regulasi != null ? json_encode($mergeRegulasi) : null;
             $header->tanggal_lhp            = $request->tanggal_lhp != '' ? $request->tanggal_lhp : null;
             $header->keterangan             = $request->keterangan != '' ? json_encode($keteranganHeader) : null;
-            $header->deskripsi_titik        = json_encode($mergeDeskripsiTitik) ?? null;
+            $header->deskripsi_titik        = $request->deskripsi_titik != '' ? $request->deskripsi_titik : null;
+            $header->informasi_sampling     = json_encode($mergeInformasiSampling) ?? null;
             $header->save();
 
             // dd($header);
