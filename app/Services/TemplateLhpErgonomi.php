@@ -106,19 +106,25 @@ class TemplateLhpErgonomi
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
             
             $avrageFrequesi = ($pengukuran->frekuensi_jumlah_awal + $pengukuran->frekuensi_jumlah_akhir) / 2;
-            $pengukuran->frekuensi = $avrageFrequesi;
-            $pengukuran->durasi_jam_kerja = $pengukuran->durasi_jam_kerja_akhir;
             $pengukuran->jarak_vertikal = $dataRwl->jarak_vertikal;
-            $pengukuran->kopling_tangan = $dataRwl->kopling_tangan;
-            $pengukuran->durasi_jam_kerja = $dataRwl->durasi_jam_kerja;
             $pengukuran->berat_beban = $dataRwl->berat_beban;
+            $pengukuran->frekuensi_jumlah_angkatan = $dataRwl->frekuensi_jumlah_angkatan;
+            $pengukuran->durasi_jam_kerja = $dataRwl->durasi_jam_kerja;
+            $pengukuran->kopling_tangan = $dataRwl->kopling_tangan;
+
+            //kesimpulan
+            $liAwal = $this->resultRwl($pengukuran->lifting_index_awal);
+            $liAkhir = $this->resultRwl($pengukuran->lifting_index_akhir);
+
+            $pengukuran->result_li_awal =$liAwal;
+            $pengukuran->result_li_akhir =$liAkhir;
             $personal = (object) [
                 "no_sampel" => $dataRwl->no_sampel,
                 "nama_pekerja" => $dataRwl->nama_pekerja,
                 "usia" => $dataRwl->usia,
                 "lama_kerja" => json_decode($dataRwl->lama_kerja),
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
-                "aktivitas_ukur" => $dataRwl->aktivitas_uku,
+                "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "aktivitas" => $dataRwl->aktivitas,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
                 "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
@@ -1266,5 +1272,25 @@ class TemplateLhpErgonomi
             $grouped[$kategori][] = $row;
         }
         return $grouped;
+    }
+
+    private function resultRwl($skor){
+        $tingkatResiko = '';
+        $tindakan = '';
+        $result = '';
+        if ($skor < 1) {
+            $tingkatResiko = 'Rendah';
+            $tindakan = 'Tindakan ada masalah dengan pekerjaan mengakat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
+        } else if ($skor <= 1 && $skor < 3) {
+            $tingkatResiko = 'Sedang';
+            $tindakan = 'Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1';
+        } elseif ($skor >= 5) {
+            $tingkatResiko = ' Tinggi';
+            $tindakan = 'Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
+        } else {
+            $tindakan = 'Belum ada Penilaian';
+        }
+
+        return ["tingkatResiko"=>$tingkatResiko,"result"=>$tindakan];
     }
 }
