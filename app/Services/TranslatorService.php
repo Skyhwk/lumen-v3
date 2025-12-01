@@ -25,7 +25,7 @@ class TranslatorService
     public function translate(string $text, string $source, string $target): ?string
     {
         try {
-            Log::warning("module translate cannot use now!!!!!!");
+            // Log::warning("module translate cannot use now!!!!!!");
             // $response = Http::post($this->apiUrl, [
             //     'text' => $text,
             //     'source' => $source,
