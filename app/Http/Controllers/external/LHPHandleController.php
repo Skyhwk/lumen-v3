@@ -182,8 +182,10 @@ class LHPHandleController extends BaseController
                     //     ?? optional($track)->ftc_sd
                     //     ?? ($lhps->created_at ?? null)
                     //     ?? $item->tanggal_terima;
-
-                    $tglSampling = $item->tanggal_sampling ?? null;
+                    
+                    $tglSampling = $item->kategori_1 != 'SD'
+                        ? ($item->tanggal_sampling ?? null)
+                        : ($item->tanggal_terima ?? null);
 
                     $labelSampling = optional($track)->ftc_verifier
                         ? 'Sampling'
