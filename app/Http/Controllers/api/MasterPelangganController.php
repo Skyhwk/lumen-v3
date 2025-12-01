@@ -20,6 +20,8 @@ use App\Models\MasterPelangganBlacklist;
 use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
+
+use App\Services\GetBawahan;
 use Carbon\Carbon;
 Carbon::setLocale('id');
 
@@ -44,6 +46,16 @@ class MasterPelangganController extends Controller
 
                 $data->whereIn('sales_id', $bawahan);
             }
+
+            if ($jabatan == 157) {
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
+            }
+
+
         }
 
         return Datatables::of($data)
