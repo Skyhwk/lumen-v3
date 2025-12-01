@@ -707,7 +707,7 @@ class InputParameterController extends Controller
                         array_fill_keys(array_keys($unapprovedSamples), '-')
                     );
                 }
-            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
+            } else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi','Padatan'])){
 				$isokinetik = Subkontrak::with('TrackingSatu')
 					->whereHas('TrackingSatu', function($q) use ($request) {
 						$q->where('ftc_laboratory', 'LIKE', "%$request->tgl%");
@@ -1896,7 +1896,7 @@ class InputParameterController extends Controller
 					'message' => 'Jenis pengujian tidak ada.'
 				], 401);
 			}
-		} else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi'])){
+		} else if(in_array($stp->name, ['Other','OTHER']) && in_array($stp->sample->nama_kategori,['Air','Udara','Emisi','Padatan'])){
 			if (isset($request->jenis_pengujian)) {
 				// Jenis Pengujian: sample
 				if ($request->jenis_pengujian == 'sample') {
@@ -3605,7 +3605,7 @@ class InputParameterController extends Controller
 			}
 
             $data_analis = array_filter((array) $request->all(), function ($value, $key) {
-                $exlude = ['jenis_pengujian', 'note','no_sample', 'parameter', 'id_stp'];
+                $exlude = ['jenis_pengujian', 'note','no_sample', 'parameter', 'id_stp','tgl'];
                 return !in_array($key, $exlude);
             }, ARRAY_FILTER_USE_BOTH);
 
@@ -3623,6 +3623,15 @@ class InputParameterController extends Controller
                     $formatted_data_analis[$key] = $value;
                 }
             }
+
+			if(isset($data_kalkulasi['massa_total_partikulat'])){
+				$formatted_data_analis['massa_total_partikulat'] = $data_kalkulasi['massa_total_partikulat'];
+				unset($data_kalkulasi['massa_total_partikulat']);
+			}
+			if(isset($data_kalkulasi['vstd'])){
+				$formatted_data_analis['vstd'] = $data_kalkulasi['vstd'];
+				unset($data_kalkulasi['vstd']);
+			}
 
 			$data = new EmisiCerobongHeader;
 			$data->no_sampel = $request->no_sample;
@@ -4340,7 +4349,7 @@ class InputParameterController extends Controller
 
 				$data 						= new Subkontrak;
 				$data->no_sampel 			= trim($request->no_sample);
-				$data->category_id 			= 1;
+				$data->category_id 			= $stp->category_id;
 				$data->parameter 			= $request->parameter;
 				$data->jenis_pengujian 		= $request->jenis_pengujian;
 				$data->hp 					= $request->hp;
@@ -4357,7 +4366,7 @@ class InputParameterController extends Controller
 				$data_kalkulasi['id_subkontrak'] = $data->id;
 				$data_kalkulasi['no_sampel'] = trim($request->no_sample);
 
-				if($stp->sample->nama_kategori == 'Air'){
+				if($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan'){
                     $kalkulasi1 = WsValueAir::create($data_kalkulasi);
                 }else if($stp->sample->nama_kategori == 'Udara'){
                     $existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))

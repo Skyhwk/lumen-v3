@@ -456,7 +456,7 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 5) {
             $this->autoBlock(DataLapanganIsokinetikPenentuanPartikulat::class);
-            $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail','survei');
+            $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail','survei', 'method3');
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -518,7 +518,7 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 6) {
             $this->autoBlock(DataLapanganIsokinetikHasil::class);
-            $data = DataLapanganIsokinetikHasil::with('detail','survei');
+            $data = DataLapanganIsokinetikHasil::with('detail','survei','method5');
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -610,11 +610,12 @@ class FdlPartikulatIsokinetikController extends Controller
         if (isset($request->id) && $request->id != null) {
             if ($request->method == 1) {
                 $data = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
-                
+                $panjang = $data->lfw / 100; // cm ke meter
+                $lebar = $data->lnw / 100; // cm ke meter
                 if($data->bentuk_cerobong == "Persegi"){
-                    $data->luas_penampang = number_format($data->lfw * $data->lnw, 2, '.', ',');
+                    $data->luas_penampang = number_format($panjang * $lebar, 4, '.', '');
                 }else{
-                    $data->luas_penampang = number_format(3.14 * 0.25 * $data->diameter_cerobong * $data->diameter_cerobong, 2, '.', ',');
+                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 4, '.', '');
                 }
                 $data->is_approve = true;
                 $data->approved_by = $this->karyawan;
@@ -682,7 +683,6 @@ class FdlPartikulatIsokinetikController extends Controller
                 DB::beginTransaction();
                 try {
                     $data = DataLapanganIsokinetikPenentuanPartikulat::where('id', $request->id)->first();
-
                     $method3 = DataLapanganIsokinetikBeratMolekul::where('no_sampel', $data->no_sampel)
                         ->where('is_approve', true)
                         ->get();
@@ -755,7 +755,7 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $hitung = $lastValue - $data->dgmAwal;
 
-                    $gas_vol = number_format($hitung / 1000, 4, '.', ',');
+                    $gas_vol = number_format($hitung / 1000, 4, '.', '');
                     
                     $method6->gas_vol = $gas_vol;
                     $method6->save();
@@ -846,23 +846,33 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $konstanta1 = $selisih;
 
-                    $ukuranLubang = $method1->ukuran_lubang * 10; // Convert cm to mm
-                    $diameterCerobong = NULL;
+                    $ukuranLubang = number_format($method1->ukuran_lubang / 100, 2, '.', ''); // Convert cm to m
+                    $diameterCerobong = $method1->diameter_cerobong; // in m
 
-                    if($method1->bentuk_cerobong == "Persegi"){
-                        $diameterCm = $method1->diameter_cerobong ?? NULL;
+                    $dataDp = $method5->dP;
+                    $totalDp = 0;
+                    $countDp = 0;
 
-                        if(isset($diameterCm)){
-                            $radiusMeter = ($diameterCm / 100) / 2;
-                            $diameterCerobong = M_PI * $radiusMeter * $radiusMeter;
+                    foreach ($dataDp as $item) {
+                        foreach ($item as $key => $value) {
+
+                            // hanya ambil key yang mengandung "avgDp"
+                            if (strpos($key, 'avgDp') !== false) {
+
+                                // ubah ke float
+                                $nilai = (float) $value;
+
+                                $totalDp += $nilai;
+                                $countDp++;
+                            }
                         }
-                    } else {
-                        $panjang = $method1->lfw ?? 0;
-                        $lebar   = $method1->lnw ?? 0;
-
-                        // Konversi dari cm ke meter, lalu hitung luas persegi panjang
-                        $diameterCerobong = ($panjang / 100) * ($lebar / 100);
                     }
+
+                    $rataRata = $countDp > 0 ? $totalDp / $countDp : 0;
+
+                    // Format 2 angka di belakang koma
+                    $rataRataDp = number_format($rataRata, 2, '.', '');
+
 
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
 
@@ -870,9 +880,26 @@ class FdlPartikulatIsokinetikController extends Controller
                         return response()->json(['message' => 'Order tidak ditemukan.'], 404);
                     }
 
+                    $persenCO = $method3->CO / 10000;
+                    $persenCO2 = $method3->CO2;
+                    $combustion = number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
+
                     $parameterOrder = is_string($order->parameter)
                         ? json_decode($order->parameter, true)
                         : $order->parameter;
+
+                    $avg_dgm = $method5->DGM;   // hasil dari database (JSON decode ke array)
+
+                    $gas_vol = $avg_dgm[0]['avgDGM'] / 1000; // convert to m3
+                    $rata_suhu_gas = $data->avgTS - 273; // convert to Celsius
+                    $berat_molekul_basah_method6 = abs(($method3->MdMole * (1 - $data->bws_frac)) + (18 * $data->bws_frac));
+
+                    $dnActual = $method5->dn_actual / 1000; // convert to meter
+                    $luasPenampang = number_format((($dnActual * $dnActual * 3.14) / 4), 8, '.', ''); // luas penampang nozzle in m2
+
+                    // selisih tekanan barometer
+                    $selisihTekananBarometerMethod2 = number_format(abs($method2->Ps - $method2->tekanan_udara), 1, '.', '');
+                    $selisihTekananBarometerMethod5 = number_format(abs($data->ps - $method2->tekanan_udara), 1, '.', '');
 
                     $listParameters = [
                         "395;Iso-Debu",
@@ -884,7 +911,6 @@ class FdlPartikulatIsokinetikController extends Controller
                         "401;Iso-Combust",
                         "402;Iso-ResTime"
                     ];
-
                     foreach ($listParameters as $item) {
                         [$id_param, $nama_param] = explode(';', $item);
                         
@@ -935,48 +961,50 @@ class FdlPartikulatIsokinetikController extends Controller
 
                             // Tambahkan hasil_isokinetik sesuai jenis parameter
                             switch ($nama_param) {
+                                // DONE
                                 case 'Iso-Velo':
-                                    $header->rata_rata_tekanan_pitot = $konstanta4;
-                                    $header->selisih_tekanan_barometer = $selisih;
 
                                     $hasilIso = [
-                                        'rata_rata_tekanan_pitot' => $konstanta4,
-                                        'selisih_tekanan_barometer' => $selisih,
+                                        'rata_rata_tekanan_pitot_method_2' => $method2->dP,
+                                        'rata_rata_tekanan_pitot_method_5' => $rataRataDp,
+                                        'selisih_tekanan_barometer_method_2' => $selisihTekananBarometerMethod2,
+                                        'selisih_tekanan_barometer_method_5' => $selisihTekananBarometerMethod5,
                                         'kp' => $method2->kp,
                                         'cp' => $method2->cp,
                                         'tekanan_barometer' => $method2->tekanan_udara,
-                                        'kecepatan_linier' => $data->avgVs,
+                                        'kecepatan_linier_method_5' => $method5->Vs,
                                         'kecepatan_volumetrik_aktual' => $data->qs_act
                                     ];
                                     break;
 
                                 case 'Iso-Debu':
                                     $header->konstanta_4 = $konstanta4;
-                                    $header->Konstanta_1 = $selisih;
+                                    $header->Konstanta_1 =0.3923;
 
                                     $hasilIso = [
-                                        'koefisien_dry_gas' => $method2->kp,
-                                        'delta_h_calibrate' => $method2->cp,
-                                        'konstanta_1' => $selisih,
-                                        'konstanta_2' => $method2->tekanan_udara,
-                                        'konstanta_4' => $konstanta4,
-                                        'konstanta_5' => $data->avgVs,
-                                        'volume_sampel_dari_dry_gas' => $data->qs_act,
-                                        'volume_sampel_gas_standar' => $data->qs_act,
-                                        'rata_rata_suhu_gas_buang' => $data->qs_act,
-                                        'tekanan_gas_buang' => $data->qs_act,
-                                        'diameter_nozzle' => $data->qs_act,
-                                        'luas_penampang_nozzle' => $data->qs_act,
+                                        'koefisien_dry_gas' => $method5->data_Y,
+                                        'delta_h_calibrate' => $method5->Delta_H,
+                                        'konstanta_1' => 0.3923,
+                                        'konstanta_2' => 0.001357,
+                                        'konstanta_4' => 4.2484,
+                                        'konstanta_5' => 0.0006068,
+                                        'volume_sampel_dari_dry_gas' => $gas_vol,
+                                        'volume_sampel_gas_standar' => $data->v_gas,
+                                        'rata_rata_suhu_gas_buang' => $rata_suhu_gas,
+                                        'tekanan_gas_buang' => $data->ps,
+                                        'diameter_nozzle' => number_format($dnActual, 4, '.', ''),
+                                        'luas_penampang_nozzle' => $luasPenampang,
+                                        'kecepatan_volumetrik_standar' => $data->qs,
                                     ];
                                     break;
 
+                                // DONE
                                 case 'Iso-Traverse':
                                     $header->ukuran_lubang = $ukuranLubang;
                                     $header->diameter_cerobong = $diameterCerobong;
-
                                     $hasilIso = [
-                                        'traverse_poin_partikulat_1' => $method1->lintas_partikulat,
-                                        'traverse_poin_kecepatan_linier' => $method1->kecepatan_linier,
+                                        'traverse_poin_partikulat' => $method1->lintas_partikulat,
+                                        'traverse_poin_kecepatan_linier' => $method1->titik_lintas_kecepatan_linier_s,
                                         'diameter_cerobong' => $diameterCerobong,
                                         'ukuran_lubang_sampling' => $ukuranLubang,
                                         'jumlah_lubang_sampling' => $method1->jumlah_lubang_sampling,
@@ -989,39 +1017,44 @@ class FdlPartikulatIsokinetikController extends Controller
                                     break;
                                 case 'Iso-Combust':
                                     $hasilIso = [
-                                        'effisiensi_pembakaran' => $method5->combustion,  
+                                        'effisiensi_pembakaran' => $combustion,  
                                     ];
+                                    $wsValue->c5 = $combustion;
                                     break;
-                                case 'Iso-DMW':
+                                // DONE
+                                case 'Iso-DMW': 
                                     $hasilIso = [
-                                        'berat_molekul_kering' => $method5->md,
-                                        'berat_molekul_basah' => $method5->ms,
-                                        'co2_mole' => $method5->co2_mole,
-                                        'co_mole' => $method5->co_mole,
-                                        'o2_mole' => $method5->o2_mole,
-                                        'n2_mole' => $method5->n2_mole,
-                                        'co2_dmw' => $method5->CO2,
-                                        'co_dmw' => $method5->CO,
-                                        'nox_dmw' => $method5->NOx,
-                                        'so2_dmw' => $method5->SO2,
-                                        'rata_suhu_cerobong' => $method5->temperatur_stack
+                                        'berat_molekul_kering_method3' => $method3->MdMole,
+                                        'berat_molekul_kering_method5' => $method3->MdMole,
+                                        'co2_method3' => $method3->CO2Mole,
+                                        'co_method3' => number_format($method3->COMole, 8, '.', ''),
+                                        'o2_method3' => $method3->O2Mole,
+                                        'n2_method3' => number_format($method3->N2Mole, 4, '.', ''),
+                                        'konsentrasi_nox' => $method5->NOx,
+                                        'konsentrasi_o2' => $method3->O2,
+                                        'konsentrasi_co' => $method5->CO,
+                                        'konsentrasi_co2' => $method3->CO2,
+                                        'konsentrasi_so2' => $method5->SO2,
+                                        'rata_suhu_cerobong_method3' => $method3->suhu_cerobong
                                     ];
                                     break;
                                 case 'Iso-Moisture':
                                     $hasilIso = [
                                         'durasi_waktu' => $method5->Total_time,
-                                        'volume_sampel_gas_standar' => $data->gas_vol,
-                                        'volume_uap_air_sampel_gas_standar' => $data->v_wtr,
-                                        'kecepatan_volumetrik_standar' => $data->qs,
-                                        'rata_suhu_gas_standar' => $method2->suhu,
-                                        'uap_air_dalam_aliran_gas_hide' => $data->bws_aktual,
-                                        'kadar_uap_air' => $data->bws_aktual,
+                                        'kadar_air' => number_format($method4->kadar_air, 2, '.', ''),
+                                        'berat_molekul_basah_method4' => number_format($method4->ms, 2, '.', ''),
+                                        'berat_molekul_basah_method5' => number_format($berat_molekul_basah_method6, 2, '.', ''),
+                                        // 'volume_uap_air' => $gas_vol,
+                                        'volume_uap_air' => $data->v_wtr,
+                                        'uap_air_dalam_aliran_gas' => $data->bws_aktual,
+                                        // 'kadar_air_hasil' => $data->bws_aktual
                                     ];
                                     break;
                                 case 'Iso-Percent':
                                     $hasilIso = [
                                         'persen_sampling_isokinetik' => $data->persenIso
                                     ];
+                                    $wsValue->c5 = $data->persenIso;
                                     break;
                                 default:
                                     $hasilIso = [];
@@ -1029,16 +1062,12 @@ class FdlPartikulatIsokinetikController extends Controller
 
                             // Simpan hasil_isokinetik di kedua tabel
                             $wsValue->hasil_isokinetik = json_encode($hasilIso);
-
                             $wsValue->created_by = $this->karyawan;
                             $wsValue->created_at = Carbon::now();
                             $wsValue->save();
-
                             $header->save();
                         }
                     }
-
-
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
                     $data->approved_at = Carbon::now();

@@ -101,6 +101,7 @@ class TqcAirController extends Controller
                     $add_by = '';
                     $approve_by = '';
                     $hasil_koreksi = '';
+                    $hasil_json = '';
 
                     $parameter = explode(';', $value)[1];
                     if ($data_order->wsValueAir != null) {
@@ -113,6 +114,7 @@ class TqcAirController extends Controller
                                 $hasil_koreksi = $value2->faktor_koreksi;
                                 $add_by = $value2->colorimetri->created_by;
                                 $approve_by = $value2->colorimetri->approved_by;
+                                $hasil_json = $value2->hasil_json;
                             } else if ($value2->id_gravimetri != null && $value2->gravimetri->parameter == $parameter && $value2->gravimetri->lhps == 1) {
                                 $hasil1 = $value2->hasil;
                                 $hasil2 = $value2->hasil_2;
@@ -120,6 +122,7 @@ class TqcAirController extends Controller
                                 $hasil_koreksi = $value2->faktor_koreksi;
                                 $add_by = $value2->gravimetri->created_by;
                                 $approve_by = $value2->gravimetri->approved_by;
+                                $hasil_json = $value2->hasil_json;
                             } else if ($value2->id_titrimetri != null && $value2->titrimetri->parameter == $parameter && $value2->titrimetri->lhps == 1) {
                                 $hasil1 = $value2->hasil;
                                 $hasil2 = $value2->hasil_2;
@@ -127,6 +130,7 @@ class TqcAirController extends Controller
                                 $hasil_koreksi = $value2->faktor_koreksi;
                                 $add_by = $value2->titrimetri->created_by;
                                 $approve_by = $value2->titrimetri->approved_by;
+                                $hasil_json = $value2->hasil_json;
                             } else if ($value2->id_subkontrak != null && $value2->subkontrak->parameter == $parameter && $value2->subkontrak->lhps == 1) {
                                 $hasil1 = $value2->hasil;
                                 $hasil2 = $value2->hasil_2;
@@ -134,6 +138,7 @@ class TqcAirController extends Controller
                                 $hasil_koreksi = $value2->faktor_koreksi;
                                 $add_by = $value2->subkontrak->created_by;
                                 $approve_by = $value2->subkontrak->approved_by;
+                                $hasil_json = $value2->hasil_json;
                             }
                         }
                     }
@@ -169,6 +174,7 @@ class TqcAirController extends Controller
                         'hasil3' => $hasil3,
                         'hasil_koreksi' => $hasil_koreksi,
                         'trend_hasil' => $trend,
+                        'hasil_json' => $hasil_json != '' ? json_decode($hasil_json, true) : null
                     ]);
                 }
 

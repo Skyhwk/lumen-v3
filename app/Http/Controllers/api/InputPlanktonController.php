@@ -28,10 +28,10 @@ class InputPlanktonController extends Controller
             ->where('is_active', true)
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
-                    ->from('colorimetri')
-                    ->whereColumn('order_detail.no_sampel', 'colorimetri.no_sampel')
-                    ->where('colorimetri.parameter', 'Plankton')
-                    ->where('colorimetri.is_active', true);
+                    ->from('subkontrak')
+                    ->whereColumn('order_detail.no_sampel', 'subkontrak.no_sampel')
+                    ->where('subkontrak.parameter', 'Plankton')
+                    ->where('subkontrak.is_active', true);
             })
             ->orderBy('no_sampel', 'asc');
 

@@ -38,7 +38,11 @@ class DataLapanganIsokinetikPenentuanPartikulat extends Sector
     public function survei(){
         return $this->belongsTo(DataLapanganIsokinetikSurveiLapangan::class, 'id_lapangan', 'id')->where('is_active', true);
     }
-
+    
+    public function method3(){
+        return $this->belongsTo(DataLapanganIsokinetikBeratMolekul::class, 'no_sampel', 'no_sampel');
+    }
+    
     public function method2(){
         return $this->belongsTo(DataLapanganIsokinetikPenentuanKecepatanLinier::class, 'no_sampel', 'no_sampel')->where('is_active', true);
     }

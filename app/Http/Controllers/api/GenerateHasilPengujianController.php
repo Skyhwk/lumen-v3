@@ -45,7 +45,7 @@ class GenerateHasilPengujianController extends Controller
             ->map(function ($item) {
                 $linkLhp = LinkLhp::where('no_order', $item->no_order);
                 if ($linkLhp->exists()) {
-                    $listPeriode = $linkLhp->pluck('periode')->toArray();
+                    $listPeriode = $linkLhp->pluck('periode')->filter()->values()->toArray();
                     if (count($listPeriode) > 0) {
                         $filteredDetail = $item->orderDetail->filter(fn($detail) => !in_array($detail->periode, $listPeriode))->values();
                         $item->setRelation('order_detail', $filteredDetail);
@@ -119,8 +119,10 @@ class GenerateHasilPengujianController extends Controller
                 ->with([
                     'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
                     'lhps_air',
+                    'lhps_padatan',
                     'lhps_emisi',
                     'lhps_emisi_c',
+                    'lhps_emisi_isokinetik',
                     'lhps_getaran',
                     'lhps_kebisingan',
                     'lhps_kebisingan_personal',
@@ -128,8 +130,10 @@ class GenerateHasilPengujianController extends Controller
                     'lhps_medanlm',
                     'lhps_pencahayaan',
                     'lhps_sinaruv',
-                    'lhps_iklim',
                     'lhps_ergonomi',
+                    'lhps_iklim',
+                    'lhps_swab_udara',
+                    'lhps_microbiologi',
                 ])
                 ->where([
                     'id_order_header' => $orderHeader->id,
@@ -149,8 +153,10 @@ class GenerateHasilPengujianController extends Controller
 
                     $lhps = collect([
                         $item->lhps_air,
+                        $item->lhps_padatan,
                         $item->lhps_emisi,
                         $item->lhps_emisi_c,
+                        $item->lhps_emisi_isokinetik,
                         $item->lhps_getaran,
                         $item->lhps_kebisingan,
                         $item->lhps_kebisingan_personal,
@@ -158,8 +164,10 @@ class GenerateHasilPengujianController extends Controller
                         $item->lhps_medanlm,
                         $item->lhps_pencahayaan,
                         $item->lhps_sinaruv,
-                        $item->lhps_iklim,
                         $item->lhps_ergonomi,
+                        $item->lhps_iklim,
+                        $item->lhps_swab_udara,
+                        $item->lhps_microbiologi
                     ])->first(fn($lhps) => $lhps !== null);
 
                     $tglSampling = optional($track)->ftc_verifier
@@ -178,7 +186,7 @@ class GenerateHasilPengujianController extends Controller
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
-                                
+
                     $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
                     if (in_array($item->kategori_3, $kategori_validation)) {
                         $steps['analisa']['date'] = $tglSampling;
@@ -292,7 +300,7 @@ class GenerateHasilPengujianController extends Controller
 
                 foreach ($lhpRilis as $cfrItem) {
                     foreach ($cfrItem['order_details'] as $detailItem) {
-                        foreach (['lhps_air', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
+                        foreach (['lhps_air', 'lhps_padatan', 'lhps_emisi', 'lhps_emisi_c', 'lhps_getaran', 'lhps_kebisingan', 'lhps_ling', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_ergonomi'] as $lhpsKey) {
                             $lhps = $detailItem[$lhpsKey] ?? null;
                             if (!$lhps || empty($lhps['file_lhp'])) continue;
 
@@ -420,7 +428,7 @@ class GenerateHasilPengujianController extends Controller
 
         $emailLhp = EmailLhp::where('no_order', $request->no_order)->first();
 
-        if($emailLhp) {
+        if ($emailLhp) {
             $emailCC = explode(',', $emailLhp->email_cc);
             $emailTo = $emailLhp->email_to;
         }
@@ -430,7 +438,9 @@ class GenerateHasilPengujianController extends Controller
                 'email_cc' => $emailCC,
                 'email_to' => $emailTo,
                 'email_bcc' => $emails,
-            ], 200);
+            ],
+            200
+        );
     }
 
     public function getUser()
@@ -494,8 +504,8 @@ class GenerateHasilPengujianController extends Controller
             if (!$linkLhp) return response()->json(['message' => 'Data Link LHP tidak ditemukan.'], 404);
 
             $listCfrRilis = json_decode($linkLhp->list_lhp_rilis);
-            $finalFilename = $linkLhp->filename;
-            if (empty($listCfrRilis) || !$finalFilename) return response()->json(['message' => 'Record ini tidak memiliki list LHP rilis atau nama file. Tidak ada yang bisa di-render ulang.'], 400);
+            // $finalFilename = $linkLhp->filename;
+            // if (empty($listCfrRilis) || !$finalFilename) return response()->json(['message' => 'Record ini tidak memiliki list LHP rilis atau nama file. Tidak ada yang bisa di-render ulang.'], 400);
 
             $finalDirectoryPath = public_path('laporan/hasil_pengujian');
             $finalFilename = $linkLhp->periode ? $linkLhp->no_order . '_' . $linkLhp->periode . '.pdf' : $linkLhp->no_order . '.pdf';
@@ -546,6 +556,104 @@ class GenerateHasilPengujianController extends Controller
             ], 503);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Gagal render ulang: ' . $e->getMessage(), 'line' => $e->getLine()], 500);
+        }
+    }
+
+    public function fixAllLhps(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $relations = [
+                'lhps_air',
+                'lhps_padatan',
+                'lhps_emisi',
+                'lhps_emisi_c',
+                'lhps_emisi_isokinetik',
+                'lhps_getaran',
+                'lhps_kebisingan',
+                'lhps_kebisingan_personal',
+                'lhps_ling',
+                'lhps_medanlm',
+                'lhps_pencahayaan',
+                'lhps_sinaruv',
+                'lhps_ergonomi',
+                'lhps_iklim',
+                'lhps_swab_udara',
+                'lhps_microbiologi',
+            ];
+
+            OrderDetail::with($relations)
+                ->where('status', 3)
+                ->where('is_approve', true)
+                ->where('is_active', true)
+                ->chunk(200, function ($orderDetails) use ($relations) {
+                    foreach ($orderDetails as $orderDetail) {
+                        // cek relasi yg kepasang
+                        $foundRelations = collect($relations)
+                            ->filter(fn($r) => $orderDetail->$r)
+                            ->values()
+                            ->toArray();
+
+                        // lebih dari 1? skip dulu biar aman
+                        if (count($foundRelations) > 1) {
+                            \Log::info('[FIX LHP RELEASE] : ❌ SKIPPED (Multiple relations was found)', [
+                                'no_sampel'  => $orderDetail->no_sampel,
+                                'relations'  => $foundRelations,
+                            ]);
+                            continue;
+                        }
+
+                        // ga ada relasi sama sekali? skip
+                        if (count($foundRelations) === 0) {
+                            continue;
+                        }
+
+                        $relation = $foundRelations[0];
+                        $lhps = $orderDetail->$relation;
+
+                        // cuma update kalau approved_at nya null
+                        if ($lhps && !$lhps->approved_at) {
+                            // cek order detail-nya udah approved belum
+                            if (!$orderDetail->is_approve || !$orderDetail->approved_by || !$orderDetail->approved_at) {
+                                \Log::info('[FIX LHP RELEASE] : ❌ SKIPPED (Status 3 tapi belum approved)', [
+                                    'no_sampel' => $orderDetail->no_sampel,
+                                    'order_detail' => $orderDetail->toArray(),
+                                ]);
+                                continue;
+                            }
+
+                            $hasApproved     = array_key_exists('is_approved', $lhps->getAttributes());
+                            $hasApprovedAlt  = array_key_exists('is_approve', $lhps->getAttributes());
+
+                            $hasApprovedBy    = array_key_exists('approved_by', $lhps->getAttributes());
+                            $hasApprovedByAlt = array_key_exists('approve_by', $lhps->getAttributes());
+
+                            $hasApprovedAt    = array_key_exists('approved_at', $lhps->getAttributes());
+                            $hasApprovedAtAlt = array_key_exists('approve_at', $lhps->getAttributes());
+
+                            if ($hasApproved) $lhps->is_approved = true;
+                            if ($hasApprovedAlt) $lhps->is_approve = true;
+
+                            if ($hasApprovedBy) $lhps->approved_by = $orderDetail->approved_by;
+                            if ($hasApprovedByAlt) $lhps->approve_by = $orderDetail->approved_by;
+
+                            if ($hasApprovedAt) $lhps->approved_at = $orderDetail->approved_at;
+                            if ($hasApprovedAtAlt) $lhps->approve_at = $orderDetail->approved_at;
+
+                            $lhps->save();
+
+                            \Log::info('[FIX LHP RELEASE] : ✅ UPDATED LHPS', [
+                                'no_sampel' => $orderDetail->no_sampel,
+                                'lhps'      => $lhps->toArray(),
+                            ]);
+                        }
+                    }
+                });
+
+            DB::commit();
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            dd($th);
         }
     }
 }

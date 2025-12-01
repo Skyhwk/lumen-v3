@@ -12,6 +12,8 @@ use App\Models\LhpsEmisiCHeader;
 use App\Models\LhpsEmisiCDetail;
 use App\Models\LhpsEmisiIsokinetikHeader;
 use App\Models\LhpsEmisiIsokinetikDetail;
+use App\Models\LhpsPadatanDetail;
+use App\Models\LhpsPadatanHeader;
 use App\Models\LhpsSinarUVDetail;
 use App\Models\LhpsSinarUVHeader;
 use App\Models\MasterBakumutu;
@@ -216,7 +218,16 @@ class LhpTemplate
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
         $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
         $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
-
+        if ($header->getTable() === 'lhps_air_header') {
+            $biota = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
+            foreach ($biota as $key => $value) {
+                $is_custom = false;
+                $page = null;
+                $biotaBody[$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                $biotaHeader[$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
+                
+            }
+        }
         if (!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
@@ -224,6 +235,15 @@ class LhpTemplate
                 $htmlCustomHeader[$page] = view($this->directoryDefault . '.customHeader', compact('header', 'detail', 'mode', 'view', 'showKan', 'page'))->render();
                 $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
                 $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
+
+                if ($header->getTable() === 'lhps_air_header') {
+                    $biota_custom = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
+                    foreach ($biota_custom as $key => $value) {
+                        $is_custom = true;
+                        $biotaCustomBody[$page][$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                        $biotaCustomHeader[$page][$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
+                    }
+                }
             }
         }
 
@@ -304,13 +324,29 @@ class LhpTemplate
         $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML($htmlBody);
         $mpdf->SetHTMLFooter($htmlLastFooter);
-
+        if(isset($biotaBody) && isset($biotaHeader)) {
+            foreach ($biotaBody as $page => $custom) {
+                $mpdf->SetHTMLHeader($biotaHeader[$page]);
+                $mpdf->WriteHTML($biotaBody[$page]);
+                $mpdf->SetHTMLFooter($htmlFooter);
+                $mpdf->SetHTMLFooter($htmlLastFooter);
+            }
+        }
         if (isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
             foreach ($htmlCustomBody as $page => $custom) {
                 $mpdf->SetHTMLHeader($htmlCustomHeader[$page]);
                 $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
                 $mpdf->WriteHTML($htmlCustomBody[$page]);
                 $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
+
+                if(isset($biotaCustomBody[$page]) && isset($biotaCustomHeader[$page])) {
+                    foreach ($biotaCustomBody[$page] as $biotaPage => $biotaCustom) {
+                        $mpdf->SetHTMLHeader($biotaCustomHeader[$page][$biotaPage]);
+                        $mpdf->WriteHTML($biotaCustomBody[$page][$biotaPage]);
+                        $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
+                        $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
+                    }
+                }
             }
         }
 
@@ -369,10 +405,20 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
+            } else if ($kategori === 6) {
+                $header = LhpsPadatanHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
+                $detail = LhpsPadatanDetail::where('id_header', $header->id)->get();
+                foreach ($detail as $val) {
+                    if ($val->akr != 'ẍ') {
+                        $parameterAkreditasi++;
+                    } else {
+                        $parameterNonAkreditasi++;
+                    }
+                }
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)']
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis', '316;power density', '277;medan listrik','236;gelombang elektro']
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
@@ -391,12 +437,12 @@ class LhpTemplate
                     }
                 }
             } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
-                if(collect($dataDecode)->contains(function ($item) {
+                if (collect($dataDecode)->contains(function ($item) {
                     return in_array(
                         $item,
-                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW','399;Iso-Moisture','400;Iso-Percent']
+                        ['395;Iso-Debu', '396;Iso-Traverse', '397;Iso-Velo', '398;Iso-DMW', '399;Iso-Moisture', '400;Iso-Percent']
                     );
-                })){
+                })) {
                     $header = LhpsEmisiIsokinetikHeader::where('no_lhp', $value->cfr)->where('is_active', true)->first();
                     $detail = LhpsEmisiIsokinetikDetail::where('id_header', $header->id)->get();
                 } else {
@@ -523,8 +569,24 @@ class LhpTemplate
                             border-bottom: 1px dotted #000000;
                             font-size: 9px;
                         }
+                        .pd-3-dot-center {
+                            padding: 3px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-dot-left {
                             padding: 8px;
+                            text-align: left;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px dotted #000000;
+                            font-size: 9px;
+                        }
+                        .pd-3-dot-left {
+                            padding: 3px;
                             text-align: left;
                             border-left: 1px solid #000000;
                             border-right: 1px solid #000000;
@@ -539,6 +601,14 @@ class LhpTemplate
                             border-bottom: 1px solid #000000;
                             font-size: 9px;
                         }
+                        .pd-3-solid-left {
+                            padding: 3px;
+                            text-align: left;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-solid-center {
                             padding: 8px;
                             text-align: center;
@@ -547,8 +617,26 @@ class LhpTemplate
                             border-bottom: 1px solid #000000;
                             font-size: 9px;
                         }
+                        .pd-3-solid-center {
+                            padding: 3px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            font-size: 9px;
+                        }
                         .pd-5-solid-top-center {
                             padding: 8px;
+                            text-align: center;
+                            border-left: 1px solid #000000;
+                            border-right: 1px solid #000000;
+                            border-bottom: 1px solid #000000;
+                            border-top: 1px solid #000000;
+                            font-size: 9px;
+                            font-weight: bold;
+                        }
+                        .pd-3-solid-top-center {
+                            padding: 3px;
                             text-align: center;
                             border-left: 1px solid #000000;
                             border-right: 1px solid #000000;
@@ -572,6 +660,14 @@ class LhpTemplate
                         .left {
                             float: left;
                             width: 59%;
+                        }
+                        .leftMiddle{
+                            float: left;
+                            width: 50%;
+                        }
+                        .rightMiddle{
+                            float: right;
+                            width: 49%;
                         }
                         .left2 {
                             float: left;

@@ -478,20 +478,20 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                             $hasilIsokinetik = json_decode($val->ws_value_cerobong->hasil_isokinetik, true);
 
                             // berat_molekul_kering
-                            if (array_key_exists('berat_molekul_kering', $hasilIsokinetik)) {
+                            if (array_key_exists('berat_molekul_kering_method5', $hasilIsokinetik)) {
                                 $dataPage2[] = [
                                     'parameter' => 'Berat Molekul Kering',
-                                    'hasil_uji' => $hasilIsokinetik['berat_molekul_kering'],
+                                    'hasil_uji' => $hasilIsokinetik['berat_molekul_kering_method5'],
                                     'baku_mutu' => '-',
                                     'satuan' => 'g/gmol',
                                     'spesifikasi_metode' => 'SNI 7177.15:2009',
                                 ];
                             }
                             // kadar_uap_air
-                            if (array_key_exists('kadar_uap_air', $hasilIsokinetik)) {
+                            if (array_key_exists('uap_air_dalam_aliran_gas', $hasilIsokinetik)) {
                                 $dataPage2[] = [
                                     'parameter' => 'Kadar Uap Air',
-                                    'hasil_uji' => $hasilIsokinetik['kadar_uap_air'],
+                                    'hasil_uji' => $hasilIsokinetik['uap_air_dalam_aliran_gas'],
                                     'baku_mutu' => '-',
                                     'satuan' => '%',
                                     'spesifikasi_metode' => 'SNI 7177.16:2009',
@@ -507,11 +507,11 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                                     'spesifikasi_metode' => 'SNI 7177.14:2009',
                                 ];
                             }
-                            // traverse_poin_partikulat_1
-                            if (array_key_exists('traverse_poin_partikulat_1', $hasilIsokinetik)) {
+                            // traverse_poin_partikulat
+                            if (array_key_exists('traverse_poin_partikulat', $hasilIsokinetik)) {
                                 $dataPage2[] = [
                                     'parameter' => 'Lokasi dan Titik - Titik Lintas (Traverse Point)',
-                                    'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat_1'],
+                                    'hasil_uji' => $hasilIsokinetik['traverse_poin_partikulat'],
                                     'baku_mutu' => '-',
                                     'satuan' => '-',
                                     'spesifikasi_metode' => 'SNI 7177.13:2009',
@@ -617,52 +617,39 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
     }
 
     private function buildPage3($data){
-        // dd($data);
         // Mapping sesuai PDF
         $mapping = [
-            'traverse_poin_partikulat_1' => ['Titik Lintas Partikulat', '-', 'Perhitungan'],
-            'traverse_poin_kecepatan_linier' => ['Titik Lintas Kecepatan Linier', '-', 'Perhitungan'],
+            'traverse_poin_partikulat' => ['Titik Lintas Partikulat', 'Titik', 'Perhitungan'],
+            'traverse_poin_kecepatan_linier' => ['Titik Lintas Kecepatan Linier', 'Titik', 'Perhitungan'],
             'diameter_cerobong' => ['Diameter Cerobong', 'm', 'Pengukuran'],
             'ukuran_lubang_sampling' => ['Ukuran Lubang Sampling', 'm', 'Pengukuran'],
-            'jumlah_lubang_sampling' => ['Jumlah Lubang Sampling', '-', 'Pengukuran'],
+            'jumlah_lubang_sampling' => ['Jumlah Lubang Sampling', 'Unit', 'Pengukuran'],
             'jarak_upstream' => ['Jarak Upstream', 'm', 'Pengukuran'],
             'jarak_downstream' => ['Jarak Downstream', 'm', 'Pengukuran'],
-            'kategori_upstream' => ['Kategori Upstream', '-', 'Perhitungan'],
-            'kategori_downstream' => ['Kategori Downstream', '-', 'Perhitungan'],
-
+            'kategori_upstream' => ['Kategori Upstream', 'D', 'Perhitungan'],
+            'kategori_downstream' => ['Kategori Downstream', 'D', 'Perhitungan'],
             'kp' => ['Kp', '-', 'Ketetapan'],
             'cp' => ['Cp', '-', 'Ketetapan'],
-
-            'selisih_tekanan_barometer' => ['Selisih Tekanan Udara Lingkungan dan Gas Buang', 'mmHg', 'Perhitungan'],
+            'selisih_tekanan_barometer_method_5' => ['Selisih Tekanan Udara Lingkungan dan Gas Buang', 'mmHg', 'Perhitungan'],
             'tekanan_barometer' => ['Tekanan Udara Lingkungan', 'mmHg', 'Pengukuran'],
-
-            'kecepatan_linier' => ['Kecepatan Linier', 'm/s', 'Perhitungan'],
+            'kecepatan_linier_method_5' => ['Kecepatan Linier', 'm/s', 'Perhitungan'],
             'kecepatan_volumetrik_aktual' => ['Kecepatan Volumetrik Actual', 'm³/s', 'Pengukuran'],
-
-            'berat_molekul_kering' => ['Berat Molekul Kering', 'g/gmol', 'Perhitungan'],
-            'berat_molekul_basah' => ['Berat Molekul Basah', 'g/gmol', 'Perhitungan'],
-
+            'berat_molekul_kering_method5' => ['Berat Molekul Kering', 'g/gmol', 'Perhitungan'],
+            'berat_molekul_basah_method5' => ['Berat Molekul Basah', 'g/gmol', 'Perhitungan'],
             'durasi_waktu' => ['Durasi Sampling', 'Menit', 'Pengukuran'],
-            'volume_uap_air_sampel_gas_standar' => ['Volume Uap Air Sampel Gas (Standar)', 'm³', 'Pengukuran'],
-
+            'volume_uap_air' => ['Volume Uap Air Sampel Gas (Standar)', 'm³', 'Pengukuran'],
             'kecepatan_volumetrik_standar' => ['Kecepatan Volumetrik Standar', 'm³/s', 'Perhitungan'],
-            'kadar_uap_air' => ['Kadar Uap Air', '%', 'Perhitungan'],
-
-            'koefisien_dry_gas' => ['Koefisien Dry Gas Meter', '-', 'Kalibrasi'],
+            'uap_air_dalam_aliran_gas' => ['Kadar Uap Air', '%', 'Perhitungan'],
+            'koefisien_dry_gas' => ['Koefisien Dry Gas Meter', '-', 'Kalibrasi'], 
             'delta_h_calibrate' => ['Δh Calibrate', 'mm H₂O', 'Kalibrasi'],
             'volume_sampel_dari_dry_gas' => ['Volume Sampel dari Dry Gas Meter', 'm³', 'Pengukuran'],
-
             'volume_sampel_gas_standar' => ['Volume Sampel Gas (Standar)', 'm³', 'Perhitungan'],
-            'rata_rata_suhu_gas_buang' => ['Rata-Rata Suhu Gas Buang', 'K', 'Perhitungan'],
-
+            'rata_rata_suhu_gas_buang' => ['Rata-Rata Suhu Gas Buang', '°C', 'Perhitungan'],
             'tekanan_gas_buang' => ['Tekanan Gas Buang', 'mmHg', 'Pengukuran'],
             'diameter_nozzle' => ['Diameter Nozzle', 'm', 'Pengukuran'],
             'luas_penampang_nozzle' => ['Luas Penampang Nozzle', 'm²', 'Perhitungan'],
-
             'persen_sampling_isokinetik' => ['Persen Sampling Isokinetik', '%', 'Perhitungan'],
             'effisiensi_pembakaran' => ['Effisiensi Pembakaran', '%', 'Perhitungan'],
-            'volume_gas_buang_aktual' => ['Volume Gas Buang Aktual', 'm³/s', 'Perhitungan'],
-            'konstanta_1' => ['Konstanta 1', '-', 'Perhitungan'],
         ];
 
         // Key yang harus dibuang
@@ -678,12 +665,23 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             'nox_dmw',
             'so2_dmw',
             'rata_suhu_cerobong',
-            'volume_sampel_gas_standar',
+            // 'volume_sampel_gas_standar',
             'rata_suhu_gas_standar',
             'uap_air_dalam_aliran_gas_hide',
             'konstanta_2',
             'konstanta_4',
-            'konstanta_5'
+            'konstanta_5',
+            'konsentrasi_co',
+            'konsentrasi_co2',
+            'konsentrasi_o2',
+            'konsentrasi_nox',
+            'konsentrasi_so2',
+            'co_method3',
+            'co2_method3',
+            'o2_method3',
+            'n2_method3',
+            'rata_rata_tekanan_pitot_method_2',
+            'rata_rata_tekanan_pitot_method_5',
         ];
 
         // Cleanup unwanted keys

@@ -290,9 +290,7 @@ class FdlMethodRulaController extends Controller
 
             // UPDATE ORDER DETAIL
             $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-                ->where('kategori_3', 'LIKE', '%27-%')
-                ->orWhere('kategori_3', 'LIKE', '%53-%')
-                ->where('parameter', 'LIKE', '%Ergonomi%')
+                ->where('parameter', 'LIKE', '%Ergonomi%')->where('is_active', true)
                 ->first();
 
             if($orderDetail->tanggal_terima == null) {
