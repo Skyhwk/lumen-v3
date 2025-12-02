@@ -83,7 +83,8 @@ Carbon::setLocale('id');
 class TestingController extends Controller
 {
     public function show(Request $request)
-    {
+    { 
+        
         try {
             //code...
 
