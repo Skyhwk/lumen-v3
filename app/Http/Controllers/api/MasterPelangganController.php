@@ -50,7 +50,13 @@ class MasterPelangganController extends Controller
             if ($jabatan == 157) {
                 $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
 
-                array_push($bawahan, $this->user_id);
+                $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
+
+                $bawahan = array_merge($bawahan, $karyawanNonAktif);
+
+                if (!in_array($this->user_id, $bawahan)) {
+                    $bawahan[] = $this->user_id;
+                }
 
                 $data->whereIn('sales_id', $bawahan);
             }
