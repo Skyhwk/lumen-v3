@@ -83,7 +83,8 @@ Carbon::setLocale('id');
 class TestingController extends Controller
 {
     public function show(Request $request)
-    {
+    { 
+        
         try {
             //code...
 
@@ -1352,7 +1353,115 @@ class TestingController extends Controller
                                 'file' => $ex->getFile(),
                             ], 500);
                         }
-                    
+                case 'sni_bahaya':
+                    $datas =DataLapanganErgonomi::where('method',8)->whereIn('no_sampel',$request->no_sampel)->get();
+                    foreach($datas as $key => $data){
+                        $pengukuran = json_decode($data->pengukuran, true);
+                        $durasiConfig = [
+                            // ATAS
+                            'Leher' => [0, 1, 2],
+                            'Rotasi Lengan' => [0, 1, 2],
+                            'Gerakan Lengan Sedang' => [0, 1, 2],
+                            'Kuliat Tertekan' => [0, 1, 2],
+                            'Getaran Lokal' => [0, 1, 2],
+    
+                            'Bahu' => [1, 2, 3],
+                            'Pergelangan Tangan' => [1, 2, 3],
+                            'Gerakan Lengan Intensif' => [1, 2, 3],
+                            'Memencet atau Menjepit' => [1, 2, 3],
+                            'Menggunakan Telapak Tangan' => [1, 2, 3],
+    
+                            'Mengetik Berselang' => [0, 0, 1],
+    
+                            'Penggenggam Kuat' => [0, 1, 3],
+                            'Mengetik Intensif' => [0, 1, 3],
+    
+                            // BAWAH
+                            'Tubuh Membungkuk 20°-45°' => [0, 1, 2],
+                            'Tubuh Menekuk 30°' => [0, 1, 2],
+                            'Gerakan Paha' => [0, 1, 2],
+                            'Pergelangan Kaki' => [0, 1, 2],
+                            'Aktivitas Pergelangan Kaki' => [0, 1, 2],
+                            'Duduk Tanpa Sandaran' => [0, 1, 2],
+                            'Tubuh Tertekan Benda' => [0, 1, 2],
+                            'Getaran Seluruh Tubuh' => [0, 1, 2],
+    
+                            'Tubuh Membungkuk >45°' => [1, 2, 3],
+                            'Tubuh Pemuntiran Torso' => [1, 2, 3],
+                            'Posisi Berlutut' => [1, 2, 3],
+                            'Lutut Untuk Memukul' => [1, 2, 3],
+    
+                            'Duduk Tanpa Pijakan' => [0, 0, 1],
+                        ];
+                        
+                        $atas  = $pengukuran['Tubuh_Bagian_Atas'] ?? [];
+                        $bawah = $pengukuran['Tubuh_Bagian_Bawah'] ?? [];
+                        $manualHandling = $pengukuran['Manual_Handling'] ?? 'Tidak';
+    
+                        $totalPoin1 = 0;
+                        $totalPoin2 = 0;
+    
+                        if ($manualHandling !== 'Tidak') {
+    
+                            // ✅ POIN 1
+                            if (
+                                isset($manualHandling['Posisi Angkat Beban']) &&
+                                isset($manualHandling['Estimasi Berat Benda'])
+                            ) {
+                                $totalPoin1 = $this->hitungRisiko(
+                                    $manualHandling['Posisi Angkat Beban'],
+                                    $manualHandling['Estimasi Berat Benda']
+                                );
+                            }
+    
+                            // ✅ POIN 2
+                            if (isset($manualHandling['Faktor Resiko'])) {
+                                foreach ($manualHandling['Faktor Resiko'] as $faktor) {
+                                    if (is_array($faktor)) {
+                                        foreach ($faktor as $nilai) {
+                                            if ($nilai !== 'Tidak') {
+                                                $skor = intval(explode(';', $nilai)[0] ?? 0);
+                                                $totalPoin2 += $skor;
+                                            }
+                                        }
+                                    } elseif ($faktor !== 'Tidak') {
+                                        $skor = intval(explode(';', $faktor)[0] ?? 0);
+                                        $totalPoin2 += $skor;
+                                    }
+                                }
+                            }
+    
+                            // ✅ SIMPAN ULANG KE STRUKTUR
+                            $manualHandling['Total Poin 1'] = $totalPoin1;
+                            $manualHandling['Faktor Resiko']['Total Poin 2'] = $totalPoin2;
+                            $manualHandling['Total Poin Akhir'] = $totalPoin1 + $totalPoin2;
+                        }
+    
+                        
+                        $hasilAtas  = $this->hitungDurasiDanPerbaiki($atas, $durasiConfig);
+                        $hasilBawah = $this->hitungDurasiDanPerbaiki($bawah, $durasiConfig);
+                        
+                        $totalAtas  = $hasilAtas['total'];
+                        $totalBawah = $hasilBawah['total'];
+                        $jumlahSkorPostur = $totalAtas + $totalBawah;
+    
+                        $atas  = $hasilAtas['data'];   // ✅ SUDAH DIPERBAIKI
+                        $bawah = $hasilBawah['data'];  // ✅ SUDAH DIPERBAIKI
+    
+                        
+                        $pengukuran['Tubuh_Bagian_Atas']  = $atas;
+                        $pengukuran['Tubuh_Bagian_Bawah']= $bawah;
+                        $pengukuran['Jumlah_Skor_Postur']= $jumlahSkorPostur;
+                        $pengukuran['Manual_Handling']  = $manualHandling;
+    
+                        $data->pengukuran = json_encode($pengukuran);
+                        dd($data);
+                        $data->save();
+
+                        return response()->json(["message"=> 'berhasil'],200);
+                    }
+
+     
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -3377,6 +3486,75 @@ class TestingController extends Controller
             ], 500);
         }
     }
+
+    private function hitungRisiko($posisi, $berat)
+    {
+        $poin = 0;
+
+        if ($posisi == 'Pengangkatan dengan jarak dekat') {
+            if ($berat == 'Berat benda >23Kg') $poin = 5;
+            elseif ($berat == 'Berat benda Sekitar 7 - 23 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak sedang') {
+            if ($berat == 'Berat benda >16Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 5 - 16 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak jauh') {
+            if ($berat == 'Berat benda >13Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 4.5 - 13 Kg') $poin = 3;
+        }
+
+        return $poin;
+    }
+
+    private function hitungDurasiDanPerbaiki($data, $durasiConfig)
+    {
+        $total = 0;
+
+        // ✅ PENGAMAN UTAMA
+        if (!is_array($data)) {
+            return [
+                'total' => 0,
+                'data'  => $data // kembalikan apa adanya
+            ];
+        }
+
+        foreach ($data as $kategoriKey => $kategori) {
+
+            if (!is_array($kategori)) {
+                continue; // ✅ lompat jika bukan array
+            }
+
+            foreach ($kategori as $key => $value) {
+
+                // ✅ JIKA ADA DURASI
+                if (is_array($value) && isset($value['Durasi Gerakan'])) {
+                    [$index, $range] = explode(';', $value['Durasi Gerakan']);
+                    $index = intval($index);
+                    // ✅ VALIDASI CONFIG
+                    $configList = $durasiConfig[$key] ?? [];
+                    if (!in_array($index, $configList)) {
+                        $index = $configList[$index] ?? 0;
+                    }
+                    // ✅ SIMPAN PERBAIKAN
+                    $data[$kategoriKey][$key]['Durasi Gerakan'] = $index . ';' . $range;
+
+                    // ✅ HITUNG SKOR
+                    $pos = array_search($index, $configList);
+                    $total += $configList[$pos] ?? 0;
+                }
+
+                // ✅ JIKA CUMA YA/TIDAK
+                elseif ($value !== 'Tidak') {
+                    $total += $durasiConfig[$key][1] ?? 0;
+                }
+            }
+        }
+
+        return [
+            'total' => $total,
+            'data'  => $data
+        ];
+    }  
+
 
     // public function decodeImageToBase64($filename)
     // {
