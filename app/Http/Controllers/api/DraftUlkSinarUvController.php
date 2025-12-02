@@ -509,6 +509,7 @@ class DraftUlkSinarUvController extends Controller
             'siku' => $siku,
             'betis' => $betis,
             'nab' => $ws->nab ?? null,
+            'tanggal_sampling' => $ws->order_detail->tanggal_sampling ?? null,
         ];
     }
 

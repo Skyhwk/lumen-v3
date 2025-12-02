@@ -274,20 +274,21 @@ class EmailJadwal
             }
             $atasan_sales = GetAtasan::where('id', $dataEmail['client']->sales_id)->get();
 
-            $filterEmails = [
-                'inafitri@intilab.com',
-                'kika@intilab.com',
-                'trialif@intilab.com',
-                'manda@intilab.com',
-                'amin@intilab.com',
-                'daud@intilab.com',
-                'faidhah@intilab.com',
-            ];
+            // $filterEmails = [
+            //     'inafitri@intilab.com',
+            //     'kika@intilab.com',
+            //     'trialif@intilab.com',
+            //     'manda@intilab.com',
+            //     'amin@intilab.com',
+            //     'daud@intilab.com',
+            //     'faidhah@intilab.com',
+            // ];
 
             $emailBcc = $atasan_sales->pluck('email')->toArray();
-            if (count(array_intersect($filterEmails, $emailBcc)) > 0) {
-                $emailBcc[] = 'admsales04@intilab.com';
-            }
+            // if (count(array_intersect($filterEmails, $emailBcc)) > 0) {
+            // }
+            $emailBcc[] = 'admsales03@intilab.com';
+            $emailBcc[] = 'admsales04@intilab.com';
             $emailBcc[] = 'luthfi@intilab.com';
             $emailBcc[] = 'sales@intilab.com';
 
