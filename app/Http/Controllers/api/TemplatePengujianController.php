@@ -1,39 +1,47 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use App\Services\GetBawahan;
-use App\Models\TemplatePenawaran;
+
+use App\Models\MasterBakumutu;
+
+use App\Models\MasterKategori;
+
+use App\Models\MasterRegulasi;
+
+use App\Models\MasterSubKategori;
 use App\Models\Parameter;
-use App\Models\{MasterKategori, MasterSubKategori, MasterRegulasi, MasterBakumutu}; // Para Master
+use App\Models\TemplatePenawaran;
+use App\Services\GetBawahan;use Carbon\Carbon;use Illuminate\Http\Request;use Illuminate\Support\Facades\DB; // Para Master
 use Yajra\DataTables\Facades\DataTables;
 
 class TemplatePengujianController extends Controller
 {
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $jabatan = $request->attributes->get('user')->karyawan->grade;
         // $data = TemplatePenawaran::where('tipe', $request->tipe)->where('is_active', true);
         $data = TemplatePenawaran::where('tipe', 'non_kontrak');
-        if($jabatan == 'SUPERVISOR' || $jabatan == 'MANAGER'){
+        if ($jabatan == 'SUPERVISOR' || $jabatan == 'MANAGER') {
             $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
             $data->whereIn('created_by', $bawahan);
-        }else{
+        } else {
             $data->where('created_by', $this->karyawan);
         }
         $data->where('is_active', true);
         return DataTables::of($data)
-            // ->editColumn('data_pendukung_sampling', function ($item) {
-            //     return json_decode($item->data_pendukung_sampling);
-            // })
+        // ->editColumn('data_pendukung_sampling', function ($item) {
+        //     return json_decode($item->data_pendukung_sampling);
+        // })
             ->editColumn('data_pendukung_sampling', function ($item) {
                 $data = json_decode($item->data_pendukung_sampling, true);
 
+                if (empty($data) || ! is_array($data)) {
+                    return [];
+                }
+
                 foreach ($data as $i => &$row) {
-                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i+1);
+                    $row['id_x'] = str_replace('.', '', microtime(true)) . ($i + 1);
                 }
 
                 return $data;
@@ -41,17 +49,20 @@ class TemplatePengujianController extends Controller
             ->make(true);
     }
 
-    public function getKategori(Request $request){
+    public function getKategori(Request $request)
+    {
         $data = MasterKategori::where('is_active', true)->select('id', 'nama_kategori')->get();
         return response()->json($data);
     }
 
-    public function getSubkategori(Request $request){
+    public function getSubkategori(Request $request)
+    {
         $data = MasterSubKategori::where('is_active', true)->select('id', 'nama_sub_kategori', 'id_kategori')->get();
         return response()->json($data);
     }
 
-    public function getParameter(Request $request){
+    public function getParameter(Request $request)
+    {
         try {
             $data = Parameter::with('hargaParameter')
                 ->whereHas('hargaParameter')
@@ -61,19 +72,20 @@ class TemplatePengujianController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Gagal mengambil parameter: ' . $e->getMessage(),
-                'status' => '500'
+                'status'  => '500',
             ], 401);
         }
     }
 
-    public function getParameterRegulasi(Request $request){
+    public function getParameterRegulasi(Request $request)
+    {
         try {
-            $idBakumutut = explode('-', $request->id_regulasi);
+            $idBakumutut  = explode('-', $request->id_regulasi);
             $sub_category = explode('-', $request->sub_category);
-            $category = explode('-', $request->id_category);
+            $category     = explode('-', $request->id_category);
 
             $bakumutu = MasterBakumutu::where('id_regulasi', $idBakumutut[0])->where('is_active', true)->get();
-            $param = array();
+            $param    = [];
             foreach ($bakumutu as $a) {
                 array_push($param, $a->id_parameter . ';' . $a->parameter);
             }
@@ -84,85 +96,89 @@ class TemplatePengujianController extends Controller
                 ->get();
 
             return response()->json([
-                'data' => $data,
-                'value' => $param,
-                'status' => '200'
+                'data'   => $data,
+                'value'  => $param,
+                'status' => '200',
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Gagal mengambil parameter: ' . $e->getMessage(),
-                'status' => '500'
+                'status'  => '500',
             ], 500);
         }
     }
 
-    public function getRegulasi(Request $request){
+    public function getRegulasi(Request $request)
+    {
         $data = MasterRegulasi::with(['bakumutu'])->where('is_active', true)->get();
         return response()->json($data);
     }
 
-    public function store(Request $request){
+    public function store(Request $request)
+    {
         DB::beginTransaction();
-        try{
-            $data = new TemplatePenawaran();
+        try {
+            $data                = new TemplatePenawaran();
             $data->nama_template = $request->nama_template;
-            $data->tipe = $request->mode;
-            $data->created_by = $this->karyawan;
-            $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->tipe          = $request->mode;
+            $data->created_by    = $this->karyawan;
+            $data->created_at    = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
             DB::commit();
             return response()->json([
-                'message' => 'Template penawaran berhasil disimpan'
+                'message' => 'Template penawaran berhasil disimpan',
             ], 200);
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Gagal menyimpan template penawaran: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
 
-    public function setTemplate(Request $request){
+    public function setTemplate(Request $request)
+    {
         DB::beginTransaction();
-        try{
-            $data = TemplatePenawaran::where('id', $request->id)->first();
+        try {
+            $data                          = TemplatePenawaran::where('id', $request->id)->first();
             $data->data_pendukung_sampling = json_encode($request->data_pendukung_sampling);
             $data->save();
 
             DB::commit();
             return response()->json([
-                'message' => 'Template penawaran berhasil disimpan'
+                'message' => 'Template penawaran berhasil disimpan',
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Gagal menyimpan template penawaran: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
 
-    public function delete(Request $request){
+    public function delete(Request $request)
+    {
         DB::beginTransaction();
-        try{
-            $data = TemplatePenawaran::where('id', $request->id)->first();
+        try {
+            $data            = TemplatePenawaran::where('id', $request->id)->first();
             $data->is_active = false;
             $data->save();
 
             DB::commit();
             return response()->json([
-                'message' => 'Template penawaran berhasil dihapus'
+                'message' => 'Template penawaran berhasil dihapus',
             ], 200);
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Gagal menghapus template penawaran: ' . $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
