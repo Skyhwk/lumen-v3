@@ -645,42 +645,6 @@ class FdlMethodBahayaErgonomiController extends Controller
         }
     }
 
-    // private function processMethod($request, $fdl, $method)
-    // {
-    //     try {
-    //         // Check for the existence of the sample with the appropriate category and parameter
-    //         $check = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //         ->where(function ($query) {
-    //             $query->where('kategori_3', 'LIKE', '%27-%')
-    //                 ->orWhere('kategori_3', 'LIKE', '%53-%');
-    //         })
-    //         ->where('parameter', 'LIKE', '%Ergonomi%')
-    //         ->where('is_active', true)
-    //         ->first();
-
-    //         // Check if the data for the given method already exists
-    //         $data = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //             ->where('method', $method)
-    //             ->first();
-
-    //         // Respond based on whether the data already exists
-    //         if ($check) {
-    //             if ($data) {
-    //                 return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-    //             } else {
-    //                 return response()->json([
-    //                     'message' => 'Successful.',
-    //                     'data' => $fdl
-    //                 ], 200);
-    //             }
-    //         } else {
-    //             return response()->json(['message' => 'Tidak ada data Ergonomi berdasarkan No. Sample tersebut.'], 401);
-    //         }
-    //     } catch (Exception $e) {
-    //         dd($e);
-    //     }
-    // }
-
     private function processMethod($request, $fdl, $method)
     {
         try {

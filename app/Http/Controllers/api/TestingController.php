@@ -1353,6 +1353,270 @@ class TestingController extends Controller
                             ], 500);
                         }
                     
+                case 'sni_ergonomi':
+                    DB::beginTransaction();
+
+                    try {
+
+                        $datas = DataLapanganErgonomi::where('method', 8)
+                            ->whereIn('no_sampel', $request->no_sampel)
+                            ->get();
+
+                        foreach ($datas as $data) {
+
+                            $pengukuran = json_decode($data->pengukuran, true) ?? [];
+
+                            // ===============================
+                            // CONFIG DURASI
+                            // ===============================
+                            $durasiConfig = [
+                                // ===== ATAS =====
+                                'Leher' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Rotasi Lengan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Gerakan Lengan Sedang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Kuliat Tertekan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Getaran Lokal' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+
+                                'Bahu' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Pergelangan Tangan' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Gerakan Lengan Intensif' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Memencet atau Menjepit' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Menggunakan Telapak Tangan' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Mengetik Berselang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                                'Temperatur' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                                'Pencahayaan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+
+                                'Penggenggam Kuat' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 3,
+                                ],
+                                'Mengetik Intensif' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 3,
+                                ],
+
+                                // ===== BAWAH =====
+                                'Tubuh Membungkuk 20°-45°' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Tubuh Menekuk 30°' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Gerakan Paha' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Pergelangan Kaki' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Aktivitas Pergelangan Kaki' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Duduk Tanpa Sandaran' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Tubuh Tertekan Benda' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Getaran Seluruh Tubuh' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Beban Sedang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Beban Berat' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Tubuh Membungkuk >45°' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Tubuh Pemuntiran Torso' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Posisi Berlutut' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Lutut Untuk Memukul' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Duduk Tanpa Pijakan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                            ];
+
+                            // ===============================
+                            // AMAN TARIK DATA
+                            // ===============================
+                            $atas  = (isset($pengukuran['Tubuh_Bagian_Atas'])  && is_array($pengukuran['Tubuh_Bagian_Atas']))
+                                        ? $pengukuran['Tubuh_Bagian_Atas']  : [];
+
+                            $bawah = (isset($pengukuran['Tubuh_Bagian_Bawah']) && is_array($pengukuran['Tubuh_Bagian_Bawah']))
+                                        ? $pengukuran['Tubuh_Bagian_Bawah'] : [];
+
+                            $manualHandling = $pengukuran['Manual_Handling'] ?? 'Tidak';
+
+                            // ===============================
+                            // MANUAL HANDLING
+                            // ===============================
+                            $totalPoin1 = 0;
+                            $totalPoin2 = 0;
+
+                            if (is_array($manualHandling)) {
+
+                                if (
+                                    isset($manualHandling['Posisi Angkat Beban']) &&
+                                    isset($manualHandling['Estimasi Berat Benda'])
+                                ) {
+                                    $totalPoin1 = $this->hitungRisiko(
+                                        $manualHandling['Posisi Angkat Beban'],
+                                        $manualHandling['Estimasi Berat Benda']
+                                    );
+                                }
+
+                                if (isset($manualHandling['Faktor Resiko']) && is_array($manualHandling['Faktor Resiko'])) {
+                                    foreach ($manualHandling['Faktor Resiko'] as $faktor) {
+                                        if (is_array($faktor)) {
+                                            foreach ($faktor as $nilai) {
+                                                if ($nilai !== 'Tidak') {
+                                                    $skor = intval(explode('-', $nilai)[0] ?? 0);
+                                                    $totalPoin2 += $skor;
+                                                }
+                                            }
+                                        } elseif ($faktor !== 'Tidak') {
+                                            $skor = intval(explode('-', $faktor)[0] ?? 0);
+                                            $totalPoin2 += $skor;
+                                        }
+                                    }
+                                }
+
+                                $manualHandling['Total Poin 1'] = $totalPoin1;
+                                $manualHandling['Faktor Resiko']['Total Poin 2'] = $totalPoin2;
+                                $manualHandling['Total Poin Akhir'] = $totalPoin1 + $totalPoin2;
+                            }
+
+                            // ===============================
+                            // HITUNG + PERBAIKI
+                            // ===============================
+                            $hasilAtas  = $this->hitungDurasiDanPerbaiki($atas, $durasiConfig, $data->no_sampel);
+                            $hasilBawah = $this->hitungDurasiDanPerbaiki($bawah, $durasiConfig, $data->no_sampel);
+
+                            $jumlahSkorPostur = $hasilAtas['total'] + $hasilBawah['total'];
+
+                            // ===============================
+                            // SIMPAN ULANG
+                            // ===============================
+                            $pengukuran['Tubuh_Bagian_Atas']   = $hasilAtas['data'];
+                            $pengukuran['Tubuh_Bagian_Bawah'] = $hasilBawah['data'];
+                            $pengukuran['Jumlah_Skor_Postur'] = $jumlahSkorPostur;
+                            $pengukuran['Manual_Handling']   = $manualHandling;
+
+                            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
+                            $data->save();
+                        }
+
+                        DB::commit();  // semua sukses baru dikunci ke DB
+
+                        return response()->json(['message' => 'Proses selesai'], 200);
+
+                    } catch (\Throwable $e) {
+
+                        DB::rollBack();  // SEMUA perubahan dibatalkan
+
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Terjadi error, semua data dibatalkan',
+                            'error' => $e->getMessage(),
+                            'line' => $e->getLine()
+                        ], 500);
+                    }
+
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -3378,42 +3642,6 @@ class TestingController extends Controller
         }
     }
 
-    // public function decodeImageToBase64($filename)
-    // {
-    //     // Path penyimpanan
-    //     $path = public_path('dokumen/bas/signatures');
-
-    //     // Path file lengkap
-    //     $filePath = $path . '/' . $filename;
-
-    //     // Periksa apakah file ada
-    //     if (!file_exists($filePath)) {
-    //         return (object) [
-    //             'status' => 'error',
-    //             'message' => 'File tidak ditemukan'
-    //         ];
-    //     }
-
-    //     // Baca konten file
-    //     $imageContent = file_get_contents($filePath);
-
-    //     // Konversi ke base64
-    //     $base64Image = base64_encode($imageContent);
-
-    //     // Deteksi tipe file
-    //     $fileType = $this->detectFileType($imageContent);
-
-    //     // Tambahkan data URI header sesuai tipe file
-    //     $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
-
-    //     // Kembalikan respons
-    //     return (object) [
-    //         'status' => 'success',
-    //         'base64' => $base64WithHeader,
-    //         'file_type' => $fileType
-    //     ];
-    // }
-
     private function detectFileType($fileContent)
     {
         // Signature file untuk berbagai format
@@ -4200,7 +4428,6 @@ class TestingController extends Controller
         return round($number / $multiple) * $multiple;
     }
 
-
     private $tableReversedMPN = [
         ["key" => 1.8, "value" => "001"],
         ["key" => 3.6, "value" => "011"],
@@ -4295,4 +4522,104 @@ class TestingController extends Controller
         ["key" => 920, "value" => "553"],
         ["key" => 1600, "value" => "554"]
     ];
+
+    private function hitungRisiko($posisi, $berat)
+    {
+        $poin = 0;
+
+        if ($posisi == 'Pengangkatan dengan jarak dekat') {
+            if ($berat == 'Berat benda >23Kg') $poin = 5;
+            elseif ($berat == 'Berat benda Sekitar 7 - 23 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak sedang') {
+            if ($berat == 'Berat benda >16Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 5 - 16 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak jauh') {
+            if ($berat == 'Berat benda >13Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 4.5 - 13 Kg') $poin = 3;
+        }
+
+        return $poin;
+    }
+
+    private function hitungDurasiDanPerbaiki($data, $durasiConfig, $no_sampel)
+    {
+        $total = 0;
+
+        // PENGAMAN UTAMA
+        if (!is_array($data)) {
+            return [
+                'total' => 0,
+                'data'  => $data // kembalikan apa adanya
+            ];
+        }
+
+        foreach ($data as $kategoriKey => $kategori) {
+
+            if (!is_array($kategori)) {
+                continue; // skip kalau bukan array
+            }
+
+            foreach ($kategori as $key => $value) {
+
+                // SKIP TOTAL JIKA KEY TIDAK ADA DI CONFIG
+                if (!array_key_exists($key, $durasiConfig)) {
+                    continue;
+                }
+
+                // ================================
+                // JIKA ADA "Durasi Gerakan"
+                // ================================
+                if (is_array($value) && isset($value['Durasi Gerakan'])) {
+
+                    // Pastikan format valid "0;0-25%"
+                    if (strpos($value['Durasi Gerakan'], ';') === false) {
+                        continue;
+                    }
+
+                    [$index, $range] = explode(';', $value['Durasi Gerakan']);
+                    $range = trim($range);
+
+                    // Pastikan key config ada
+                    if (!isset($durasiConfig[$key])) {
+                        continue;
+                    }
+
+                    $configList = $durasiConfig[$key];
+
+                    // Cocokkan berdasarkan RANGE, BUKAN INDEX
+                    if (!isset($configList[$range])) {
+                        continue; // skip jika range tidak dikenal
+                    }
+
+                    $nilai = $configList[$range];
+                    // dump("No Sampel: $no_sampel | Kategori: $kategoriKey | Key: $key | Range: $range | Nilai: $nilai");
+
+                    // Simpan kembali hasil konversi
+                    $data[$kategoriKey][$key]['Durasi Gerakan'] = $nilai . ';' . $range;
+
+                    // Tambah ke total
+                    $total += $nilai;
+                }
+
+                // ================================
+                // JIKA HANYA YA / TIDAK
+                // ================================
+                elseif ($value !== 'Tidak') {
+
+                    // Pastikan index 1 ada
+                    if (!isset($durasiConfig[$key][1])) {
+                        continue;
+                    }
+
+                    $nilai = $durasiConfig[$key][1];
+                    $total += $nilai;
+                }
+            }
+        }
+
+        return [
+            'total' => $total,
+            'data'  => $data
+        ];
+    }
 }
