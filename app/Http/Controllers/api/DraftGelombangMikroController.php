@@ -276,7 +276,7 @@ class DraftGelombangMikroController extends Controller
                         $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
                         $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 316) {
-                        $hasil_uji            = $nilaiDecode['hasil_m1'];
+                        $hasil_uji            = $nilaiDecode['hasil_mwatt'];
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
                         $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
@@ -309,7 +309,7 @@ class DraftGelombangMikroController extends Controller
                         'hasil_sumber_radiasi' => $hasil_sumber_radiasi ?? '-',
                         'waktu_pemaparan'      => $waktu_pemaparan ?? '-',
                         'frekuensi_area'       => $frekuensi_area ?? '-',
-                        'akr'                  => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'akr'                  => str_contains($bakumutu->akreditasi ?? '', 'AKREDITASI') ? '' : 'ẍ',
                         'nab'                  => $nab ?? '-',
                     ];
                 })->toArray();
