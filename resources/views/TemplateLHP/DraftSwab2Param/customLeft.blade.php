@@ -94,7 +94,7 @@
 
                 <tr>
                     {{-- NO --}}
-                    <td class="pd-5-{{ $rowClass }}-center">
+                    <td class="pd-5-{{ $rowClass }}-center" width="6%">
                         {{ $rowNo }}
                     </td>
 
@@ -116,7 +116,7 @@
                         @endphp
 
 
-                        <td class="pd-5-{{ $rowClass }}-center">
+                        <td class="pd-5-{{ $rowClass }}-center" width="20%">
                             {!! $hasil !!}
                         </td>
                     @endforeach
@@ -127,13 +127,13 @@
                             $r = $rowsByParam->get($param, []);
                             $baku = $r['baku_mutu'] ?? '-';
                         @endphp
-                        <td class="pd-5-{{ $rowClass }}-center">
+                        <td class="pd-5-{{ $rowClass }}-center" width="20%">
                             {{ htmlspecialchars($baku) }}
                         </td>
                     @endforeach
 
 
-                    <td class="pd-5-{{ $rowClass }}-center">
+                    <td class="pd-5-{{ $rowClass }}-center" width="20%">
                         {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
                     </td>
                 </tr>
