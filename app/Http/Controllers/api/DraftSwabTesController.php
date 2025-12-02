@@ -190,7 +190,7 @@ class DraftSwabTesController extends Controller
             if ($swabData->isEmpty()) {
                 $swabData = Subkontrak::with('ws_udara')
                     ->whereIn('no_sampel', $orders)
-                    ->where('is_approved', 1)
+                    ->where('is_approve', 1)
                     ->where('is_active', 1)
                     ->where('lhps', 1)
                     ->get();
