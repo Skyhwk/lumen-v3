@@ -51,11 +51,11 @@ class FdlMethodGotrakController extends Controller
         try {
             $inputs = $request->all();
             $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 7)->first();
-            if ($fdl){
-                return response()->json([
-                    'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
-                ], 401);
-            }
+            // if ($fdl){
+            //     return response()->json([
+            //         'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
+            //     ], 401);
+            // }
             $umum = [];
             $tubuh = [];
 
