@@ -436,9 +436,14 @@ class DraftUlkSinarUvController extends Controller
                     }
                 }
 
-                $mainData = collect($mainData)->sortBy(function ($item) {
-                    return mb_strtolower($item['parameter']);
-                })->values()->toArray();
+                // $mainData = collect($mainData)->sortBy(function ($item) {
+                //     return mb_strtolower($item['parameter']);
+                // })->values()->toArray();
+                $mainData = collect($mainData)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
+                ])->values()->toArray();
 
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
