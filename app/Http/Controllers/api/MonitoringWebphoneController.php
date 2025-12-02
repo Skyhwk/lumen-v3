@@ -42,7 +42,7 @@ class MonitoringWebphoneController extends Controller
             $webphones = Webphone::query();
             $data = $webphones->get()->map(function ($item) {
 
-                $item->karyawan = MasterKaryawan::where('id_department', 9)->where('id_jabatan', 24)->where('is_active', true)->find($item->karyawan_id);
+                $item->karyawan = MasterKaryawan::where('id_department', 9)->whereIn('id_jabatan', [24, 148])->where('is_active', true)->find($item->karyawan_id);
                 $item->logWebphone = LogWebphone::where('karyawan_id', $item->karyawan_id)->latest()->first();
 
                 return $item->karyawan ? $item : null;

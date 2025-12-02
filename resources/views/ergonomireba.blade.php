@@ -285,7 +285,7 @@
                     <tr class="image-row">
                         <td rowspan="2">1</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_leher.jpg') }}" alt="Posisi Leher"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_leher.PNG') }}" alt="Posisi Leher"
                             style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_leher }}</td>
@@ -298,7 +298,7 @@
                     <tr class="image-row">
                         <td rowspan="2">2</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_badan.jpg') }}" alt="Posisi Badan"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_badan.PNG') }}" alt="Posisi Badan"
                             style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_badan }}</td>
@@ -311,7 +311,7 @@
                     <tr class="image-row">
                         <td rowspan="2">3</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_kaki.jpg') }}" alt="Posisi Kaki"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_kaki.png') }}" alt="Posisi Kaki"
                             style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_kaki }}</td>
@@ -387,7 +387,7 @@
                     <tr class="image-row">
                         <td rowspan="2">5</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_atas.jpg') }}"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_atas.PNG') }}"
                             alt="Posisi Lengan Atas" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_lengan_atas }}</td>
@@ -400,7 +400,7 @@
                     <tr class="image-row">
                         <td rowspan="2">6</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_bawah.jpg') }}"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_lengan_bawah.PNG') }}"
                             alt="Posisi Lengan Bawah" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_lengan_bawah }}</td>
@@ -413,7 +413,7 @@
                     <tr class="image-row">
                         <td rowspan="2">7</td>
                         <td>
-                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_pergelangan_tangan.jpg') }}"
+                            <img src="{{ public_path('dokumen/img_ergo/reba/reba_pergelangan_tangan.PNG') }}"
                             alt="Posisi Pergelangan Tangan" style="object-fit: contain;" height="45px">
                         </td>
                         <td rowspan="2">{{ $pengukuran->skor_pergelangan_tangan }}</td>
@@ -606,18 +606,13 @@
                             DESKRIPSI SINGKAT PEKERJAAN PEKERJA
                         </td>
                         <td style="text-align: justify; vertical-align: top; font-size: 8pt; line-height: 1.2;">
-                            @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
-                                @if(!is_array($personal->aktivitas_ukur))
+                            {{$personal->divisi}} : <br>
+                            @if($personal->aktifitas_k3->uraian != null && $personal->aktifitas_k3->uraian != [])
+                                @foreach($personal->aktifitas_k3->uraian as $item)
                                     <p style="margin: 2px 0;">
-                                        {{ $personal->aktivitas_ukur }}
+                                        {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
                                     </p>
-                                @else
-                                    @foreach($personal->aktivitas_ukur as $item)
-                                        <p style="margin: 2px 0;">
-                                            {{ $item->Uraian }} - {{ $item->jam }} Jam,{{ $item->menit }} Menit
-                                        </p>
-                                    @endforeach
-                                @endif
+                                @endforeach
                             @endif
                         </td>
                     </tr>

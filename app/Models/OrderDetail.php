@@ -142,7 +142,7 @@ class OrderDetail extends Sector
     }
     public function lhp_psikologi()
     {
-        return $this->belongsTo(LhpUdaraPsikologiHeader::class, 'no_order', 'no_order');
+        return $this->belongsTo(LhpUdaraPsikologiHeader::class, 'cfr', 'no_cfr');
     }
     public function lingkunganHeader()
     {

@@ -165,6 +165,7 @@ class VerifikasiBotolController extends Controller
 
                 $data = OrderDetail::whereNotNull('persiapan')
                     ->whereJsonContains('persiapan', ['koding' => $request->no_sampel])
+                    ->where('is_active', true)
                     ->first();
 
                 if (!$data) {

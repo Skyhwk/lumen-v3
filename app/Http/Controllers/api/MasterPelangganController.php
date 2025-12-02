@@ -20,6 +20,8 @@ use App\Models\MasterPelangganBlacklist;
 use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
+
+use App\Services\GetBawahan;
 use Carbon\Carbon;
 Carbon::setLocale('id');
 
@@ -31,15 +33,35 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
+
+            if ($jabatan == 157) {
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+
+                $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
+
+                $bawahan = array_merge($bawahan, $karyawanNonAktif);
+
+                if (!in_array($this->user_id, $bawahan)) {
+                    $bawahan[] = $this->user_id;
+                }
+
+                $data->whereIn('sales_id', $bawahan);
+            }
+
+
         }
 
         return Datatables::of($data)
@@ -65,14 +87,16 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
         }
 
