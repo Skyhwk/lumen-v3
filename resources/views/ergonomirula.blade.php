@@ -5,7 +5,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 10pt; /* Reduced from 11pt */
+            font-size: 10px; /* Reduced from 11pt */
             background-color: white;
             margin: 0;
             padding: 0;
@@ -20,7 +20,7 @@
 
         h1 {
             text-align: center;
-            font-size: 12px; /* Reduced from 16pt */
+            font-size: 10px; /* Reduced from 16pt */
             font-weight: bold;
             text-decoration: underline;
             margin-bottom: 5px;
@@ -46,7 +46,10 @@
         th, td {
             padding: 3px; /* Reduced from 4px */
             text-align: center;
-            font-size: 9pt; /* Reduced from 10pt */
+            font-size: 10px; /* Reduced from 10pt */
+
+            white-space: nowrap; 
+            overflow: hidden;
         }
 
         .text-left {
@@ -57,7 +60,7 @@
             text-align: center;
             font-weight: bold;
             padding: 3px;
-            font-size: 9pt;
+            font-size: 10px;
         }
 
         .table-secondary {
@@ -91,31 +94,31 @@
             font-weight: normal;
             width: 110px; /* Reduced from 120px */
             float: left;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-value {
             margin-left: 110px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-header {
             font-weight: bold;
             margin-top: 6px; /* Reduced from 8px */
             margin-bottom: 2px; /* Reduced from 3px */
-            font-size: 9pt;
+            font-size: 9px;
             clear: both;
         }
 
         .info-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             margin-top: 4px;
             line-height: 1.1;
         }
 
         .arrow {
             text-align: center;
-            font-size: 16pt; /* Reduced from 18pt */
+            font-size: 16px; /* Reduced from 18pt */
             margin: 4px 0;
             display: inline-block;
             vertical-align: middle;
@@ -125,7 +128,7 @@
             border: 1px solid #000;
             padding: 6px; /* Reduced from 8px */
             margin-top: 8px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .watermark {
@@ -138,7 +141,7 @@
             z-index: -1;
             pointer-events: none;
             transform: rotate(-45deg);
-            font-size: 100pt; /* Reduced from 120pt */
+            font-size: 100px; /* Reduced from 120pt */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -165,7 +168,7 @@
         }
 
         .footer-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             text-align: center;
             margin-top: 8px;
             font-style: italic;
@@ -236,18 +239,19 @@
             <!-- Left side - Tables -->
             <div class="table-main">
                 <!-- Tabel A -->
+                <!-- Tabel Acuan Skor Risiko -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="8%">No</td>
                         <td rowspan="2" width="30%">Jenis Skoring</td>
-                        <td colspan="5" width="65%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
+                        <td colspan="5" width="62%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
                     </tr>
                     <tr>
-                        <td width="15%">Nilai</td>
-                        <td width="15%">Skoring (1)</td>
-                        <td width="15%">Beban (2)</td>
-                        <td width="15%">Otot (3)</td>
-                        <td width="40%">Total Skor Tabel A (1+2+3)</td>
+                        <td width="10%">Nilai</td>
+                        <td width="10%">Skoring (1)</td>
+                        <td width="10%">Beban (2)</td>
+                        <td width="10%">Otot (3)</td>
+                        <td width="22%">Total Skor Tabel A (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
@@ -273,20 +277,19 @@
                         <td class="text-left">Pergelangan Tangan Memuntir</td>
                         <td>{{$pengukuran->tangan_memuntir}}</td>
                     </tr>
+                </table>
+                <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td colspan="7" style="border-left: none; border-right: none;"></td>
-                    </tr>
-                    <tr>
-                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="8%">No</td>
                         <td rowspan="2" width="30%">Jenis Skoring</td>
-                        <td colspan="5" width="65%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
+                        <td colspan="5" width="62%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
                     </tr>
                     <tr>
-                        <td width="15%">Nilai</td>
-                        <td width="15%">Skoring (1)</td>
-                        <td width="15%">Beban (2)</td>
-                        <td width="15%">Otot (3)</td>
-                        <td width="40%">Total Skor Tabel B (1+2+3)</td>
+                        <td width="10%">Nilai</td>
+                        <td width="10%">Skoring (1)</td>
+                        <td width="10%">Beban (2)</td>
+                        <td width="10%">Otot (3)</td>
+                        <td width="22%">Total Skor Tabel B (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
@@ -308,7 +311,6 @@
                         <td>{{$pengukuran->kaki}}</td>
                     </tr>
                 </table>
-
                 <div style="width: 25%; float: left;">
                     <!-- Skor RULA Box -->
                     <table style="width: 100%; float: left;" cellpadding="3" cellspacing="0">
@@ -320,7 +322,7 @@
                         </tr>
                     </table>
                 </div>
-                <div style="width: 10%; float: left; text-align: center;font-size: 16pt;">→</div>
+                <div style="width: 10%; float: left; text-align: center;font-size: 16px;">→</div>
                 <div style="
                     width: 55px;
                     height: 25px;
@@ -332,10 +334,7 @@
                 ">
                     {{$pengukuran->skor_rula}}
                 </div>
-
                 <div style="clear: both;"></div>
-
-                <!-- Tabel Acuan Skor Risiko -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
                         <td colspan="6" class="text-left">Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</td>
@@ -371,6 +370,9 @@
                         <td colspan="3">Diperlukan tindakan saat ini</td>
                     </tr>
                 </table>
+                
+
+                
 
                 <!-- Kesimpulan -->
                 <div>
