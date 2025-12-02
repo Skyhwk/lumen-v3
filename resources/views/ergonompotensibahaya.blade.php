@@ -198,7 +198,7 @@
                                         </div>
                                         <hr style="border: 1px solid black;">
                                         <div style="padding: 10px; text-align: center; font-weight: bold;">
-                                            {{ ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0 }}
+                                            {{ $manualHandling->total_poin_1 }}
                                         </div>
                                     </td>
                                 </tr>
@@ -255,8 +255,12 @@
                                 </td>
                                 <td style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                     
-                                    {{$totalSkorLangkah + ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0}}
-                                    @php $skorLangkahAkhir = $totalSkorLangkah + ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0; @endphp
+                                    @php 
+                                        $skorEstimasiBerat = (int)($manualHandling->estimasi_berat_benda ?? 0);
+                                        $skorFaktorResiko = (int)($manualHandling->faktor_resiko->total_poin_2 ?? 0);
+                                        $skorLangkahAkhir = $skorEstimasiBerat + $skorFaktorResiko;
+                                    @endphp
+                                    {{$skorLangkahAkhir }}
                                 </td>
                             </tr>
                         </tbody>
