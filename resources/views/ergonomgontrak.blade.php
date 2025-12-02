@@ -157,7 +157,7 @@
                                     <thead>
                                         <tr style="background-color: #f9f9f9;">
                                             <th style="text-align: left;">Bagian Tubuh</th>
-                                            <th style="text-align: left;">Sisi Tubuh</th>
+                                            <th style="text-align: left;">Sisi Tubuh (Jika Ada Keluhan)</th>
                                             <th style="width: 45px;">Skor</th>
                                         </tr>
                                     </thead>
