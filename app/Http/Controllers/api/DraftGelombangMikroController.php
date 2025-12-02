@@ -263,35 +263,25 @@ class DraftGelombangMikroController extends Controller
                     $nab                  = '-';
                     $rata_frekuensi_raw   = $nilaiDecode['rata_frekuensi'] ?? 0;
                     $rata_frekuensi_clean = str_replace(',', '', $rata_frekuensi_raw);
-                    $frekuensiHz        = floatval($rata_frekuensi_clean);
+                    $frekuensiHz          = floatval($rata_frekuensi_clean);
                     // $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
-
-                    if ($val->id_parameter == 236) {
-                        $hasil_uji            = $nilaiDecode['hasil_mwatt'];
-                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                    if ($val->id_parameter == 236 || $val->id_parameter == 316 || $val->id_parameter == 563) {
+                        $hasil_uji            = $nilaiDecode['hasil_mwatt'] ?? null;
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
                         $nab                  = $ws->nab_medan_magnet;
                         $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
                         $frekuensi_area       = $frekuensiHz ?? null;
-                    } else if ($val->id_parameter == 316) {
-                        $hasil_uji            = $nilaiDecode['hasil_mwatt'];
-                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
-                        $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
-                        $nab                  = $ws->nab_power_density;
-                        $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
-                        $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
-                        $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 277) {
-                        $hasil_uji            = $nilaiDecode['rata_listrik'];
-                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
-                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $hasilWs['medan_listrik'] ?? null;
+                        $hasil_uji            = $nilaiDecode['rata_listrik'] ?? null;
+                        $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $nilaiDecode['rata_magnet'] ?? $nilaiDecode['medan_magnet'] ?? null;
+                        $rata_listrik         = $nilaiDecode['rata_listrik'] ?? $nilaiDecode['medan_listrik'] ?? null;
                         $rata_frekuensi       = $nilaiDecode['rata_frekuensi'] ?? null;
                         $nab                  = $ws->nab_medan_listrik;
-                        $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
-                        $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
+                        $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
+                        $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
                         $frekuensi_area       = $frekuensiHz ?? null;
                     }
 
@@ -309,8 +299,10 @@ class DraftGelombangMikroController extends Controller
                         'hasil_sumber_radiasi' => $hasil_sumber_radiasi ?? '-',
                         'waktu_pemaparan'      => $waktu_pemaparan ?? '-',
                         'frekuensi_area'       => $frekuensi_area ?? '-',
-                        'akr'                  => str_contains($bakumutu->akreditasi ?? '', 'AKREDITASI') ? '' : 'ẍ',
-                        'nab'                  => $nab ?? '-',
+                        'akr'                  => (! empty($bakumutu->akreditasi) && str_contains($bakumutu->akreditasi, 'AKREDITASI'))
+                            ? ''
+                            : 'ẍ', 
+                        'nab' => $nab ?? '-',
                     ];
                 })->toArray();
 
@@ -411,7 +403,7 @@ class DraftGelombangMikroController extends Controller
                             $method_kelembapan = $d->method_kelembapan;
                         }
 
-                            // $rata_frekuensi_clean = str_replace(',', '', $d->rata_frekuensi);
+                        // $rata_frekuensi_clean = str_replace(',', '', $d->rata_frekuensi);
 
                         return [
                             'id'             => $d->id,
@@ -423,7 +415,7 @@ class DraftGelombangMikroController extends Controller
                             'hasil_uji'      => $d->hasil_uji ?? null,
                             'medan_magnet'   => $d->medan_magnet ?? null,
                             'rata_listrik'   => $d->rata_listrik ?? null,
-                            'rata_frekuensi' => $d->rata_frekuensi?? null,
+                            'rata_frekuensi' => $d->rata_frekuensi ?? null,
                             'akr'            => $d->akr ?? null,
                             'nab'            => $d->nab ?? null,
                         ];
