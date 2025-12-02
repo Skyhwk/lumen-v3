@@ -411,7 +411,7 @@ class DraftGelombangMikroController extends Controller
                             $method_kelembapan = $d->method_kelembapan;
                         }
 
-                            $rata_frekuensi_clean = str_replace(',', '', $d->rata_frekuensi);
+                            // $rata_frekuensi_clean = str_replace(',', '', $d->rata_frekuensi);
 
                         return [
                             'id'             => $d->id,
