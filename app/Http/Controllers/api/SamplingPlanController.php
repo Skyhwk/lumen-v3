@@ -807,7 +807,7 @@ class SamplingPlanController extends Controller
         DB::beginTransaction();
         try {
             $timestamp = Carbon::now()->format('Y-m-d H:i:s');
-            $cek = SamplingPlan::where('id', $request->id)->first();
+            $cek = SamplingPlan::where('id', $request->id)->where('is_active', true)->first();
             $checkJadwal = JadwalServices::on('no_quotation', $cek->no_quotation)->countJadwalApproved();
             $chekQoutations = JadwalServices::on('no_quotation', $cek->no_quotation)
                 ->on('quotation_id', $cek->quotation_id)->countQuotation();
