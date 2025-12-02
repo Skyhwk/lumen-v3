@@ -190,9 +190,9 @@ class FdlMethodNbmController extends Controller
             if ($request->permission != '')
                 $data->permission = $request->permission;
             $data->method = 1;
-            $data->sebelum_kerja = json_encode($sebelum);
-            $data->setelah_kerja = json_encode($setelah);
-            $data->pengukuran = json_encode($pengukuran);
+            $data->sebelum_kerja = json_encode($sebelum, JSON_UNESCAPED_UNICODE);
+            $data->setelah_kerja = json_encode($setelah, JSON_UNESCAPED_UNICODE);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();

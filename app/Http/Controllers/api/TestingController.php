@@ -1364,7 +1364,6 @@ class TestingController extends Controller
                             ->get();
 
                         foreach ($datas as $data) {
-
                             $pengukuran = json_decode($data->pengukuran, true) ?? [];
 
                             // ===============================
@@ -1569,13 +1568,13 @@ class TestingController extends Controller
                                                     $totalPoin2 += $skor;
                                                 }
                                             }
-                                        } elseif ($faktor !== 'Tidak') {
-                                            $skor = intval(explode('-', $faktor)[0] ?? 0);
-                                            $totalPoin2 += $skor;
-                                        }
+                                        } 
+                                        // elseif ($faktor !== 'Tidak') {
+                                        //     $skor = intval(explode('-', $faktor)[0] ?? 0);
+                                        //     $totalPoin2 += $skor;
+                                        // }
                                     }
                                 }
-
                                 $manualHandling['Total Poin 1'] = $totalPoin1;
                                 $manualHandling['Faktor Resiko']['Total Poin 2'] = $totalPoin2;
                                 $manualHandling['Total Poin Akhir'] = $totalPoin1 + $totalPoin2;
@@ -1601,7 +1600,6 @@ class TestingController extends Controller
                             $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
                             $data->save();
                         }
-
                         DB::commit();  // semua sukses baru dikunci ke DB
 
                         return response()->json(['message' => 'Proses selesai'], 200);
