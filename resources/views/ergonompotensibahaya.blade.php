@@ -63,7 +63,7 @@
                             <th style="border: 1px solid black; padding: 5px; width: 15%;">No.</th>
                             <th style="border: 1px solid black; padding: 5px; width: 25%;">Kategori</th>
                             <th style="border: 1px solid black; padding: 5px;">Potensi Bahaya</th>
-                            <th style="border: 1px solid black; padding: 5px; width: 80px;">Skor</th>
+                            <th style="border: 1px solid black; padding: 5px; width: 10%;">Skor</th>
                         </tr>
                         @php 
                             $nomorUrut = 1;

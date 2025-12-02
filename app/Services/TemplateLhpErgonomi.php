@@ -519,14 +519,14 @@ class TemplateLhpErgonomi
             //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
             
             $skorDataAtas = array_merge(
-                $skorDataAtasGetaran,
-                $skorDataAtasLingkungan,
-                $skorDataAtasUsahaTangan,
-                $skorDataAtasGerakanLengan,
-                $skorDataAtasPosturJanggal,
-                $skorDataAtasPosturPenggunaanKeyboard,
-                $skorDataAtasPosturFaktorTidakDapatDiKontrol,
-                $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
+                (array)$skorDataAtasGetaran,
+                (array)$skorDataAtasLingkungan,
+                (array)$skorDataAtasUsahaTangan,
+                (array)$skorDataAtasGerakanLengan,
+                (array)$skorDataAtasPosturJanggal,
+                (array)$skorDataAtasPosturPenggunaanKeyboard,
+                (array)$skorDataAtasPosturFaktorTidakDapatDiKontrol,
+                (array)$skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
             );
            
             $skorDataBawah = array_merge(
