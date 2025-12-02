@@ -498,7 +498,6 @@ class TemplateLhpErgonomi
             // $mapPointBagianBawah =Helper::normalize_format_key($mapPointBagianBawah,true);
 
             $skorDataAtasGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->getaran);
-            
             $skorDataAtasLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->lingkungan);
             $skorDataAtasUsahaTangan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->usaha_tangan);
             $skorDataAtasGerakanLengan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->gerakan_lengan);
@@ -515,6 +514,7 @@ class TemplateLhpErgonomi
             $skorDataBawahPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->postur_janggal);
             $skorDataBawahPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->penggunaan_keyboard);
             $skorDataBawahPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol);
+            $skorDataBawahPosturAktivitasMendorong =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->aktivitas_mendorong);
             $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_ke_bagian_tubuh);
             //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
             
@@ -537,7 +537,8 @@ class TemplateLhpErgonomi
                 (array) $skorDataBawahPosturJanggal,
                 (array) $skorDataBawahPosturPenggunaanKeyboard,
                 (array) $skorDataBawahPosturFaktorTidakDapatDiKontrol,
-                (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh
+                (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh,
+                (array) $skorDataBawahPosturAktivitasMendorong
             );
             // clearData
             foreach($skorDataAtas as $key => $value){
@@ -609,7 +610,7 @@ class TemplateLhpErgonomi
             }else{
                 $hasilResikoBeban =null;
             }
-            
+           
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','hasilResikoBeban','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
