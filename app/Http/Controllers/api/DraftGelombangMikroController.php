@@ -263,8 +263,8 @@ class DraftGelombangMikroController extends Controller
                     $nab                  = '-';
                     $rata_frekuensi_raw   = $nilaiDecode['rata_frekuensi'] ?? 0;
                     $rata_frekuensi_clean = str_replace(',', '', $rata_frekuensi_raw);
-
-                    $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
+                    $frekuensiHz        = floatval($rata_frekuensi_clean);
+                    // $frekuensiMhz = floatval($rata_frekuensi_clean) / 1000000;
 
                     if ($val->id_parameter == 236) {
                         $hasil_uji            = $nilaiDecode['hasil_mwatt'];
@@ -274,7 +274,7 @@ class DraftGelombangMikroController extends Controller
                         $nab                  = $ws->nab_medan_magnet;
                         $hasil_sumber_radiasi = $dataLapangan['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $dataLapangan['waktu_pemaparan'] ?? null;
-                        $frekuensi_area       = $frekuensiMhz ?? null;
+                        $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 316) {
                         $hasil_uji            = $nilaiDecode['hasil_m1'];
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
@@ -283,7 +283,7 @@ class DraftGelombangMikroController extends Controller
                         $nab                  = $ws->nab_power_density;
                         $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
-                        $frekuensi_area       = $frekuensiMhz ?? null;
+                        $frekuensi_area       = $frekuensiHz ?? null;
                     } else if ($val->id_parameter == 277) {
                         $hasil_uji            = $nilaiDecode['rata_listrik'];
                         $medan_magnet         = $nilaiDecode['medan_magnet_am'] ?? $hasilWs['rata_magnet'] ?? $hasilWs['medan_magnet'] ?? null;
@@ -292,7 +292,7 @@ class DraftGelombangMikroController extends Controller
                         $nab                  = $ws->nab_medan_listrik;
                         $hasil_sumber_radiasi = $nilaiDecode['sumber_radiasi'] ?? null;
                         $waktu_pemaparan      = $nilaiDecode['waktu_pemaparan'] ?? null;
-                        $frekuensi_area       = $frekuensiMhz ?? null;
+                        $frekuensi_area       = $frekuensiHz ?? null;
                     }
 
                     return [
@@ -368,7 +368,7 @@ class DraftGelombangMikroController extends Controller
                         ],
                         [
                             'no_sampel' => $item['no_sampel'],
-                            'parameter' => 'Frekuensi Area(MHz)',
+                            'parameter' => 'Frekuensi Area(Hz)',
                             'data'      => $item['frekuensi_area'],
                         ],
                     ];
@@ -411,6 +411,8 @@ class DraftGelombangMikroController extends Controller
                             $method_kelembapan = $d->method_kelembapan;
                         }
 
+                            $rata_frekuensi_clean = str_replace(',', '', $d->rata_frekuensi);
+
                         return [
                             'id'             => $d->id,
                             'no_sampel'      => $d->no_sampel ?? null,
@@ -421,7 +423,7 @@ class DraftGelombangMikroController extends Controller
                             'hasil_uji'      => $d->hasil_uji ?? null,
                             'medan_magnet'   => $d->medan_magnet ?? null,
                             'rata_listrik'   => $d->rata_listrik ?? null,
-                            'rata_frekuensi' => $d->rata_frekuensi ?? null,
+                            'rata_frekuensi' => $d->rata_frekuensi?? null,
                             'akr'            => $d->akr ?? null,
                             'nab'            => $d->nab ?? null,
                         ];
