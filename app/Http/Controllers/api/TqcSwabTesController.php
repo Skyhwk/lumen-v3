@@ -32,8 +32,8 @@ class TqcSwabTesController extends Controller
             MAX(kategori_3) as kategori_3,
             GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
             GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_sampling,
-            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
-        ')
+            GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima,
+            MIN(tanggal_terima) as tanggal_terima_min')
             ->with([
                 'lhps_swab_udara',
                 'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
@@ -42,7 +42,7 @@ class TqcSwabTesController extends Controller
             ->where('kategori_3', '46-Udara Swab Test')
             ->where('status', 1)
             ->groupBy('cfr')
-            ->orderBy('tanggal_terima')
+            ->orderBy('tanggal_terima_min')
             ->get();
 
         return Datatables::of($data)->make(true);
