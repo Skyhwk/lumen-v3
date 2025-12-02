@@ -35,7 +35,7 @@
                 @foreach ($parameters as $param)
                     <th class="pd-5-solid-top-center" style="white-space: nowrap;">
                         @php
-                            foreach ($detail as $row) {
+                            foreach ($custom as $row) {
                                 if ($row['parameter'] === $param) {
                                     $akr = $row['akr'];
                                     $satuan = $row['satuan'];
@@ -52,7 +52,7 @@
                 {{-- BAKU MUTU - PARAMETER --}}
                 @foreach ($parameters as $param)
                     @php
-                        foreach ($detail as $row) {
+                        foreach ($custom as $row) {
                             if ($row['parameter'] === $param) {
                                 $akr = $row['akr'];
                                 $satuan = $row['satuan'];
