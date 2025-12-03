@@ -53,6 +53,8 @@ class MasterPelangganController extends Controller
                 $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
 
                 $bawahan = array_merge($bawahan, $karyawanNonAktif);
+                
+                array_push($bawahan, 14);
 
                 if (!in_array($this->user_id, $bawahan)) {
                     $bawahan[] = $this->user_id;
