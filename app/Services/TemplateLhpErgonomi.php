@@ -479,7 +479,7 @@ class TemplateLhpErgonomi
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_sampling : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
