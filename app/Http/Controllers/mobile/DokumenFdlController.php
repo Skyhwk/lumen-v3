@@ -584,9 +584,10 @@ class DokumenFdlController extends Controller
                 $persiapanSampel = PersiapanSampelHeader::where('no_quotation', $nomorQuotation)->where('tanggal_sampling', $tanggalSampling)->where('is_active', 1)->orderBy('id', 'desc')->first();
                 // dd($persiapanSampel);
                 if (! $persiapanSampel) {
-                    $persiapanSampel = new PersiapanSampelHeader();
-                    $persiapanSampel->no_quotation      = $nomorQuotation;
-                    $persiapanSampel->detail_cs_documents = json_encode([]);
+                    return response()->json(['message'=>'Persiapan Belum Disiapkan Harap Menghubungi Admin Sampling Untuk Melakukan Update Persiapan'],401);
+                    // $persiapanSampel = new PersiapanSampelHeader();
+                    // $persiapanSampel->no_quotation      = $nomorQuotation;
+                    // $persiapanSampel->detail_cs_documents = json_encode([]);
                 }
 
                 // Sampler

@@ -82,7 +82,15 @@ class LHPHandleController extends BaseController
                 $fileName = $dataLhp->filename ?? null;
 
                 $dataOrder = OrderHeader::where('no_order', $noOrder)->where('is_active', true)->first();
-                $cekInvoice = Invoice::where('no_order', $noOrder)->where('periode', $periode)->where('is_active', true)->get() ?? null;
+
+                $cekInvoice = Invoice::with(['recordPembayaran', 'recordWithdraw'])->where('no_order', $noOrder);
+                $all = false;
+                foreach($cekInvoice->get() as $invoice){
+                    if($invoice->periode == "all") $all = true; break;
+                }
+                
+                if($periode != null && $periode != '' && !$all) $cekInvoice = $cekInvoice->where('periode', $periode);
+                $cekInvoice = $cekInvoice->where('is_active', true)->get() ?? null;
 
                 if($dataOrder){
                     $dataGrouped = $this->getGroupedCFRs($dataOrder, $periode);

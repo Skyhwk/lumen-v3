@@ -272,7 +272,7 @@
                                 <td style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                     
                                     @php 
-                                        $skorEstimasiBerat = (int)($manualHandling->estimasi_berat_benda ?? 0);
+                                        $skorEstimasiBerat = (int)($manualHandling->total_poin_1 ?? 0);
                                         $skorFaktorResiko = (int)($manualHandling->faktor_resiko->total_poin_2 ?? 0);
                                         $skorLangkahAkhir = $skorEstimasiBerat + $skorFaktorResiko;
                                     @endphp
@@ -419,20 +419,20 @@
                             <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td style="width:25%">Usia</td>
+                            <td style="width:25%">Posisi/Jabatan</td>
                             <td style="width:3%">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->usia }} Tahun</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->jabatan }}</td>
                         </tr>
                         <!-- <tr>
                             <td style="width:25%">Jenis Pekerjaan</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                         </tr> -->
-                        <tr>
+                        <!-- <tr>
                             <td style="width:25%">Lama Bekerja</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
-                        </tr>
+                        </tr> -->
                     </table>
             </div>
             <!-- aktivitas -->
@@ -509,26 +509,22 @@
                     </tr>
                 </table>
             </div>
-            <table style="width: 100%; margin-top: 10px; border: none;">
+            <table style="width: 100%; margin-top: 7px; border: none;">
                 <tr>
-                    <td style="width: 50%; border: none;"></td>
-
-                    <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
-                        
+                    <td colspan="2" style="border: none; text-align: right; vertical-align: top;">
                         <div style="margin-bottom: 5px;">
                             Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
                         </div>
-
                         @if($ttd && $ttd->qr_path)
+                            <br><br>
                             <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
                         @else
-                            <br><br><br>
+                            <br><br>
                             <div style="font-weight: bold; text-decoration: underline;">
                                 (Abidah Walfathiyyah)
                             </div>
                             <div>Technical Control Supervisor</div>
                         @endif
-
                     </td>
                 </tr>
             </table>
