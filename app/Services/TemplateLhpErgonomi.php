@@ -526,7 +526,7 @@ class TemplateLhpErgonomi
                 (array)$skorDataAtasGerakanLengan,
                 (array)$skorDataAtasPosturJanggal,
                 (array)$skorDataAtasPosturPenggunaanKeyboard,
-                (array)$skorDataAtasPosturFaktorTidakDapatDiKontrol,
+                (array)optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol,
                 (array)$skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
             );
            
@@ -537,7 +537,7 @@ class TemplateLhpErgonomi
                 (array) $skorDataBawahGerakanLengan,
                 (array) $skorDataBawahPosturJanggal,
                 (array) $skorDataBawahPosturPenggunaanKeyboard,
-                (array) $skorDataBawahPosturFaktorTidakDapatDiKontrol,
+                (array) optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol,
                 (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh,
                 (array) $skorDataBawahPosturAktivitasMendorong
             );
@@ -571,6 +571,8 @@ class TemplateLhpErgonomi
                     ];
                 }
             }
+
+            
             
             foreach($skorDataBawah as $key => $value){
                 if(is_array($value) && empty($value)){
