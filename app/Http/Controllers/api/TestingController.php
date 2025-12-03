@@ -1585,7 +1585,6 @@ class TestingController extends Controller
                             // ===============================
                             $hasilAtas  = $this->hitungDurasiDanPerbaiki($atas, $durasiConfig, $data->no_sampel);
                             $hasilBawah = $this->hitungDurasiDanPerbaiki($bawah, $durasiConfig, $data->no_sampel);
-
                             $jumlahSkorPostur = $hasilAtas['total'] + $hasilBawah['total'];
 
                             // ===============================
@@ -4555,22 +4554,38 @@ class TestingController extends Controller
         foreach ($data as $kategoriKey => $kategori) {
 
             if (!is_array($kategori)) {
-                continue; // skip kalau bukan array
+                continue;
             }
 
             foreach ($kategori as $key => $value) {
 
-                // SKIP TOTAL JIKA KEY TIDAK ADA DI CONFIG
-                if (!array_key_exists($key, $durasiConfig)) {
+                // ================================
+                // ✅ KHUSUS FAKTOR KONTROL
+                // ================================
+                if ($key === 'Faktor Kontrol' && is_string($value)) {
+
+                    // Skip jika "Tidak"
+                    if (stripos($value, 'Tidak') !== false) {
+                        continue;
+                    }
+
+                    // Ambil angka dari string (1 atau 2)
+                    if (preg_match('/(\d+)/', $value, $match)) {
+                        $nilai = (int) $match[1];
+                    } else {
+                        continue; // tidak ada angka → skip
+                    }
+
+                    $total += $nilai;
+
                     continue;
                 }
 
                 // ================================
-                // JIKA ADA "Durasi Gerakan"
+                // ✅ JIKA ADA "Durasi Gerakan"
                 // ================================
                 if (is_array($value) && isset($value['Durasi Gerakan'])) {
 
-                    // Pastikan format valid "0;0-25%"
                     if (strpos($value['Durasi Gerakan'], ';') === false) {
                         continue;
                     }
@@ -4578,34 +4593,23 @@ class TestingController extends Controller
                     [$index, $range] = explode(';', $value['Durasi Gerakan']);
                     $range = trim($range);
 
-                    // Pastikan key config ada
                     if (!isset($durasiConfig[$key])) {
                         continue;
                     }
 
                     $configList = $durasiConfig[$key];
 
-                    // Cocokkan berdasarkan RANGE, BUKAN INDEX
                     if (!isset($configList[$range])) {
-                        continue; // skip jika range tidak dikenal
+                        continue;
                     }
 
                     $nilai = $configList[$range];
-                    // dump("No Sampel: $no_sampel | Kategori: $kategoriKey | Key: $key | Range: $range | Nilai: $nilai");
 
-                    // Simpan kembali hasil konversi
                     $data[$kategoriKey][$key]['Durasi Gerakan'] = $nilai . ';' . $range;
 
-                    // Tambah ke total
                     $total += $nilai;
-                }
+                }elseif ($value !== 'Tidak') {
 
-                // ================================
-                // JIKA HANYA YA / TIDAK
-                // ================================
-                elseif ($value !== 'Tidak') {
-
-                    // Pastikan index 1 ada
                     if (!isset($durasiConfig[$key][1])) {
                         continue;
                     }
@@ -4613,8 +4617,14 @@ class TestingController extends Controller
                     $nilai = $durasiConfig[$key][1];
                     $total += $nilai;
                 }
+                if (
+                    isset($value['Overtime'])
+                ) {
+                    $total += (float) $value['Overtime'];
+                }
             }
         }
+
 
         return [
             'total' => $total,
