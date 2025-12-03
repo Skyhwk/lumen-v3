@@ -53,7 +53,7 @@ class TemplateLhpErgonomi
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat resiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori risiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
@@ -505,6 +505,7 @@ class TemplateLhpErgonomi
             
             $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->penggunaan_keyboard);
             $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol);
+            
             $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->tekanan_langsung_ke_bagian_tubuh);
             
             $skorDataBawahGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->getaran);

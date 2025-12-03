@@ -18,7 +18,7 @@ class ErgonomiHeader extends Sector{
 
     public function datalapangan()
     {
-        return $this->belongsTo('App\Models\DataLapanganErgonomi', 'id_lapangan', 'id');
+        return $this->belongsTo('App\Models\DataLapanganErgonomi', 'id_lapangan', 'id')->with('detail');
     }
 
     public function ws_value_ergonomi()
