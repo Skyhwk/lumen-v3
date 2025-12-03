@@ -419,20 +419,20 @@
                             <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td style="width:25%">Usia</td>
+                            <td style="width:25%">Posisi/Jabatan</td>
                             <td style="width:3%">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->usia }} Tahun</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->jabatan }}</td>
                         </tr>
                         <!-- <tr>
                             <td style="width:25%">Jenis Pekerjaan</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                         </tr> -->
-                        <tr>
+                        <!-- <tr>
                             <td style="width:25%">Lama Bekerja</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
-                        </tr>
+                        </tr> -->
                     </table>
             </div>
             <!-- aktivitas -->
