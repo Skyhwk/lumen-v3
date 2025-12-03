@@ -66,7 +66,7 @@ class LingkunganHidupNO2
 
         $C14 = $C2;
 
-        $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi / 1000, 4));
+        $Vu_alt = \str_replace(",", "",number_format($data->average_flow * $data->durasi, 4));
 
         if(floatval($Vu_alt) != 0.0) {
             // C (ug/Nm3) = (a/Vu)*(10/25)*1000
