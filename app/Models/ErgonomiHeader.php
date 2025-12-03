@@ -13,7 +13,7 @@ class ErgonomiHeader extends Sector{
     protected $guarded = [];
 
     public function order_detail() {
-        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->where('is_active', true);
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->with('orderHeader')->where('is_active', true);
     }
 
     public function datalapangan()
