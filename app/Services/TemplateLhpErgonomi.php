@@ -809,7 +809,7 @@ class TemplateLhpErgonomi
         $urutanSesuaiTabel = [
             'batang_tubuh_memuntir_saat_mengangkat',
             'mengangkat_dengan_satu_tangan',
-            'mengangkat_dengan_beban_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
+            'mengangkat_dengan_beban_yang_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
             'mengangkat_1_5_kali_per_menit',
             'mengangkat_lebih_dari_5_kali_per_menit',
             'posisi_benda_yang_diangkat_berada_di_atas_bahu',
@@ -861,13 +861,13 @@ class TemplateLhpErgonomi
             "kuliat_tertekan" =>["ket"=>"Kulit tertekan oleh benda yang keras atau runcing","index"=>11,"label"=>"Tekanan Langsung ke bagian tubuh"],
             "menggunakan_telapak_tangan" =>["ket"=>"Menggunakan telapak atau pergelangan tangan untuk memukul","index"=>12,"label"=>"Tekanan Langsung ke bagian tubuh"],
             "getaran_lokal" =>["ket"=>"Getaran lokal (tanpa peredam)","index"=>13,"label"=>"Getaran"],
-            "faktor_tidak_dapat_di_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat","index"=>14,"label"=>"faktor"],
+            "faktor_tidak_dapat_di_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol oleh pekerja","index"=>14,"label"=>"faktor"],
             "pencahayaan" =>["ket"=>"Pencahayaan (Pencahayaan yang kurang atau silau)","index"=>15,"label"=>"Lingkungan"],
             "temperatur" =>["ket"=>"Temperatur terlalu tinggi atau rendah","index"=>16,"label"=>"Lingkungan"],
             "tubuh_membungkuk_20_45" =>["ket"=>"Tubuh membungkuk ke depan / menekuk ke samping 20 - 45°","index"=>17,"label"=>"Postur Janggal"],
             "tubuh_membungkuk_gt_45" =>["ket"=>"Tubuh membungkuk ke depan > 45°","index"=>18,"label"=>"Postur Janggal"],
             "tubuh_menekuk_30" =>["ket"=>"Tubuh menekuk ke belakang hingga 30°","index"=>19,"label"=>"Postur Janggal"],
-            "tubuh_pemuntiran_torso" =>["ket"=>"Torso (batang tubuh) Pemuntiran","index"=>20,"label"=>"Postur Janggal"],
+            "tubuh_pemuntiran_torso" =>["ket"=>"Pemuntiran torso (batang tubuh)","index"=>20,"label"=>"Postur Janggal"],
             "gerakan_paha" =>["ket"=>"Gerakan paha menjauhi tubuh ke samping secara berulang-ulang","index"=>21,"label"=>"Postur Janggal"],
             "posisi_berlutut" =>["ket"=>"Posisi berlutut atau jongkok","index"=>22,"label"=>"Postur Janggal"],
             "pergelangan_kaki" =>["ket"=>"Pergelangan kaki menekuk ke atas / ke bawah secara berulang","index"=>23,"label"=>"Postur Janggal"],
@@ -1119,8 +1119,9 @@ class TemplateLhpErgonomi
                 $ket  = isset($parts[1]) ? $parts[1] : '';
 
                 // UBAH format string tadi menjadi Array yang punya skor
+                $result = ucfirst(Str::replace('_', ' ', $parentKey));
                 $value = [
-                    'raw_text'   => Str::headline($parentKey), // Simpan teks asli
+                    'raw_text'   => $result, // Simpan teks asli
                     'skor'       => $skor,  // Ini angka 2 nya
                     'keterangan' => $ket    // Ini keterangannya
                 ];
