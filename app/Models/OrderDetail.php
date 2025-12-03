@@ -565,7 +565,7 @@ class OrderDetail extends Sector
     }
     public function udaraDebu()
     {
-        return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true);
+        return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
     }
 
     // emisi isokinetik
