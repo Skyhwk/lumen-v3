@@ -14,7 +14,7 @@
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom">Lingkungan Kerja</td>
+                        <td class="custom">Kebisingan</td>
                         <td class="custom">Tingkat Kebisingan Lingkungan</td>
                     </tr>
                 </table>
