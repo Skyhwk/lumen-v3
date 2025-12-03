@@ -272,7 +272,7 @@
                                 <td style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                     
                                     @php 
-                                        $skorEstimasiBerat = (int)($manualHandling->estimasi_berat_benda ?? 0);
+                                        $skorEstimasiBerat = (int)($manualHandling->total_poin_1 ?? 0);
                                         $skorFaktorResiko = (int)($manualHandling->faktor_resiko->total_poin_2 ?? 0);
                                         $skorLangkahAkhir = $skorEstimasiBerat + $skorFaktorResiko;
                                     @endphp
