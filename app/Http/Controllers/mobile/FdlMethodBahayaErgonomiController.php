@@ -176,6 +176,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 }
             }
 
+            
             $total_skor = $total_skor_1 + $total_skor_2;
 
             // Menghitung total durasi untuk Tubuh_Bagian_Atas dan Tubuh_Bagian_Bawah
@@ -194,6 +195,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 $manualHandling['Total Poin Akhir'] = $total_skor;
             }
 
+            
             // Buat array pengukuran dengan data yang telah dimodifikasi
             $pengukuran = [
                 "Tubuh_Bagian_Atas" => $request->input('Tubuh_Bagian_Atas'),
@@ -230,7 +232,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 $data->aktivitas = $request->aktivitas;
             }
             $data->method = 8;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->aktivitas_ukur = $request->aktivitas_ukur;
             $data->permission = $request->permission;
             $data->created_by = $this->karyawan;

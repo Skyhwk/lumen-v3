@@ -154,15 +154,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 }
 
                 return Datatables::of($data)->make(true);
-            } else if ($parameterArray[1] == 'Debu (P8J)') {
-                $data = DebuPersonalHeader::with('data_lapangan', 'ws_lingkungan')
-                    ->where('no_sampel', $request->no_sampel)
-                    ->where('is_approved', true)
-                    ->where('is_active', true)
-                    ->select('*')
-                    ->addSelect(DB::raw("'debu_personal' as data_type"));
-
-                return Datatables::of($data)->make(true);
             } else if ($parameterArray[1] == 'Medan Magnit Statis' || $parameterArray[1] == 'Medan Listrik' || $parameterArray[1] == 'Power Density') {
                 $data = MedanLmHeader::with('datalapangan', 'ws_udara')
                     ->where('no_sampel', $request->no_sampel)
@@ -277,7 +268,6 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             }
 
             $getSatuan = new HelperSatuan;
-
             return Datatables::of($processedData)
                 ->addColumn('nilai_uji', function ($item) use ($getSatuan) {
                     // ambil satuan dan index (boleh null)
