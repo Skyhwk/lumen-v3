@@ -101,10 +101,10 @@
                     </td>
 
                     {{-- NO SAMPEL --}}
-                    <td class="pd-3-{{ $rowClass }}" width="7%" style="text-align: right; border-right: none;">
-                        <sup style="font-size: 5px; margin-top: -10px;">{{ $noSampel }}</sup>
+                    <td class="pd-3-{{ $rowClass }}" style="text-align: center; border-right: none;">
+                        <sup style="font-size: 8px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
-                    <td class="pd-3-{{ $rowClass }}" width="27%" style="border-left: none; text-align: left;">
+                    <td class="pd-3-{{ $rowClass }}" style="border-left: none; text-align: left;">
                         {{ htmlspecialchars($keterangan) }}
                     </td>
 
