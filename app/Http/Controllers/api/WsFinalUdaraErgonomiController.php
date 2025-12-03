@@ -90,7 +90,7 @@ class WsFinalUdaraErgonomiController extends Controller
 				// Cek apakah 'Ergonomi' ada dalam array
 				if (in_array("Ergonomi", $parameterNames)) {
 
-					$data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->first();
+					$data = DataLapanganErgonomi::with('detail')->where('no_sampel', $request->no_sampel)->first();
 					$urutan = $lapangan2->search($data->no_sampel);
 					$urutanDisplay = $urutan + 1;
 					$data['urutan'] = "{$urutanDisplay}/{$totLapangan}";
