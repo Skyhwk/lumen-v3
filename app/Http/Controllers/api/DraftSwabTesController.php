@@ -282,7 +282,9 @@ class DraftSwabTesController extends Controller
                         'id_regulasi'      => $id_regulasi,
                         'nama_regulasi'    => $nama_regulasi,
                         'tanggal_terima'   => $val->tanggal_terima ?? null,
-                        'akr'              => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
+                        'akr'              => (! empty($bakumutu->akreditasi) && str_contains($bakumutu->akreditasi, 'AKREDITASI'))
+                            ? ''
+                            : 'ẍ',
                     ];
                 })->toArray();
 
@@ -376,10 +378,10 @@ class DraftSwabTesController extends Controller
                     }
 
                     $final[] = [
-                        "id_regulasi"   => $group['id_regulasi'],
-                        "nama_regulasi" => $group['nama_regulasi'],
+                        "id_regulasi"     => $group['id_regulasi'],
+                        "nama_regulasi"   => $group['nama_regulasi'],
                         "deskripsi_titik" => $group['deskripsi_titik'],
-                        "detail"        => array_values($result),
+                        "detail"          => array_values($result),
                     ];
                 }
 
@@ -721,7 +723,6 @@ class DraftSwabTesController extends Controller
             $totalSampel     = $groupedBySampel->count();
             $parameters      = $validasi->pluck('parameter')->filter()->unique();
             $totalParam      = $parameters->count();
-
 
             $isSingleSampelMultiParam = $totalSampel === 1 && $totalParam > 2;
             $isMultiSampelOneParam    = $totalSampel >= 1 && $totalParam === 1;
