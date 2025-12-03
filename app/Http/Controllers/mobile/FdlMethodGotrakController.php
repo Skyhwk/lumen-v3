@@ -51,11 +51,11 @@ class FdlMethodGotrakController extends Controller
         try {
             $inputs = $request->all();
             $fdl = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))->where('method', 7)->first();
-            if ($fdl){
-                return response()->json([
-                    'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
-                ], 401);
-            }
+            // if ($fdl){
+            //     return response()->json([
+            //         'message' => 'Data dengan No. Sampel ' . strtoupper(trim($request->no_sample)) . ' sudah terinput pada method SNI Gotrak'
+            //     ], 401);
+            // }
             $umum = [];
             $tubuh = [];
 
@@ -165,7 +165,7 @@ class FdlMethodGotrakController extends Controller
             if ($request->aktivitas != '')
                 $data->aktivitas = $request->aktivitas;
             $data->method = 7;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             if ($request->foto_samping_kiri != '')
                 $data->foto_samping_kiri = self::convertImg($request->foto_samping_kiri, 1, $this->user_id);
             if ($request->foto_samping_kanan != '')

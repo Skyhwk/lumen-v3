@@ -1193,7 +1193,7 @@ class FdlErgonomiController extends Controller
         
         DB::beginTransaction();
         try {
-            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->first();
+            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->orderBy('id', 'desc')->first();
             $uraians = $request->input('uraian', []);
             $jams = $request->input('jam', []);
             $menits = $request->input('menit', []);
@@ -1239,7 +1239,7 @@ class FdlErgonomiController extends Controller
     {
         DB::beginTransaction();
         try {
-            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->first();
+            $data = DataLapanganErgonomi::where('no_sampel', $request->no_sampel)->where('method', $request->method)->orderBy('id', 'desc')->first();
             // dd($data);
             $input_k3 = $data->input_k3;
             DB::commit();

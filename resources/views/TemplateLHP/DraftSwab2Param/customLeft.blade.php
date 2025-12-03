@@ -12,7 +12,7 @@
 @endphp
 
 <div class="left" style="page-break-before: always;">
-    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;" width="100%">
         <thead>
             <tr>
                 <th width="6%" rowspan="2" class="pd-5-solid-top-center">NO</th>
@@ -35,7 +35,7 @@
                 @foreach ($parameters as $param)
                     <th class="pd-5-solid-top-center" style="white-space: nowrap;">
                         @php
-                            foreach ($detail as $row) {
+                            foreach ($custom as $row) {
                                 if ($row['parameter'] === $param) {
                                     $akr = $row['akr'];
                                     $satuan = $row['satuan'];
@@ -52,7 +52,7 @@
                 {{-- BAKU MUTU - PARAMETER --}}
                 @foreach ($parameters as $param)
                     @php
-                        foreach ($detail as $row) {
+                        foreach ($custom as $row) {
                             if ($row['parameter'] === $param) {
                                 $akr = $row['akr'];
                                 $satuan = $row['satuan'];
@@ -94,15 +94,15 @@
 
                 <tr>
                     {{-- NO --}}
-                    <td class="pd-5-{{ $rowClass }}-center">
+                    <td class="pd-5-{{ $rowClass }}-center" >
                         {{ $rowNo }}
                     </td>
 
                     {{-- NO SAMPEL --}}
-                    <td class="pd-3-{{ $rowClass }}" width="7%" style="text-align: right; border-right: none;">
-                        <sup style="font-size: 5px; margin-top: -10px;">{{ $noSampel }}</sup>
+                    <td class="pd-3-{{ $rowClass }}" style="text-align: center; border-right: none;">
+                        <sup style="font-size: 8px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
-                    <td class="pd-3-{{ $rowClass }}" width="27%" style="border-left: none; text-align: left;">
+                    <td class="pd-3-{{ $rowClass }}" style="border-left: none; text-align: left;">
                         {{ htmlspecialchars($keterangan) }}
                     </td>
 
@@ -116,7 +116,7 @@
                         @endphp
 
 
-                        <td class="pd-5-{{ $rowClass }}-center">
+                        <td class="pd-5-{{ $rowClass }}-center" >
                             {!! $hasil !!}
                         </td>
                     @endforeach
@@ -127,13 +127,13 @@
                             $r = $rowsByParam->get($param, []);
                             $baku = $r['baku_mutu'] ?? '-';
                         @endphp
-                        <td class="pd-5-{{ $rowClass }}-center">
+                        <td class="pd-5-{{ $rowClass }}-center" >
                             {{ htmlspecialchars($baku) }}
                         </td>
                     @endforeach
 
 
-                    <td class="pd-5-{{ $rowClass }}-center">
+                    <td class="pd-5-{{ $rowClass }}-center" >
                         {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
                     </td>
                 </tr>

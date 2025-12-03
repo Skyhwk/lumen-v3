@@ -23,17 +23,59 @@ use Yajra\Datatables\Datatables;
 class LhpULKController extends Controller
 {
     public function index(Request $request){
-        $data = OrderDetail::with('lhps_ling','orderHeader','dataLapanganLingkunganKerja')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '4-Udara')->where('kategori_3', '27-Udara Lingkungan Kerja')->where('status', 3)->orderBy('tanggal_terima', 'desc');
-        return Datatables::of($data)->make(true);
+        // $data = OrderDetail::with('lhps_ling','orderHeader','dataLapanganLingkunganKerja')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '4-Udara')->where('kategori_3', '27-Udara Lingkungan Kerja')->where('status', 3)->orderBy('tanggal_terima', 'desc');
+        $parameterAllowed = [
+            'Sinar UV',
+            'Ergonomi',
+            'Gelombang Elektro',
+            'Medan Listrik',
+            'Medan Magnit Statis',
+            'Power Density',
+        ];
+
+        $data = OrderDetail::selectRaw('
+                max(id) as id,
+                max(id_order_header) as id_order_header,
+                cfr,
+                GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+                MAX(nama_perusahaan) as nama_perusahaan,
+                MAX(konsultan) as konsultan,
+                MAX(no_quotation) as no_quotation,
+                MAX(no_order) as no_order,
+                MAX(parameter) as parameter,
+                MAX(regulasi) as regulasi,
+                GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+                MAX(kategori_2) as kategori_2,
+                MAX(kategori_3) as kategori_3,
+                GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+                GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+                GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+            ')
+            ->with(['lhps_ling','orderHeader'])
+            ->where('is_active', true)
+            ->where('kategori_3', '27-Udara Lingkungan Kerja')
+            ->where('status', 3)
+            ->where(function ($query) use ($parameterAllowed) {
+                foreach ($parameterAllowed as $param) {
+                    $query->where('parameter', 'NOT LIKE', "%;$param%");
+                }
+            })
+            ->groupBy('cfr');
+
+        return Datatables::of($data)
+            ->order(function ($query) {
+                $query->orderByRaw("MAX(tanggal_terima) DESC");
+            })
+            ->make(true);
+
     }
 
     public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
             $detail = LhpsLingDetail::where('id_header', $header->id)->get();
             $custom = LhpsLingCustom::where('id_header', $header->id)->get();
-
             if($header != null) {
 
                 $header->is_approved = 0;
@@ -43,7 +85,7 @@ class LhpULKController extends Controller
                 // $header->file_qr = null;
                 $header->save();
 
-                $data_order = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
+                $data_order = OrderDetail::where('cfr', $request->no_lhp)->where('is_active', true)->update([
                     'status' => 2,
                     'is_approve' => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -53,7 +95,7 @@ class LhpULKController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel '.$request->no_sampel.' berhasil!'
+                'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();

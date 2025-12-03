@@ -333,6 +333,7 @@ class TemplateLhpErgonomi
                 "periode_analisis" => '-',
                 "deskripsi_pekerjaan" => $dataReba->aktivitas_ukur,
                 "divisi" => $dataReba->divisi,
+                'aktifitas_k3' =>json_decode($dataReba->input_k3) ?? (object) ['uraian' => [], 'analisis_potensi_bahaya' => '', 'kesimpulan_survey_lanjutan' => '']
             ];
 
             
@@ -486,191 +487,22 @@ class TemplateLhpErgonomi
                 'aktifitas_k3' =>json_decode($dataRwl->input_k3) ?? (object) ['uraian' => [], 'analisis_potensi_bahaya' => '', 'kesimpulan_survey_lanjutan' => '']
             ];
             
-            
-
-
-             
-    
             // $pengukuran = json_decode($dataRwl->pengukuran,true);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
+            
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
 
-            $mapPointBagianAtas=[
-                'Leher'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Bahu'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Rotasi Lengan'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Pergelangan Tangan'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Gerakan Lengan Sedang'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Gerakan Lengan Intensif'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Mengetik Berselang'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>0,
-                    '50%-100%'=>1
-                ],
-                'Mengetik Intensif'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>3
-                ],
-                'Penggenggam Kuat'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>3
-                ],
-                'Memencet atau Menjepit'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Kuliat Tertekan'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Menggunakan Telapak Tangan'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Getaran Lokal'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Faktor Tidak Dapat Di Kontrol'=>[
-                    'Ditemukan 1 faktor Kontrol'=>1,
-                    'Ditemukan 2 atau lebih faktor kontrol'=>2
-                ],
-                'Pencahayaan'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>0,
-                    '50%-100%'=>1
-                ],
-                'Temperatur'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>0,
-                    '50%-100%'=>1
-                ]
-            ];
+            
 
-            $mapPointBagianBawah=[
-                'Tubuh Membungkuk 20°-45°'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Tubuh Membungkuk >45°'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Tubuh Menekuk 30°'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Tubuh Pemuntiran Torso'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Gerakan Paha'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Posisi Berlutut'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Pergelangan Kaki'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Aktivitas Pergelangan Kaki'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Duduk Tanpa Sandaran'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Duduk Tanpa Pijakan'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>0,
-                    '50%-100%'=>1
-                ],
-                'Tubuh Tertekan Benda'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Lutut Untuk Memukul'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Getaran Seluruh Tubuh'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Beban Sedang'=>[
-                    '0%-25%'=>0,
-                    '25%-50%'=>1,
-                    '50%-100%'=>2
-                ],
-                'Beban Berat'=>[
-                    '0%-25%'=>1,
-                    '25%-50%'=>2,
-                    '50%-100%'=>3
-                ],
-                'Faktor Kontrol'=>[
-                    'Ditemukan 1 faktor Kontrol'=>1,
-                    'Ditemukan 2 atau lebih faktor kontrol'=>2,
-                ]
-            ];
-
-            $mapPointBagianAtas =Helper::normalize_format_key($mapPointBagianAtas,true);
-            $mapPointBagianBawah =Helper::normalize_format_key($mapPointBagianBawah,true);
-            
-            
-            
+            // $mapPointBagianAtas =Helper::normalize_format_key($mapPointBagianAtas,true);
+            // $mapPointBagianBawah =Helper::normalize_format_key($mapPointBagianBawah,true);
 
             $skorDataAtasGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->getaran);
-            
             $skorDataAtasLingkungan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->lingkungan);
             $skorDataAtasUsahaTangan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->usaha_tangan);
             $skorDataAtasGerakanLengan =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->gerakan_lengan);
             $skorDataAtasPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->postur_janggal);
+            
             $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->penggunaan_keyboard);
             $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol);
             $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->tekanan_langsung_ke_bagian_tubuh);
@@ -682,18 +514,19 @@ class TemplateLhpErgonomi
             $skorDataBawahPosturJanggal =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->postur_janggal);
             $skorDataBawahPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->penggunaan_keyboard);
             $skorDataBawahPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol);
+            $skorDataBawahPosturAktivitasMendorong =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->aktivitas_mendorong);
             $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_ke_bagian_tubuh);
             //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
             
             $skorDataAtas = array_merge(
-                $skorDataAtasGetaran,
-                $skorDataAtasLingkungan,
-                $skorDataAtasUsahaTangan,
-                $skorDataAtasGerakanLengan,
-                $skorDataAtasPosturJanggal,
-                $skorDataAtasPosturPenggunaanKeyboard,
-                $skorDataAtasPosturFaktorTidakDapatDiKontrol,
-                $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
+                (array)$skorDataAtasGetaran,
+                (array)$skorDataAtasLingkungan,
+                (array)$skorDataAtasUsahaTangan,
+                (array)$skorDataAtasGerakanLengan,
+                (array)$skorDataAtasPosturJanggal,
+                (array)$skorDataAtasPosturPenggunaanKeyboard,
+                (array)$skorDataAtasPosturFaktorTidakDapatDiKontrol,
+                (array)$skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
             );
            
             $skorDataBawah = array_merge(
@@ -704,7 +537,8 @@ class TemplateLhpErgonomi
                 (array) $skorDataBawahPosturJanggal,
                 (array) $skorDataBawahPosturPenggunaanKeyboard,
                 (array) $skorDataBawahPosturFaktorTidakDapatDiKontrol,
-                (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh
+                (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh,
+                (array) $skorDataBawahPosturAktivitasMendorong
             );
             // clearData
             foreach($skorDataAtas as $key => $value){
@@ -776,7 +610,7 @@ class TemplateLhpErgonomi
             }else{
                 $hasilResikoBeban =null;
             }
-            
+           
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','hasilResikoBeban','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
@@ -975,7 +809,7 @@ class TemplateLhpErgonomi
         $urutanSesuaiTabel = [
             'batang_tubuh_memuntir_saat_mengangkat',
             'mengangkat_dengan_satu_tangan',
-            'mengangkat_dengan_beban_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
+            'mengangkat_dengan_beban_yang_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
             'mengangkat_1_5_kali_per_menit',
             'mengangkat_lebih_dari_5_kali_per_menit',
             'posisi_benda_yang_diangkat_berada_di_atas_bahu',
@@ -998,7 +832,6 @@ class TemplateLhpErgonomi
         // 5. Cek Hasilnya
         return $dataSudahUrut;
     }
-    
     private function hitungRecursive(&$items, $namaKey = null)
     {
         // 1. GUARD CLAUSE: Jika items bukan array (misal string "Tidak"), stop dan return array kosong.
@@ -1028,13 +861,13 @@ class TemplateLhpErgonomi
             "kuliat_tertekan" =>["ket"=>"Kulit tertekan oleh benda yang keras atau runcing","index"=>11,"label"=>"Tekanan Langsung ke bagian tubuh"],
             "menggunakan_telapak_tangan" =>["ket"=>"Menggunakan telapak atau pergelangan tangan untuk memukul","index"=>12,"label"=>"Tekanan Langsung ke bagian tubuh"],
             "getaran_lokal" =>["ket"=>"Getaran lokal (tanpa peredam)","index"=>13,"label"=>"Getaran"],
-            "faktor_tidak_dapat_di_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat","index"=>14,"label"=>"faktor"],
+            "faktor_tidak_dapat_di_kontrol" =>["ket"=>"Terdapat faktor yang membuat ritme kerja tubuh bagian atas dan/atau lengan tidak dapat dikontrol oleh pekerja","index"=>14,"label"=>"faktor"],
             "pencahayaan" =>["ket"=>"Pencahayaan (Pencahayaan yang kurang atau silau)","index"=>15,"label"=>"Lingkungan"],
             "temperatur" =>["ket"=>"Temperatur terlalu tinggi atau rendah","index"=>16,"label"=>"Lingkungan"],
             "tubuh_membungkuk_20_45" =>["ket"=>"Tubuh membungkuk ke depan / menekuk ke samping 20 - 45°","index"=>17,"label"=>"Postur Janggal"],
             "tubuh_membungkuk_gt_45" =>["ket"=>"Tubuh membungkuk ke depan > 45°","index"=>18,"label"=>"Postur Janggal"],
             "tubuh_menekuk_30" =>["ket"=>"Tubuh menekuk ke belakang hingga 30°","index"=>19,"label"=>"Postur Janggal"],
-            "tubuh_pemuntiran_torso" =>["ket"=>"Torso (batang tubuh) Pemuntiran","index"=>20,"label"=>"Postur Janggal"],
+            "tubuh_pemuntiran_torso" =>["ket"=>"Pemuntiran torso (batang tubuh)","index"=>20,"label"=>"Postur Janggal"],
             "gerakan_paha" =>["ket"=>"Gerakan paha menjauhi tubuh ke samping secara berulang-ulang","index"=>21,"label"=>"Postur Janggal"],
             "posisi_berlutut" =>["ket"=>"Posisi berlutut atau jongkok","index"=>22,"label"=>"Postur Janggal"],
             "pergelangan_kaki" =>["ket"=>"Pergelangan kaki menekuk ke atas / ke bawah secara berulang","index"=>23,"label"=>"Postur Janggal"],
@@ -1051,8 +884,187 @@ class TemplateLhpErgonomi
 
         if ($keyDurasi) {
             // --- PROSES HITUNG SKOR ---
+            $mapPointBagianAtas=[
+                'leher'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'bahu'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'rotasi_lengan'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'pergelangan_tangan'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'gerakan_lengan_sedang'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'gerakan_lengan_intensif'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'mengetik_berselang'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>0,
+                    '50-100%'=>1
+                ],
+                'mengetik_intensif'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>3
+                ],
+                'penggenggam_kuat'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>3
+                ],
+                'memencet_atau_menjepit'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'kuliat_tertekan'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'menggunakan_telapak_tangan'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'getaran_lokal'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'faktor_tidak_dapat_di_kontrol'=>[
+                    'Ditemukan 1 faktor Kontrol'=>1,
+                    'Ditemukan 2 atau lebih faktor kontrol'=>2
+                ],
+                'pencahayaan'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>0,
+                    '50-100%'=>1
+                ],
+                'temperatur'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>0,
+                    '50-100%'=>1
+                ]
+            ];
+
+            $mapPointBagianBawah=[
+                'tubuh_membungkuk_20_45'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'tubuh_membungkuk_gt_45'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'tubuh_menekuk_30'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'tubuh_pemuntiran_torso'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'gerakan_paha'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'posisi_berlutut'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'pergelangan_kaki'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'aktivitas_pergelangan_kaki'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'duduk_tanpa_sandaran'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'duduk_tanpa_pijakan'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>0,
+                    '50-100%'=>1
+                ],
+                'tubuh_tertekan_benda'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'lutut_untuk_memukul'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'getaran_seluruh_tubuh'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'beban_sedang'=>[
+                    '0-25%'=>0,
+                    '25-50%'=>1,
+                    '50-100%'=>2
+                ],
+                'beban_berat'=>[
+                    '0-25%'=>1,
+                    '25-50%'=>2,
+                    '50-100%'=>3
+                ],
+                'faktor_kontrol'=>[
+                    'Ditemukan 1 faktor Kontrol'=>1,
+                    'Ditemukan 2 atau lebih faktor kontrol'=>2,
+                ]
+            ];
+            // 1. Dapatkan string durasi (contoh: "0-25%", "Ditemukan 1 faktor Kontrol")
             $parts = explode(';', $items[$keyDurasi]);
-            $point = isset($parts[0]) ? (int)$parts[0] : 0;
+            $durasiKey = $parts[1] ?? ($parts[0] ?? null); // Ambil bagian kedua, jika tidak ada, ambil bagian pertama.
+            
+            $point = 0;
+            $mapDigunakan = [];
+            
+            // 2. Tentukan Map yang akan digunakan berdasarkan $namaKey
+            if (isset($mapPointBagianAtas[$namaKey])) {
+                $mapDigunakan = $mapPointBagianAtas[$namaKey];
+            } elseif (isset($mapPointBagianBawah[$namaKey])) {
+                $mapDigunakan = $mapPointBagianBawah[$namaKey];
+            }
+
+            // 3. Ambil nilai point dari Map
+            if (!empty($mapDigunakan) && isset($mapDigunakan[$durasiKey])) {
+                $point = (int)$mapDigunakan[$durasiKey];
+            }
             
             // Cek overtime (handle jika string "Tidak" dianggap 0)
             $valOvertime = $items[$keyOvertime] ?? 0;
@@ -1074,8 +1086,7 @@ class TemplateLhpErgonomi
 
         // 3. JIKA BUKAN TARGET, CARI KE DALAM ANAKNYA (REKURSIF)
         foreach ($items as $key => &$subItem) {
-            // Panggil fungsi ini untuk anak-anaknya
-            
+            // Panggil fungsi ini untuk anak-anaknya   
             if (is_string($subItem) && $subItem != "" && $key !== 'skor' && $key !== 'keterangan') {
                 $subItem = []; // Mengganti string "Tidak" menjadi [] melalui referensi
                 continue; // Lanjut ke item berikutnya
@@ -1089,7 +1100,6 @@ class TemplateLhpErgonomi
                 }
             }
         }
-
         // 4. KEMBALIKAN KUMPULAN HASIL
         return $hasilKalkulasi;
     }
@@ -1109,8 +1119,9 @@ class TemplateLhpErgonomi
                 $ket  = isset($parts[1]) ? $parts[1] : '';
 
                 // UBAH format string tadi menjadi Array yang punya skor
+                $result = ucfirst(Str::replace('_', ' ', $parentKey));
                 $value = [
-                    'raw_text'   => Str::headline($parentKey), // Simpan teks asli
+                    'raw_text'   => $result, // Simpan teks asli
                     'skor'       => $skor,  // Ini angka 2 nya
                     'keterangan' => $ket    // Ini keterangannya
                 ];
@@ -1123,8 +1134,8 @@ class TemplateLhpErgonomi
             }
         }
     }
-
-    private function hitungResikoBeban($inputJarakString, $inputBeratString) {
+    private function hitungResikoBeban($inputJarakString, $inputBeratString)
+    {
     
         // --- 1. PARSING INPUT JARAK ---
         // Ubah kalimat "Pengangkatan dengan jarak dekat" menjadi "jarak_dekat"
@@ -1259,7 +1270,6 @@ class TemplateLhpErgonomi
         
         return null;
     }
-    
     private function groupByKategori($data)
     {
        
@@ -1273,17 +1283,17 @@ class TemplateLhpErgonomi
         }
         return $grouped;
     }
-
-    private function resultRwl($skor){
+    private function resultRwl($skor)
+    {
         $tingkatResiko = '';
         $tindakan = '';
         $result = '';
         if ($skor < 1) {
             $tingkatResiko = 'Rendah';
-            $tindakan = 'Tindakan ada masalah dengan pekerjaan mengakat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
+            $tindakan = 'Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
         } else if ($skor <= 1 && $skor < 3) {
             $tingkatResiko = 'Sedang';
-            $tindakan = 'Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1';
+            $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1';
         } elseif ($skor >= 5) {
             $tingkatResiko = ' Tinggi';
             $tindakan = 'Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';

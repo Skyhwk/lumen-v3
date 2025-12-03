@@ -32,14 +32,31 @@ class EmailHistoryController extends Controller
             ->filterColumn('email_subject', function ($query, $keyword) {
                 $query->where('email_subject', 'like', '%' . $keyword . '%');
             })
-            ->addColumn('email', function ($row) {
-                $filePath = storage_path('repository/email_history/' . $row->email_body);
-                if (file_exists($filePath) && is_file($filePath)) {
-                    return file_get_contents($filePath);
-                } else {
-                    return 'File not found';
-                }
-                })
         ->make(true);
+    }
+
+    public function getDetailData(Request $request)
+    {
+        $data = EmailHistory::where('id', $request->id)->first();
+
+        if (!$data) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan'
+            ], 404);
+        }
+
+        // ✅ Ambil isi file email
+        $filePath = storage_path('repository/email_history/' . $data->email_body);
+
+        if (file_exists($filePath) && is_file($filePath)) {
+            $data->email_content = file_get_contents($filePath);
+        } else {
+            $data->email_content = 'File not found';
+        }
+        return response()->json([
+            'status' => true,
+            'data' => $data, // ✅ email_content SUDAH MASUK DI SINI
+        ], 200);
     }
 }

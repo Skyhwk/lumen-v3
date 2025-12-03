@@ -63,7 +63,7 @@
                             <th style="border: 1px solid black; padding: 5px; width: 15%;">No.</th>
                             <th style="border: 1px solid black; padding: 5px; width: 25%;">Kategori</th>
                             <th style="border: 1px solid black; padding: 5px;">Potensi Bahaya</th>
-                            <th style="border: 1px solid black; padding: 5px; width: 80px;">Skor</th>
+                            <th style="border: 1px solid black; padding: 5px; width: 10%;">Skor</th>
                         </tr>
                         @php 
                             $nomorUrut = 1;
@@ -161,7 +161,7 @@
                         <thead>
                             <tr style="background-color: #ffffff;">
                                 <td colspan="4" style="border: 1px solid black; padding: 5px; font-weight: bold; text-decoration: underline;">
-                                    III. Daftar Periksa Pengamatan Beban Secara Manual
+                                    III. Hasil Penilaian Pengangkatan Beban Secara Manual
                                 </td>
                             </tr>
                         </thead>
@@ -177,18 +177,34 @@
                                         </div>
                                         <hr style="border: 1px solid black;">
                                         <div style="padding: 10px;">
-                                            {{ $manualHandling->posisi_angkat_beban }}
+
+                                            @php 
+                                                $posisiAngkatBeban = $manualHandling->posisi_angkat_beban;
+                                                $posisiLabel = "-";
+                                                
+                                                if($posisiAngkatBeban != '' && $posisiAngkatBeban != null) {
+                                                    if (strpos($posisiAngkatBeban, "jarak dekat") !== false) {
+                                                        $posisiLabel = "Dekat";
+                                                    } elseif (strpos($posisiAngkatBeban, "jarak sedang") !== false) {
+                                                        $posisiLabel = "Sedang";
+                                                    } elseif (strpos($posisiAngkatBeban, "jarak jauh") !== false) {
+                                                        $posisiLabel = "Jauh";
+                                                    }
+                                                }
+                                            @endphp
+                                            {{ $posisiLabel }}
                                         </div>
                                     </td>
 
-                                    <td style="border: 1px solid black; padding: 5px; vertical-align: center; font-weight: bold; text-align: center; width: 25%;">
+                                    <td style="border: 1px solid black; padding: 5px; vertical-align: center;  text-align: center; width: 25%;">
                                         <div style="padding: 5px; margin-top:3px; font-weight: bold; text-align: center; width: 100%; box-sizing: border-box;">
                                             Berat Beban
                                         </div>
                                         <hr style="border: 1px solid black;">
-                                        <div style="padding: 10px; text-align: center; font-weight: bold;">
+                                        <div style="padding: 10px; text-align: center;">
                                             {{-- Membersihkan kata 'Berat benda' agar sisa angkanya saja --}}
-                                            {{ trim(str_ireplace(['Berat benda', 'Sekitar'], '', $manualHandling->estimasi_berat_benda)) }}
+                                            <!-- {{ trim(str_ireplace(['Berat benda', 'Sekitar'], '', $manualHandling->estimasi_berat_benda)) }} -->
+                                              {{$manualHandling->bobot_akual_benda}} Kg
                                         </div>
                                     </td>
 
@@ -198,7 +214,7 @@
                                         </div>
                                         <hr style="border: 1px solid black;">
                                         <div style="padding: 10px; text-align: center; font-weight: bold;">
-                                            {{ ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0 }}
+                                            {{ $manualHandling->total_poin_1 }}
                                         </div>
                                     </td>
                                 </tr>
@@ -255,8 +271,12 @@
                                 </td>
                                 <td style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                     
-                                    {{$totalSkorLangkah + ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0}}
-                                    @php $skorLangkahAkhir = $totalSkorLangkah + ($hasilResikoBeban != null) ? $hasilResikoBeban['poin'] : 0; @endphp
+                                    @php 
+                                        $skorEstimasiBerat = (int)($manualHandling->estimasi_berat_benda ?? 0);
+                                        $skorFaktorResiko = (int)($manualHandling->faktor_resiko->total_poin_2 ?? 0);
+                                        $skorLangkahAkhir = $skorEstimasiBerat + $skorFaktorResiko;
+                                    @endphp
+                                    {{$skorLangkahAkhir }}
                                 </td>
                             </tr>
                         </tbody>
@@ -353,9 +373,9 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td>{{$personal->no_lhp}}</td>
-                        <td>{{$personal->no_sampel}}</td>
-                        <td>ERGONOMI</td>
+                        <td class="text-center">{{$personal->no_lhp}}</td>
+                        <td class="text-center">{{$personal->no_sampel}}</td>
+                        <td class="text-center">ERGONOMI</td>
                     </tr>
                 </tbody>
             </table>
@@ -384,9 +404,9 @@
                         <td style="width: 72%;text-align:start;">{{ $personal->tanggal_sampling }}</td>
                     </tr>
                     <tr>
-                        <td style="width:25%">Metode Analisa</td>
+                        <td style="width:25%">Metode Sampling*</td>
                         <td style="width:3%">:</td>
-                        <td style="width: 72%;text-align:start;">Observasi Potensi Bahaya Ergonomi SNI 9011:2021</td>
+                        <td style="width: 72%;text-align:start;">SNI 9011:2021</td>
                     </tr>
                 </table>
             </div>
@@ -411,7 +431,7 @@
                         <tr>
                             <td style="width:25%">Lama Bekerja</td>
                             <td style="width:3%">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }} Tahun</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
             </div>
@@ -422,7 +442,7 @@
                         <tr>
                             <th style="width:13%">No.</th>
                             <th>Uraian Tugas Singkat</th>
-                            <th>Waktu/Durasi Kerja</th>
+                            <th>Waktu/Durasi Kerja Tiap Tugas</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -464,7 +484,7 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="text-align: center;">&lt;2</td>
+                            <td style="text-align: center;"> &le;2 </td>
                             <td>Kondisi tempat kerja aman</td>
                         </tr>
                         <tr>
@@ -472,7 +492,7 @@
                             <td>Perlu pengamatan lebih lanjut</td>
                         </tr>
                         <tr>
-                            <td style="text-align: center;">&ge;7</td>
+                            <td style="text-align: center;"> &ge;7</td>
                             <td>Berbahaya</td>
                         </tr>
                     </tbody>
@@ -484,7 +504,7 @@
                     <tr>
                         <td style="border: 0; font-size: 9px; line-height: 1.3;">
                             * Standar Nasional Indonesia 9011:2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja.
-                            <br>**Interpretasi Hasil Pengukuran Daftar Periksa Potensi Bahaya Ergonomi Mengacu kepada Standar Nasional Indonesia 9011:2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja Bagian 5.1.
+                            <br>**Interpretasi Hasil Pengukuran Potensi Bahaya Ergonomi Mengacu kepada Standar Nasional Indonesia 9011:2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja Bagian 5.1.
                         </td>
                     </tr>
                 </table>

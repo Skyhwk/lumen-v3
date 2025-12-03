@@ -176,6 +176,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 }
             }
 
+            
             $total_skor = $total_skor_1 + $total_skor_2;
 
             // Menghitung total durasi untuk Tubuh_Bagian_Atas dan Tubuh_Bagian_Bawah
@@ -194,6 +195,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 $manualHandling['Total Poin Akhir'] = $total_skor;
             }
 
+            
             // Buat array pengukuran dengan data yang telah dimodifikasi
             $pengukuran = [
                 "Tubuh_Bagian_Atas" => $request->input('Tubuh_Bagian_Atas'),
@@ -230,7 +232,7 @@ class FdlMethodBahayaErgonomiController extends Controller
                 $data->aktivitas = $request->aktivitas;
             }
             $data->method = 8;
-            $data->pengukuran = json_encode($pengukuran);
+            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
             $data->aktivitas_ukur = $request->aktivitas_ukur;
             $data->permission = $request->permission;
             $data->created_by = $this->karyawan;
@@ -644,42 +646,6 @@ class FdlMethodBahayaErgonomiController extends Controller
             ], 401);
         }
     }
-
-    // private function processMethod($request, $fdl, $method)
-    // {
-    //     try {
-    //         // Check for the existence of the sample with the appropriate category and parameter
-    //         $check = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //         ->where(function ($query) {
-    //             $query->where('kategori_3', 'LIKE', '%27-%')
-    //                 ->orWhere('kategori_3', 'LIKE', '%53-%');
-    //         })
-    //         ->where('parameter', 'LIKE', '%Ergonomi%')
-    //         ->where('is_active', true)
-    //         ->first();
-
-    //         // Check if the data for the given method already exists
-    //         $data = DataLapanganErgonomi::where('no_sampel', strtoupper(trim($request->no_sample)))
-    //             ->where('method', $method)
-    //             ->first();
-
-    //         // Respond based on whether the data already exists
-    //         if ($check) {
-    //             if ($data) {
-    //                 return response()->json(['message' => 'No. Sample sudah di input.'], 401);
-    //             } else {
-    //                 return response()->json([
-    //                     'message' => 'Successful.',
-    //                     'data' => $fdl
-    //                 ], 200);
-    //             }
-    //         } else {
-    //             return response()->json(['message' => 'Tidak ada data Ergonomi berdasarkan No. Sample tersebut.'], 401);
-    //         }
-    //     } catch (Exception $e) {
-    //         dd($e);
-    //     }
-    // }
 
     private function processMethod($request, $fdl, $method)
     {

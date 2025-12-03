@@ -334,7 +334,7 @@
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">Data Variabel</td>
                             <td style="width:20%;">Asal</td>
-                            <td style="width:20%;">Akhir</td>
+                            <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -348,7 +348,7 @@
                             <td>2</td>
                             <td class="text-left">Horizontal Multiplier (HM)</td>
                             <td>{{$pengukuran->pengali_horizontal_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_horizontal_awal}}</td>
+                            <td class="text-left">{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
@@ -389,7 +389,7 @@
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">JENIS HASIL</td>
                             <td style="width:20%;">AWAL</td>
-                            <td style="width:20%;">AKHIR</td>
+                            <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>

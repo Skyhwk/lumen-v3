@@ -53,13 +53,10 @@ class LhpSwabTesController extends Controller
         DB::beginTransaction();
         try {
             $header = LhpsSwabTesHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-            if ($header != null) {
-
+            if ($header) {
                 $header->is_approve  = 0;
                 $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->rejected_by = $this->karyawan;
-
-                // $header->file_qr = null;
                 $header->save();
 
                 OrderDetail::where('cfr', $request->cfr)->where('is_active', true)->update([
@@ -69,10 +66,16 @@ class LhpSwabTesController extends Controller
                     'rejected_by' => $this->karyawan,
                 ]);
             }
+            else {
+                return response()->json([
+                    'message' => 'Data no lhp ' . $request->cfr . ' tidak ditemukan!',
+                ], 401);
+            }
+
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel ' . $request->cfr . ' berhasil!',
+                'message' => 'Reject no lhp ' . $request->cfr . ' berhasil!',
             ]);
         } catch (Exception $e) {
             DB::rollBack();

@@ -16,6 +16,12 @@ class WsValueUdara extends Sector
     {
         return $this->belongsTo(LingkunganHeader::class, 'id_lingkungan_header', 'id');
     }
+
+    public function order_detail()
+    {
+        return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel');
+    }
+    
     public function getExistingParametersAttribute(){
         return $this->lingkungan()->where('is_approved', 1)->pluck('parameter')->toArray();
     }

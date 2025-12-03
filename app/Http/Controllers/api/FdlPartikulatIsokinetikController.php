@@ -882,7 +882,10 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $persenCO = $method3->CO / 10000;
                     $persenCO2 = $method3->CO2;
-                    $combustion = number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
+                    // $combustion = number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
+                    $combustion = ($persenCO + $persenCO2) == 0
+                        ? "0.0000"
+                        : number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
 
                     $parameterOrder = is_string($order->parameter)
                         ? json_decode($order->parameter, true)

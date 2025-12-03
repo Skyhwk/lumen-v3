@@ -1,20 +1,10 @@
 @php
-    use App\Models\DataLapanganMedanLM;
-    use App\Models\WsValueUdara;
-
     $data = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
 
     $data = collect($data)->map(fn($r) => (array) $r);
 
     $satuan = $data->pluck('satuan')->filter()->first();
 
-    $dataLapangan = DataLapanganMedanLM::where('no_sampel', $data[0]['no_sampel'])->where('is_approve', true)->first();
-
-    $wsValue = WsValueUdara::where('no_sampel', $data[0]['no_sampel'])->where('is_active', true)->first();
-
-    $decodeHasil = json_decode($wsValue->hasil1);
-    $rata_frekuensi = $decodeHasil->rata_frekuensi ?? 0;
-    $frekuensiMhz = $rata_frekuensi / 1000000;
 @endphp
 
 <div class="left" style="page-break-before: always;">
@@ -78,6 +68,18 @@
             <strong>INFORMASI LOKASI(AREA) ATAU OBJEK SAMPLING</strong>
         </p>
 
+        @php
+            $informasiSampling = json_decode($header->informasi_sampling ?? '[]', true) ?? [];
+            $listInformasiSampling = [];
+
+            foreach ($informasiSampling as $i => $value) {
+                if ($i === $page - 1) {
+                    $listInformasiSampling = $informasiSampling[$i] ?? [];
+                    break;
+                }
+            }
+        @endphp
+
         <table
             style="border-collapse: collapse; border: 1px solid black; font-family: Arial, Helvetica, sans-serif; font-size: 10px; margin-top: 3px;"
             width="100%">
@@ -89,25 +91,22 @@
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td class="pd-3-dot-center">1</td>
-                    <td class="pd-3-dot-left">Sumber Radiasi</td>
-                    <td class="pd-3-dot-left" style="text-align: center;">
-                        {{ $dataLapangan['sumber_radiasi'] ?? '-' }}
-                    </td>
-                </tr>
-                <tr>
-                    <td class="pd-3-dot-center">2</td>
-                    <td class="pd-3-dot-left">Waktu Pemaparan (Per-menit)</td>
-                    <td class="pd-3-dot-left" style="text-align: center;">
-                        {{ $dataLapangan['waktu_pemaparan'] ?? '-' }}
-                        Menit</td>
-                </tr>
-                <tr>
-                    <td class="pd-3-dot-center">3</td>
-                    <td class="pd-3-dot-left">Frekuensi Area (MHz)</td>
-                    <td class="pd-3-dot-left" style="text-align: center;">{{ $frekuensiMhz }}</td>
-                </tr>
+                @foreach ($listInformasiSampling as $i => $value)
+                    @php
+                        $p = $i + 1;
+                        $rowClass = $p == count($listInformasiSampling) ? 'dot' : 'solid';
+                    @endphp
+                    <tr>
+                        <td class="pd-3-{{ $rowClass }}-center" style="white-space: nowrap;">{{ $p }}
+                        </td>
+                        <td class="pd-3-{{ $rowClass }}-left" style="white-space: nowrap;">
+                            {{ htmlspecialchars($value['parameter'] ?? '') }}
+                        </td>
+                        <td class="pd-3-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {{ htmlspecialchars($value['data'] ?? '') }}
+                        </td>
+                    </tr>
+                @endforeach
             </tbody>
         </table>
     </div>
