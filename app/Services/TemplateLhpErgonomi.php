@@ -53,7 +53,7 @@ class TemplateLhpErgonomi
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat resiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
