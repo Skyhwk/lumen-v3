@@ -1299,17 +1299,19 @@ class TemplateLhpErgonomi
         $tingkatResiko = '';
         $tindakan = '';
         $result = '';
-        if ($skor < 1) {
+        $skorNumerik = (float) $skor;
+        if ($skorNumerik < 1) {
             $tingkatResiko = 'Rendah';
             $tindakan = 'Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
-        } else if ($skor <= 1 && $skor < 3) {
+        } else if ($skorNumerik >= 1 && $skorNumerik < 3) {
             $tingkatResiko = 'Sedang';
             $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1';
-        } elseif ($skor >= 5) {
+        } else if ($skorNumerik >= 3) {
             $tingkatResiko = ' Tinggi';
             $tindakan = 'Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
         } else {
-            $tindakan = 'Belum ada Penilaian';
+            $tingkatResiko = 'Tidak Dinilai';
+            $tindakan = 'Input skor tidak valid atau tidak dapat diukur.';
         }
 
         return ["tingkatResiko"=>$tingkatResiko,"result"=>$tindakan];
