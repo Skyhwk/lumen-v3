@@ -193,6 +193,7 @@ class FollowUpController extends Controller
             ->join('master_pelanggan as p', function ($join) {
                 $join->on('p.id_pelanggan', '=', 'dfus.id_pelanggan')->where('p.is_active', true);
             })
+            ->limit(1)
             ->where('dfus.tanggal', $request->tanggal ?: date('Y-m-d'))
             ->orderBy('dfus.tanggal', 'desc')
             ->orderBy('dfus.jam', 'desc');
@@ -224,15 +225,28 @@ class FollowUpController extends Controller
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
-            ->filterColumn('keterangan_tambahan', function ($query, $keyword) {
-                $query->whereHas('keteranganTambahan', fn($q) => 
-                $q->where('keterangan_perkenalan', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_proposal', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_review_manager', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_negosiasi_harga', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_maintain_call', 'like', "%{$keyword}%")
-                ->orWhere('proposal', 'like', "%{$keyword}%")
-            );
+            ->filterColumn('keterangan_tambahan', function($query, $value){
+                $data = json_decode($value, true);
+                $kategori = $data['kategori'] ?? null;
+                $keyword  = $data['keyword'] ?? null;
+
+                if(!$keyword) return;
+
+                $query->whereHas('keteranganTambahan', function($q) use ($kategori, $keyword){
+                    if($kategori){
+                        return $q->where($kategori, 'like', "%$keyword%");
+                    }
+
+                    // fallback kalau kategori kosong
+                    $q->where(function($x) use ($keyword){
+                        $x->where('keterangan_perkenalan', 'like', "%$keyword%")
+                        ->orWhere('keterangan_proposal', 'like', "%$keyword%")
+                        ->orWhere('keterangan_review_manager', 'like', "%$keyword%")
+                        ->orWhere('keterangan_negosiasi_harga', 'like', "%$keyword%")
+                        ->orWhere('keterangan_maintain_call', 'like', "%$keyword%")
+                        ->orWhere('proposal', 'like', "%$keyword%");
+                    });
+                });
             })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn() => "Coming Soon")
