@@ -120,7 +120,7 @@ class GroupedCfrByLhp
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
-                    if (in_array($item->kategori_3, $kategori_validation)) {
+                    if (in_array($item->kategori_3, $kategori_validation) || strpos($item->parameter, 'Ergonomi') !== false) {
                         $steps['analisa']['date'] = $tglSampling;
                     } else {
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
