@@ -340,43 +340,43 @@
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Load Constant (LC)</td>
+                            <td class="text-left">Konstanta Beban</td>
                             <td>{{$pengukuran->konstanta_beban_awal}}</td>
                             <td class="text-left">{{$pengukuran->konstanta_beban_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
-                            <td class="text-left">Horizontal Multiplier (HM)</td>
+                            <td class="text-left">Pengali Horizontal</td>
                             <td>{{$pengukuran->pengali_horizontal_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
-                            <td class="text-left">Vertical Multiplier (VM)</td>
+                            <td class="text-left">Pengali Vertikal</td>
                             <td>{{$pengukuran->pengali_vertikal_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_vertikal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
-                            <td class="text-left">Distance Multiplier (DM)</td>
+                            <td class="text-left">Pengali Jarak</td>
                             <td>{{$pengukuran->pengali_jarak_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_jarak_akhir}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
-                            <td class="text-left">Asymmetric Multiplier (AM)</td>
+                            <td class="text-left">Pengali Asmetri</td>
                             <td>{{$pengukuran->pengali_asimetris_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
                         <tr>
                             <td>6</td>
-                            <td class="text-left">Frequency Multiplier (FM)</td>
+                            <td class="text-left">Pengali Frekuensi</td>
                             <td>{{$pengukuran->pengali_frekuensi_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_frekuensi_akhir}}</td>
                         </tr>
                         <tr>
                             <td>7</td>
-                            <td class="text-left">Coupling Multiplier (CM)</td>
+                            <td class="text-left">Pengali Kopling</td>
                             <td>{{$pengukuran->pengali_kopling_awal}}</td>
                             <td class="text-left">{{$pengukuran->pengali_kopling_akhir}}</td>
                         </tr>
@@ -395,7 +395,7 @@
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Recommended Weight Limit (RWL)</td>
+                            <td class="text-left">Nilai Beban Angkat Yang disarankan (RWL)</td>
                             <td>{{$pengukuran->nilai_beban_rwl_awal}}</td>
                             <td>{{$pengukuran->nilai_beban_rwl_akhir}}</td>
                         </tr>
