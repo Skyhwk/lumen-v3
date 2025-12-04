@@ -566,7 +566,7 @@
                     ** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Peraturan Menteri Ketenagakerjaan Republik
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
-                <!-- <table style="width: 100%; margin-top: 10px; border: none;">
+                <table style="width: 100%; margin-top: 10px; border: none;">
                         <tr>
                         <td style="width: 50%; border: none;"></td>
 
@@ -577,6 +577,7 @@
                             </div>
 
                             @if($ttd && $ttd->qr_path)
+                                <br><br>
                                 <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
                             @else
                                 <br><br><br>
@@ -588,7 +589,7 @@
 
                         </td>
                     </tr>
-                </table> -->
+                </table>
             </div>
         </div>
     </div>
