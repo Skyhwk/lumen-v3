@@ -291,8 +291,8 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">VARIABEL PENGUKURAN</td>
-                            <td style="width:20%;">Satuan</td>
-                            <td style="width:20%;">Hasil</td>
+                            <td style="width:20%;">SATUAN</td>
+                            <td style="width:20%;">HASIL</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -336,7 +336,7 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">Data Variabel</td>
-                            <td style="width:20%;">AWAL</td>
+                            <td style="width:20%;">ASAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
@@ -391,7 +391,7 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">JENIS HASIL</td>
-                            <td style="width:20%;">AWAL</td>
+                            <td style="width:20%;">ASAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
