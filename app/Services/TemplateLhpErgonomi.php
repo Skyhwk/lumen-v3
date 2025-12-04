@@ -1308,7 +1308,7 @@ class TemplateLhpErgonomi
             $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1';
         } else if ($skorNumerik >= 3) {
             $tingkatResiko = ' Tinggi';
-            $tindakan = 'Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
+            $tindakan = 'Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
         } else {
             $tingkatResiko = 'Tidak Dinilai';
             $tindakan = 'Input skor tidak valid atau tidak dapat diukur.';

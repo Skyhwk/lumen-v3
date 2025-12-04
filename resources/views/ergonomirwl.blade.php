@@ -557,7 +557,7 @@
                             <tr>
                                 <td>&ge; 3</td>
                                 <td>Tinggi</td>
-                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                         </tbody>
                     </table>
