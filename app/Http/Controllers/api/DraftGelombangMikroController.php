@@ -78,7 +78,7 @@ class DraftGelombangMikroController extends Controller
             $maxDate = null;
 
             if ($lapangan->isNotEmpty()) {
-                $minDate = $lapangan->min('created_at');
+                $minDate = $item->tanggal_tugas;
                 $maxDate = $lapangan->max('created_at');
             }
 
