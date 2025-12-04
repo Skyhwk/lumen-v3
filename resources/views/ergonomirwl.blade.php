@@ -333,7 +333,7 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">Data Variabel</td>
-                            <td style="width:20%;">Asal</td>
+                            <td style="width:20%;">AWAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
