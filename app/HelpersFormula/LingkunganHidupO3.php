@@ -63,7 +63,7 @@ class LingkunganHidupO3
 
                 $C14 = $C2;
                 $Vu_alt = \str_replace(",", "", number_format($value * $data->durasi[$key], 4));
-                $C16 = \str_replace(",", "", number_format(floatval($item_ks[$key]) / floatval($Vu_alt), 5));
+                $C16 = \str_replace(",", "", number_format((floatval($item_ks[$key]) / floatval($Vu_alt)) * 1000, 5));
                 $C15 = $C16;
 
                 $C_value[$key_ks][$key] = $C;

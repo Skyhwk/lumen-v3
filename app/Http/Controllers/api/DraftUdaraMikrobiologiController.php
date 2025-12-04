@@ -95,7 +95,7 @@ class DraftUdaraMikrobiologiController extends Controller
                 'orderHeader',
             ])
             ->where('is_active', true)
-            ->whereIn('kategori_3', ["12-Udara Angka Kuman", '33-Mikrobiologi Udara', '27-Udara Lingkungan Kerja'])
+            ->whereIn('kategori_3', ["12-Udara Angka Kuman", '33-Mikrobiologi Udara', '27-Udara Lingkungan Kerja','26-Kualitas Udara Dalam Ruang'])
             ->where('status', 2)
             ->where(function ($query) use ($parameterAllowed) {
                 foreach ($parameterAllowed as $param) {
