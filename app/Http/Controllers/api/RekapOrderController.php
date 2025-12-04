@@ -56,19 +56,26 @@ class RekapOrderController extends Controller
 
         if ($request->filled('is_completed')) {
 
-            // Ambil subquery dulu
-            $linkLhpQuery = LinkLhp::select('no_order', 'is_completed', 'jumlah_lhp_rilis');
+            // Ambil kolom lengkap dari link_lhp
+            $linkLhpQuery = LinkLhp::select(
+                'no_order',
+                'is_completed',
+                'jumlah_lhp_rilis',
+                'periode'
+            );
 
             $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
                 $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
             });
 
             if ($request->is_completed == 'true' || $request->is_completed == 1) {
-                // Hanya completed saja
+
+                // Completed hanya yang completed
                 $rekapOrder->where('link_lhp.is_completed', true);
 
             } else {
-                // Hanya yang belum completed
+
+                // NOT completed → boleh punya link_lhp atau tidak
                 $rekapOrder->where(function ($q) {
                     $q->whereNull('link_lhp.is_completed')
                     ->orWhere('link_lhp.is_completed', false);
@@ -76,6 +83,34 @@ class RekapOrderController extends Controller
             }
         }
 
+        /** 
+         * ===============================
+         *         FILTER LOGIC
+         * ===============================
+         * Jika kontrak = C → filter by PERIODE
+         * Jika kontrak != C → filter by tanggal_sampling_min LIKE
+         */
+
+        $rekapOrder->when($request->filled('tanggal_sampling'), function ($q) use ($request) {
+
+            $periode = $request->tanggal_sampling;
+
+            $q->where(function ($sub) use ($periode) {
+
+                // Kontrak = C → filter periode
+                $sub->where(function ($f) use ($periode) {
+                    $f->where('order_detail.kontrak', 'C')
+                    ->where('order_detail.periode', $periode)
+                    ->where('link_lhp.periode', $periode);
+                });
+
+                // Kontrak != C → filter tanggal_sampling_min (HARUS HAVING)
+                $sub->orWhere(function ($f) use ($periode) {
+                    $f->where('order_detail.kontrak', '!=', 'C');
+                });
+
+            });
+        });
 
         // Grouping
         $rekapOrder->groupByRaw('
