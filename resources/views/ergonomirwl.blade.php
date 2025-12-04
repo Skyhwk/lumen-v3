@@ -55,6 +55,9 @@
         td.text-left {
             text-align: left;
         }
+        td.text-center {
+            text-align: center;
+        }
 
         .table-title {
             text-align: left;
@@ -342,43 +345,43 @@
                             <td>1</td>
                             <td class="text-left">Konstanta Beban</td>
                             <td>{{$pengukuran->konstanta_beban_awal}}</td>
-                            <td class="text-left">{{$pengukuran->konstanta_beban_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->konstanta_beban_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Pengali Horizontal</td>
                             <td>{{$pengukuran->pengali_horizontal_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_horizontal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Pengali Vertikal</td>
                             <td>{{$pengukuran->pengali_vertikal_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_vertikal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_vertikal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
                             <td class="text-left">Pengali Jarak</td>
                             <td>{{$pengukuran->pengali_jarak_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_jarak_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_jarak_akhir}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
                             <td class="text-left">Pengali Asmetri</td>
                             <td>{{$pengukuran->pengali_asimetris_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_asimetris_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
                         <tr>
                             <td>6</td>
                             <td class="text-left">Pengali Frekuensi</td>
                             <td>{{$pengukuran->pengali_frekuensi_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_frekuensi_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_frekuensi_akhir}}</td>
                         </tr>
                         <tr>
                             <td>7</td>
                             <td class="text-left">Pengali Kopling</td>
                             <td>{{$pengukuran->pengali_kopling_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_kopling_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_kopling_akhir}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -552,7 +555,7 @@
                                 <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                             <tr>
-                                <td>&gt;3</td>
+                                <td>&ge; 3</td>
                                 <td>Tinggi</td>
                                 <td class="text-left" style="font-size: 9px;">Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
