@@ -23,6 +23,7 @@ class TemplateLhpErgonomi
             ];
             $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
+            ->where('is_approve',1)
             ->orderBy('id','desc')
             ->first();
             
@@ -99,6 +100,7 @@ class TemplateLhpErgonomi
             ];
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 5)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
             // $pengukuran = json_decode($dataRwl->pengukuran);
@@ -159,6 +161,7 @@ class TemplateLhpErgonomi
             // olah data:
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
 
@@ -268,6 +271,7 @@ class TemplateLhpErgonomi
             $dataReba = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 2)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
     
@@ -366,6 +370,7 @@ class TemplateLhpErgonomi
             $dataRosa = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 4)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
     
@@ -467,6 +472,7 @@ class TemplateLhpErgonomi
             $pdf = new PDF($mpdfConfig);
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
                 ->where('method', 8)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
             $dataJson = json_decode($dataRwl->input_k3);
@@ -640,6 +646,8 @@ class TemplateLhpErgonomi
             $pdf = new PDF($mpdfConfig);
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 7)
+                ->where('is_approve',1)
+                ->orderBy('id','desc')
                 ->first();
     
             // $pengukuran = json_decode($dataRwl->pengukuran);
