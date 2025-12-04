@@ -1769,9 +1769,7 @@ class DraftUlkErgonomiController extends Controller
         DB::beginTransaction();
         try {
             Carbon::setLocale('id');
-            
-            $noSampel = $request->no_sampel; // Ambil no_sampel dari request frontend $request->no_sampel
-            
+            $noSampel = $request->no_sampel;
             /* prepare data pengesahan */
             $tanggalLhp = date('Y-m-d H:i:s');
             $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $tanggalLhp)
@@ -1812,6 +1810,7 @@ class DraftUlkErgonomiController extends Controller
                 $file_qr = new GenerateQrDocumentLhp();
                 $pathQr = $file_qr->insert('LHP_ERGONOMI', $dataQr, $this->karyawan);
                 $pdfFile->file_qr = $pathQr;
+                $pdfFile->no_lhp = $dataLHP->detail->cfr;
                 $pdfFile->save();
             }
             
