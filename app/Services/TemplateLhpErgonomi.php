@@ -522,7 +522,7 @@ class TemplateLhpErgonomi
             $skorDataBawahPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->penggunaan_keyboard);
             $skorDataBawahPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol);
             $skorDataBawahPosturAktivitasMendorong =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->aktivitas_mendorong);
-            $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_ke_bagian_tubuh);
+            $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_tubuh);
             //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
             
             $skorDataAtas = array_merge(
@@ -619,7 +619,7 @@ class TemplateLhpErgonomi
             }else{
                 $hasilResikoBeban =null;
             }
-           
+            
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','hasilResikoBeban','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
@@ -885,8 +885,8 @@ class TemplateLhpErgonomi
             "aktivitas_pergelangan_kaki" =>["ket"=>"Aktivitas pergelangan kaki / berdiri dengan pijakan tidak memadai","index"=>24,"label"=>"Postur Janggal"],
             "duduk_tanpa_sandaran" =>["ket"=>"Duduk dalam waktu yang lama tanpa sandaran yang memadai","index"=>25,"label"=>"Postur Janggal"],
             "duduk_tanpa_pijakan" =>["ket"=>"Bekerja berdiri dalam waktu lama / duduk tanpa pijakan memadai","index"=>26,"label"=>"Postur Janggal"],
-            "tubuh_tertekan_benda" =>["ket"=>"Tubuh tertekan oleh benda yang keras / runcing","index"=>27,"label"=>"Tekanan Langsung ke bagian tubuh"],
-            "lutut_untuk_memukul" =>["ket"=>"Menggunakan lutut untuk memukul / menendang","index"=>28,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "tubuh_tertekan_benda" =>["ket"=>"Tubuh tertekan oleh benda yang keras / runcing","index"=>27,"label"=>"Tekanan Langsung Tubuh"],
+            "lutut_untuk_memukul" =>["ket"=>"Menggunakan lutut untuk memukul / menendang","index"=>28,"label"=>"Tekanan Langsung Tubuh"],
             "getaran_seluruh_tubuh" =>["ket"=>"Getaran pada seluruh tubuh (tanpa peredam)","index"=>29,"label"=>"Getaran"],
             "beban_sedang" =>["ket"=>"Beban sedang","index"=>30,"label"=>"Aktifitas Mendorong / Menarik beban"],
             "beban_berat" =>["ket"=>"Beban berat","index"=>31,"label"=>"Aktifitas Mendorong / Menarik beban"],
