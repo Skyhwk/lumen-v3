@@ -335,7 +335,7 @@
                     <thead>
                         <tr>
                             <td style="width:5%;">No</td>
-                            <td style="width:55%;">Data Variabel</td>
+                            <td style="width:55%;">DATA VARIABEL</td>
                             <td style="width:20%;">ASAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
