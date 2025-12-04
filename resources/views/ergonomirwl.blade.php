@@ -367,7 +367,7 @@
                         </tr>
                         <tr>
                             <td>5</td>
-                            <td class="text-left">Pengali Asmetri</td>
+                            <td class="text-left">Pengali Asimetris</td>
                             <td>{{$pengukuran->pengali_asimetris_awal}}</td>
                             <td class="text-center">{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
@@ -547,12 +547,12 @@
                             <tr>
                                 <td>&lt;1</td>
                                 <td>Rendah</td>
-                                <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengakat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
+                                <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
                             </tr>
                             <tr>
                                 <td>1 - &lt; 3</td>
                                 <td>Sedang</td>
-                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                             <tr>
                                 <td>&ge; 3</td>
