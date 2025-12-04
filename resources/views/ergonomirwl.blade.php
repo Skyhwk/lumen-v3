@@ -547,7 +547,7 @@
                                 <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengakat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
                             </tr>
                             <tr>
-                                <td>1 &lt; SI &lt; 3</td>
+                                <td>1 - &lt; 3</td>
                                 <td>Sedang</td>
                                 <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
