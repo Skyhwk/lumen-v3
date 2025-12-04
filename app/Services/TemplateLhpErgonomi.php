@@ -113,10 +113,15 @@ class TemplateLhpErgonomi
             $pengukuran->frekuensi_jumlah_angkatan = $dataRwl->frekuensi_jumlah_angkatan;
             $pengukuran->durasi_jam_kerja = $dataRwl->durasi_jam_kerja;
             $pengukuran->kopling_tangan = $dataRwl->kopling_tangan;
-
+            
+            $stringAwal = $pengukuran->durasi_jam_kerja_awal;
+            $kataWaktu = ['Jam', 'jam', 'Menit', 'menit', 'Detik', 'detik'];
+            $stringBersih = str_ireplace($kataWaktu, '', $stringAwal);
+            $stringAkhir = trim($stringBersih);
             //kesimpulan
             $liAwal = $this->resultRwl($pengukuran->lifting_index_awal);
             $liAkhir = $this->resultRwl($pengukuran->lifting_index_akhir);
+            $pengukuran->durasi_jam_kerja_awal = $stringAkhir;
 
             $pengukuran->result_li_awal =$liAwal;
             $pengukuran->result_li_akhir =$liAkhir;
