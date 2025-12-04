@@ -10,7 +10,7 @@ class GroupedCfrByLhp
     protected $orderHeader;
     protected $periode;
 
-    public function __construct($orderHeader, $periode)
+    public function __construct($orderHeader, $periode = null)
     {
         $this->orderHeader = $orderHeader;
         $this->periode = $periode;
