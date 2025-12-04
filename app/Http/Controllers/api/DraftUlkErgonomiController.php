@@ -1786,10 +1786,10 @@ class DraftUlkErgonomiController extends Controller
             $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
             $pdfFile->no_sampel = $noSampel;
-            $pdfFile->create_at = Carbon::now('Asia/Jakarta');
+            $pdfFile->created_at = Carbon::now('Asia/Jakarta');
             $pdfFile->nama_karyawan = $nama_perilis;
             $pdfFile->jabatan_karyawan = $jabatan_perilis;
-            $pdfFile->create_by =$this->karyawan;
+            $pdfFile->created_by =$this->karyawan;
             $pdfFile->tanggal_lhp =Carbon::now('Asia/Jakarta')->locale('id')->isoFormat('YYYY-MM-DD');
             $pdfFile->save();
             
