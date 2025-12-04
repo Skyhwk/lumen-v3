@@ -223,7 +223,7 @@ class OrderDetail extends Sector
 
     public function lhps_ergonomi()
     {
-        return $this->belongsTo(LhpsErgonomiHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        return $this->belongsTo(DraftErgonomiFile::class, 'cfr', 'no_lhp');
     }
 
     public function lhps_iklim()
