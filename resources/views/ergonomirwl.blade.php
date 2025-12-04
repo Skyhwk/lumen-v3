@@ -319,7 +319,7 @@
                             <td>4</td>
                             <td class="text-left">Durasi Angkat</td>
                             <td>Jam</td>
-                            <td>{{$pengukuran->durasi_jam_kerja}}</td>
+                            <td>{{$pengukuran->durasi_jam_kerja_awal}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
