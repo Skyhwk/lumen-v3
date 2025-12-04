@@ -37,9 +37,9 @@ class RekapOrderController extends Controller
         // Subquery link_lhp
         $linkLhpQuery = LinkLhp::query();
 
-        if ($request->filled('is_completed')) {
-            $linkLhpQuery->where('is_completed', $request->is_completed);
-        }
+        // if ($request->filled('is_completed')) {
+        //     $linkLhpQuery->where('is_completed', $request->is_completed);
+        // }
 
         // Query utama
         $rekapOrder = DB::table('order_detail')
@@ -56,10 +56,21 @@ class RekapOrderController extends Controller
                 link_lhp.jumlah_lhp_rilis,
                 MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
             ')
-            ->joinSub($linkLhpQuery, 'link_lhp', function ($join) {
-                $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
-            });
+            ->where('order_detail.is_active', true);
 
+        if($request->filled('is_completed')) {
+            if ($request->is_completed) {
+                $rekapOrder = $rekapOrder->joinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
+                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
+                        ->where('link_lhp.is_completed', $request->is_completed);
+                });
+            } else {
+                $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
+                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
+                        ->where('link_lhp.is_completed', $request->is_completed);
+                });
+            }
+        }
         /** 
          * ===============================
          *         FILTER LOGIC
