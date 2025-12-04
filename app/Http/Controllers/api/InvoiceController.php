@@ -128,6 +128,16 @@ class InvoiceController extends Controller
 
                     return $history;
                 })
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->where('order_header.nama_perusahaan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('consultant', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->Where('order_header.konsultan', 'like', "%{$keyword}%");
+                    });
+                })
                 ->make(true);
         } catch (\Throwable $th) {
             dd($th);
