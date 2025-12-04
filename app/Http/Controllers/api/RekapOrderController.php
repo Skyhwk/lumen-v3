@@ -37,10 +37,6 @@ class RekapOrderController extends Controller
         // Subquery link_lhp
         $linkLhpQuery = LinkLhp::query();
 
-        // if ($request->filled('is_completed')) {
-        //     $linkLhpQuery->where('is_completed', $request->is_completed);
-        // }
-
         // Query utama
         $rekapOrder = DB::table('order_detail')
             ->selectRaw('
@@ -58,47 +54,28 @@ class RekapOrderController extends Controller
             ')
             ->where('order_detail.is_active', true);
 
-        if($request->filled('is_completed')) {
-            if ($request->is_completed) {
-                $rekapOrder = $rekapOrder->joinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
-                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
-                        ->where('link_lhp.is_completed', $request->is_completed);
-                });
+        if ($request->filled('is_completed')) {
+
+            // Ambil subquery dulu
+            $linkLhpQuery = LinkLhp::select('no_order', 'is_completed', 'jumlah_lhp_rilis');
+
+            $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
+                $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
+            });
+
+            if ($request->is_completed == 'true' || $request->is_completed == 1) {
+                // Hanya completed saja
+                $rekapOrder->where('link_lhp.is_completed', true);
+
             } else {
-                $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
-                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
-                        ->where('link_lhp.is_completed', $request->is_completed);
+                // Hanya yang belum completed
+                $rekapOrder->where(function ($q) {
+                    $q->whereNull('link_lhp.is_completed')
+                    ->orWhere('link_lhp.is_completed', false);
                 });
             }
         }
-        /** 
-         * ===============================
-         *         FILTER LOGIC
-         * ===============================
-         * Jika kontrak = C → filter by PERIODE
-         * Jika kontrak != C → filter by tanggal_sampling_min LIKE
-         */
 
-        $rekapOrder->when($request->filled('tanggal_sampling'), function ($q) use ($request) {
-
-            $periode = $request->tanggal_sampling;
-
-            $q->where(function ($sub) use ($periode) {
-
-                // Kontrak = C → filter periode
-                $sub->where(function ($f) use ($periode) {
-                    $f->where('order_detail.kontrak', 'C')
-                    ->where('order_detail.periode', $periode)
-                    ->where('link_lhp.periode', $periode);
-                });
-
-                // Kontrak != C → filter tanggal_sampling_min (HARUS HAVING)
-                $sub->orWhere(function ($f) use ($periode) {
-                    $f->where('order_detail.kontrak', '!=', 'C');
-                });
-
-            });
-        });
 
         // Grouping
         $rekapOrder->groupByRaw('
