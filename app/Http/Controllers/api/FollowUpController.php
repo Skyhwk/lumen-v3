@@ -193,7 +193,6 @@ class FollowUpController extends Controller
             ->join('master_pelanggan as p', function ($join) {
                 $join->on('p.id_pelanggan', '=', 'dfus.id_pelanggan')->where('p.is_active', true);
             })
-            ->limit(1)
             ->where('dfus.tanggal', $request->tanggal ?: date('Y-m-d'))
             ->orderBy('dfus.tanggal', 'desc')
             ->orderBy('dfus.jam', 'desc');
