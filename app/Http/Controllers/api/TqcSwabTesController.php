@@ -125,9 +125,12 @@ class TqcSwabTesController extends Controller
                     ->get();
             }
 
-            if ($header->isEmpty()) {
-                continue;
-            }
+            $header2 = SubKontrak::with(['ws_value_linkungan', 'ws_udara'])
+                ->where('no_sampel', $orderDetail->no_sampel)
+                ->where('is_active', 1)
+                ->get();
+
+            $merge = $header->merge($header2);
 
             // 2. Ambil id_regulasi dari field regulasi di OrderDetail
             $id_regulasi = null;
@@ -142,19 +145,22 @@ class TqcSwabTesController extends Controller
                 }
             }
 
-            foreach ($header as $item) {
-                $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+            foreach ($merge as $item) {
+                $parameter = Parameter::where('nama_lab', $item->parameter)
+                    ->where('is_active', 1)
+                    ->first();
+                $bakuMutu = MasterBakumutu::where("id_parameter", $parameter->id)
                     ->where('id_regulasi', $id_regulasi)
                     ->where('is_active', 1)
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
                     ->first();
 
-                $ws = $item->ws_udara; 
+                $ws = $item->ws_udara ?? $item->ws_value_linkungan;
 
                 $nilai = '-';
 
                 if ($ws) {
-                   $hasil = $ws->toArray();
+                    $hasil = $ws->toArray();
 
                     $index = $getSatuan->udara($bakuMutu->satuan ?? null);
 

@@ -128,8 +128,21 @@ class WsFinalUdaraSwabTesController extends Controller
                     ->where('is_active', 1)
                     ->get();
             }
-            foreach ($data as $item) {
-                $bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+
+            $data2 = SubKontrak::with(['ws_value_linkungan', 'ws_udara'])
+                ->where('no_sampel', $request->no_sampel)
+                ->where('is_approve', 1)
+                ->whereIn('parameter', $parameterNames) // Query dengan nama parameter
+                ->where('is_active', 1)
+                ->get();
+
+            $merge = $data->merge($data2);
+
+            foreach ($merge as $item) {
+                $parameter = Parameter::where('nama_lab', $item->parameter)
+                    ->where('is_active', 1)
+                    ->first();
+                $bakuMutu = MasterBakumutu::where("id_parameter", $parameter->id)
                     ->where('id_regulasi', $id_regulasi)
                     ->where('is_active', 1)
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
@@ -144,14 +157,14 @@ class WsFinalUdaraSwabTesController extends Controller
 
             $getSatuan = new HelperSatuan;
 
-            return Datatables::of($data)
+            return Datatables::of($merge)
                 ->addColumn('nilai_uji', function ($item) use ($getSatuan) {
                     // ambil satuan dan index (boleh null)
                     $satuan = $item->satuan ?? null;
                     $index  = $getSatuan->udara($satuan);
 
                     // pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
-                    $source = $item->ws_udara ?? null;
+                    $source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
                     if (! $source) {
                         return 'noWs';
                     }
@@ -815,7 +828,7 @@ class WsFinalUdaraSwabTesController extends Controller
             ], 401);
         }
     }
-    
+
     public function handleReject(Request $request)
     {
         DB::beginTransaction();
@@ -864,11 +877,11 @@ class WsFinalUdaraSwabTesController extends Controller
                 'lhps' => 1,
             ]);
 
-        if(! $header) {
+        if (! $header) {
             $header = MicrobioHeader::whereIn('no_sampel', $request->no_sampel_list)
-            ->update([
-                'lhps' => 1,
-            ]);
+                ->update([
+                    'lhps' => 1,
+                ]);
         }
         return response()->json([
             'message' => 'Data berhasil diapprove.',
