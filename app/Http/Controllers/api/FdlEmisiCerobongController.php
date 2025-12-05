@@ -159,10 +159,30 @@ class FdlEmisiCerobongController extends Controller
                     }
                 }
             }
-            $paramList = ['CO2', 'O2', 'Opasitas', 'Suhu', 'Velocity', 'CO2 (ESTB)', 
-                'O2 (ESTB)', 'Opasitas (ESTB)', 'NO2', 'NO', 'SO2', 'NOx', 'Effisiensi Pembakaran', 'Eff. Pembakaran', 
-                'CO', 'C O', 'SO2 (P)', 'CO (P)', 'O2 (P)', "Tekanan Udara", "NO2-Nox (P)"
+            $paramList = [
+                'CO2',
+                'O2',
+                'Opasitas',
+                'Suhu',
+                'Velocity',
+                'CO2 (ESTB)',
+                'O2 (ESTB)',
+                'Opasitas (ESTB)',
+                'NO2',
+                'NO',
+                'SO2',
+                'NOx',
+                'Effisiensi Pembakaran',
+                'Eff. Pembakaran',
+                'CO',
+                'C O',         // dipertahankan seperti permintaan
+                'SO2 (P)',
+                'CO (P)',
+                'O2 (P)',
+                'Tekanan Udara',
+                'NO2-Nox (P)',
             ];
+
                         // ambil nama parameter dari order
             $orderedParameters = array_column($parameterList, 'nama');
 
@@ -175,19 +195,14 @@ class FdlEmisiCerobongController extends Controller
                     ->where('is_active', true)
                     ->first();
 
+
                 $functionObj = Formula::where('id_parameter', $parameter->id)
                     ->where('is_active', true)
                     ->first();
-                if(!$functionObj){
-                    return response()->json(['message' => 'Formula is Coming Soon'], 404);
-                } else{
-                    $function = $functionObj->function;
-                }
-
                 if (in_array($value, $paramList)) {
                     $function = 'EmisiCerobongDirect';
                 }
-                
+
                 $data_kalkulasi = AnalystFormula::where('function', $function)
                     ->where('data', $data)
                     ->where('id_parameter', $parameter->nama_lab)
@@ -233,6 +248,7 @@ class FdlEmisiCerobongController extends Controller
                     'C8' => $data_kalkulasi['C9'] ?? null,
                     'C9' => $data_kalkulasi['C10'] ?? null,
                     'C10' => $data_kalkulasi['C11'] ?? null,
+                    'C11' => $data_kalkulasi['C12'] ?? null,
                     'created_by' => $this->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'suhu' => $data->suhu,
@@ -246,6 +262,7 @@ class FdlEmisiCerobongController extends Controller
                 $valueEmisi->save();
 
             }
+            
             $data->is_approve = 1;
             $data->approved_by = $this->karyawan;
             $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');

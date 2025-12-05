@@ -265,6 +265,7 @@ class GenerateHasilPengujianController extends Controller
             }
 
             if (in_array($item, $filterEmails)) {
+                $emails[] = 'admsales03@intilab.com';
                 $emails[] = 'admsales04@intilab.com';
             }
 
