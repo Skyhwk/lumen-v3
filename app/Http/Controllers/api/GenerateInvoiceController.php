@@ -426,6 +426,40 @@ class GenerateInvoiceController extends Controller
                     ->update($update);
             }
 
+            $filename = \str_replace("/", "_", $request->no_invoice);
+            $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            if(!file_exists($path)){
+                $invoice = Invoice::where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
+                $link = 'https://www.intilab.com/validation/';
+                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+                $getDetail = Invoice::select('order_header.nama_perusahaan')
+                    ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                    ->where('invoice.no_invoice', $request->no_invoice)
+                    ->where('invoice.is_active', true)
+                    ->first();
+
+                QrCode::size(200)->generate($link . $unique, $path);
+                $dataQr = [
+                    'type_document' => 'invoice',
+                    'kode_qr' => $unique,
+                    'file' => $filename,
+                    'data' => json_encode([
+                        'no_document' => $request->no_invoice,
+                        'nama_customer' => $getDetail->nama_perusahaan,
+                        'type_document' => 'invoice',
+                        'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $invoice->nama_pj,
+                        'Jabatan' => $invoice->jabatan_pj
+                    ]),
+                    'created_at' => Carbon::now(),
+                    'created_by' => $this->karyawan,
+                ];
+
+                DB::table('qr_documents')->insert($dataQr);
+                self::generatePDF($request->no_invoice);
+            }
+
             self::generatePDF($request->no_invoice);
 
             DB::commit();
@@ -621,33 +655,36 @@ class GenerateInvoiceController extends Controller
                 } else {
                     $filename = \str_replace("/", "_", $request->no_invoice);
                     $path = public_path() . "/qr_documents/" . $filename . '.svg';
-                    $link = 'https://www.intilab.com/validation/';
-                    $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-                    $getDetail = Invoice::select('order_header.nama_perusahaan')
-                        ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                        ->where('invoice.no_invoice', $request->no_invoice)
-                        ->where('invoice.is_active', true)
-                        ->first();
-
-                    QrCode::size(200)->generate($link . $unique, $path);
-                    $dataQr = [
-                        'type_document' => 'invoice',
-                        'kode_qr' => $unique,
-                        'file' => $filename,
-                        'data' => json_encode([
-                            'no_document' => $request->no_invoice,
-                            'nama_customer' => $getDetail->nama_perusahaan,
+                    if(!file_exists($path)){
+                        $link = 'https://www.intilab.com/validation/';
+                        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+    
+                        $getDetail = Invoice::select('order_header.nama_perusahaan')
+                            ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                            ->where('invoice.no_invoice', $request->no_invoice)
+                            ->where('invoice.is_active', true)
+                            ->first();
+    
+                        QrCode::size(200)->generate($link . $unique, $path);
+                        $dataQr = [
                             'type_document' => 'invoice',
-                            'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
-                            'Disahkan_Oleh' => $invoice->nama_pj,
-                            'Jabatan' => $invoice->jabatan_pj
-                        ]),
-                        'created_at' => Carbon::now(),
-                        'created_by' => $this->karyawan,
-                    ];
-
-                    DB::table('qr_documents')->insert($dataQr);
+                            'kode_qr' => $unique,
+                            'file' => $filename,
+                            'data' => json_encode([
+                                'no_document' => $request->no_invoice,
+                                'nama_customer' => $getDetail->nama_perusahaan,
+                                'type_document' => 'invoice',
+                                'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                                'Disahkan_Oleh' => $invoice->nama_pj,
+                                'Jabatan' => $invoice->jabatan_pj
+                            ]),
+                            'created_at' => Carbon::now(),
+                            'created_by' => $this->karyawan,
+                        ];
+    
+                        DB::table('qr_documents')->insert($dataQr);
+                        self::generatePDF($request->no_invoice);
+                    }
 
                     $tokenService = new GenerateToken();
                     if($invoice->upload_file != null) {
@@ -664,7 +701,6 @@ class GenerateInvoiceController extends Controller
                     ]);
                 }
 
-                self::generatePDF($request->no_invoice);
 
                 $message = "Invoice number $invoice->no_invoice success Generated";
                 DB::commit();
@@ -1381,7 +1417,7 @@ class GenerateInvoiceController extends Controller
             }
 
             // Generate nama file unik
-            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '_' . 'upld' . '.pdf';
+            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '_' . 'upload' . '.pdf';
 
             // Simpan file
             $file->move($folder, $fileName);

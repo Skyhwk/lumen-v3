@@ -14,6 +14,7 @@ use App\Services\GenerateQrDocument;
 use App\Http\Controllers\Controller;
 use App\Services\RenderInvoice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -288,6 +289,7 @@ class CreateInvoiceController extends Controller
                             'created_at' => DATE('Y-m-d H:i:s'),
                             'is_emailed' => 0,
                             'is_generate' => 0,
+                            'is_active' => 1,
                             'expired' => $expired,
                         ];
                     }
@@ -315,6 +317,36 @@ class CreateInvoiceController extends Controller
                 // ];
 
                 // DB::table('qr_documents')->insert($dataQr);
+                $invoice = Invoice::where('is_active', true)->where('no_invoice', $noInvoice)->first();
+                $filename = \str_replace("/", "_", $noInvoice);
+                $path = public_path() . "/qr_documents/" . $filename . '.svg';
+                $link = 'https://www.intilab.com/validation/';
+                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+                $getDetail = Invoice::select('order_header.nama_perusahaan')
+                    ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                    ->where('invoice.no_invoice', $noInvoice)
+                    ->where('invoice.is_active', true)
+                    ->first();
+
+                QrCode::size(200)->generate($link . $unique, $path);
+                $dataQr = [
+                    'type_document' => 'invoice',
+                    'kode_qr' => $unique,
+                    'file' => $filename,
+                    'data' => json_encode([
+                        'no_document' => $request->no_invoice,
+                        'nama_customer' => $getDetail->nama_perusahaan,
+                        'type_document' => 'invoice',
+                        'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $invoice->nama_pj,
+                        'Jabatan' => $invoice->jabatan_pj
+                    ]),
+                    'created_at' => Carbon::now(),
+                    'created_by' => $this->karyawan,
+                ];
+
+                DB::table('qr_documents')->insert($dataQr);
                 self::generatePDF($noInvoice);
                 // dd('masukkkk');
                 DB::commit();

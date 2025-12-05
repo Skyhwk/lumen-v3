@@ -187,12 +187,8 @@ class RenderInvoice
             if ($dataHead->jabatan_pic != '')
                 $jab_pic = ' (' . $dataHead->jabatan_pic . ')';
 
-            $qr_img = '';
-            if ($dataHead->is_generate == 1) {
-                $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
-                $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
-                if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
-            }
+            
+            
 
             $trAlamat = '<tr>
                             <td style="width:35%;"><p style="font-size: 10px;"><u>Alamat Kantor :</u><br><span
@@ -1673,6 +1669,16 @@ class RenderInvoice
                         </td>
             ');
 
+            $qr_img = '';
+            $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            if ($qr) {
+                 if($nilai_tagihan > 4999999){
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+                 } else {
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
+                 }
+            }
             if($nilai_tagihan > 4999999){
                 $pdf->writeHTML('
                             <td width="25%" style="text-align:center;">
@@ -1793,12 +1799,11 @@ class RenderInvoice
             $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $dataHead->no_invoice) . '.pdf';
             $jab_pic = $customInvoice->data[0]->jabatan_pic;
 
-            $qr_img = '';
-            if ($dataHead->is_generate == 1) {
-                $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
-                $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
-                if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
-            }
+            // $qr_img = '';
+            // $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            // $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            // if ($qr) $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+            
 
             // $footer = array(
             //     'odd' => array(
@@ -2068,19 +2073,20 @@ class RenderInvoice
             $pdf->writeHTML('
                         <table style="margin-top: 30px;" width="100%">
                             <tr>
-                            <td style="padding-right:50px;">
-                            </td>
-                            <td width="25%" style="text-align:center;">
-                            <div style="float: right; text-align: center;">
-                            <span style="font-size: 10px;">' . $area . ', ' . self::tanggal_indonesia($dataHead->tgl_invoice) . '</span><br><br><br><br><br><br><br>
-                            <span style="border-bottom: solid 1px #000; font-size:10px;"><b>' . $dataHead->nama_pj . '</b></span><br>
-                            <span style="font-size:10px;">' . $dataHead->jabatan_pj . '</span>
-                            </div>
-                            </td>
-                            </tr>
-                            </table>
+                                <td style="padding-right:50px;">
+                                </td>
                             ');
 
+            $qr_img = '';
+            $qr_name = \str_replace("/", "_", $dataHead->no_invoice);
+            $qr = DB::table('qr_documents')->where('file', $qr_name)->where('type_document', 'invoice')->first();
+            if ($qr) {
+                 if($customInvoice->harga->nilai_tagihan > 4999999){
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr . '';
+                 } else {
+                     $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>';
+                 }
+            }
             if($customInvoice->harga->nilai_tagihan > 4999999){
                 $pdf->writeHTML('
                             <td width="25%" style="text-align:center;">
