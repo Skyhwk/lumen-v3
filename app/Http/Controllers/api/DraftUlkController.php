@@ -138,8 +138,8 @@ class DraftUlkController extends Controller
     public function index(Request $request)
     {
         $parameterAllowed = [];
-        // $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        // $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
         $parameterAllowed[] = 'Sinar UV';
         $parameterAllowed[] = 'Ergonomi';
         $parameterAllowed[] = 'Gelombang Elektro';
@@ -321,7 +321,7 @@ class DraftUlkController extends Controller
         DB::beginTransaction();
         try {
             // === 1. Ambil header / buat baru ===
-            $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
 
