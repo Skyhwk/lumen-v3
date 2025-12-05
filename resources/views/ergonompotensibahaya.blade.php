@@ -156,7 +156,7 @@
                 </table>
             </div>
             <div class="sectionP">
-                @if(optional($manualHandling)->posisi_angkat_beban != null && optional($manualHandling)->estimasi_berat_benda != null && !empty($faktorResiko))
+                @if(optional($manualHandling)->posisi_angkat_beban != null && optional($manualHandling)->estimasi_berat_benda != null)
                     <table style="border-collapse: collapse; width: 100%; border: 2px solid black; font-size: 13px;">
                         <thead>
                             <tr style="background-color: #ffffff;">
@@ -209,7 +209,7 @@
                                     </td>
 
                                     <td style="border: 1px solid black; padding: 5px; vertical-align: center; font-weight: bold; text-align: center; width: 10%;">
-                                        <div style="padding: 5px; margin-top:3px; background-color: #f2f2f2; font-weight: bold; text-align: center; width: 100%; box-sizing: border-box;">
+                                        <div style="padding: 5px; margin-top:3px; font-weight: bold; text-align: center; width: 100%; box-sizing: border-box;">
                                             Skor
                                         </div>
                                         <hr style="border: 1px solid black;">
@@ -229,21 +229,21 @@
                                 $totalSkorLangkah =0;
                             
                             @endphp
-                            <tr>
-                                <td rowspan={{$totalRowspan}} style="border: 1px solid black; padding: 10px; font-weight: bold; text-align: center;">
-                                    Skor Langkah 2
-                                </td>
-                                <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
-                                    Faktor Risiko
-                                </td>
-                                <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
-                                    Pengangkatan
-                                </td>
-                                <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
-                                    Skor
-                                </td>
-                            </tr>
                             @if(!empty($faktorResiko))
+                                <tr>
+                                    <td rowspan={{$totalRowspan}} style="border: 1px solid black; padding: 10px; font-weight: bold; text-align: center;">
+                                        Skor Langkah 2
+                                    </td>
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
+                                        Faktor Risiko
+                                    </td>
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
+                                        Pengangkatan
+                                    </td>
+                                    <td style="border: 1px solid black; padding: 5px; text-align: center; font-weight: bold;">
+                                        Skor
+                                    </td>
+                                </tr>
                                 @foreach($faktorResiko as $kategori => $listItem)
                                     {{-- Loop kedua untuk membuka index 0, 1, 2, dst --}}
                                     @foreach($listItem as $item)
@@ -272,7 +272,7 @@
                                 <td style="border: 1px solid black; padding: 10px; text-align: center; font-weight: bold;">
                                     
                                     @php 
-                                        $skorEstimasiBerat = (int)($manualHandling->estimasi_berat_benda ?? 0);
+                                        $skorEstimasiBerat = (int)($manualHandling->total_poin_1 ?? 0);
                                         $skorFaktorResiko = (int)($manualHandling->faktor_resiko->total_poin_2 ?? 0);
                                         $skorLangkahAkhir = $skorEstimasiBerat + $skorFaktorResiko;
                                     @endphp
@@ -419,20 +419,20 @@
                             <td style="width: 72%;text-align:start;">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td style="width:25%">Usia</td>
+                            <td style="width:25%">Posisi/Jabatan</td>
                             <td style="width:3%">:</td>
-                            <td style="width: 72%;text-align:start;">{{ $personal->usia }} Tahun</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->jabatan }}</td>
                         </tr>
                         <!-- <tr>
                             <td style="width:25%">Jenis Pekerjaan</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                         </tr> -->
-                        <tr>
+                        <!-- <tr>
                             <td style="width:25%">Lama Bekerja</td>
                             <td style="width:3%">:</td>
                             <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
-                        </tr>
+                        </tr> -->
                     </table>
             </div>
             <!-- aktivitas -->
@@ -509,26 +509,22 @@
                     </tr>
                 </table>
             </div>
-            <table style="width: 100%; margin-top: 10px; border: none;">
+            <table style="width: 100%; margin-top: 7px; border: none;">
                 <tr>
-                    <td style="width: 50%; border: none;"></td>
-
-                    <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
-                        
+                    <td colspan="2" style="border: none; text-align: right; vertical-align: top;">
                         <div style="margin-bottom: 5px;">
                             Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
                         </div>
-
                         @if($ttd && $ttd->qr_path)
+                            <br><br>
                             <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
                         @else
-                            <br><br><br>
+                            <br><br>
                             <div style="font-weight: bold; text-decoration: underline;">
                                 (Abidah Walfathiyyah)
                             </div>
                             <div>Technical Control Supervisor</div>
                         @endif
-
                     </td>
                 </tr>
             </table>

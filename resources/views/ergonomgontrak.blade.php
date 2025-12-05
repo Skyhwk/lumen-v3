@@ -248,6 +248,8 @@
                         ["Kaki", $pengukuran->keluhan_bagian_tubuh->sakit_kaki],
                     ];
 
+                    
+
                     $higherNumber = 0;
                     $returnKeluhan = [];
 
@@ -263,8 +265,7 @@
                         }
 
                         if (is_array($value) || is_object($value)) {
-                            $poin = isset($value->Poin) ? intval($value->Poin) : 0;
-
+                            $poin = isset($value->poin) ? intval($value->poin) : 0;
                             if ($poin === $higherNumber) {
                                 $returnKeluhan[] = $label;
                             } elseif ($poin > $higherNumber) {

@@ -28,7 +28,7 @@ use App\Helpers\HelperSatuan;
 
 class WsFinalUdaraMikrobiologiUdaraController extends Controller
 {
-	private $categoryMicrobio = [12, 33, 27];
+	private $categoryMicrobio = [12, 33, 27,26];
 
 	public function index(Request $request)
 	{
@@ -44,7 +44,7 @@ class WsFinalUdaraMikrobiologiUdaraController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman","27-Udara Lingkungan Kerja"])
+			->whereIn('kategori_3', ["33-Mikrobiologi Udara", "12-Udara Angka Kuman","27-Udara Lingkungan Kerja","26-Kualitas Udara Dalam Ruang"])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])

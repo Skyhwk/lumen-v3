@@ -101,6 +101,7 @@ class InvoiceController extends Controller
                                 'nilai_pembayaran' => $r->nilai_pembayaran,
                                 'nilai_pengurangan' => null,
                                 'jenis_pengurangan' => null,
+                                'tanggal_pembayaran' => $r->tgl_pembayaran,
                                 'keterangan' => $r->keterangan,
                                 'created_by' => $r->created_by,
                                 'created_at' => $r->created_at,
@@ -116,6 +117,7 @@ class InvoiceController extends Controller
                                 'nilai_pembayaran' => null,
                                 'nilai_pengurangan' => $w->nilai_pembayaran,
                                 'jenis_pengurangan' => $w->keterangan_pelunasan,
+                                'tanggal_pembayaran' => $w->created_at,
                                 'keterangan' => $w->keterangan_tambahan,
                                 'created_by' => $w->created_by,
                                 'created_at' => $w->created_at,
@@ -125,6 +127,16 @@ class InvoiceController extends Controller
                     $history = $record->merge($withdraw);
 
                     return $history;
+                })
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->where('order_header.nama_perusahaan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('consultant', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->Where('order_header.konsultan', 'like', "%{$keyword}%");
+                    });
                 })
                 ->make(true);
         } catch (\Throwable $th) {

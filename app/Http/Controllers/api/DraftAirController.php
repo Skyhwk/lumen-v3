@@ -588,7 +588,7 @@ class DraftAirController extends Controller
             'name' => $val->parameter,
             'no_sampel' => $val->no_sampel,
             'akr' => $param->status === "AKREDITASI" ? '' : 'ẍ',
-            'keterangan' => $param->nama_regulasi,
+            'keterangan' => $param->nama_lhp ?? $param->nama_regulasi,
             'satuan' => $param->satuan,
             'hasil' => \str_replace('_', ' ', $val->ws_value->hasil) ?? null,
             'hasil_koreksi' => $val->ws_value->faktor_koreksi ?? null,

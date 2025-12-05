@@ -12,6 +12,7 @@ use App\Models\ParameterTotal;
 use App\Models\AnalisParameter;
 use App\Models\TemplateStp;
 use App\Models\OrderDetail;
+use App\Models\WsValueAir;
 use Carbon\Carbon;
 use DB;
 
@@ -154,6 +155,12 @@ class TotalAirController extends Controller
             $Colorimetri->is_active = false;
             $Colorimetri->save();
 
+            $ws_value = WsValueAir::where('id_colorimetri', $Colorimetri->id)->first();
+            if($ws_value){
+                $ws_value->is_active = false;
+                $ws_value->save();
+            }
+
             $parameter_total = ParameterTotal::where('parameter_name', $Colorimetri->parameter)->where('is_active', 1)->first();
             $children = json_decode($parameter_total->id_child);
             foreach ($children as $child) {
@@ -165,13 +172,22 @@ class TotalAirController extends Controller
                         $graviChild->is_active = false;
                         $graviChild->save();
                     }
+                    $ws_gravi = WsValueAir::where('id_gravimetri', $graviChild->id)->first();
+                    if($ws_gravi){
+                        $ws_gravi->is_active = false;
+                        $ws_gravi->save();
+                    }
                 }else if($stp->name == 'TITRIMETRI' && $stp->category_id == 1){
                     $titriChild = Titrimetri::where('template_stp', $analisParameter->id_stp)->where('no_sampel', $Colorimetri->no_sampel)->where('parameter', $analisParameter->parameter_name)->where('is_active', 1)->where('is_total', 1)->first();
                     if($titriChild){
                         $titriChild->is_active = false;
                         $titriChild->save();
                     }
-                    
+                    $ws_titri = WsValueAir::where('id_titrimetri', $titriChild->id)->first();
+                    if($ws_titri){
+                        $ws_titri->is_active = false;
+                        $ws_titri->save();
+                    }
                 }if (( ($stp->name == 'MIKROBIOLOGI' || $stp->name == 'ICP' || $stp->name == 'DIRECT READING' || $stp->name == 'COLORIMETRI' || $stp->name == 'SPEKTROFOTOMETER UV-VIS' || $stp->name == 'MERCURY ANALYZER')
                 &&
                 $stp->category_id == 1
@@ -180,6 +196,11 @@ class TotalAirController extends Controller
                     if($coloriChild){
                         $coloriChild->is_active = false;
                         $coloriChild->save();
+                    }
+                    $ws_colori = WsValueAir::where('id_colorimetri', $coloriChild->id)->first();
+                    if($ws_colori){
+                        $ws_colori->is_active = false;
+                        $ws_colori->save();
                     }
                 }
             }

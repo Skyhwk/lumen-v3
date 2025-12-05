@@ -23,6 +23,7 @@ class TemplateLhpErgonomi
             ];
             $dataRula = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
             ->where('method', 3)
+            ->where('is_approve',1)
             ->orderBy('id','desc')
             ->first();
             
@@ -53,7 +54,7 @@ class TemplateLhpErgonomi
                 $result = 'Belum ada Penilaian';
             }
             if ($skor !== null && $skor !== '') {
-                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori resiko {$kategoriResiko}, sehingga {$tindakan}.";
+                $result = "Berdasarkan hasil analisa yang telah dilakukan, didapatkan hasil skor RULA yaitu sebesar {$skor}. Hasil skor tersebut masuk dalam tingkat risiko {$tingkatResiko} dan kategori risiko {$kategoriResiko}, sehingga {$tindakan}.";
             }
 
             $pengukuran->result = $result;
@@ -67,7 +68,7 @@ class TemplateLhpErgonomi
                 "aktivitas_ukur" => $dataRula->aktivitas_ukur,
                 "aktivitas" => $dataRula->aktivita,
                 "nama_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRula->detail) ? $dataRula->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRula->detail) ? Carbon::parse($dataRula->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRula->detail) ? $dataRula->detail->cfr : null,
                 "periode_analisis" => null,
@@ -99,6 +100,7 @@ class TemplateLhpErgonomi
             ];
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 5)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
             // $pengukuran = json_decode($dataRwl->pengukuran);
@@ -111,10 +113,15 @@ class TemplateLhpErgonomi
             $pengukuran->frekuensi_jumlah_angkatan = $dataRwl->frekuensi_jumlah_angkatan;
             $pengukuran->durasi_jam_kerja = $dataRwl->durasi_jam_kerja;
             $pengukuran->kopling_tangan = $dataRwl->kopling_tangan;
-
+            
+            $stringAwal = $pengukuran->durasi_jam_kerja_awal;
+            $kataWaktu = ['Jam', 'jam', 'Menit', 'menit', 'Detik', 'detik'];
+            $stringBersih = str_ireplace($kataWaktu, '', $stringAwal);
+            $stringAkhir = trim($stringBersih);
             //kesimpulan
             $liAwal = $this->resultRwl($pengukuran->lifting_index_awal);
             $liAkhir = $this->resultRwl($pengukuran->lifting_index_akhir);
+            $pengukuran->durasi_jam_kerja_awal = $stringAkhir;
 
             $pengukuran->result_li_awal =$liAwal;
             $pengukuran->result_li_akhir =$liAkhir;
@@ -127,7 +134,7 @@ class TemplateLhpErgonomi
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "aktivitas" => $dataRwl->aktivitas,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
@@ -159,6 +166,7 @@ class TemplateLhpErgonomi
             // olah data:
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 1)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
 
@@ -233,7 +241,7 @@ class TemplateLhpErgonomi
                 "divisi" => $dataRwl->divisi,
                 "aktivitas" => $dataRwl->aktivita,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => null,
@@ -268,6 +276,7 @@ class TemplateLhpErgonomi
             $dataReba = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 2)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
     
@@ -326,7 +335,7 @@ class TemplateLhpErgonomi
                     ? ($uraianAktivitasK3[0]->Uraian.' - '.$uraianAktivitasK3[0]->jam.' jam, '.$uraianAktivitasK3[0]->menit.' menit.')
                     : '',
                 "nama_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataReba->detail) ? $dataReba->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataReba->detail) ? Carbon::parse($dataReba->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataReba->detail) ? $dataReba->detail->cfr : null,
                 "jenis_sampel" => isset($dataReba->detail) ? explode('-', $dataReba->detail->kategori_3)[1] : null,
@@ -366,6 +375,7 @@ class TemplateLhpErgonomi
             $dataRosa = DataLapanganErgonomi::with(['detail'])
                 ->where('no_sampel', $data->no_sampel)
                 ->where('method', 4)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
     
@@ -407,7 +417,7 @@ class TemplateLhpErgonomi
                 "no_sampel" => $dataRosa->no_sampel,
                 "jenis_sampel" => isset($dataRosa->detail) ? explode('-', $dataRosa->detail->kategori_3)[1] : null,
                 "nama_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRosa->detail) ? $dataRosa->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRosa->detail) ? Carbon::parse($dataRosa->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "periode_analisis" => '-',
                 "nama_pekerja" => $dataRosa->nama_pekerja,
@@ -467,6 +477,7 @@ class TemplateLhpErgonomi
             $pdf = new PDF($mpdfConfig);
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel',$data->no_sampel)
                 ->where('method', 8)
+                ->where('is_approve',1)
                 ->orderBy('id','desc')
                 ->first();
             $dataJson = json_decode($dataRwl->input_k3);
@@ -479,7 +490,7 @@ class TemplateLhpErgonomi
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
@@ -505,6 +516,7 @@ class TemplateLhpErgonomi
             
             $skorDataAtasPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->penggunaan_keyboard);
             $skorDataAtasPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol);
+            
             $skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_atas)->tekanan_langsung_ke_bagian_tubuh);
             
             $skorDataBawahGetaran =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->getaran);
@@ -515,7 +527,7 @@ class TemplateLhpErgonomi
             $skorDataBawahPosturPenggunaanKeyboard =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->penggunaan_keyboard);
             $skorDataBawahPosturFaktorTidakDapatDiKontrol =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol);
             $skorDataBawahPosturAktivitasMendorong =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->aktivitas_mendorong);
-            $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_ke_bagian_tubuh);
+            $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh =$this->calculateSkorSNI(optional($pengukuran->tubuh_bagian_bawah)->tekanan_langsung_tubuh);
             //getaran,lingkungan,usaha_tangan,gerakan_lengan,postur_janggal,penggunaan_keyboard,faktor_tidak_dapat_di_kontrol,tekanan_langsung_ke_bagian_tubuh
             
             $skorDataAtas = array_merge(
@@ -525,7 +537,7 @@ class TemplateLhpErgonomi
                 (array)$skorDataAtasGerakanLengan,
                 (array)$skorDataAtasPosturJanggal,
                 (array)$skorDataAtasPosturPenggunaanKeyboard,
-                (array)$skorDataAtasPosturFaktorTidakDapatDiKontrol,
+                (array)optional($pengukuran->tubuh_bagian_atas)->faktor_tidak_dapat_di_kontrol,
                 (array)$skorDataAtasPosturFaktorTekananLangsungKeBagianTubuh
             );
            
@@ -536,7 +548,7 @@ class TemplateLhpErgonomi
                 (array) $skorDataBawahGerakanLengan,
                 (array) $skorDataBawahPosturJanggal,
                 (array) $skorDataBawahPosturPenggunaanKeyboard,
-                (array) $skorDataBawahPosturFaktorTidakDapatDiKontrol,
+                (array) optional($pengukuran->tubuh_bagian_bawah)->faktor_tidak_dapat_di_kontrol,
                 (array) $skorDataBawahPosturFaktorTekananLangsungKeBagianTubuh,
                 (array) $skorDataBawahPosturAktivitasMendorong
             );
@@ -570,6 +582,8 @@ class TemplateLhpErgonomi
                     ];
                 }
             }
+
+            
             
             foreach($skorDataBawah as $key => $value){
                 if(is_array($value) && empty($value)){
@@ -610,7 +624,7 @@ class TemplateLhpErgonomi
             }else{
                 $hasilResikoBeban =null;
             }
-           
+            
             $html = View::make('ergonompotensibahaya',compact('cssGlobal','pengukuran','skorDataAtas','skorDataBawah','faktorResiko','manualHandling','hasilResikoBeban','personal','ttd'))->render();
             return $html;
         } catch (ViewException $e) {
@@ -637,6 +651,8 @@ class TemplateLhpErgonomi
             $pdf = new PDF($mpdfConfig);
             $dataRwl = DataLapanganErgonomi::with(['detail'])->where('no_sampel', $data->no_sampel)
                 ->where('method', 7)
+                ->where('is_approve',1)
+                ->orderBy('id','desc')
                 ->first();
     
             // $pengukuran = json_decode($dataRwl->pengukuran);
@@ -653,7 +669,7 @@ class TemplateLhpErgonomi
                 "jenis_kelamin" => $dataRwl->jenis_kelamin,
                 "aktivitas_ukur" => $dataRwl->aktivitas_ukur,
                 "nama_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->nama_perusahaan : null,
-                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->alamat_perusahaan : null,
+                "alamat_pelanggan" => isset($dataRwl->detail) ? $dataRwl->detail->orderHeader->alamat_sampling : null,
                 "tanggal_sampling" => isset($dataRwl->detail) ? Carbon::parse($dataRwl->detail->tanggal_sampling)->locale('id')->isoFormat('DD MMMM YYYY') : null,
                 "no_lhp" => isset($dataRwl->detail) ? $dataRwl->detail->cfr : null,
                 "periode_analisis" => (isset($dataRwl->detail) ? $dataRwl->detail->tanggal_sampling : null) . ' - ' . date('Y-m-d'),
@@ -874,8 +890,8 @@ class TemplateLhpErgonomi
             "aktivitas_pergelangan_kaki" =>["ket"=>"Aktivitas pergelangan kaki / berdiri dengan pijakan tidak memadai","index"=>24,"label"=>"Postur Janggal"],
             "duduk_tanpa_sandaran" =>["ket"=>"Duduk dalam waktu yang lama tanpa sandaran yang memadai","index"=>25,"label"=>"Postur Janggal"],
             "duduk_tanpa_pijakan" =>["ket"=>"Bekerja berdiri dalam waktu lama / duduk tanpa pijakan memadai","index"=>26,"label"=>"Postur Janggal"],
-            "tubuh_tertekan_benda" =>["ket"=>"Tubuh tertekan oleh benda yang keras / runcing","index"=>27,"label"=>"Tekanan Langsung ke bagian tubuh"],
-            "lutut_untuk_memukul" =>["ket"=>"Menggunakan lutut untuk memukul / menendang","index"=>28,"label"=>"Tekanan Langsung ke bagian tubuh"],
+            "tubuh_tertekan_benda" =>["ket"=>"Tubuh tertekan oleh benda yang keras / runcing","index"=>27,"label"=>"Tekanan Langsung Tubuh"],
+            "lutut_untuk_memukul" =>["ket"=>"Menggunakan lutut untuk memukul / menendang","index"=>28,"label"=>"Tekanan Langsung Tubuh"],
             "getaran_seluruh_tubuh" =>["ket"=>"Getaran pada seluruh tubuh (tanpa peredam)","index"=>29,"label"=>"Getaran"],
             "beban_sedang" =>["ket"=>"Beban sedang","index"=>30,"label"=>"Aktifitas Mendorong / Menarik beban"],
             "beban_berat" =>["ket"=>"Beban berat","index"=>31,"label"=>"Aktifitas Mendorong / Menarik beban"],
@@ -1288,17 +1304,19 @@ class TemplateLhpErgonomi
         $tingkatResiko = '';
         $tindakan = '';
         $result = '';
-        if ($skor < 1) {
+        $skorNumerik = (float) $skor;
+        if ($skorNumerik < 1) {
             $tingkatResiko = 'Rendah';
             $tindakan = 'Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
-        } else if ($skor <= 1 && $skor < 3) {
+        } else if ($skorNumerik >= 1 && $skorNumerik < 3) {
             $tingkatResiko = 'Sedang';
             $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1';
-        } elseif ($skor >= 5) {
+        } else if ($skorNumerik >= 3) {
             $tingkatResiko = ' Tinggi';
-            $tindakan = 'Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
+            $tindakan = 'Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
         } else {
-            $tindakan = 'Belum ada Penilaian';
+            $tingkatResiko = 'Tidak Dinilai';
+            $tindakan = 'Input skor tidak valid atau tidak dapat diukur.';
         }
 
         return ["tingkatResiko"=>$tingkatResiko,"result"=>$tindakan];

@@ -697,6 +697,24 @@ class FdlMethodBahayaErgonomiController extends Controller
         // Periksa apakah data adalah array
         if (is_array($data)) {
             foreach ($data as $section => $values) {
+                // dump($values);
+                if (isset($values['Faktor Kontrol'])) {
+                    // Skip jika "Tidak"
+                    if (stripos($values['Faktor Kontrol'], 'Tidak') !== false) {
+                        continue;
+                    }
+
+                    // Ambil angka dari string (1 atau 2)
+                    if (preg_match('/(\d+)/', $values['Faktor Kontrol'], $match)) {
+                        $nilai = (int) $match[1];
+                    } else {
+                        continue; // tidak ada angka → skip
+                    }
+
+                    $totalDurasi += $nilai;
+
+                    continue;
+                }
                 // Periksa apakah $values adalah array
                 if (is_array($values)) {
                     foreach ($values as $subSection => $details) {
@@ -709,16 +727,17 @@ class FdlMethodBahayaErgonomiController extends Controller
                             if (is_numeric($durasi)) {
                                 $totalDurasi += (int)$durasi;
                             } else {
-                                // Tambahkan log untuk kasus durasi yang tidak valid
-                                // Misalnya, jika nilai 'Durasi Gerakan' tidak bisa diproses
                                 Log::warning("Durasi Gerakan tidak valid: {$details['Durasi Gerakan']}");
                             }
+                        }
+
+                        if (isset($details['Overtime'])) {
+                            $totalDurasi += (float) $details['Overtime'];
                         }
                     }
                 }
             }
         }
-
         return $totalDurasi;
     }
 

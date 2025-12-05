@@ -35,6 +35,7 @@ class TqcUdaraMicrobiologiController extends Controller
             '27-Udara Lingkungan Kerja',
             '12-Udara Angka Kuman',
             '33-Mikrobiologi Udara',
+            '26-Kualitas Udara Dalam Ruang'
         ];
         $data = OrderDetail::select(
             'cfr',

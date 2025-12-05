@@ -33,7 +33,7 @@
 
 @endphp
 
-<div class="left">
+<div class="left" style="page-break-before: always;">
     <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
         <thead>
             @if ($isMultipleParameter)
