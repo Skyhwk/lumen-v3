@@ -3963,10 +3963,11 @@ class InputParameterController extends Controller
 				if(count($fdl) > 0){
 					$data_udara['hasil9'] = $data_kalkulasi['hasil'];
 				}else{
-					$data_udara['hasil10'] = $data_kalkulasi['hasil'];
-					$data_udara['hasil11'] = $data_kalkulasi['hasil2'];
-					$data_udara['hasil13'] = $data_kalkulasi['hasil3'];
-					$data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+					$data_udara['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
+					$data_udara['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;
+					$data_udara['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
+					$data_udara['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
+					$data_udara['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
 				}
 				WsValueUdara::create($data_udara);
 
