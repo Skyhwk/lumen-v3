@@ -233,6 +233,7 @@ class FdlEmisiCerobongController extends Controller
                     'C8' => $data_kalkulasi['C9'] ?? null,
                     'C9' => $data_kalkulasi['C10'] ?? null,
                     'C10' => $data_kalkulasi['C11'] ?? null,
+                    'C11' => $data_kalkulasi['C12'] ?? null,
                     'created_by' => $this->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'suhu' => $data->suhu,
