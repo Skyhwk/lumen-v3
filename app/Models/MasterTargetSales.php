@@ -4,11 +4,10 @@ namespace App\Models;
 
 use App\Models\Sector;
 
-
 class MasterTargetSales extends Sector
 {
     protected $table = 'master_target_sales';
-    protected $guarded = [];
+    protected $guarded = ['id'];
     public $timestamps = false;
 
     protected $casts = [

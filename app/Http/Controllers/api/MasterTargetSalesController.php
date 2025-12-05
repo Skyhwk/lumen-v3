@@ -28,14 +28,22 @@ class MasterTargetSalesController extends Controller
     {
         DB::beginTransaction();
         try {
+            $cek = MasterTargetSales::where([
+                'karyawan_id' => $request->karyawan_id,
+                'tahun' => $request->tahun,
+                'is_active' => true,
+            ])->first();
+
+            if ($cek) return response()->json(['message' => 'Data Sudah Ada'], 401);
+
             $kuota = [];
             foreach ($request->KATEGORI as $key => $value) {
                 $kuota[$value] = (int) $request->VALUE[$key];
             }
 
-            $cek = MasterTargetSales::where('karyawan_id', $request->karyawan_id)->where('tahun', $request->tahun)->first();
-            if ($cek) {
-                return response()->json(['message' => 'Data Sudah Ada'], 401);
+            $target = [];
+            foreach ($request->periode as $periode) {
+                $target[$periode] = (int) $request->total_target;
             }
 
             $data = new MasterTargetSales();
@@ -53,6 +61,7 @@ class MasterTargetSalesController extends Controller
             $data->oktober      = in_array($request->tahun . '-10', $request->periode) ? $kuota : null;
             $data->november     = in_array($request->tahun . '-11', $request->periode) ? $kuota : null;
             $data->desember     = in_array($request->tahun . '-12', $request->periode) ? $kuota : null;
+            $data->target       = json_encode($target);
             $data->created_by   = $this->karyawan;
             $data->created_at   = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
@@ -85,14 +94,17 @@ class MasterTargetSalesController extends Controller
 
     public function getTemplate()
     {
-        $template = MasterKuotaTarget::where('is_active', true)->where('created_by', $this->karyawan)->get();
+        $template = MasterKuotaTarget::where([
+            'created_by' => $this->karyawan,
+            'is_active' => true
+        ])->get();
 
         return response()->json(['data' => $template], 200);
     }
 
     public function getKategori()
     {
-        $array = [
+        $kategori = [
             'AIR' => [
                 'AIR LIMBAH', //-> limbah, domestik, industri
                 'AIR BERSIH',
@@ -117,6 +129,25 @@ class MasterTargetSalesController extends Controller
             ]
         ];
 
+        $harga = [
+            'AIR LIMBAH' => config('harga_kategori.HARGA_AIR_LIMBAH'), //-> limbah, domestik, industri
+            'AIR BERSIH' => config('harga_kategori.HARGA_AIR_BERSIH'),
+            'AIR MINUM' => config('harga_kategori.HARGA_AIR_MINUM'),
+            'AIR SUNGAI' => config('harga_kategori.HARGA_AIR_SUNGAI'),
+            'AIR LAUT' => config('harga_kategori.HARGA_AIR_LAUT'),
+            'AIR LAINNYA' => config('harga_kategori.HARGA_AIR_LAINNYA'),
+            'UDARA AMBIENT' => config('harga_kategori.HARGA_UDARA_AMBIENT'),
+            'UDARA LINGKUNGAN KERJA' => config('harga_kategori.HARGA_UDARA_LINGKUNGAN_KERJA'),
+            'KEBISINGAN' => config('harga_kategori.HARGA_KEBISINGAN'),
+            'PENCAHAYAAN' => config('harga_kategori.HARGA_PENCAHAYAAN'),
+            'GETARAN' => config('harga_kategori.HARGA_GETARAN'),
+            'IKLIM KERJA' => config('harga_kategori.HARGA_IKLIM_KERJA'),
+            'UDARA LAINNYA' => config('harga_kategori.HARGA_UDARA_LAINNYA'),
+            'EMISI SUMBER BERGERAK' => config('harga_kategori.HARGA_EMISI_SUMBER_BERGERAK'), // Emisi Kendaraan (Bensin), Emisi Kendaraan (Solar), Emisi Kendaraan (Gas)
+            'EMISI SUMBER TIDAK BERGERAK' => config('harga_kategori.HARGA_EMISI_SUMBER_TIDAK_BERGERAK'),
+            'EMISI ISOKINETIK' => config('harga_kategori.HARGA_EMISI_ISOKINETIK')
+        ];
+
         $idBawahan = GetBawahan::where('id', 890)->get()->pluck('id')->toArray();
 
         $sales = MasterKaryawan::where('is_active', true)
@@ -125,7 +156,8 @@ class MasterTargetSalesController extends Controller
             ->get();
 
         return response()->json([
-            'data' => $array,
+            'data' => $kategori,
+            'harga' => $harga,
             'sales' => $sales
         ], 200);
     }
