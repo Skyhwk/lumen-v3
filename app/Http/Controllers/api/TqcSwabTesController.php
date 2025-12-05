@@ -155,7 +155,7 @@ class TqcSwabTesController extends Controller
                     ->select('baku_mutu', 'satuan', 'method', 'nama_header')
                     ->first();
 
-                $ws = $item->ws_udara ?? $item->ws_value_linkungan;
+                $ws = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
 
                 $nilai = '-';
 

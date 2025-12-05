@@ -172,7 +172,7 @@ class DraftSwabTesController extends Controller
                 ->pluck('no_sampel');
 
             // Ambil data KebisinganHeader + relasinya
-            $swabData = SwabTestHeader::with('ws_value')
+            $swabData = SwabTestHeader::with('ws_udara')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approved', 1)
                 ->where('is_active', 1)
@@ -180,14 +180,14 @@ class DraftSwabTesController extends Controller
                 ->get();
 
             if ($swabData->isEmpty()) {
-                $swabData = MicrobioHeader::with('ws_value')
+                $swabData = MicrobioHeader::with('ws_udara')
                     ->whereIn('no_sampel', $orders)
                     ->where('is_approved', 1)
                     ->where('is_active', 1)
                     ->where('lhps', 1)
                     ->get();
             }
-            $swabData2 = Subkontrak::with('ws_udara')
+            $swabData2 = Subkontrak::with('ws_udara', 'ws_value_linkungan')
                 ->whereIn('no_sampel', $orders)
                 ->where('is_approve', 1)
                 ->where('is_active', 1)
@@ -224,7 +224,7 @@ class DraftSwabTesController extends Controller
                     $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
                     $parameterLhp      = Parameter::where('id', $val->id_parameter)->first()->nama_lhp ?? null;
 
-                    $ws       = $val->ws_value;
+                    $ws       = $val->ws_udara ?? $val->ws_value_linkungan ?? null;
                     $hasil    = $ws->toArray();
                     $orderRow = OrderDetail::where('no_sampel', $val->no_sampel)
                         ->where('is_active', 1)

@@ -111,7 +111,7 @@ class WsFinalUdaraSwabTesController extends Controller
             // dd($parameterNames); 
             // Output: ["E.Coli (Swab Test)", "Total Kuman (Swab Test)"]
 
-            $data = SwabTestHeader::with(['ws_value'])
+            $data = SwabTestHeader::with(['ws_udara'])
                 ->where('no_sampel', $request->no_sampel)
                 ->where('is_approved', 1)
                 ->where('status', 0)
@@ -120,7 +120,7 @@ class WsFinalUdaraSwabTesController extends Controller
                 ->get();
 
             if ($data->isEmpty()) {
-                $data = MicrobioHeader::with(['ws_value'])
+                $data = MicrobioHeader::with(['ws_udara'])
                     ->where('no_sampel', $request->no_sampel)
                     ->where('is_approved', 1)
                     ->where('status', 0)
