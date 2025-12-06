@@ -656,6 +656,7 @@ class TemplateLhpErgonomi
                 ->first();
     
             // $pengukuran = json_decode($dataRwl->pengukuran);
+            dd($dataRwl);
             $pengukuran = json_decode($dataRwl->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
             
