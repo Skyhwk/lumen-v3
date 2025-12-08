@@ -747,6 +747,8 @@ class DraftUdaraAmbientController extends Controller
                     'udaraSubKontrak',
                     'udaraDirect',
                     'udaraPartikulat',
+                    'udaraDebu',
+                    'dustFall'
                 ])
                     ->where('no_sampel', $request->no_sampel)
                     ->first();
@@ -756,8 +758,10 @@ class DraftUdaraAmbientController extends Controller
                 $subKontrak = $validasi->udaraSubKontrak;
                 $direct     = $validasi->udaraDirect;
                 $partikulat = $validasi->udaraPartikulat;
+                $debu       = $validasi->udaraDebu;
+                $dustFall   = $validasi->dustFall;
 
-                $detail = collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat);
+                $detail = collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat)->merge($debu)->merge($dustFall);
 
                 $validasi = $detail->map(function ($item) {
                     $newQuery = Parameter::where('nama_lab', $item->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
@@ -775,7 +779,7 @@ class DraftUdaraAmbientController extends Controller
                         'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
                     ];
                 });
-
+                
                 // dd($test);
 
                 // dd($validasi->udaraLingkungan, $validasi->udaraMicrobio, $validasi->udaraSubKontrak, $validasi->udaraDirect, $validasi->udaraPartikulat);
@@ -926,6 +930,10 @@ class DraftUdaraAmbientController extends Controller
             $fKoreksi1          = $ws->f_koreksi_1 ?? null;
             $hasil1             = $ws->hasil1 ?? null;
             $entry['hasil_uji'] = $fKoreksi1 ?? $hasil1 ?? $entry['hasil_uji'];
+        }
+
+        if($bakumutu && $bakumutu->baku_mutu) {
+            $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
         }
 
         if ($bakumutu && $bakumutu->method) {
