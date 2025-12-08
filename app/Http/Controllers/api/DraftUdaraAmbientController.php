@@ -747,6 +747,7 @@ class DraftUdaraAmbientController extends Controller
                     'udaraSubKontrak',
                     'udaraDirect',
                     'udaraPartikulat',
+                    'udaraDebu'
                 ])
                     ->where('no_sampel', $request->no_sampel)
                     ->first();
@@ -756,8 +757,9 @@ class DraftUdaraAmbientController extends Controller
                 $subKontrak = $validasi->udaraSubKontrak;
                 $direct     = $validasi->udaraDirect;
                 $partikulat = $validasi->udaraPartikulat;
+                $debu       = $validasi->udaraDebu;
 
-                $detail = collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat);
+                $detail = collect()->merge($lingkungan)->merge($microbio)->merge($subKontrak)->merge($direct)->merge($partikulat)->merge($debu);
 
                 $validasi = $detail->map(function ($item) {
                     $newQuery = Parameter::where('nama_lab', $item->parameter)->where('id_kategori', '4')->where('is_active', true)->first();
