@@ -166,7 +166,7 @@ class FdlEmisiKendaraanController extends Controller
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
                 if ($cek_qr->id_kendaraan != null) {
                     $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
-                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)', 'Emisi Kendaraan (Gas)'))->orderBy('id', 'DESC')->first();
+                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)', '116-Emisi Kendaraan (Gas)'))->orderBy('id', 'DESC')->first();
                     $no_sequen = 'EMISI' . $cek_po->id;
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
