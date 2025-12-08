@@ -4316,14 +4316,7 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
-            ],
-            [
-                "parameter" => "Isopropil Alkohol",
-                "requiredCount" => 1,
-                "category" => "4-Udara",
-                "model" => DetailLingkunganKerja::class,
-                "model2" => DetailSenyawaVolatile::class
-            ],
+            ]
         ];
 
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];

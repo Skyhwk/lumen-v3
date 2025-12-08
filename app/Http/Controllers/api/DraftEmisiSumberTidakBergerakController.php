@@ -677,7 +677,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         }
 
         if($nilai == '-'){ 
-            $nilai = $ws['C3_persen'] ?? '-';
+            $nilai = $ws['nil_koreksi'] ?? '-';
         }
 
         return $nilai;
