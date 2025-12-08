@@ -563,9 +563,15 @@ class OrderDetail extends Sector
     {
         return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
     }
+
     public function udaraDebu()
     {
         return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
+    }
+
+    public function dustFall()
+    {
+        return $this->hasMany(DustFallHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
     }
 
     // emisi isokinetik
