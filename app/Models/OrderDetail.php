@@ -575,6 +575,11 @@ class OrderDetail extends Sector
         return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
     }
 
+    public function lhps_hygene()
+    {
+        return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp');
+    }
+
     // barangkali kepakai
     // public function isoBeratMolekul()
     // {
