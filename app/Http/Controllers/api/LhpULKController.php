@@ -9,6 +9,7 @@ use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\Parameter;
+use App\Models\ParameterFdl;
 use App\Models\GenerateLink;
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
@@ -23,15 +24,15 @@ use Yajra\Datatables\Datatables;
 class LhpULKController extends Controller
 {
     public function index(Request $request){
-        // $data = OrderDetail::with('lhps_ling','orderHeader','dataLapanganLingkunganKerja')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '4-Udara')->where('kategori_3', '27-Udara Lingkungan Kerja')->where('status', 3)->orderBy('tanggal_terima', 'desc');
-        $parameterAllowed = [
+        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+        $parameterAllowed = array_merge($parameterAllowed, [
             'Sinar UV',
             'Ergonomi',
             'Gelombang Elektro',
             'Medan Listrik',
             'Medan Magnit Statis',
-            'Power Density',
-        ];
+            'Power Density',]);
 
         $data = OrderDetail::selectRaw('
                 max(id) as id,
