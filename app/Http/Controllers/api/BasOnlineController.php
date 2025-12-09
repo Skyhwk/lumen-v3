@@ -4010,7 +4010,7 @@ class BasOnlineController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
-                "model2" => DetailLingkunganHidup::class
+                "model2" => DetailSenyawaVolatile::class
             ],
             [
                 "parameter" => "Metanol",

@@ -12,6 +12,7 @@ use App\Models\QuotationKontrakD;
 use App\Services\GetBawahan;
 use App\Services\GroupedCfrByLhp;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Datatables;
 use Exception;
 
@@ -20,26 +21,26 @@ class StatusOrderController extends Controller
     public function index(Request $request)
     {
         try {
+            
             $mode = $request->mode;
             if ($request->mode == 'non_kontrak') {
                 $data = QuotationNonKontrak::with([
                     'sales',
-                    'link_lhp',
                     'sampling' => function ($q) {
                         $q->orderBy('periode_kontrak', 'asc');
                     },
                     'orderHeader.invoices.recordWithdraw'
                 ])
-                    ->where('id_cabang', $request->cabang)
-                    ->whereHas('orderHeader')
-                    // ->where('flag_status', '!=', 'ordered')
-                    // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
+                ->select('request_quotation.*')
+                    ->where('request_quotation.id_cabang', $request->cabang) 
+                    ->whereHas('orderHeader') // whereHas tidak perlu dikualifikasi
+                    ->where('request_quotation.is_approved', true) 
+                    ->where('request_quotation.is_emailed', true) // <-- INI YANG MENYEBABKAN ERROR
+                    ->whereYear('request_quotation.tanggal_penawaran', $request->year) 
+                    ->whereMonth('request_quotation.tanggal_penawaran', '>=', 11)
+                    ->orderBy('request_quotation.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
-                $data = QuotationKontrakD::with([
+                /* $data = QuotationKontrakD::with([
                     'header',
                     'header.sales',
                     'header.link_lhp',
@@ -56,8 +57,47 @@ class StatusOrderController extends Controller
                             ->where('is_active', true)
                             ->whereYear('tanggal_penawaran', $request->year)
                             ->whereHas('orderHeader')
+                            ->whereYear('tanggal_penawaran', $request->year)
+                            ->whereMonth('tanggal_penawaran', '>=', 11)
                             ->orderBy('tanggal_penawaran', 'desc');
                     })
+                    ->orderBy('request_quotation_kontrak_D.id', 'desc'); */
+                    //optimasi
+                    $data = QuotationKontrakD::with([
+                        'header',
+                        'header.sales',
+                        // 'header.link_lhp', // Jika JOIN digunakan, eager loading ini mungkin tidak diperlukan
+                        'header.sampling' => function ($q) {
+                            $q->orderBy('periode_kontrak', 'asc');
+                        },
+                        'header.orderHeader.invoices.recordWithdraw'
+                    ]);
+                    // Memastikan kolom D yang diambil, JIKA ADA JOIN EKSPLISIT
+                    $data->select(
+                        'request_quotation_kontrak_D.*',
+                        // Tambahkan kolom yang digunakan untuk ORDER BY:
+                        'header.tanggal_penawaran as header_tanggal_penawaran',
+                        'header.id as header_id_fk' // Penting untuk memastikan relasi 'header' tetap berfungsi di Eloquent
+                    );
+
+                    // --- 🚀 INISIASI JOIN PERFORMA TINGGI DI SINI ---
+                    
+                    // 1. JOIN ke Header (Wajib, untuk filter Header dan untuk JOIN ke LHP)
+                    $data->join('request_quotation_kontrak_H as header', 
+                            'request_quotation_kontrak_D.id_request_quotation_kontrak_h', 
+                            '=', 
+                            'header.id')
+                    ->distinct(); // Mencegah baris D terduplikasi jika ada relasi 1:N
+
+                    // 2. Filter Header (Sama seperti whereHas sebelumnya, tapi diterapkan langsung)
+                    $data->where('header.id_cabang', $request->cabang)
+                        ->where('header.is_approved', true)
+                        ->where('header.is_emailed', true)
+                        ->where('header.is_active', true)
+                        ->whereYear('header.tanggal_penawaran', $request->year)
+                        // Asumsi: orderHeader/tanggal_penawaran hanya ada di Header (H)
+                        ->whereMonth('header.tanggal_penawaran', '>=', 11);
+                    $data->orderBy('header.tanggal_penawaran', 'desc')
                     ->orderBy('request_quotation_kontrak_D.id', 'desc');
             }
 
@@ -86,6 +126,98 @@ class StatusOrderController extends Controller
                 }
             }
 
+            $filterStatusType = $request->input('filter_status_type'); // Ambil parameter dari frontend
+           
+            if ($filterStatusType === 'completed') {
+                // 🎯 LOGIKA: HARUS MEMENUHI KRITERIA LHP SELESAI DAN INVOICE LUNAS
+
+                if ($request->mode == 'kontrak'){
+                      
+                    $data->join('link_lhp as lhp', function($join) {
+                        $join->on('header.no_document', '=', 'lhp.no_quotation') 
+                            ->on('lhp.periode', '=', DB::raw('request_quotation_kontrak_D.periode_kontrak'))
+                            ->where('lhp.is_completed', true);
+                    });
+                    $data->distinct(); 
+
+                    
+                    $data->join('order_header as oh', 'header.no_document', '=', 'oh.no_document')
+                    ->distinct();
+                    $data->join('invoice as i', function($join) {
+                        $join->on('oh.no_order', '=', 'i.no_order');
+                        $join->whereNotNull('i.nilai_pelunasan')
+                            ->whereRaw('i.nilai_pelunasan >= i.nilai_tagihan');
+                        $join->on('i.periode', '=', DB::raw('request_quotation_kontrak_D.periode_kontrak'));
+                    })
+                    ->distinct();
+                }else{
+                    $data->join('order_header as oh', 'request_quotation.no_document', '=', 'oh.no_document')
+                        ->distinct()
+                        ->whereNotExists(function($query) {
+                            $query->select(DB::raw(1))
+                                ->from('invoice as i')
+                                ->whereColumn('i.no_order', '=', 'oh.no_order')
+                                ->where(function($q) {
+                                    $q->whereNull('i.nilai_pelunasan')  // Belum bayar
+                                        ->orWhereRaw('i.nilai_pelunasan < i.nilai_tagihan'); // Parsial
+                                });
+                        });
+                    $data->join('link_lhp as lhp', function($join) {
+                        $join->on('request_quotation.no_document', '=', 'lhp.no_quotation')
+                            ->where('lhp.is_completed', true);
+                    });
+                    $data->whereHas('orderHeader.invoices');
+                }
+                
+            }else if($filterStatusType === 'incompleted'){
+                
+                if ($request->mode == 'kontrak'){
+                      
+                    $data->join('link_lhp as lhp', function($join) {
+                        $join->on('header.no_document', '=', 'lhp.no_quotation') 
+                            ->on('lhp.periode', '=', DB::raw('request_quotation_kontrak_D.periode_kontrak'));
+                    });
+                    $data->distinct();
+                    // Filter untuk LHP: (LHP belum ada [NULL] ATAU LHP ada tapi is_completed = FALSE)
+                    $data->where(function($q) {
+                        $q->whereNull('lhp.no_quotation') // Data belum memiliki LHP
+                        ->orWhere('lhp.is_completed', false); // Data memiliki LHP tapi belum completed
+                    });
+                    $data->join('order_header as oh', 'header.no_document', '=', 'oh.no_document')
+                    ->distinct();
+                    // 3. JOIN Invoice (Menggunakan LEFT JOIN untuk menyertakan Detail yang BELUM ADA Invoice)
+                    $data->leftJoin('invoice as i', function($join) {
+                        $join->on('oh.no_order', '=', 'i.no_order')
+                            ->on('i.periode', '=', DB::raw('request_quotation_kontrak_D.periode_kontrak'));
+                    })
+                    ->distinct();
+                    // Filter untuk Invoice: (Invoice belum ada [NULL] ATAU Invoice ada tapi BELUM LUNAS)
+                    $data->where(function($q) {
+                        $q->whereNull('i.no_invoice') // Data belum memiliki Invoice
+                        // Jika ada Invoice, pastikan belum lunas (Pelunasan NULL ATAU Pelunasan < Tagihan)
+                        ->orWhere(function($q2) {
+                            $q2->whereNotNull('i.no_invoice') // Ada Invoice
+                                ->where(function($q3) {
+                                    $q3->whereNull('i.nilai_pelunasan') // Pelunasan NULL
+                                        ->orWhereRaw('i.nilai_pelunasan < i.nilai_tagihan'); // Pelunasan Parsial
+                                });
+                        });
+                    });
+                }else{
+                    $data->where(function ($query) {
+                        $query->whereDoesntHave('link_lhp', function ($q) {
+                            $q->where('is_completed', true); // TIDAK memiliki LHP COMPLETED
+                        });
+                        $query->orWhereHas('orderHeader.invoices', function ($q) {
+                            $q->where(function($q2) {
+                                $q2->whereNull('nilai_pelunasan') 
+                                ->orWhereRaw('nilai_pelunasan < nilai_tagihan');
+                            });
+                        });
+                    });
+                }
+            }
+            
             return DataTables::of($data)
                 ->addColumn('count_jadwal', function ($row) {
                     return $row->sampling ? $row->sampling->sum(function ($sampling) {
@@ -94,11 +226,9 @@ class StatusOrderController extends Controller
                 })
                 ->filterColumn('no_document', function ($query, $keyword) use ($mode) {
                     if ($mode == 'non_kontrak') {
-                        $query->where('no_document', 'like', "%{$keyword}%");
+                        $query->where('request_quotation.no_document', 'like', "%{$keyword}%");
                     } elseif ($mode == 'kontrak') {
-                        $query->whereHas('header', function ($q) use ($keyword) {
-                            $q->where('no_document', 'like', "%{$keyword}%");
-                        });
+                        $query->where('header.no_document', 'like', "%{$keyword}%");
                     }
                 })
                 ->filterColumn('invoice', function ($query, $keyword) use ($mode) {
@@ -141,48 +271,6 @@ class StatusOrderController extends Controller
                         return json_decode($row->link_lhp, true);
                     }
                 })
-                // ->addColumn('nilai_invoice', function ($row) use ($mode) {
-                //     if ($mode == 'non_kontrak') {
-                //         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return 0;
-                        
-                //         $filtered = $row->orderHeader->invoices
-                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->no_document);
-                //         if ($filtered->isEmpty()) {
-                //             $filtered = $row->orderHeader->invoices
-                //                 ->where('periode', 'all')->where('no_quotation', $row->no_document);
-                //         };
-                //         $nilaiInvoice = 0;
-                //         foreach ($filtered as $invoice) {
-                //             $nilaiInvoice += $invoice->nilai_pelunasan;
-                //             if($invoice->record_withdraw) {
-                //                 foreach ($invoice->record_withdraw as $withdraw) {
-                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
-                //                 }
-                //             }
-                //         }
-
-                //         return $nilaiInvoice;
-                //     } else if ($mode == 'kontrak') {
-                //         if (!$row->header->orderHeader || $row->header->orderHeader->invoices->isEmpty()) return '-';
-                //         $filtered = $row->header->orderHeader->invoices
-                //             ->where('periode', $row->periode_kontrak)->where('no_quotation', $row->header->no_document);
-                //         if ($filtered->isEmpty()) {
-                //             $filtered = $row->header->orderHeader->invoices
-                //                 ->where('periode', 'all')->where('no_quotation', $row->header->no_document);
-                //         };
-                //         $nilaiInvoice = 0;
-                //         foreach ($filtered as $invoice) {
-                //             $nilaiInvoice += $invoice->nilai_pelunasan;
-                //             if($invoice->record_withdraw) {
-                //                 foreach ($invoice->record_withdraw as $withdraw) {
-                //                     $nilaiInvoice += $withdraw->nilai_pembayaran;
-                //                 }
-                //             }
-                //         }
-
-                //         return $nilaiInvoice;
-                //     };
-                // })
                 ->addColumn('nilai_pelunasan', function ($row) use ($mode) {
                     if ($mode == 'non_kontrak') {
                         if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
@@ -230,7 +318,9 @@ class StatusOrderController extends Controller
                 ->make(true);
         } catch (Exception $e) {
             return response()->json([
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' =>$e->getLine(),
+                'file' =>$e->getFile()
             ], 500);
         }
     }

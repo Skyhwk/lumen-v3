@@ -72,82 +72,41 @@ class LhpHygieneSanitasiController extends Controller
 
     }
 
-    public function uploadFile(Request $request)
-    {
+
+    public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $file = $request->file('file_input');
+            $header = LhpsHygieneSanitasiHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
+            // $detail = LhpsLingDetail::where('id_header', $header->id)->get();
+            // $custom = LhpsLingCustom::where('id_header', $header->id)->get();
+            if($header != null) {
 
-            // Validasi file
-            if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
-                return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+                $header->is_approved = 0;
+                $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+                $header->rejected_by = $this->karyawan;
+                
+                // $header->file_qr = null;
+                $header->save();
+
+                $data_order = OrderDetail::where('cfr', $request->no_lhp)->where('is_active', true)->update([
+                    'status' => 2,
+                    'is_approve' => 0,
+                    'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'rejected_by' => $this->karyawan
+                ]);
             }
-
-            $Lhp = LhpsHygieneSanitasiHeader::updateOrCreate([
-                'no_lhp' => $request->no_lhp,
-            ]);
-
-            // Pastikan folder invoice ada
-            $folder = public_path('dokumen/LHP_DOWNLOAD/');
-            if (!file_exists($folder)) {
-                mkdir($folder, 0777, true);
-            }
-            
-            $fileName = 'LHP-' . str_replace("/", "-", $request->no_lhp) . '.pdf';
-
-            // Simpan file
-            $file->move($folder, $fileName);
-
-            $Lhp->file_lhp = $fileName;
-            $Lhp->save();
 
             DB::commit();
             return response()->json([
-                'success'  => 'Sukses menyimpan file upload',
+                'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
             return response()->json([
-                'error' => 'Terjadi kesalahan server',
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'Terjadi kesalahan '.$e->getMessage(),
+            ], 401);
         }
     }
-
-    // public function handleReject(Request $request) {
-    //     DB::beginTransaction();
-    //     try {
-    //         $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
-    //         $detail = LhpsLingDetail::where('id_header', $header->id)->get();
-    //         $custom = LhpsLingCustom::where('id_header', $header->id)->get();
-    //         if($header != null) {
-
-    //             $header->is_approved = 0;
-    //             $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
-    //             $header->rejected_by = $this->karyawan;
-                
-    //             // $header->file_qr = null;
-    //             $header->save();
-
-    //             $data_order = OrderDetail::where('cfr', $request->no_lhp)->where('is_active', true)->update([
-    //                 'status' => 2,
-    //                 'is_approve' => 0,
-    //                 'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
-    //                 'rejected_by' => $this->karyawan
-    //             ]);
-    //         }
-
-    //         DB::commit();
-    //         return response()->json([
-    //             'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
-    //         ]);
-    //     } catch (Exception $e) {
-    //         DB::rollBack();
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan '.$e->getMessage(),
-    //         ], 401);
-    //     }
-    // }
 
     // public function handleDownload(Request $request) {
     //     try {
