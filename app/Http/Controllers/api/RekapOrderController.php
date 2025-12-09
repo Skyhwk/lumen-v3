@@ -37,10 +37,6 @@ class RekapOrderController extends Controller
         // Subquery link_lhp
         $linkLhpQuery = LinkLhp::query();
 
-        // if ($request->filled('is_completed')) {
-        //     $linkLhpQuery->where('is_completed', $request->is_completed);
-        // }
-
         // Query utama
         $rekapOrder = DB::table('order_detail')
             ->selectRaw('
@@ -58,19 +54,35 @@ class RekapOrderController extends Controller
             ')
             ->where('order_detail.is_active', true);
 
-        if($request->filled('is_completed')) {
-            if ($request->is_completed) {
-                $rekapOrder = $rekapOrder->joinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
-                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
-                        ->where('link_lhp.is_completed', $request->is_completed);
-                });
+        if ($request->filled('is_completed')) {
+
+            // Ambil kolom lengkap dari link_lhp
+            $linkLhpQuery = LinkLhp::select(
+                'no_order',
+                'is_completed',
+                'jumlah_lhp_rilis',
+                'periode'
+            );
+
+            $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) {
+                $join->on('order_detail.no_order', '=', 'link_lhp.no_order');
+            });
+
+            if ($request->is_completed == 'true' || $request->is_completed == 1) {
+
+                // Completed hanya yang completed
+                $rekapOrder->where('link_lhp.is_completed', true);
+
             } else {
-                $rekapOrder = $rekapOrder->leftJoinSub($linkLhpQuery, 'link_lhp', function ($join) use ($request) {
-                    $join->on('order_detail.no_order', '=', 'link_lhp.no_order')
-                        ->where('link_lhp.is_completed', $request->is_completed);
+
+                // NOT completed → boleh punya link_lhp atau tidak
+                $rekapOrder->where(function ($q) {
+                    $q->whereNull('link_lhp.is_completed')
+                    ->orWhere('link_lhp.is_completed', false);
                 });
             }
         }
+
         /** 
          * ===============================
          *         FILTER LOGIC

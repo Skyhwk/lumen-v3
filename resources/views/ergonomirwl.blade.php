@@ -55,6 +55,9 @@
         td.text-left {
             text-align: left;
         }
+        td.text-center {
+            text-align: center;
+        }
 
         .table-title {
             text-align: left;
@@ -288,8 +291,8 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">VARIABEL PENGUKURAN</td>
-                            <td style="width:20%;">Satuan</td>
-                            <td style="width:20%;">Hasil</td>
+                            <td style="width:20%;">SATUAN</td>
+                            <td style="width:20%;">HASIL</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -316,7 +319,7 @@
                             <td>4</td>
                             <td class="text-left">Durasi Angkat</td>
                             <td>Jam</td>
-                            <td>{{$pengukuran->durasi_jam_kerja}}</td>
+                            <td>{{$pengukuran->durasi_jam_kerja_awal}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
@@ -332,53 +335,53 @@
                     <thead>
                         <tr>
                             <td style="width:5%;">No</td>
-                            <td style="width:55%;">Data Variabel</td>
-                            <td style="width:20%;">Asal</td>
+                            <td style="width:55%;">DATA VARIABEL</td>
+                            <td style="width:20%;">ASAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Load Constant (LC)</td>
+                            <td class="text-left">Konstanta Beban</td>
                             <td>{{$pengukuran->konstanta_beban_awal}}</td>
-                            <td class="text-left">{{$pengukuran->konstanta_beban_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->konstanta_beban_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
-                            <td class="text-left">Horizontal Multiplier (HM)</td>
+                            <td class="text-left">Pengali Horizontal</td>
                             <td>{{$pengukuran->pengali_horizontal_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_horizontal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
-                            <td class="text-left">Vertical Multiplier (VM)</td>
+                            <td class="text-left">Pengali Vertikal</td>
                             <td>{{$pengukuran->pengali_vertikal_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_vertikal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_vertikal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
-                            <td class="text-left">Distance Multiplier (DM)</td>
+                            <td class="text-left">Pengali Jarak</td>
                             <td>{{$pengukuran->pengali_jarak_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_jarak_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_jarak_akhir}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
-                            <td class="text-left">Asymmetric Multiplier (AM)</td>
+                            <td class="text-left">Pengali Asimetris</td>
                             <td>{{$pengukuran->pengali_asimetris_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_asimetris_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
                         <tr>
                             <td>6</td>
-                            <td class="text-left">Frequency Multiplier (FM)</td>
+                            <td class="text-left">Pengali Frekuensi</td>
                             <td>{{$pengukuran->pengali_frekuensi_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_frekuensi_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_frekuensi_akhir}}</td>
                         </tr>
                         <tr>
                             <td>7</td>
-                            <td class="text-left">Coupling Multiplier (CM)</td>
+                            <td class="text-left">Pengali Kopling</td>
                             <td>{{$pengukuran->pengali_kopling_awal}}</td>
-                            <td class="text-left">{{$pengukuran->pengali_kopling_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_kopling_akhir}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -388,14 +391,14 @@
                         <tr>
                             <td style="width:5%;">No</td>
                             <td style="width:55%;">JENIS HASIL</td>
-                            <td style="width:20%;">AWAL</td>
+                            <td style="width:20%;">ASAL</td>
                             <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Recommended Weight Limit (RWL)</td>
+                            <td class="text-left">Nilai Beban Angkat Yang disarankan (RWL)</td>
                             <td>{{$pengukuran->nilai_beban_rwl_awal}}</td>
                             <td>{{$pengukuran->nilai_beban_rwl_akhir}}</td>
                         </tr>
@@ -544,17 +547,17 @@
                             <tr>
                                 <td>&lt;1</td>
                                 <td>Rendah</td>
-                                <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengakat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
+                                <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
                             </tr>
                             <tr>
-                                <td>1 &lt; SI &lt; 3</td>
+                                <td>1 - &lt; 3</td>
                                 <td>Sedang</td>
-                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter anggkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                             <tr>
-                                <td>&gt;3</td>
+                                <td>&ge; 3</td>
                                 <td>Tinggi</td>
-                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permesalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -566,7 +569,7 @@
                     ** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Peraturan Menteri Ketenagakerjaan Republik
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
-                <!-- <table style="width: 100%; margin-top: 10px; border: none;">
+                <table style="width: 100%; margin-top: 10px; border: none;">
                         <tr>
                         <td style="width: 50%; border: none;"></td>
 
@@ -577,6 +580,7 @@
                             </div>
 
                             @if($ttd && $ttd->qr_path)
+                                <br><br>
                                 <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
                             @else
                                 <br><br><br>
@@ -588,7 +592,7 @@
 
                         </td>
                     </tr>
-                </table> -->
+                </table>
             </div>
         </div>
     </div>

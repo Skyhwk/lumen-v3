@@ -563,9 +563,15 @@ class OrderDetail extends Sector
     {
         return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
     }
+
     public function udaraDebu()
     {
         return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
+    }
+
+    public function dustFall()
+    {
+        return $this->hasMany(DustFallHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
     }
 
     // emisi isokinetik
@@ -573,6 +579,11 @@ class OrderDetail extends Sector
     public function isoHeader()
     {
         return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
+    }
+
+    public function lhps_hygene()
+    {
+        return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp');
     }
 
     // barangkali kepakai

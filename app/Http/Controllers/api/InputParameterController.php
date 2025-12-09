@@ -3963,10 +3963,11 @@ class InputParameterController extends Controller
 				if(count($fdl) > 0){
 					$data_udara['hasil9'] = $data_kalkulasi['hasil'];
 				}else{
-					$data_udara['hasil10'] = $data_kalkulasi['hasil'];
-					$data_udara['hasil11'] = $data_kalkulasi['hasil2'];
-					$data_udara['hasil13'] = $data_kalkulasi['hasil3'];
-					$data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+					$data_udara['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
+					$data_udara['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;
+					$data_udara['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
+					$data_udara['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
+					$data_udara['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
 				}
 				WsValueUdara::create($data_udara);
 
@@ -4075,10 +4076,11 @@ class InputParameterController extends Controller
 				$data_swab = array();
 				$data_swab['id_swab_header'] = $header->id;
 				$data_swab['no_sampel'] = $request->no_sample;
-				$data_swab['hasil10'] = $data_kalkulasi['hasil'];
-				$data_swab['hasil11'] = $data_kalkulasi['hasil2'];
-                $data_swab['hasil13'] = $data_kalkulasi['hasil3'];
-                $data_swab['hasil14'] = $data_kalkulasi['hasil4'];
+				$data_swab['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
+				$data_swab['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;
+                $data_swab['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
+                $data_swab['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
+                $data_swab['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
                 $data_swab['created_by'] = $this->karyawan;
 				WsValueUdara::create($data_swab);
 

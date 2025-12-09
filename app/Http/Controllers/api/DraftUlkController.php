@@ -321,7 +321,7 @@ class DraftUlkController extends Controller
         DB::beginTransaction();
         try {
             // === 1. Ambil header / buat baru ===
-            $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)
                 ->where('is_active', true)
                 ->first();
 

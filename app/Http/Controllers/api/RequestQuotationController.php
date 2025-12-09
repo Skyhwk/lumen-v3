@@ -2202,6 +2202,7 @@ class RequestQuotationController extends Controller
                 }
 
                 $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                    ->whereNull('nilai_pelunasan')
                     ->where('is_active', true)
                     ->get();
 
@@ -5151,6 +5152,7 @@ class RequestQuotationController extends Controller
 
                     if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                         $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                            ->whereNull('nilai_pelunasan')
                             ->where('is_active', true)
                             ->get();
 

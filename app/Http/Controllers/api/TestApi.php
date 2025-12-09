@@ -48,7 +48,7 @@ class TestApi extends Controller
             $pdfFile->nama_karyawan = $nama_perilis;
             $pdfFile->jabatan_karyawan = $jabatan_perilis;
             $pdfFile->create_by =$this->karyawan;
-            $pdfFile->save();
+            // $pdfFile->save();
 
            
             
@@ -67,10 +67,10 @@ class TestApi extends Controller
                     'jabatan_karyawan' => $pengesahan->jabatan_karyawan
                 ];
                 $file_qr = new GenerateQrDocumentLhp();
-                $pathQr = $file_qr->insert('LHP_ERGONOMI', $dataQr, $this->karyawan);
+                //$pathQr = $file_qr->insert('LHP_ERGONOMI', $dataQr, $this->karyawan);
                 
-                $pdfFile->file_qr = $pathQr;
-                $pdfFile->save();
+                //$pdfFile->file_qr = $pathQr;
+                // $pdfFile->save();
             }
            
             
@@ -1159,7 +1159,7 @@ class TestApi extends Controller
             $pdfLhp = $createPDF('lhp')[0]; 
             $pdfLhpDigital = $createPDF('lhp_digital')[0];
             $pdfFile->name_file = $createPDF('draft')[1];
-            $pdfFile->save();
+            //$pdfFile->save();
             return response($pdfDraft->Output('laporan.pdf', 'S'), 200, [
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',

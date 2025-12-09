@@ -77,13 +77,13 @@
                         <sup style="font-size: 5px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
                     <td class="pd-3-{{ $rowClass }}" width="37%" style="border-left: none; text-align: left;">
-                        {{ htmlspecialchars($keterangan) }}
+                        {{ $keterangan }}
                     </td>
                     <td class="pd-5-{{ $rowClass }}-center">
                         {!! $hasilUji !!}
                     </td>
                     <td class="pd-5-{{ $rowClass }}-center">
-                        {{ htmlspecialchars($bakuMutu) }}
+                        {{ $bakuMutu }}
                     </td>
                     <td class="pd-5-{{ $rowClass }}-center">
                         {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
