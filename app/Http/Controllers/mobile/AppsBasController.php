@@ -4316,13 +4316,6 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
-            ],
-            [
-                "parameter" => "Isopropil Alkohol",
-                "requiredCount" => 1,
-                "category" => "4-Udara",
-                "model" => DetailLingkunganKerja::class,
-                "model2" => DetailSenyawaVolatile::class
             ]
         ];
 
