@@ -50,7 +50,8 @@ class RekapOrderController extends Controller
                 order_detail.kontrak,
                 link_lhp.is_completed,
                 link_lhp.jumlah_lhp_rilis,
-                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
+                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min,
+                MAX(order_detail.tanggal_sampling) as tanggal_sampling_max
             ')
             ->where('order_detail.is_active', true);
 
@@ -130,7 +131,7 @@ class RekapOrderController extends Controller
         }
 
         // ORDER BY menggunakan nama alias yang benar
-        $rekapOrder->orderBy('tanggal_sampling_min', 'desc');
+        $rekapOrder->orderBy('tanggal_sampling_max', 'desc');
 
         return DataTables::of($rekapOrder)
             ->addColumn('cfr_list', function ($data) {
