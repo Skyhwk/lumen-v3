@@ -855,17 +855,17 @@ class DraftHygieneController extends Controller
                     $this->dispatch($job);
                 }
 
-                // $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
-                //     ->first();
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                    ->first();
 
-                // EmailLhpRilisHelpers::run([
-                //     'cfr'              => $data->no_lhp,
-                //     'no_order'         => $data->no_order,
-                //     'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
-                //     'nama_perusahaan'  => $data->nama_pelanggan,
-                //     'periode'          => $cekDetail->periode,
-                //     'karyawan'         => $this->karyawan
-                // ]);
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $data->no_lhp,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
             } else {
                 DB::rollBack();
                 return response()->json([
