@@ -432,263 +432,263 @@ class DraftHygieneController extends Controller
     //     }
     // }
 
-    public function handleDatadetail(Request $request)
-    {
-        try {
-            // $noSampel = explode(', ', $request->no_sampel);
+    // public function handleDatadetail(Request $request)
+    // {
+    //     try {
+    //         // $noSampel = explode(', ', $request->no_sampel);
 
-            // Ambil data LHP jika ada
-            $cek_lhp = LhpsHygieneSanitasiHeader::with('lhpsLingDetail', 'lhpsLingCustom')
-                ->where('no_lhp', $request->cfr)
-                ->first();
-            // dd($cek_lhp->is_many_sampel);
-            // ==============================
-            // CASE 1: Jika ada cek_lhp
-            // ==============================
-            if ($cek_lhp) {
-                $data_entry   = [];
-                $data_custom  = [];
-                $cek_regulasi = [];
+    //         // Ambil data LHP jika ada
+    //         $cek_lhp = LhpsHygieneSanitasiHeader::with('lhpsLingDetail', 'lhpsLingCustom')
+    //             ->where('no_lhp', $request->cfr)
+    //             ->first();
+    //         // dd($cek_lhp->is_many_sampel);
+    //         // ==============================
+    //         // CASE 1: Jika ada cek_lhp
+    //         // ==============================
+    //         if ($cek_lhp) {
+    //             $data_entry   = [];
+    //             $data_custom  = [];
+    //             $cek_regulasi = [];
 
-                // Ambil data detail dari LHP (existing entry)
-                foreach ($cek_lhp->lhpsLingDetail as $val) {
-                    // if($val->no_sampel == 'AARG012503/024')dd($val);
-                    // dd($val);
-                    $data_entry[] = [
-                        'id'                => $val->id,
-                        'parameter_lab'     => $val->parameter_lab,
-                        'no_sampel'         => $val->no_sampel,
-                        'akr'               => $val->akr,
-                        'parameter'         => $val->parameter,
-                        'satuan'            => $val->satuan,
-                        'nilai_persyaratan' => $val->baku_mutu ?? '-',
-                        'jenis_persyaratan' => $val->nama_header ?? '-',
-                        'hasil_uji'         => $val->hasil_uji,
-                        'methode'           => $val->methode,
-                        'durasi'            => $val->durasi,
-                        'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
-                        'penamaan_titik'    => $val->deskripsi_titik,
-                        'tanggal_sampling'  => $val->tanggal_sampling,
-                    ];
-                }
+    //             // Ambil data detail dari LHP (existing entry)
+    //             foreach ($cek_lhp->lhpsLingDetail as $val) {
+    //                 // if($val->no_sampel == 'AARG012503/024')dd($val);
+    //                 // dd($val);
+    //                 $data_entry[] = [
+    //                     'id'                => $val->id,
+    //                     'parameter_lab'     => $val->parameter_lab,
+    //                     'no_sampel'         => $val->no_sampel,
+    //                     'akr'               => $val->akr,
+    //                     'parameter'         => $val->parameter,
+    //                     'satuan'            => $val->satuan,
+    //                     'nilai_persyaratan' => $val->baku_mutu ?? '-',
+    //                     'jenis_persyaratan' => $val->nama_header ?? '-',
+    //                     'hasil_uji'         => $val->hasil_uji,
+    //                     'methode'           => $val->methode,
+    //                     'durasi'            => $val->durasi,
+    //                     'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
+    //                     'penamaan_titik'    => $val->deskripsi_titik,
+    //                     'tanggal_sampling'  => $val->tanggal_sampling,
+    //                 ];
+    //             }
 
-                // Ambil regulasi tambahan jika ada
-                if ($request->other_regulasi) {
-                    $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
-                        ->select('id', 'peraturan as regulasi')
-                        ->get()
-                        ->toArray();
-                }
+    //             // Ambil regulasi tambahan jika ada
+    //             if ($request->other_regulasi) {
+    //                 $cek_regulasi = MasterRegulasi::whereIn('id', $request->other_regulasi)
+    //                     ->select('id', 'peraturan as regulasi')
+    //                     ->get()
+    //                     ->toArray();
+    //             }
 
-                // Proses regulasi custom dari LHP
-                if (! empty($cek_lhp->lhpsLingDetail) && ! empty($cek_lhp->regulasi_custom)) {
-                    $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
+    //             // Proses regulasi custom dari LHP
+    //             if (! empty($cek_lhp->lhpsLingDetail) && ! empty($cek_lhp->regulasi_custom)) {
+    //                 $regulasi_custom = json_decode($cek_lhp->regulasi_custom, true);
 
-                    // Mapping id regulasi jika ada other_regulasi
-                    if (! empty($cek_regulasi)) {
-                        // Buat mapping regulasi => id
-                        $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
-                        // Cari regulasi yang belum ada id-nya
-                        $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
-                            $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
-                            if (isset($mapRegulasi[$regulasi_clean])) {
-                                $item['id'] = $mapRegulasi[$regulasi_clean];
-                            } else {
-                                // Cari id regulasi jika belum ada di mapping
-                                $regulasi_db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
-                                if ($regulasi_db) {
-                                    $item['id']                   = $regulasi_db->id;
-                                    $mapRegulasi[$regulasi_clean] = $regulasi_db->id;
-                                }
-                            }
-                            return $item;
-                        }, $regulasi_custom);
-                    }
-                    // Group custom berdasarkan page
-                    $groupedCustom = [];
-                    foreach ($cek_lhp->lhpsLingCustom as $val) {
-                        $groupedCustom[$val->page][] = $val;
-                    }
-                    // Isi data_custom
-                    // Urutkan regulasi_custom berdasarkan page
-                    usort($regulasi_custom, function ($a, $b) {
-                        return $a['page'] <=> $b['page'];
-                    });
-                    // Bentuk data_custom
-                    foreach ($regulasi_custom as $item) {
-                        // dd($item['page']);
-                        if (empty($item['page'])) {
-                            continue;
-                        }
+    //                 // Mapping id regulasi jika ada other_regulasi
+    //                 if (! empty($cek_regulasi)) {
+    //                     // Buat mapping regulasi => id
+    //                     $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
+    //                     // Cari regulasi yang belum ada id-nya
+    //                     $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
+    //                         $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
+    //                         if (isset($mapRegulasi[$regulasi_clean])) {
+    //                             $item['id'] = $mapRegulasi[$regulasi_clean];
+    //                         } else {
+    //                             // Cari id regulasi jika belum ada di mapping
+    //                             $regulasi_db = MasterRegulasi::where('peraturan', $regulasi_clean)->first();
+    //                             if ($regulasi_db) {
+    //                                 $item['id']                   = $regulasi_db->id;
+    //                                 $mapRegulasi[$regulasi_clean] = $regulasi_db->id;
+    //                             }
+    //                         }
+    //                         return $item;
+    //                     }, $regulasi_custom);
+    //                 }
+    //                 // Group custom berdasarkan page
+    //                 $groupedCustom = [];
+    //                 foreach ($cek_lhp->lhpsLingCustom as $val) {
+    //                     $groupedCustom[$val->page][] = $val;
+    //                 }
+    //                 // Isi data_custom
+    //                 // Urutkan regulasi_custom berdasarkan page
+    //                 usort($regulasi_custom, function ($a, $b) {
+    //                     return $a['page'] <=> $b['page'];
+    //                 });
+    //                 // Bentuk data_custom
+    //                 foreach ($regulasi_custom as $item) {
+    //                     // dd($item['page']);
+    //                     if (empty($item['page'])) {
+    //                         continue;
+    //                     }
 
-                        $id_regulasi = (string) "id_" . $item['id'] . '-' . $item['page'];
-                        $page        = $item['page'];
+    //                     $id_regulasi = (string) "id_" . $item['id'] . '-' . $item['page'];
+    //                     $page        = $item['page'];
 
-                        if (! empty($groupedCustom[$page])) {
-                            foreach ($groupedCustom[$page] as $val) {
-                                $data_custom[$id_regulasi][] = [
-                                    'id'                => $val->id,
-                                    'parameter_lab'     => $val->parameter_lab,
-                                    'no_sampel'         => $val->no_sampel,
-                                    'akr'               => $val->akr,
-                                    'parameter'         => $val->parameter,
-                                    'nilai_persyaratan' => $val->baku_mutu ?? '-',
-                                    'jenis_persyaratan' => $val->nama_header ?? '-',
-                                    'satuan'            => $val->satuan,
-                                    'hasil_uji'         => $val->hasil_uji,
-                                    'methode'           => $val->methode,
-                                    'durasi'            => $val->durasi,
-                                    'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
-                                    'penamaan_titik'    => $val->deskripsi_titik,
-                                    'tanggal_sampling'  => $val->tanggal_sampling,
-                                ];
-                            }
-                        }
-                    }
-                }
+    //                     if (! empty($groupedCustom[$page])) {
+    //                         foreach ($groupedCustom[$page] as $val) {
+    //                             $data_custom[$id_regulasi][] = [
+    //                                 'id'                => $val->id,
+    //                                 'parameter_lab'     => $val->parameter_lab,
+    //                                 'no_sampel'         => $val->no_sampel,
+    //                                 'akr'               => $val->akr,
+    //                                 'parameter'         => $val->parameter,
+    //                                 'nilai_persyaratan' => $val->baku_mutu ?? '-',
+    //                                 'jenis_persyaratan' => $val->nama_header ?? '-',
+    //                                 'satuan'            => $val->satuan,
+    //                                 'hasil_uji'         => $val->hasil_uji,
+    //                                 'methode'           => $val->methode,
+    //                                 'durasi'            => $val->durasi,
+    //                                 'status'            => $val->akr == 'ẍ' ? "BELUM AKREDITASI" : "AKREDITASI",
+    //                                 'penamaan_titik'    => $val->deskripsi_titik,
+    //                                 'tanggal_sampling'  => $val->tanggal_sampling,
+    //                             ];
+    //                         }
+    //                     }
+    //                 }
+    //             }
 
-                $defaultMethods = Parameter::where('is_active', true)
-                    ->where('id_kategori', 4)
-                    ->whereNotNull('method')
-                    ->pluck('method')
-                    ->unique()
-                    ->values()
-                    ->toArray();
+    //             $defaultMethods = Parameter::where('is_active', true)
+    //                 ->where('id_kategori', 4)
+    //                 ->whereNotNull('method')
+    //                 ->pluck('method')
+    //                 ->unique()
+    //                 ->values()
+    //                 ->toArray();
 
-                $data_entry = collect($data_entry)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc'],
-                    ['parameter', 'asc']
-                ])->values()->toArray();
+    //             $data_entry = collect($data_entry)->sortBy([
+    //                 ['tanggal_sampling', 'asc'],
+    //                 ['no_sampel', 'asc'],
+    //                 ['parameter', 'asc']
+    //             ])->values()->toArray();
 
-                $data_custom = collect($data_custom)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc'],
-                    ['parameter', 'asc']
-                ])->values()->toArray();
+    //             $data_custom = collect($data_custom)->sortBy([
+    //                 ['tanggal_sampling', 'asc'],
+    //                 ['no_sampel', 'asc'],
+    //                 ['parameter', 'asc']
+    //             ])->values()->toArray();
 
-                return response()->json([
-                    'status'             => true,
-                    'data'               => $data_entry,
-                    'next_page'          => $data_custom,
-                    'spesifikasi_method' => $defaultMethods,
-                    'many_no_sampel'     => $cek_lhp->is_many_sampel,
-                    'keterangan'         => [
-                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                        'ẍ Parameter belum terakreditasi.',
-                    ],
-                ], 201);
-            } else {
-                $mainData         = [];
-                $otherRegulations = [];
-                $methodsUsed      = [];
+    //             return response()->json([
+    //                 'status'             => true,
+    //                 'data'               => $data_entry,
+    //                 'next_page'          => $data_custom,
+    //                 'spesifikasi_method' => $defaultMethods,
+    //                 'many_no_sampel'     => $cek_lhp->is_many_sampel,
+    //                 'keterangan'         => [
+    //                     '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+    //                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+    //                     'ẍ Parameter belum terakreditasi.',
+    //                 ],
+    //             ], 201);
+    //         } else {
+    //             $mainData         = [];
+    //             $otherRegulations = [];
+    //             $methodsUsed      = [];
 
-                $validasi = OrderDetail::with([
-                    'udaraLingkungan',
-                    'udaraMicrobio',
-                    'udaraSubKontrak',
-                    'udaraDirect',
-                    'udaraPartikulat',
-                    'udaraDebu'
-                ])
-                    ->where('cfr', $request->cfr)
-                    ->get();
-                $manyNoSampel = count($validasi) > 1 ? true : false;
-                $listData = collect(); // <- PENTING: pakai collect
+    //             $validasi = OrderDetail::with([
+    //                 'udaraLingkungan',
+    //                 'udaraMicrobio',
+    //                 'udaraSubKontrak',
+    //                 'udaraDirect',
+    //                 'udaraPartikulat',
+    //                 'udaraDebu'
+    //             ])
+    //                 ->where('cfr', $request->cfr)
+    //                 ->get();
+    //             $manyNoSampel = count($validasi) > 1 ? true : false;
+    //             $listData = collect(); // <- PENTING: pakai collect
 
 
-                foreach ($validasi as $items) {
-                    $lingkungan = $items->udaraLingkungan;
-                    $microbio   = $items->udaraMicrobio;
-                    $subKontrak = $items->udaraSubKontrak;
-                    $direct     = $items->udaraDirect;
-                    $partikulat = $items->udaraPartikulat;
-                    $debu       = $items->udaraDebu;
+    //             foreach ($validasi as $items) {
+    //                 $lingkungan = $items->udaraLingkungan;
+    //                 $microbio   = $items->udaraMicrobio;
+    //                 $subKontrak = $items->udaraSubKontrak;
+    //                 $direct     = $items->udaraDirect;
+    //                 $partikulat = $items->udaraPartikulat;
+    //                 $debu       = $items->udaraDebu;
 
-                    $detail = collect()
-                        ->merge($lingkungan)
-                        ->merge($microbio)
-                        ->merge($subKontrak)
-                        ->merge($direct)
-                        ->merge($partikulat)
-                        ->merge($debu);
+    //                 $detail = collect()
+    //                     ->merge($lingkungan)
+    //                     ->merge($microbio)
+    //                     ->merge($subKontrak)
+    //                     ->merge($direct)
+    //                     ->merge($partikulat)
+    //                     ->merge($debu);
 
-                    // MERGE ke $listData, bukan replace
-                    $listData = $listData->merge(
-                        $detail->map(function ($item) {
-                            $newQuery = Parameter::where('nama_lab', $item->parameter)
-                                ->where('id_kategori', '4')
-                                ->where('is_active', true)
-                                ->first();
-                            // dump($item->no_sampel);
-                            return [
-                                'id'            => $item->id,
-                                'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
-                                'nama_lab'      => $item->parameter,
-                                'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
-                                'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
-                                'satuan'        => $newQuery->satuan,
-                                'method'        => $newQuery->method,
-                                'status'        => $newQuery->status,
-                                'no_sampel'     => $item->no_sampel,
-                                'durasi'        => $item->ws_udara->durasi ?? null,
-                                'ws_udara'      => collect($item->ws_udara)->toArray(),
-                                'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
-                            ];
-                        })
-                    );
-                }
-                // dd('---------------------------');
-                foreach ($listData as $item) {
-                    $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);
-                    $mainData[] = $entry;
+    //                 // MERGE ke $listData, bukan replace
+    //                 $listData = $listData->merge(
+    //                     $detail->map(function ($item) {
+    //                         $newQuery = Parameter::where('nama_lab', $item->parameter)
+    //                             ->where('id_kategori', '4')
+    //                             ->where('is_active', true)
+    //                             ->first();
+    //                         // dump($item->no_sampel);
+    //                         return [
+    //                             'id'            => $item->id,
+    //                             'parameter'     => $newQuery->nama_lhp ?? $newQuery->nama_regulasi,
+    //                             'nama_lab'      => $item->parameter,
+    //                             'penamaan_titik'    => $item->ws_udara->detailLingkunganKerja->keterangan ?? null,
+    //                             'tanggal_sampling'    => $item->order_detail->tanggal_sampling ?? null,
+    //                             'satuan'        => $newQuery->satuan,
+    //                             'method'        => $newQuery->method,
+    //                             'status'        => $newQuery->status,
+    //                             'no_sampel'     => $item->no_sampel,
+    //                             'durasi'        => $item->ws_udara->durasi ?? null,
+    //                             'ws_udara'      => collect($item->ws_udara)->toArray(),
+    //                             'ws_lingkungan' => collect($item->ws_value_linkungan)->toArray(),
+    //                         ];
+    //                     })
+    //                 );
+    //             }
+    //             // dd('---------------------------');
+    //             foreach ($listData as $item) {
+    //                 $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);
+    //                 $mainData[] = $entry;
 
-                    if ($request->other_regulasi) {
-                        foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi);
-                        }
-                    }
-                }
-                // Sort mainData
-                $mainData = collect($mainData)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc'],
-                    ['parameter', 'asc']
-                ])->values()->toArray();
+    //                 if ($request->other_regulasi) {
+    //                     foreach ($request->other_regulasi as $id_regulasi) {
+    //                         $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi);
+    //                     }
+    //                 }
+    //             }
+    //             // Sort mainData
+    //             $mainData = collect($mainData)->sortBy([
+    //                 ['tanggal_sampling', 'asc'],
+    //                 ['no_sampel', 'asc'],
+    //                 ['parameter', 'asc']
+    //             ])->values()->toArray();
 
-                // Sort otherRegulations
-                foreach ($otherRegulations as $id => $regulations) {
-                    $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
-                }
-                $methodsUsed    = array_values(array_unique($methodsUsed));
-                $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
-                    ->whereNotNull('method')->groupBy('method')
-                    ->pluck('method')->toArray();
-                $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
+    //             // Sort otherRegulations
+    //             foreach ($otherRegulations as $id => $regulations) {
+    //                 $otherRegulations[$id] = collect($regulations)->sortBy(fn($item) => mb_strtolower($item['parameter']))->values()->toArray();
+    //             }
+    //             $methodsUsed    = array_values(array_unique($methodsUsed));
+    //             $defaultMethods = Parameter::where('is_active', true)->where('id_kategori', 4)
+    //                 ->whereNotNull('method')->groupBy('method')
+    //                 ->pluck('method')->toArray();
+    //             $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
 
-                return response()->json([
-                    'status'             => true,
-                    'data'               => $mainData,
-                    'next_page'          => $otherRegulations,
-                    'spesifikasi_method' => $resultMethods,
-                    'many_no_sampel'     => $manyNoSampel,
-                    'keterangan'         => [
-                        '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
-                        '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
-                        'ẍ Parameter belum terakreditasi.',
-                    ],
-                ], 201);
-            }
-        } catch (\Throwable $e) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'line'    => $e->getLine(),
-                'file'    => $e->getFile(),
-            ], 500);
-        }
-    }
+    //             return response()->json([
+    //                 'status'             => true,
+    //                 'data'               => $mainData,
+    //                 'next_page'          => $otherRegulations,
+    //                 'spesifikasi_method' => $resultMethods,
+    //                 'many_no_sampel'     => $manyNoSampel,
+    //                 'keterangan'         => [
+    //                     '▲ Hasil Uji melampaui nilai ambang batas yang diperbolehkan.',
+    //                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
+    //                     'ẍ Parameter belum terakreditasi.',
+    //                 ],
+    //             ], 201);
+    //         }
+    //     } catch (\Throwable $e) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+    //             'line'    => $e->getLine(),
+    //             'file'    => $e->getFile(),
+    //         ], 500);
+    //     }
+    // }
 
     private function formatEntry($val, $regulasiId, &$methodsUsed = [])
     {
@@ -891,68 +891,68 @@ class DraftHygieneController extends Controller
     }
 
     // Amang
-    public function handleReject(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            // $noSampel = array_map('trim', explode(',', $request->noSampel));
-            $data = OrderDetail::where('cfr', $request->no_lhp)
-                // ->where('no_sampel', $request->no_sampel)
-                ->where('is_active', true)
-                ->get();
+    // public function handleReject(Request $request)
+    // {
+    //     DB::beginTransaction();
+    //     try {
+    //         // $noSampel = array_map('trim', explode(',', $request->noSampel));
+    //         $data = OrderDetail::where('cfr', $request->no_lhp)
+    //             // ->where('no_sampel', $request->no_sampel)
+    //             ->where('is_active', true)
+    //             ->get();
 
-            if ($data->isNotEmpty()) {
-                $lhps = LhpsHygieneSanitasiHeader::where('no_lhp', $request->no_lhp)
-                    ->where('is_active', true)
-                    ->first();
+    //         if ($data->isNotEmpty()) {
+    //             $lhps = LhpsHygieneSanitasiHeader::where('no_lhp', $request->no_lhp)
+    //                 ->where('is_active', true)
+    //                 ->first();
 
-                if ($lhps) {
-                    $lhpsHistory = $lhps->replicate();
-                    $lhpsHistory->setTable((new LhpsHygieneSanitasiHeaderHistory())->getTable());
-                    $lhpsHistory->created_at = $lhps->created_at;
-                    $lhpsHistory->updated_at = $lhps->updated_at;
-                    $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $lhpsHistory->deleted_by = $this->karyawan;
-                    $lhpsHistory->save();
+    //             if ($lhps) {
+    //                 $lhpsHistory = $lhps->replicate();
+    //                 $lhpsHistory->setTable((new LhpsHygieneSanitasiHeaderHistory())->getTable());
+    //                 $lhpsHistory->created_at = $lhps->created_at;
+    //                 $lhpsHistory->updated_at = $lhps->updated_at;
+    //                 $lhpsHistory->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+    //                 $lhpsHistory->deleted_by = $this->karyawan;
+    //                 $lhpsHistory->save();
 
-                    $oldDetails = LhpsLingDetail::where('id_header', $lhps->id)->get();
-                    foreach ($oldDetails as $detail) {
-                        $detailHistory = $detail->replicate();
-                        $detailHistory->setTable((new LhpsLingDetailHistory())->getTable());
-                        $detailHistory->created_by = $this->karyawan;
-                        $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                        $detailHistory->save();
-                    }
+    //                 $oldDetails = LhpsLingDetail::where('id_header', $lhps->id)->get();
+    //                 foreach ($oldDetails as $detail) {
+    //                     $detailHistory = $detail->replicate();
+    //                     $detailHistory->setTable((new LhpsLingDetailHistory())->getTable());
+    //                     $detailHistory->created_by = $this->karyawan;
+    //                     $detailHistory->created_at = Carbon::now()->format('Y-m-d H:i:s');
+    //                     $detailHistory->save();
+    //                 }
 
-                    foreach ($oldDetails as $detail) {
-                        $detail->delete();
-                    }
+    //                 foreach ($oldDetails as $detail) {
+    //                     $detail->delete();
+    //                 }
 
-                    $lhps->delete();
-                }
-            }
+    //                 $lhps->delete();
+    //             }
+    //         }
 
-            $update = OrderDetail::where('cfr', $request->no_lhp)
-                ->where('is_active', true)
-                ->update([
-                    'status' => 1
-                ]);
+    //         $update = OrderDetail::where('cfr', $request->no_lhp)
+    //             ->where('is_active', true)
+    //             ->update([
+    //                 'status' => 1
+    //             ]);
 
-            DB::commit();
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil direject',
-            ]);
-        } catch (\Exception $th) {
-            DB::rollBack();
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Terjadi kesalahan ' . $th->getMessage(),
-                'line'    => $th->getLine(),
-                'getFile' => $th->getFile(),
-            ]);
-        }
-    }
+    //         DB::commit();
+    //         return response()->json([
+    //             'status'  => 'success',
+    //             'message' => 'Data draft Udara Ambient no LHP ' . $request->no_lhp . ' berhasil direject',
+    //         ]);
+    //     } catch (\Exception $th) {
+    //         DB::rollBack();
+    //         return response()->json([
+    //             'status'  => 'error',
+    //             'message' => 'Terjadi kesalahan ' . $th->getMessage(),
+    //             'line'    => $th->getLine(),
+    //             'getFile' => $th->getFile(),
+    //         ]);
+    //     }
+    // }
 
     // Amang
     public function generate(Request $request)
