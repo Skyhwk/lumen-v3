@@ -165,6 +165,7 @@ class StatusOrderController extends Controller
                         
                     })
                     ->distinct();
+                   
                 }
                 
             }else if($filterStatusType === 'incompleted'){
@@ -202,33 +203,17 @@ class StatusOrderController extends Controller
                         });
                     });
                 }else{
-                    $data->leftJoin('link_lhp as lhp', function($join) {
-                        // Menggunakan nama tabel root Anda di klausa ON
-                        $join->on('request_quotation.no_document', '=', 'lhp.no_quotation'); 
-                    });
-                    // Filter untuk LHP: (LHP belum ada [NULL] ATAU LHP ada tapi is_completed = FALSE)
-                    $data->where(function($q) {
-                        $q->whereNull('lhp.no_quotation') // Data belum memiliki LHP
-                        ->orWhere('lhp.is_completed', false); // Data memiliki LHP tapi belum completed
-                    });
-                    // $data->whereDoesntHave('orderHeader.invoices', function ($q) {
-                    //     // Kriteria LUNAS: Invoice yang sudah lunas penuh
-                    //     $q->whereRaw('nilai_pelunasan >= nilai_tagihan');
-                    //     // Catatan: Jika ada 5 Invoice, dan 1 LUNAS, maka whereDoesntHave ini akan gagal.
-                    //     // Ini mengasumsikan kriteria "incompleted" adalah: "belum ada satupun Invoice yang lunas penuh".
-                    // });
-                    $data->join('order_header as oh', 'request_quotation.no_document', '=', 'oh.no_document')
-                    ->distinct();
-                    $data->join('invoice as i', function($join) { // Gunakan 'invoices' jika itu nama tabel yang benar
-                        $join->on('oh.no_order', '=', 'i.no_order');
-                        
-                        // 🚨 PERBAIKAN: Gunakan OR untuk mendefinisikan BELUM LUNAS
-                        $join->where(function($q) {
-                            $q->whereNull('i.nilai_pelunasan') // Kriteria 1: Belum ada pembayaran
-                            ->orWhereRaw('i.nilai_pelunasan < i.nilai_tagihan'); // Kriteria 2: Dibayar parsial
+                    $data->where(function ($query) {
+                        $query->whereDoesntHave('link_lhp', function ($q) {
+                            $q->where('is_completed', true); // TIDAK memiliki LHP COMPLETED
                         });
-                    })
-                    ->distinct();
+                        $query->orWhereHas('orderHeader.invoices', function ($q) {
+                            $q->where(function($q2) {
+                                $q2->whereNull('nilai_pelunasan') 
+                                ->orWhereRaw('nilai_pelunasan < nilai_tagihan');
+                            });
+                        });
+                    });
                 }
             }
             
