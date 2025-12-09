@@ -117,8 +117,8 @@ class LingkunganHidupO3_8J
         // dd($avg_pershift);
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
-            'flow' => array_sum($data->average_flow) / count($data->average_flow),
-            'durasi' => array_sum($data->durasi) / count($data->durasi),
+            'flow' => round(array_sum($data->average_flow) / count($data->average_flow),4),
+            'durasi' => round(array_sum($data->durasi) / count($data->durasi), 4),
             // 'durasi' => $waktu,
             'tekanan_u' => $data->tekanan,
             'suhu' => $data->suhu,
