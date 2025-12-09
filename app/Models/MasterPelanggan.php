@@ -20,6 +20,7 @@ class MasterPelanggan extends Sector
         'wilayah',
         'kategori_pelanggan',
         'sub_kategori',
+        'npwp',
         'bahan_pelanggan',
         'merk_pelanggan',
         'sales_penanggung_jawab',
