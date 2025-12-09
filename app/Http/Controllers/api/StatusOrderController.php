@@ -151,21 +151,22 @@ class StatusOrderController extends Controller
                     })
                     ->distinct();
                 }else{
+                    $data->join('order_header as oh', 'request_quotation.no_document', '=', 'oh.no_document')
+                        ->distinct()
+                        ->whereNotExists(function($query) {
+                            $query->select(DB::raw(1))
+                                ->from('invoice as i')
+                                ->whereColumn('i.no_order', '=', 'oh.no_order')
+                                ->where(function($q) {
+                                    $q->whereNull('i.nilai_pelunasan')  // Belum bayar
+                                        ->orWhereRaw('i.nilai_pelunasan < i.nilai_tagihan'); // Parsial
+                                });
+                        });
                     $data->join('link_lhp as lhp', function($join) {
                         $join->on('request_quotation.no_document', '=', 'lhp.no_quotation')
                             ->where('lhp.is_completed', true);
                     });
-                    $data->distinct();
-                    $data->join('order_header as oh', 'request_quotation.no_document', '=', 'oh.no_document')
-                    ->distinct();
-                    $data->join('invoice as i', function($join) {
-                        $join->on('oh.no_order', '=', 'i.no_order');
-                        $join->whereNotNull('i.nilai_pelunasan')
-                            ->whereRaw('i.nilai_pelunasan >= i.nilai_tagihan');
-                        
-                    })
-                    ->distinct();
-                   
+                    $data->whereHas('orderHeader.invoices');
                 }
                 
             }else if($filterStatusType === 'incompleted'){
