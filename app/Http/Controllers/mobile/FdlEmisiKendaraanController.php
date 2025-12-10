@@ -641,6 +641,12 @@ class FdlEmisiKendaraanController extends Controller
         return $safeName;
     }
 
+    public function delete(Request $request){
+        $data = DataLapanganEmisiKendaraan::where('id', $request->id)->delete();
+        $emisiOrder = DataLapanganEmisiOrder::where('id_fdl', $request->id)->delete();
+        return response()->json(['message' => 'Data Berhasil dihapus'], 200);
+    }
+
     protected function autoBlock()
     {
         $tgl = Carbon::now()->subDays(3);
