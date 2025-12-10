@@ -100,7 +100,7 @@ class BundledTemplateLhps
                     $bodi .= '<tr>
                         <td style="border: 1px dotted #000; padding: 5px; text-align: center;">' . $i . '</td>
                         <td style="border: 1px dotted #000; padding: 5px; text-align: left;">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                        <td style="border: 1px dotted #000; padding: 5px; text-align: center;">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                        <td style="border: 1px dotted #000; padding: 5px; text-align: center;">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                     foreach ($baku as $value) {
                         $bodi .= '<td style="border: 1px dotted #000; padding: 5px; text-align: center;">' . $value . '</td>';
                     }
@@ -170,7 +170,7 @@ class BundledTemplateLhps
                             $bodi .= '<tr>
                                     <td class="pd-5-solid-center">' . $i . '</td>
                                     <td class="pd-5-solid-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                    <td class="pd-5-solid-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                    <td class="pd-5-solid-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                             foreach ($baku as $key => $value) {
                                 $value = str_replace(' ', '', $value);
                                 $bodi .= '<td class="pd-5-solid-center">' . $value . '</td>';
@@ -182,7 +182,7 @@ class BundledTemplateLhps
                             $bodi .= '<tr>
                                     <td class="pd-5-dot-center">' . $i . '</td>
                                     <td class="pd-5-dot-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                    <td class="pd-5-dot-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                    <td class="pd-5-dot-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                             foreach ($baku as $key => $value) {
                                 $value = str_replace(' ', '', $value);
                                 $bodi .= '<td class="pd-5-dot-center">' . $value . '</td>';
@@ -474,7 +474,7 @@ class BundledTemplateLhps
                     $bodi .= '<tr>
                                     <td class="pd-5-solid-center">' . $i . '</td>
                                     <td class="pd-5-solid-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                    <td class="pd-5-solid-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                    <td class="pd-5-solid-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                     foreach (json_decode($v['baku_mutu']) as $kk => $vv) {
                         $bodi .= '<td class="pd-5-solid-center">' . $vv . '</td>';
                     }
@@ -485,7 +485,7 @@ class BundledTemplateLhps
                     $bodi .= '<tr>
                                     <td class="pd-5-dot-center">' . $i . '</td>
                                     <td class="pd-5-dot-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                    <td class="pd-5-dot-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                    <td class="pd-5-dot-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                     foreach (json_decode($v['baku_mutu']) as $kk => $vv) {
                         $bodi .= '<td class="pd-5-dot-center">' . $vv . '</td>';
                     }
@@ -553,7 +553,7 @@ class BundledTemplateLhps
                         $bodi .= '<tr>
                                 <td class="pd-5-solid-center">' . $i . '</td>
                                 <td class="pd-5-solid-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                <td class="pd-5-solid-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                <td class="pd-5-solid-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                         foreach (json_decode($v['baku_mutu']) as $kk => $vv) {
                             $bodi .= '<td class="pd-5-solid-center">' . $vv . '</td>';
                         }
@@ -564,7 +564,7 @@ class BundledTemplateLhps
                         $bodi .= '<tr>
                                 <td class="pd-5-dot-center">' . $i . '</td>
                                 <td class="pd-5-dot-left">' . $akr . '&nbsp;' . $v['parameter'] . '</td>
-                                <td class="pd-5-dot-center">' . str_replace('.', ',', $v['hasil_uji']) . '&nbsp;' . $v['attr'] . '</td>';
+                                <td class="pd-5-dot-center">' . $v['hasil_uji'] . '&nbsp;' . $v['attr'] . '</td>';
                         foreach (json_decode($v['baku_mutu']) as $kk => $vv) {
                             $bodi .= '<td class="pd-5-dot-center">' . $vv . '</td>';
                         }
