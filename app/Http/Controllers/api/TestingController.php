@@ -4631,4 +4631,15 @@ class TestingController extends Controller
             'data'  => $data
         ];
     }
+
+    public function moveInvoiceToGeneradteAndEmailed(Request $request) {
+        // dd(count($request->no_invoices));
+        Invoice::whereIn('no_invoice', $request->no_invoices)->update(['is_emailed' => true, 'is_generate' => true]);
+
+        return response()->json([
+            'message' => 'Success',
+            'total' => count($request->no_invoices)
+        ], 200);
+    
+    }
 }
