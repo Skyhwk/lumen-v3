@@ -104,24 +104,24 @@ class StatusOrderController extends Controller
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             if($mode == 'non_kontrak') {
                 if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
-                    $data->where('sales_id', $this->user_id);
+                    $data->where('request_quotation.sales_id', $this->user_id);
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
                     $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
                     array_push($bawahan, $this->user_id);
-                    $data->whereIn('sales_id', $bawahan);
+                    $data->whereIn('request_quotation.sales_id', $bawahan);
                 }
             }else if($mode == 'kontrak') {
                 $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
                 if ($jabatan == 24 || $jabatan == 86) { 
                     $data->whereHas('header', function ($q) {
-                        $q->where('sales_id', $this->user_id);
+                        $q->where('request_quotation_kontrak_H.sales_id', $this->user_id);
                     });
 
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
                     array_push($bawahan, $this->user_id);
 
                     $data->whereHas('header', function ($q) use ($bawahan) {
-                        $q->whereIn('sales_id', $bawahan);
+                        $q->whereIn('request_quotation_kontrak_H.sales_id', $bawahan);
                     });
                 }
             }
