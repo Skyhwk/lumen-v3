@@ -194,6 +194,7 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',
@@ -205,6 +206,7 @@ class MasterPelangganController extends Controller
                 $dataPelanggan['sales_penanggung_jawab'] = $sales->nama_lengkap;
                 
                 $dataPelanggan['nama_pelanggan'] = trim($dataPelanggan['nama_pelanggan']);
+                $dataPelanggan['npwp'] = trim($dataPelanggan['npwp']);
                 $dataPelanggan['id_cabang'] = $this->idcabang;
                 $dataPelanggan['updated_by'] = $this->karyawan;
                 $dataPelanggan['updated_at'] = $timestamp;
@@ -359,6 +361,7 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',

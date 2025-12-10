@@ -35,6 +35,11 @@ class FdlErgonomiController extends Controller
                 ->filterColumn('method', function ($query, $keyword) {
                     $query->where('method', 'like', '%' . $keyword . '%');
                 })
+                ->filterColumn('detail.tanggal_sampling', function ($query, $keyword) {
+                    $query->whereHas('detail', function ($q) use ($keyword) {
+                        $q->where('tanggal_sampling', 'like', '%' . $keyword . '%');
+                    });
+                })
                 ->filterColumn('no_sampel', function ($query, $keyword) {
                     $query->where('no_sampel', 'like', '%' . $keyword . '%');
                 })
