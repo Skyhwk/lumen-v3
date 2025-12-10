@@ -77,47 +77,6 @@
                         </td>
                     </tr>
 
-                    <tr>
-                        <td class="custom5" width="120">Spesifikasi Metode</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                            @foreach ($paramUnik as $idx => $p)
-                                @if ($idx > 0)
-                                    <br>
-                                @endif
-
-                                @php
-                                    $methode = '-';
-                                    foreach ($custom as $row) {
-                                        if ($row['parameter'] === $p) {
-                                            $methode = $row['methode'];
-                                            break;
-                                        }
-                                    }
-                                @endphp
-
-                                {{ $p }} : {{ $methode }}
-                            @endforeach
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="custom5" width="120">Periode Analisa</td>
-                        <td class="custom5" width="12">:</td>
-                        <td class="custom5">
-                            @if ($periode2)
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
-                            @elseif ($periode1)
-                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
-                            @else
-                                -
-                            @endif
-                        </td>
-                    </tr>
-
-
-
-                    {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
 
                     <tr>
                         <td class="custom5" width="120">Spesifikasi Metode</td>
