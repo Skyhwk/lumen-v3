@@ -220,9 +220,9 @@ class DraftSwabTesController extends Controller
                 // mapping setiap swabData terhadap regulasi ini
                 $tmpData = $merge->map(function ($val) use ($id_regulasi, $nama_regulasi, $getSatuan) {
                     $keterangan        = OrderDetail::where('no_sampel', $val->no_sampel)->first()->keterangan_1 ?? null;
-                    $parameterLab      = Parameter::where('id', $val->id_parameter)->first()->nama_lab ?? null;
-                    $parameterRegulasi = Parameter::where('id', $val->id_parameter)->first()->nama_regulasi ?? null;
-                    $parameterLhp      = Parameter::where('id', $val->id_parameter)->first()->nama_lhp ?? null;
+                    $parameterLab      = Parameter::where('nama_lab', $val->parameter)->first()->nama_lab ?? null;
+                    $parameterRegulasi = Parameter::where('nama_lab', $val->parameter)->first()->nama_regulasi ?? null;
+                    $parameterLhp      = Parameter::where('nama_lab', $val->parameter)->first()->nama_lhp ?? null;
 
                     $ws       = $val->ws_udara ?? $val->ws_value_linkungan ?? null;
                     $hasil    = $ws->toArray();

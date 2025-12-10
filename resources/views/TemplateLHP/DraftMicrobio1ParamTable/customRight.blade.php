@@ -1,48 +1,18 @@
 @php
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
+    use App\Models\LhpsMicrobiologiDetail;
 
-    $detailData = is_object($detail) && method_exists($detail, 'toArray') ? $detail->toArray() : (array) $detail;
+    $custom = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', $page)->get();
+
+    $detailData = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
 
     $detailData = collect($detailData)->map(fn($r) => (array) $r);
 
-    if (!empty($header->metode_sampling)) {
-        $metodeSampling = is_array($header->metode_sampling)
-            ? $header->metode_sampling
-            : json_decode($header->metode_sampling, true) ?? [];
-    } else {
-        $metodeSampling = [];
-    }
-    if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
-        if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
-            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
-        } elseif ($header->tanggal_sampling_akhir == null) {
-            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal);
-        } else {
-            $tanggalSampling =
-                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_awal) .
-                ' - ' .
-                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling_akhir);
-        }
-    } elseif ($header->tanggal_sampling || $header->tanggal_terima) {
-        if ($header->tanggal_sampling == $header->tanggal_terima) {
-            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-        } elseif ($header->tanggal_terima != null) {
-            $tanggalSampling =
-                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling) .
-                ' - ' .
-                \App\Helpers\Helper::tanggal_indonesia($header->tanggal_terima);
-        } else {
-            $tanggalSampling = \App\Helpers\Helper::tanggal_indonesia($header->tanggal_sampling);
-        }
-    } else {
-        $tanggalSampling = '-';
-    }
+    $paramUnik = $detailData->pluck('parameter')->filter()->unique()->values();
 
     $periode1 = $header->tanggal_analisa_awal ?? '';
     $periode2 = $header->tanggal_analisa_akhir ?? '';
-
-    $keterangan = $detailData->pluck('keterangan')->first() ?? '';
 
 @endphp
 
@@ -56,13 +26,11 @@
                 <table style="border-collapse: collapse; text-align: center;" width="100%">
                     <tr>
                         <td class="custom">No. LHP</td>
-                        <td class="custom" width="33%">No. SAMPEL</td>
                         <td class="custom">JENIS SAMPEL</td>
                     </tr>
                     <tr>
                         <td class="custom">{{ $header->no_lhp }}</td>
-                        <td class="custom" width="33%">{{ $header->no_sampel }}</td>
-                        <td class="custom">Swab Lingkungan Kerja</td>
+                        <td class="custom">Lingkungan Kerja</td>
                     </tr>
                 </table>
             </td>
@@ -110,31 +78,78 @@
                     </tr>
 
                     <tr>
-                        <td class="custom5" width="120">Tanggal Sampling</td>
+                        <td class="custom5" width="120">Spesifikasi Metode</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $tanggalSampling ?? '-' }}</td>
-                    </tr>
+                        <td class="custom5">
+                            @foreach ($paramUnik as $idx => $p)
+                                @if ($idx > 0)
+                                    <br>
+                                @endif
 
-                    {{-- keterangan (bisa gabung semua area/keterangan) --}}
+                                @php
+                                    $methode = '-';
+                                    foreach ($custom as $row) {
+                                        if ($row['parameter'] === $p) {
+                                            $methode = $row['methode'];
+                                            break;
+                                        }
+                                    }
+                                @endphp
+
+                                {{ $p }} : {{ $methode }}
+                            @endforeach
+                        </td>
+                    </tr>
                     <tr>
-                        <td class="custom5" width="120">Keterangan</td>
+                        <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $keterangan ?? '-' }}</td>
+                        <td class="custom5">
+                            @if ($periode2)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }} -
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode2) }}
+                            @elseif ($periode1)
+                                {{ \App\Helpers\Helper::tanggal_indonesia($periode1) }}
+                            @else
+                                -
+                            @endif
+                        </td>
                     </tr>
 
-                    {{-- area swab (kalau mau dipisah) --}}
-                    @foreach (json_decode($header->deskripsi_titik) as $i => $y)
-                        @if ($i === 0)
-                            <tr>
-                                <td class="custom5" width="120">Area Swab</td>
-                                <td class="custom5" width="12">:</td>
-                                <td class="custom5">
-                                    {{ $y }}
-                                </td>
-                            </tr>
-                        @endif
-                    @endforeach
 
+
+                    {{-- KONDISI 2: banyak no sampel, 1 parameter --}}
+
+                    <tr>
+                        <td class="custom5" width="120">Spesifikasi Metode</td>
+                        <td class="custom5" width="12">:</td>
+                        <td class="custom5">
+                            @foreach ($paramUnik as $idx => $p)
+                                @if ($idx > 0)
+                                    <br>
+                                @endif
+
+                                @php
+                                    $methode = '-';
+                                    foreach ($custom as $row) {
+                                        if ($row['parameter'] === $p) {
+                                            $methode = $row['methode'];
+                                            $methode_suhu = $row['methode_suhu'];
+                                            $methode_kelembapan = $row['methode_kelembapan'];
+                                            break;
+                                        }
+                                    }
+                                @endphp
+
+                                {{ $p }} : {{ $methode }}
+                                <br>
+                                Suhu : {{ $methode_suhu }}
+                                <br>
+                                Kelembapan : {{ $methode_kelembapan }}
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- periode analisa --}}
                     <tr>
                         <td class="custom5" width="120">Periode Analisa</td>
                         <td class="custom5" width="12">:</td>
@@ -157,7 +172,7 @@
                 @if (!empty($header->regulasi))
 
                     @foreach (json_decode($header->regulasi) as $i => $y)
-                        @if ($i === 0)
+                        @if ($i === $page - 1)
                             <table style="padding-top: 10px;" width="100%">
                                 <tr>
                                     <td class="custom5" colspan="3"><strong>{{ explode('-', $y)[1] }}</strong></td>
@@ -181,10 +196,11 @@
                     @endif
                 @endif
 
+
                 @php
                     $temptArrayPush = [];
-                    if (!empty($detail)) {
-                        foreach ($detail as $v) {
+                    if (!empty($custom)) {
+                        foreach ($custom as $v) {
                             if (!empty($v['akr']) && !in_array($v['akr'], $temptArrayPush)) {
                                 $temptArrayPush[] = $v['akr'];
                             }
