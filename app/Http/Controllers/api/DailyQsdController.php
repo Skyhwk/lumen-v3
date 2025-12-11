@@ -231,4 +231,112 @@ class DailyQsdController extends Controller
             })
             ->make(true);
     }
+
+    public function getRevenuesSummary(Request $request)
+    {
+        $today = Carbon::now();
+        $currentYear = $today->year;
+        $currentMonth = $today->format('Y-m');
+        $currentDate = $today->format('Y-m-d');
+
+        // Single optimized query untuk semua periode
+        $revenues = DB::table('order_detail as od')
+            ->selectRaw('
+                -- This Year
+                SUM(CASE 
+                    WHEN YEAR(od.tanggal_sampling) = ? 
+                    AND (
+                        (od.kontrak != "C" AND rq.id IS NOT NULL)
+                        OR 
+                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND LEFT(rqkd.periode_kontrak, 4) = ?)
+                    )
+                    THEN COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
+                    ) - COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
+                    ) + COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
+                    )
+                    ELSE 0 
+                END) as this_year_revenue,
+                
+                -- This Month
+                SUM(CASE 
+                    WHEN DATE_FORMAT(od.tanggal_sampling, "%Y-%m") = ? 
+                    AND (
+                        (od.kontrak != "C" AND rq.id IS NOT NULL)
+                        OR 
+                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND rqkd.periode_kontrak = ?)
+                    )
+                    THEN COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
+                    ) - COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
+                    ) + COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
+                    )
+                    ELSE 0 
+                END) as this_month_revenue,
+                
+                -- Today
+                SUM(CASE 
+                    WHEN DATE(od.tanggal_sampling) = ? 
+                    AND (
+                        (od.kontrak != "C" AND rq.id IS NOT NULL)
+                        OR 
+                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND rqkd.periode_kontrak = DATE_FORMAT(?, "%Y-%m"))
+                    )
+                    THEN COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
+                    ) - COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
+                    ) + COALESCE(
+                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
+                    )
+                    ELSE 0 
+                END) as today_revenue
+            ', [
+                $currentYear, $currentYear,  // For year filter
+                $currentMonth, $currentMonth, // For month filter  
+                $currentDate, $currentDate    // For date filter
+            ])
+            ->leftJoin('request_quotation as rq', function($join) {
+                $join->on('od.no_quotation', '=', 'rq.no_document')
+                    ->where('od.kontrak', '!=', 'C')
+                    ->where('rq.is_active', 1);
+            })
+            ->leftJoin('request_quotation_kontrak_H as rqkh', function($join) {
+                $join->on('od.no_quotation', '=', 'rqkh.no_document')
+                    ->where('rqkh.is_active', 1)
+                    ->where('od.kontrak', '=', 'C');
+            })
+            ->leftJoin('request_quotation_kontrak_D as rqkd', function($join) {
+                $join->on('rqkh.id', '=', 'rqkd.id_request_quotation_kontrak_H')
+                    ->whereColumn('od.periode', '=', 'rqkd.periode_kontrak');
+            })
+            ->where('od.is_active', true)
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'year' => [
+                    'period' => $currentYear,
+                    'revenue' => (float) ($revenues->this_year_revenue ?? 0),
+                    'formatted' => 'Rp ' . number_format($revenues->this_year_revenue ?? 0, 0, ',', '.')
+                ],
+                'month' => [
+                    'period' => $currentMonth,
+                    'revenue' => (float) ($revenues->this_month_revenue ?? 0),
+                    'formatted' => 'Rp ' . number_format($revenues->this_month_revenue ?? 0, 0, ',', '.')
+                ],
+                'day' => [
+                    'period' => $currentDate,
+                    'revenue' => (float) ($revenues->today_revenue ?? 0),
+                    'formatted' => 'Rp ' . number_format($revenues->today_revenue ?? 0, 0, ',', '.')
+                ]
+            ],
+            'timestamp' => $today->toDateTimeString()
+        ]);
+    }
 }
