@@ -482,7 +482,7 @@ class DraftAirController extends Controller
                     ->values()
                     ->toArray();
                 
-                $defaultMethods = array_push($defaultMethods, '-');
+                array_push($defaultMethods, '-');
 
                 return response()->json([
                     'status' => true,
@@ -559,9 +559,8 @@ class DraftAirController extends Controller
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
 
-                $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
-
-                $resultMethods = array_push($resultMethods, '-');
+                $resultMethods = array_unique(array_merge($methodsUsed, $defaultMethods));
+                array_push($resultMethods, '-');
 
                 return response()->json([
                     'status' => true,
