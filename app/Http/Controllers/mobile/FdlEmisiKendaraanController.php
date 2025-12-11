@@ -172,7 +172,6 @@ class FdlEmisiKendaraanController extends Controller
         DB::beginTransaction();
         try {
             if (isset($request->kode_qr) && $request->kode_qr != null) {
-                
                 $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', trim($request->no_sampel))->where('is_active',true)->first();
                 if($fdlKendaraan){
                     return response()->json([
@@ -184,6 +183,13 @@ class FdlEmisiKendaraanController extends Controller
                     : null;
 
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
+                
+                if(!$cek_qr){
+                    return response()->json([
+                        'message'=>'Qr Code tidak ditemukan'
+                    ]);
+                }
+
                 if ($cek_qr->id_kendaraan != null) {
                     $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
                     $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)', '116-Emisi Kendaraan (Gas)'))->orderBy('id', 'DESC')->first();
@@ -344,7 +350,6 @@ class FdlEmisiKendaraanController extends Controller
                             if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
                             if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                         }
-
                         $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
                         if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
                             $data_kendaraan = new MasterKendaraan;
