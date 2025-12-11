@@ -76,7 +76,7 @@
                         @endphp
                         <tr>
                             <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $number }}</td>
-                            <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">
+                            <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
                                 {!! $akr !!}&nbsp;
                                 {!! $isManyNoSampel 
                                     ? '<sup>'.$v['no_sampel'].'</sup> '.$v['deskripsi_titik'] 
