@@ -5,6 +5,8 @@ namespace App\Http\Controllers\api;
 use App\Models\TicketSampling;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
 use App\Services\GetAtasan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +69,8 @@ class TicketSamplingController extends Controller
         $allType = [
             "perubahan Jadwal",
             "perubahan Team",
-            "perubahan Kategori"
+            "perubahan Kategori",
+            "Split Jadwal"
         ];
 
         return response()->json([
@@ -440,6 +443,9 @@ class TicketSamplingController extends Controller
             }
 
             $data->status = 'WAITING PROCESS';
+            $data->no_quotation = $request->no_quotation;
+            $data->periode_kontrak = $request->periode_kontrak ?? null;
+            $data->type_quotation = $request->type_quotation;
             $data->kategori = $request->kategori;
 
             if($this->grade == 'MANAGER' && $data->kategori == 'PERUBAHAN_DATA') {
@@ -455,20 +461,20 @@ class TicketSamplingController extends Controller
                 ->pluck('id')
                 ->toArray();
 
-            Notification::whereIn('id', $user_Sampling)
-                ->title('Ticket Sampling !')
-                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-                ->url('/ticket-sampling')
-                ->send();
+            // Notification::whereIn('id', $user_Sampling)
+            //     ->title('Ticket Sampling !')
+            //     ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+            //     ->url('/ticket-sampling')
+            //     ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
 
             $isPerubahanData = $data->kategori == 'PERUBAHAN_DATA';
-            Notification::whereIn('id', $getAtasan)
-                ->title('Ticket Sampling !')
-                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-                ->url('/ticket-sampling')
-                ->send();
+            // Notification::whereIn('id', $getAtasan)
+            //     ->title('Ticket Sampling !')
+            //     ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
+            //     ->url('/ticket-sampling')
+            //     ->send();
 
             DB::commit();
             return response()->json([
@@ -529,4 +535,32 @@ class TicketSamplingController extends Controller
             ], 500);
         }
     }
+
+    public function getQuotation(Request $request) 
+    {
+        $search = $request->search ?? '';
+
+        if ($request->type_quot == 'kontrak') {
+            $data = QuotationKontrakH::with('detail')->select('no_document', 'id')
+                ->where('is_active', true)
+                ->where('no_document', 'like', '%' . $search . '%')
+                ->limit(20)
+                ->get();
+        } else {
+            $data = QuotationNonKontrak::select('no_document', 'id')
+                ->where('no_document', 'like', '%' . $search . '%')
+                ->where('is_active', true)
+                ->limit(20)
+                ->get();
+        }
+
+        return response()->json([
+            'results' => $data->map(fn($v) => [
+                'id' => $v->no_document,
+                'text' => $v->no_document,
+                'periode' => $v->detail ? $v->detail->pluck('periode_kontrak') : [],
+            ])
+        ], 200);
+    }
+
 }
