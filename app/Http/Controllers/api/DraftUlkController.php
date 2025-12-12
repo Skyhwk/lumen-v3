@@ -190,8 +190,9 @@ class DraftUlkController extends Controller
             $lapanganLing = DetailLingkunganKerja::whereIn('no_sampel', $noSampelList)->get();
             $lapanganDirect = DataLapanganDirectLain::whereIn('no_sampel', $noSampelList)->get();
             $debuPersonal = DataLapanganDebuPersonal::whereIn('no_sampel', $noSampelList)->get();
+            $lapanganSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $noSampelList)->get();
 
-            $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal);
+            $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa);
             // 3. Hitung min/max created_at
             $minDate = null;
             $maxDate = null;
