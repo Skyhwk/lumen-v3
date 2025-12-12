@@ -28,22 +28,34 @@ class HoldHpController extends Controller
 
     public function getListOrder(Request $request)
     {
-        $listData = OrderHeader::with(['holdHp' => function ($query) {
-            $query->where('is_hold', 0);
-        }])
+        $listData = OrderHeader::with('orderDetail')
             ->select(['id', 'no_order', 'nama_perusahaan', 'konsultan'])
-            ->where(function ($query) use ($request) {
-                $query->where('no_order', 'LIKE', "%{$request->term}%")
-                    ->orWhere('nama_perusahaan', 'LIKE', "%{$request->term}%");
+            ->where('no_order', 'like', "%{$request->term}%")
+            // ->where(function ($query) {
+            //     $query->whereDoesntHave('holdHp') // belum punya holdHp
+            //         ->orWhereHas('holdHp', function ($q) {
+            //             $q->where('is_hold', 0); // punya tapi masih 0
+            //         });
+            // })
+            ->limit(20)
+            ->get()
+            ->map(function ($item) {
+                $holdHp = HoldHp::where('no_order', $item->no_order);
+                if ($holdHp->exists()) {
+                    $listPeriode = $holdHp->pluck('periode')->filter()->values()->toArray();
+                    if (count($listPeriode) > 0) {
+                        $filteredDetail = $item->orderDetail->filter(fn($detail) => !in_array($detail->periode, $listPeriode))->values();
+                        $item->setRelation('order_detail', $filteredDetail);
+                        return $item->makeHidden(['id']);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return $item->makeHidden(['id']);
+                }
             })
-            ->where(function ($query) {
-                $query->whereDoesntHave('holdHp') // belum punya holdHp
-                    ->orWhereHas('holdHp', function ($q) {
-                        $q->where('is_hold', 0); // punya tapi masih 0
-                    });
-            })
-            ->take(20)
-            ->get();
+            ->filter()
+            ->values();
 
         return response()->json($listData, 200);
     }
@@ -66,8 +78,24 @@ class HoldHpController extends Controller
                     ->first();
 
                 $periode = $quotation
-                    ? $quotation->detail->pluck('periode_kontrak')->unique()->toArray()
-                    : [];
+                    ? collect($quotation->detail->pluck('periode_kontrak')->unique()->toArray())
+                    : collect();
+
+                $holdHp = HoldHp::where('no_order', $request->no_order);
+                if ($holdHp->exists()) {
+                    $listPeriode = $holdHp->pluck('periode')->filter()->values()->toArray();
+                    if (count($listPeriode) > 0) {
+
+                        // LANGSUNG hapus dari $periode
+                        $periode = $periode
+                            ->reject(fn($p) => in_array($p, $listPeriode))
+                            ->values();
+                    } else {
+                        return null;
+                    }
+                }
+
+                $data->detail_kontrak = $quotation->detail;
             }
         }
 

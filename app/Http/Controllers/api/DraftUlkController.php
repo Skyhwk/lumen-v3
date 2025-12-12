@@ -34,6 +34,7 @@ use App\Models\DataLapanganDirectLain;
 use App\Models\DataLapanganLingkunganHidup;
 use App\Models\DataLapanganLingkunganKerja;
 use App\Models\DataLapanganDebuPersonal;
+use App\Models\DataLapanganPartikulatMeter;
 use App\Models\DetailLingkunganKerja;
 use App\Models\ParameterFdl;
 use Carbon\Carbon;
@@ -191,8 +192,9 @@ class DraftUlkController extends Controller
             $lapanganDirect = DataLapanganDirectLain::whereIn('no_sampel', $noSampelList)->get();
             $debuPersonal = DataLapanganDebuPersonal::whereIn('no_sampel', $noSampelList)->get();
             $lapanganSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $noSampelList)->get();
-
-            $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa);
+            $partikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $noSampelList)->get();
+            $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa)->merge($partikulat);
+            
             // 3. Hitung min/max created_at
             $minDate = null;
             $maxDate = null;
