@@ -1,10 +1,13 @@
 <?php
+
 namespace App\Http\Controllers\api;
 
 //models
 
 use App\Helpers\EmailLhpRilisHelpers;
-use App\Helpers\HelperSatuan;use App\Http\Controllers\Controller;use App\Jobs\CombineLHPJob;
+use App\Helpers\HelperSatuan;
+use App\Http\Controllers\Controller;
+use App\Jobs\CombineLHPJob;
 use App\Models\EmisiCerobongHeader;
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
@@ -48,7 +51,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
     public function index(Request $request)
     {
         $data1 = OrderDetail::with('lhps_emisi', 'orderHeader', 'lhps_emisi_c', 'dataLapanganEmisiCerobong')
-        // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
+            // ->select('cfr', 'no_order', 'nama_perusahaan', 'no_quotation', 'kategori_3', 'kategori_2', 'tanggal_sampling', 'tanggal_terima', DB::raw('group_concat(no_sampel) as no_sampel'))
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('status', 2)
@@ -107,6 +110,13 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                     ];
                 })->values()->toArray();
 
+                $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
+                    ->orderByDesc('berlaku_mulai')
+                    ->first();
+
+                $nama_perilis = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
+                $jabatan_perilis = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
+
                 $header->id_kategori_2    = $request->category2 ?: null;
                 $header->id_kategori_3    = $request->category ?: null;
                 $header->kategori         = $request->kategori ?: null;
@@ -130,8 +140,9 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 $header->tanggal_terima   = $request->tanggal_terima ?: null;
                 $header->tanggal_tugas    = $request->tanggal_tugas ?: null;
                 $header->periode_analisa  = $request->periode_analisa ?: null;
-                $header->nama_karyawan    = 'Abidah Walfathiyyah';
-                $header->jabatan_karyawan = 'Technical Control Supervisor';
+                $header->nama_karyawan    = $nama_perilis;
+                $header->jabatan_karyawan = $jabatan_perilis;
+                $header->header_table     = $request->header_table ? $request->header_table : null;
                 $header->keterangan       = $request->keterangan ? json_encode($request->keterangan) : null;
                 $header->deskripsi_titik  = $request->penamaan_titik ?: null;
                 $header->titik_koordinat  = $request->titik_koordinat ?: null;
@@ -596,8 +607,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'baku_mutu'     => $val->baku_mutu->baku_mutu ?? '-',
             'akr'           => (
                 ! empty($bakumutu)
-                    ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
-                    : 'ẍ'
+                ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ')
+                : 'ẍ'
             ),
         ];
 
@@ -636,7 +647,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                 if (! empty($nilai)) {
                     break;
                 }
-
             }
 
             $nilai = $nilai ?? '-';
@@ -646,7 +656,6 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $nilai = $ws[$hasilKey] ?? $ws[$hasilKey] ?? '-';
         }
         return $nilai;
-
     }
     private function getKoreksi($val, $satuan)
     {
@@ -676,12 +685,11 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $nilai = $ws[$fKoreksiKey] ?? $ws[$fKoreksiKey] ?? '-';
         }
 
-        if($nilai == '-'){ 
+        if ($nilai == '-') {
             $nilai = $ws['nil_koreksi'] ?? '-';
         }
 
         return $nilai;
-
     }
 
     public function handleReject(Request $request)
