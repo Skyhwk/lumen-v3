@@ -454,11 +454,13 @@ class FdlLingkunganHidupController extends Controller
                             ];
                         }
                     } else if (str_contains($a, 'Dustfall')) {
+                        // dd($request->diameter_botol[$a]);
                         if ($request->keterangan_alat[$a] != '') {
                             if($request->keterangan_alat[$a] == 'pemasangan_alat'){
                                 $pengukuran = [
                                     'keterangan' => $request->keterangan_alat[$a] ?? null,
                                     'tanggal_pemasangan' => $request->tanggal_pemasangan[$a] ?? null,
+                                    'diameter_botol' => $request->diameter_botol[$a] . ' cm' ?? null,
                                     'luas_botol' => ($request->luas_botol[$a] ?? null) ? $request->luas_botol[$a] . ' m2' : null,
                                 ];
                             }else{
@@ -760,7 +762,7 @@ class FdlLingkunganHidupController extends Controller
             $no_sampel = strtoupper(trim($header->no_sampel));
             DetailLingkunganHidup::where('no_sampel', $no_sampel)->delete();
 
-            $this->resultx = "Data Sampling FDL Lingkungan Hidup Dengan No Sample $no_sampel berhasil disimpan oleh $this->karyawan";
+            $this->resultx = "Data Sampling FDL Lingkungan Hidup Dengan No Sample $no_sampel berhasil hapus oleh $this->karyawan";
 
             $header->delete();
 
