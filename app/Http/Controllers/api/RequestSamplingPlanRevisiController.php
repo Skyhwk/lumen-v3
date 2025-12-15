@@ -253,4 +253,17 @@ class RequestSamplingPlanRevisiController extends Controller
             "data" => $chekNoQty ? true : false
         ], 200);
     }
+
+    public function getStatusSampling(Request $request)
+    {
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
 }
