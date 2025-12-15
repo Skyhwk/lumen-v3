@@ -61,8 +61,11 @@ class StatusOrderController extends Controller
                 if ($jabatan == 24 || $jabatan == 86) {
                     $data->where('sales_id', $this->user_id);
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
-                    $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
-                    $bawahan[] = $this->user_id;
+                    // $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
+                    // $bawahan[] = $this->user_id;
+
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
                     $data->whereIn('sales_id', $bawahan);
                 }
 
@@ -97,7 +100,9 @@ class StatusOrderController extends Controller
                         $q->where('sales_id', $this->user_id);
                     });
                 } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
-                    $bawahan[] = $this->user_id;
+                    // $bawahan[] = $this->user_id;
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
                     $data->whereHas('header', function ($q) use ($bawahan) {
                         $q->whereIn('sales_id', $bawahan);
                     });
