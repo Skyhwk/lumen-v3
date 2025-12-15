@@ -97,6 +97,12 @@ class LingkunganHidupH2S
             $C1 = '<0.0022';
         if (floatval($C2) < 0.0010)
             $C2 = '<0.0010';
+        if (floatval($C14) < 0.0010)
+            $C14 = '<0.0010';
+        if (floatval($C15) < 1.39)
+            $C15 = '<1.39';
+        if (floatval($C16) < 0.0022)
+            $C16 = '<0.0022';
 
         $satuan = 'mg/Nm3';
 
