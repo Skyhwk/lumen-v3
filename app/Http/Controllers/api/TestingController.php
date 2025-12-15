@@ -90,7 +90,56 @@ class TestingController extends Controller
 
             switch ($request->menu) {
                 case 'this':
-                    dd($this);
+                    $cek = DB::table('pic_pelanggan')
+                        ->where('email_pic', 'not like', '%@%')
+                        ->pluck('pelanggan_id')
+                        ->toArray();
+
+                    $data = DB::table('master_pelanggan')
+                        ->whereIn('id', $cek)
+                        ->get();
+
+                    foreach ($data as $item) {
+
+                        $namaPic = null;
+                        $emailPic = null;
+
+                        // 1. Cek quotation biasa
+                        $quotation = DB::table('request_quotation')
+                            ->where('pelanggan_ID', $item->id_pelanggan)
+                            ->orderBy('id', 'desc')
+                            ->first();
+                        
+                        if ($quotation) {
+                            $namaPic  = $quotation->nama_pic_order;
+                            $emailPic = $quotation->email_pic_order;
+                        } else {
+                            // 2. Cek kontrak
+                            $kontrak = DB::table('request_quotation_kontrak_H')
+                                ->where('pelanggan_ID', $item->id_pelanggan)
+                                ->orderBy('id', 'desc')
+                                ->first();
+
+                            if ($kontrak) {
+                                $namaPic  = $kontrak->nama_pic_order;
+                                $emailPic = $kontrak->email_pic_order;
+                            }
+                        }
+
+                        // 3. Kalau tetap tidak ketemu → skip
+                        if (!$namaPic || !$emailPic) {
+                            continue;
+                        }
+                        // 4. Update PIC jika nama cocok
+                        DB::table('pic_pelanggan')
+                            ->where('pelanggan_id', $item->id)
+                            ->where('nama_pic', $namaPic)
+                            ->update([
+                                'email_pic' => $emailPic
+                            ]);
+                    }
+                    
+                    return response()->json($data, 200);
                     break;
                 case 'attributes':
                     dd($request->attributes->get('user')->karyawan);
