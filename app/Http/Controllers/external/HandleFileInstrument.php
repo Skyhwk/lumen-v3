@@ -497,7 +497,7 @@ class HandleFileInstrument extends BaseController
                                         ->where('id_parameter', $par->id)
                                         ->process();
                                     $data_kalkulasi['no_sampel'] = $no_sampel;
-                                    dump($data_kalkulasi);
+
                                     $colorimetriInserts[] = $colorimetriData;
                                     $wsValueAirData[] = $data_kalkulasi;
                                 }
@@ -512,7 +512,7 @@ class HandleFileInstrument extends BaseController
                                     'ks' => [$avg_param],
                                     'kb' => [$blankoParam],
                                     'st' => $stParam,
-                                    'vs' => 50,
+                                    'vl' => 50,
                                     'fp' => $pengecer,
                                     'created_by' => "SYSTEM",
                                     'created_at' => $now
@@ -656,7 +656,7 @@ class HandleFileInstrument extends BaseController
                     }
                 }
             }
-            // dd('berhasil horeee', $emisiCerobongHeaderInserts, $wsValueEmisiCerobongData);
+            // dd('berhasil horeee', $icpInserts, $draftIcpInserts, $lingkunganHeaderInserts, $emisiCerobongHeaderInserts, $wsValueUdaraData, $wsValueLingkunganData, $wsValueEmisiCerobongData);
 
             // Process Lingkungan Header data efficiently
             if (!empty($lingkunganHeaderInserts)) {
@@ -1066,9 +1066,10 @@ class HandleFileInstrument extends BaseController
 				->where('id_parameter', $par->id)
 				->process();
             
+            // if($request->no_sampel == 'AGAB012501/002' && $request->parameter == 'Pb') dd($par);
 			if (!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
-				return (object)[
-					'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
+                return (object)[
+                    'message' => 'Formula is Coming Soon parameter : ' . $request->parameter . '',
 					'status' => 404
 				];
 			}
@@ -1159,6 +1160,7 @@ class HandleFileInstrument extends BaseController
                     'no_sampel' => $request->no_sampel
                 ];
                 
+                // unset($data_kalkulasi['satuan']);
                 foreach ($data_kalkulasi as $key => $value) {
                     if ($key !== 'satuan') {
                         $wsValueLingkunganData[$key] = $value;
