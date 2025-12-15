@@ -2734,6 +2734,13 @@ class InputParameterController extends Controller
 
 				DB::beginTransaction();
 				try {
+					$inputan_analis = (object)[
+						'w2' => $request->w2,
+						'w1' => $request->w1,
+						'b2' => $request->b2,
+						'b1' => $request->b1
+					];
+
 					$header = new DebuPersonalHeader;
 					$header->no_sampel = $request->no_sample;
 					$header->parameter = $request->parameter;
@@ -2741,6 +2748,7 @@ class InputParameterController extends Controller
 					$header->id_parameter = $data_parameter->id;
 					$header->note = $request->note;
 					$header->tanggal_terima = $order_detail->tanggal_terima;
+					$header->inputan_analis = json_encode($inputan_analis);
 					$header->created_by = $this->karyawan;
 					$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 					$header->save();
