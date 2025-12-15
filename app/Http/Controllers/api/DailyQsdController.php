@@ -1,195 +1,62 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 date_default_timezone_set('Asia/Jakarta');
 
+use App\Http\Controllers\Controller;
 use Carbon\Carbon;
+use DB;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
-use App\Http\Controllers\Controller;
-use App\Models\{LinkLhp, OrderHeader, OrderDetail};
-use DB;
 
 class DailyQsdController extends Controller
 {
+
     public function index(Request $request)
     {
-        $periodeFilter = null;
-        $filterType = null; // 'year', 'month', 'date'
+        $query = DB::table('daily_qsd');
 
-        /** 
-         * Sebenarnya ga perlu sih ini kyknya cukup pakai today,
-         * tapi biar mempersingkat pencarian kyknya harus 
-         * menyesuaikan kondisi tanggal_sampling
-         * */
-        if ($request->filled('tanggal_sampling') && $request->tanggal_sampling == date('Y')) {
-            $maxDate = Carbon::now()->format('Y-m-d');
-        } elseif ($request->filled('tanggal_sampling') && $request->tanggal_sampling < date('Y')) {
-            $maxDate = Carbon::createFromFormat('Y', $request->tanggal_sampling)->endOfYear()->format('Y-m-d');
-        } else {
-            $maxDate = Carbon::now()->format('Y-m-d');
-        }
-        
+        // Filter tanggal_sampling jika ada
         if ($request->filled('tanggal_sampling')) {
             $tanggalInput = $request->tanggal_sampling;
-            
+
             // Deteksi format input
             if (strlen($tanggalInput) == 4 && is_numeric($tanggalInput)) {
                 // Format: Y (tahun saja) - 2024
-                $periodeFilter = $tanggalInput;
-                $filterType = 'year';
+                $query->whereRaw("YEAR(tanggal_sampling_min) = ?", [$tanggalInput]);
             } elseif (strlen($tanggalInput) == 7 && strpos($tanggalInput, '-') !== false) {
                 // Format: Y-m (bulan) - 2024-01
-                $periodeFilter = $tanggalInput;
-                $filterType = 'month';
+                $query->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$tanggalInput]);
             } else {
                 // Format: Y-m-d (tanggal lengkap) - 2024-01-15
-                $periodeFilter = $tanggalInput;
-                $filterType = 'date';
+                $query->whereDate('tanggal_sampling_min', $tanggalInput);
             }
         }
 
-        $rekapOrder = DB::table('order_detail')
-            ->selectRaw('
-                order_detail.no_order,
-                order_detail.no_quotation,
-                GROUP_CONCAT(DISTINCT order_detail.cfr SEPARATOR ",") as cfr,
-                COUNT(DISTINCT order_detail.cfr) AS total_cfr,
-                order_detail.nama_perusahaan,
-                order_detail.konsultan,
-                MIN(CASE order_detail.kontrak WHEN "C" THEN rqkd.periode_kontrak ELSE NULL END) as periode,
-                order_detail.kontrak,
-                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_discount ELSE NULL END) as total_discount_kontrak,
-                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_ppn ELSE NULL END) as total_ppn_kontrak,
-                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_pph ELSE NULL END) as total_pph_kontrak,
-                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.biaya_akhir ELSE NULL END) as biaya_akhir_kontrak,
-                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.grand_total ELSE NULL END) as grand_total_kontrak,
-                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.total_discount ELSE NULL END) as total_discount_non_kontrak,
-                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.total_ppn ELSE NULL END) as total_ppn_non_kontrak,
-                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.total_pph ELSE NULL END) as total_pph_non_kontrak,
-                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.biaya_akhir ELSE NULL END) as biaya_akhir_non_kontrak,
-                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.grand_total ELSE NULL END) as grand_total_non_kontrak,
-                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
-            ')
-            ->where('order_detail.is_active', true)
-            ->whereDate('order_detail.tanggal_sampling', '<=', $maxDate); 
+        // Filter periode untuk data kontrak
+        if ($request->filled('periode')) {
+            $periodeInput = $request->periode;
 
-        /**
-         * FILTER TANGGAL SAMPLING DI ORDER_DETAIL
-         */
-        if ($filterType) {
-            switch ($filterType) {
-                case 'year':
-                    // Filter berdasarkan tahun saja
-                    $rekapOrder->whereRaw("YEAR(order_detail.tanggal_sampling) = ?", [$periodeFilter]);
-                    break;
-                case 'month':
-                    // Filter berdasarkan bulan
-                    $rekapOrder->whereRaw("DATE_FORMAT(order_detail.tanggal_sampling, '%Y-%m') = ?", [$periodeFilter]);
-                    break;
-                case 'date':
-                    // Filter berdasarkan tanggal lengkap
-                    $rekapOrder->whereDate('order_detail.tanggal_sampling', $periodeFilter);
-                    break;
+            if (strlen($periodeInput) == 4 && is_numeric($periodeInput)) {
+                // Filter tahun periode
+                $query->where(function ($q) use ($periodeInput) {
+                    $q->where('kontrak', 'C')
+                        ->whereRaw("LEFT(periode, 4) = ?", [$periodeInput]);
+                });
+            } elseif (strlen($periodeInput) == 7 && strpos($periodeInput, '-') !== false) {
+                // Filter bulan periode
+                $query->where(function ($q) use ($periodeInput) {
+                    $q->where('kontrak', 'C')
+                        ->where('periode', $periodeInput);
+                });
             }
         }
 
-        /**
-         * JOIN UNTUK KONTRAK (C)
-         */
-        $rekapOrder->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
-            $join->on('order_detail.no_quotation', '=', 'rqkh.no_document')
-                ->where('rqkh.is_active', true);
-        });
+        // Default ordering
+        $query->orderBy('tanggal_sampling_min', 'desc')
+            ->orderBy('no_order', 'asc');
 
-        $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($filterType, $periodeFilter) {
-            $join->on('rqkh.id', '=', 'rqkd.id_request_quotation_kontrak_H');
-            
-            if ($filterType && $periodeFilter) {
-                switch ($filterType) {
-                    case 'year':
-                        // Perbaikan: match tahun saja
-                        $join->whereRaw("LEFT(rqkd.periode_kontrak, 4) = ?", [$periodeFilter]);
-                        break;
-                    case 'month':
-                        $join->where('rqkd.periode_kontrak', '=', $periodeFilter);
-                        break;
-                    case 'date':
-                        $monthFromDate = date('Y-m', strtotime($periodeFilter));
-                        $join->where('rqkd.periode_kontrak', '=', $monthFromDate);
-                        break;
-                }
-            }
-        });
-
-
-        /**
-         * JOIN UNTUK NON-KONTRAK (!= C)
-         */
-        $rekapOrder->leftJoin('request_quotation as rq', function ($join) {
-            $join->on('order_detail.no_quotation', '=', 'rq.no_document');
-        });
-
-        /**
-         * FILTER UTAMA: Hanya tampilkan yang memenuhi kondisi
-         */
-        $rekapOrder->where(function ($query) use ($filterType, $periodeFilter) {
-            $query->where(function ($q) use ($filterType, $periodeFilter) {
-                // Untuk kontrak = C, harus ada relasi di rqkh (kontrak_H)
-                $q->where('order_detail.kontrak', 'C')
-                    ->whereNotNull('rqkh.id')
-                    ->whereColumn('order_detail.periode', 'rqkd.periode_kontrak'); // ★ Tambahan penting
-
-                if ($filterType && $periodeFilter) {
-                    switch ($filterType) {
-                        case 'year':
-                            $q->whereNotNull('rqkd.id')
-                            ->whereRaw("LEFT(rqkd.periode_kontrak, 4) = ?", [$periodeFilter]);
-                            break;
-                        case 'month':
-                            $q->whereNotNull('rqkd.id')
-                            ->where('rqkd.periode_kontrak', '=', $periodeFilter);
-                            break;
-                        case 'date':
-                            $monthFromDate = date('Y-m', strtotime($periodeFilter));
-                            $q->whereNotNull('rqkd.id')
-                            ->where('rqkd.periode_kontrak', '=', $monthFromDate);
-                            break;
-                    }
-                }
-            })
-            // Atau untuk non-kontrak, harus ada di request_quotation
-            ->orWhere(function ($q) {
-                $q->where('order_detail.kontrak', '!=', 'C')
-                ->whereNotNull('rq.id');
-            });
-        });
-
-        /**
-         * GROUP BY yang TEPAT - termasuk periode_kontrak untuk kontrak
-         */
-        $rekapOrder->groupByRaw('
-            order_detail.no_order,
-            order_detail.no_quotation,
-            order_detail.nama_perusahaan,
-            order_detail.konsultan,
-            order_detail.periode,
-            order_detail.kontrak,
-            CASE 
-                WHEN order_detail.kontrak = "C" THEN rqkd.periode_kontrak 
-                ELSE NULL 
-            END
-        ');
-
-        /**
-         * ORDER BY
-         */
-        $rekapOrder->orderBy('tanggal_sampling_min', 'desc')
-                ->orderBy('order_detail.no_order', 'asc');
-
-
-        return DataTables::of($rekapOrder)
+        return DataTables::of($query)
             ->addColumn('cfr_list', function ($data) {
                 return explode(',', $data->cfr);
             })
@@ -197,146 +64,110 @@ class DailyQsdController extends Controller
                 return $data->kontrak == 'C' ? 'KONTRAK' : 'NON-KONTRAK';
             })
             ->addColumn('periode_aktif', function ($data) {
-                // Tampilkan periode kontrak jika ada
-                if ($data->kontrak == 'C' && isset($data->periode_kontrak)) {
-                    return $data->periode_kontrak;
+                if ($data->kontrak == 'C' && isset($data->periode)) {
+                    return $data->periode;
                 }
                 return '-';
             })
+            ->addColumn('sales_id', function ($data) {
+                if ($data->kontrak == 'C') {
+                    return $data->sales_id_kontrak;
+                } else {
+                    return $data->sales_id_non_kontrak;
+                }
+            })
+            ->addColumn('sales_nama', function ($data) {
+                if ($data->kontrak == 'C') {
+                    return $data->sales_nama_kontrak ?? '-';
+                } else {
+                    return $data->sales_nama_non_kontrak ?? '-';
+                }
+            })
+            ->addColumn('total_revenue', function ($data) {
+                if ($data->kontrak == 'C') {
+                    return $data->total_revenue_kontrak ?? 0;
+                } else {
+                    return $data->total_revenue_non_kontrak ?? 0;
+                }
+            })
             ->filterColumn('no_order', function ($query, $keyword) {
-                $query->where('order_detail.no_order', 'like', "%$keyword%");
+                $query->where('no_order', 'like', "%$keyword%");
             })
             ->filterColumn('no_quotation', function ($query, $keyword) {
-                $query->where('order_detail.no_quotation', 'like', "%$keyword%");
+                $query->where('no_quotation', 'like', "%$keyword%");
             })
             ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-                $query->where('order_detail.nama_perusahaan', 'like', "%$keyword%");
+                $query->where('nama_perusahaan', 'like', "%$keyword%");
             })
             ->filterColumn('konsultan', function ($query, $keyword) {
-                $query->where('order_detail.konsultan', 'like', "%$keyword%");
+                $query->where('konsultan', 'like', "%$keyword%");
             })
-            ->orderColumn('tanggal_sampling_min', function ($query, $keyword) {
-                $query->orderBy('order_detail.tanggal_sampling_min', $keyword);
-            })
-            ->orderColumn('periode', function ($query, $keyword) {
-                $query->orderBy('periode', $keyword);
+            ->filterColumn('tanggal_sampling_min', function ($query, $keyword) {
+                $query->whereDate('tanggal_sampling_min', 'like', "%$keyword%");
             })
             ->filterColumn('tipe_quotation', function ($query, $keyword) {
                 $keyword = strtolower($keyword);
                 if (strpos($keyword, 'kon') !== false) {
-                    $query->where('order_detail.kontrak', 'C');
+                    $query->where('kontrak', 'C');
                 } elseif (strpos($keyword, 'non') !== false) {
-                    $query->where('order_detail.kontrak', '!=', 'C');
+                    $query->where('kontrak', '!=', 'C');
                 }
+            })
+            ->filterColumn('sales_nama', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('sales_nama_kontrak', 'like', "%$keyword%")
+                        ->orWhere('sales_nama_non_kontrak', 'like', "%$keyword%");
+                });
+            })
+            ->orderColumn('tanggal_sampling_min', function ($query, $order) {
+                $query->orderBy('tanggal_sampling_min', $order);
+            })
+            ->orderColumn('periode', function ($query, $order) {
+                $query->orderBy('periode', $order);
             })
             ->make(true);
     }
 
-    public function getRevenuesSummary(Request $request)
+    public function getTotalRevenue(Request $request)
     {
-        $today = Carbon::now();
-        $currentYear = $today->year;
-        $currentMonth = $today->format('Y-m');
-        $currentDate = $today->format('Y-m-d');
+        $currentYear  = Carbon::now()->format('Y');
+        $currentMonth = Carbon::now()->format('Y-m');
+        $currentDate  = Carbon::now()->format('Y-m-d');
 
-        // Single optimized query untuk semua periode
-        $revenues = DB::table('order_detail as od')
+        // $currentYear  = $request->year;
+        // $currentMonth = $currentYear . '-' . Carbon::now()->format('m');
+
+        // Total Revenue Per Tahun
+        $yearRevenue = DB::table('daily_qsd')
+            ->whereRaw("YEAR(tanggal_sampling_min) = ?", [$currentYear])
             ->selectRaw('
-                -- This Year
-                SUM(CASE 
-                    WHEN YEAR(od.tanggal_sampling) = ? 
-                    AND (
-                        (od.kontrak != "C" AND rq.id IS NOT NULL)
-                        OR 
-                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND LEFT(rqkd.periode_kontrak, 4) = ?)
-                    )
-                    THEN COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
-                    ) - COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
-                    ) + COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
-                    )
-                    ELSE 0 
-                END) as this_year_revenue,
-                
-                -- This Month
-                SUM(CASE 
-                    WHEN DATE_FORMAT(od.tanggal_sampling, "%Y-%m") = ? 
-                    AND (
-                        (od.kontrak != "C" AND rq.id IS NOT NULL)
-                        OR 
-                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND rqkd.periode_kontrak = ?)
-                    )
-                    THEN COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
-                    ) - COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
-                    ) + COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
-                    )
-                    ELSE 0 
-                END) as this_month_revenue,
-                
-                -- Today
-                SUM(CASE 
-                    WHEN DATE(od.tanggal_sampling) = ? 
-                    AND (
-                        (od.kontrak != "C" AND rq.id IS NOT NULL)
-                        OR 
-                        (od.kontrak = "C" AND rqkh.id IS NOT NULL AND rqkd.periode_kontrak = DATE_FORMAT(?, "%Y-%m"))
-                    )
-                    THEN COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.biaya_akhir ELSE rqkd.biaya_akhir END, 0
-                    ) - COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_pph ELSE rqkd.total_pph END, 0
-                    ) + COALESCE(
-                        CASE WHEN od.kontrak != "C" THEN rq.total_ppn ELSE rqkd.total_ppn END, 0
-                    )
-                    ELSE 0 
-                END) as today_revenue
-            ', [
-                $currentYear, $currentYear,  // For year filter
-                $currentMonth, $currentMonth, // For month filter  
-                $currentDate, $currentDate    // For date filter
-            ])
-            ->leftJoin('request_quotation as rq', function($join) {
-                $join->on('od.no_quotation', '=', 'rq.no_document')
-                    ->where('od.kontrak', '!=', 'C')
-                    ->where('rq.is_active', 1);
-            })
-            ->leftJoin('request_quotation_kontrak_H as rqkh', function($join) {
-                $join->on('od.no_quotation', '=', 'rqkh.no_document')
-                    ->where('rqkh.is_active', 1)
-                    ->where('od.kontrak', '=', 'C');
-            })
-            ->leftJoin('request_quotation_kontrak_D as rqkd', function($join) {
-                $join->on('rqkh.id', '=', 'rqkd.id_request_quotation_kontrak_H')
-                    ->whereColumn('od.periode', '=', 'rqkd.periode_kontrak');
-            })
-            ->where('od.is_active', true)
+                SUM(COALESCE(total_revenue_kontrak, 0)) +
+                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+            ')
+            ->first();
+
+        // Total Revenue Per Bulan
+        $monthRevenue = DB::table('daily_qsd')
+            ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$currentMonth])
+            ->selectRaw('
+                SUM(COALESCE(total_revenue_kontrak, 0)) +
+                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+            ')
+            ->first();
+
+        // Total Revenue Per Hari (Today)
+        $dayRevenue = DB::table('daily_qsd')
+            ->whereDate('tanggal_sampling_min', $currentDate)
+            ->selectRaw('
+                SUM(COALESCE(total_revenue_kontrak, 0)) +
+                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+            ')
             ->first();
 
         return response()->json([
-            'success' => true,
-            'data' => [
-                'year' => [
-                    'period' => $currentYear,
-                    'revenue' => (float) ($revenues->this_year_revenue ?? 0),
-                    'formatted' => 'Rp ' . number_format($revenues->this_year_revenue ?? 0, 0, ',', '.')
-                ],
-                'month' => [
-                    'period' => $currentMonth,
-                    'revenue' => (float) ($revenues->this_month_revenue ?? 0),
-                    'formatted' => 'Rp ' . number_format($revenues->this_month_revenue ?? 0, 0, ',', '.')
-                ],
-                'day' => [
-                    'period' => $currentDate,
-                    'revenue' => (float) ($revenues->today_revenue ?? 0),
-                    'formatted' => 'Rp ' . number_format($revenues->today_revenue ?? 0, 0, ',', '.')
-                ]
-            ],
-            'timestamp' => $today->toDateTimeString()
+            'year_revenue'  => $yearRevenue->total ?? 0,
+            'month_revenue' => $monthRevenue->total ?? 0,
+            'day_revenue'   => $dayRevenue->total ?? 0,
         ]);
     }
 }
