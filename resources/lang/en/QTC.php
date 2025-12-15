@@ -15,7 +15,8 @@ return [
         'S24' => '24 Hours Sampling',
         'SD' => 'Delivered Sample',
         'S' => 'Sampling',
-        'RS' => 'Re-Sample'
+        'RS' => 'Re-Sample',
+        'SP' => 'Sample Pickup',
     ],
     'table' => [
         'header' => [
