@@ -12,13 +12,12 @@ use App\Models\GenerateLink;
 use App\Models\JobTask;
 use App\Models\Jadwal;
 use App\Models\QrDocument;
+use App\Models\SamplingPlan;
 use PHPMailer\PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\DB;
 use \Mpdf\Mpdf as PDF;
 use Carbon\Carbon;
 use Exception;
-
-
 
 class EmailJadwal
 {
@@ -154,124 +153,150 @@ class EmailJadwal
                     ->update(['is_approved' => false]);
             }
 
-            if ($path == 'QT') {
-                $tanggal = (isset($this->value['tanggal'])) ? implode(", ", $this->value['tanggal']) : "-";
-                $jam_mulai = (isset($this->value['jam_mulai'])) ? $this->value['jam_mulai'] : "-";
-                $jam_selesai = (isset($this->value['jam_selesai'])) ? $this->value['jam_selesai'] : "-";
+            // if ($path == 'QT') {
+            //     $tanggal = (isset($this->value['tanggal'])) ? implode(", ", $this->value['tanggal']) : "-";
+            //     $jam_mulai = (isset($this->value['jam_mulai'])) ? $this->value['jam_mulai'] : "-";
+            //     $jam_selesai = (isset($this->value['jam_selesai'])) ? $this->value['jam_selesai'] : "-";
 
-                $body_text =
-                    ' <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            margin: 0;
-                            padding: 0
-                        }
-                        .container {
-                            max-width: 600px;
-                            margin: 0 auto;
-                            padding: 20px
-                        }
-                        .header {
-                            background-color: #007bff;
-                            color: #fff;
-                            text-align: center;
-                            padding: 10px
-                        }
-                        .content {
-                            padding: 20px
-                        }
-                        .signature {
-                            margin-top: 20px;
-                            font-style: italic
-                        }
-                    </style>
-                <div class="container">
-                    <div class="header">
-                        <h2>Penjadwalan Pengambilan Sampling</h2>
-                    </div>
-                    <div class="content">
-                        <p>Kepada ' . $dataEmail['client']->nama_pic_order . ',</p>
-                        <p>&nbsp;' . $dataEmail['client']->nama_perusahaan . '</p>
-                        <p>Saya harap email ini menemui Anda dalam keadaan baik. Saya ingin mengatur jadwal pengambilan sampling yang telah direncanakan dengan Anda. Berikut adalah rincian jadwal dan informasi yang relevan:</p>
-                        <ul>
-                            <li>
-                                <strong>Tanggal Pengambilan Sampling: </strong>' . $tanggal . '
-                            </li>
-                            <li>
-                                <strong>Waktu: </strong>' . $jam_mulai . ' sd ' . $jam_selesai . ' WIB
-                            </li>
-                        </ul>
-                        <p>Mohon konfirmasi kembali jadwal ini apakah telah sesuai dengan ketersediaan Anda. Jika ada perubahan yang perlu dilakukan atau pertanyaan lebih lanjut, silakan segera hubungi pihak sales kami (' . $sales->nama_lengkap . '-' . $sales->no_telpon . ') atau melalui telepon 021-5089-8988/89.</p>
-                        <p>Kami sangat menghargai kerjasama Anda dalam proses pengambilan sampling ini dan berharap semuanya berjalan lancar. Terima kasih atas perhatian Anda dan segera konfirmasi jadwal ini agar kami dapat mempersiapkan segala yang diperlukan.</p>
-                        <p>Terima kasih dan salam,</p>
-                        <a role="button" id="detailPdf" href="' . env('PORTAL_API') . $dataEmail['file'][0]['token'] . '" class="btn btn-primary">Lihat Detail</a>
-                        <p class="signature">' . $dataEmail['user']['nama_lengkap'] . ' <br>' . $dataEmail['user']['cost_center'] . ' <br>INTI SURYA LABORATARIUM <br>' . $dataEmail['user']['email'] . ' <br>' . $dataEmail['user']['no_telpon'] . ' <br>
-                        </p>
-                    </div>
-                </div>';
-            } else if ($path == 'QTC') {
-                $body_text =
-                    ' <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        margin: 0;
-                        padding: 0
-                    }
+            //     $body_text =
+            //         ' <style>
+            //             body {
+            //                 font-family: Arial, sans-serif;
+            //                 margin: 0;
+            //                 padding: 0
+            //             }
+            //             .container {
+            //                 max-width: 600px;
+            //                 margin: 0 auto;
+            //                 padding: 20px
+            //             }
+            //             .header {
+            //                 background-color: #007bff;
+            //                 color: #fff;
+            //                 text-align: center;
+            //                 padding: 10px
+            //             }
+            //             .content {
+            //                 padding: 20px
+            //             }
+            //             .signature {
+            //                 margin-top: 20px;
+            //                 font-style: italic
+            //             }
+            //         </style>
+            //     <div class="container">
+            //         <div class="header">
+            //             <h2>Penjadwalan Pengambilan Sampling</h2>
+            //         </div>
+            //         <div class="content">
+            //             <p>Kepada ' . $dataEmail['client']->nama_pic_order . ',</p>
+            //             <p>&nbsp;' . $dataEmail['client']->nama_perusahaan . '</p>
+            //             <p>Saya harap email ini menemui Anda dalam keadaan baik. Saya ingin mengatur jadwal pengambilan sampling yang telah direncanakan dengan Anda. Berikut adalah rincian jadwal dan informasi yang relevan:</p>
+            //             <ul>
+            //                 <li>
+            //                     <strong>Tanggal Pengambilan Sampling: </strong>' . $tanggal . '
+            //                 </li>
+            //                 <li>
+            //                     <strong>Waktu: </strong>' . $jam_mulai . ' sd ' . $jam_selesai . ' WIB
+            //                 </li>
+            //             </ul>
+            //             <p>Mohon konfirmasi kembali jadwal ini apakah telah sesuai dengan ketersediaan Anda. Jika ada perubahan yang perlu dilakukan atau pertanyaan lebih lanjut, silakan segera hubungi pihak sales kami (' . $sales->nama_lengkap . '-' . $sales->no_telpon . ') atau melalui telepon 021-5089-8988/89.</p>
+            //             <p>Kami sangat menghargai kerjasama Anda dalam proses pengambilan sampling ini dan berharap semuanya berjalan lancar. Terima kasih atas perhatian Anda dan segera konfirmasi jadwal ini agar kami dapat mempersiapkan segala yang diperlukan.</p>
+            //             <p>Terima kasih dan salam,</p>
+            //             <a role="button" id="detailPdf" href="' . env('PORTAL_API') . $dataEmail['file'][0]['token'] . '" class="btn btn-primary">Lihat Detail</a>
+            //             <p class="signature">' . $dataEmail['user']['nama_lengkap'] . ' <br>' . $dataEmail['user']['cost_center'] . ' <br>INTI SURYA LABORATARIUM <br>' . $dataEmail['user']['email'] . ' <br>' . $dataEmail['user']['no_telpon'] . ' <br>
+            //             </p>
+            //         </div>
+            //     </div>';
+            // } else if ($path == 'QTC') {
+            //     $body_text =
+            //         ' <style>
+            //         body {
+            //             font-family: Arial, sans-serif;
+            //             margin: 0;
+            //             padding: 0
+            //         }
 
-                    .container {
-                        max-width: 600px;
-                        margin: 0 auto;
-                        padding: 20px
-                    }
+            //         .container {
+            //             max-width: 600px;
+            //             margin: 0 auto;
+            //             padding: 20px
+            //         }
 
-                    .header {
-                        background-color: #007bff;
-                        color: #fff;
-                        text-align: center;
-                        padding: 10px
-                    }
+            //         .header {
+            //             background-color: #007bff;
+            //             color: #fff;
+            //             text-align: center;
+            //             padding: 10px
+            //         }
 
-                    .content {
-                        padding: 20px
-                    }
+            //         .content {
+            //             padding: 20px
+            //         }
 
-                    .signature {
-                        margin-top: 20px;
-                        font-style: italic
-                    }
-                </style>
-                <div class="container">
-                    <div class="header">
-                        <h2>Penjadwalan Pengambilan Sampling</h2>
-                    </div>
-                    <div class="content">
-                        <p>Kepada ' . $dataEmail['client']->nama_pic_order . ',</p>
-                        <p>&nbsp;' . $dataEmail['client']->nama_perusahaan . '</p>
-                        <p>Saya harap email ini menemui Anda dalam keadaan baik. Saya ingin mengatur jadwal pengambilan sampling yang telah direncanakan dengan Anda.</p>';
-                // dd($this->value);
-                foreach ($this->value as $periode => $data) {
-                    $tanggal = !empty($data['tanggal']) ? implode(", ", $this->translateTanggalArray($data['tanggal'])) : "-";
-                    $jam_mulai = $data['jam_mulai'] ?? "-";
-                    $jam_selesai = $data['jam_selesai'] ?? "-";
-                    $sampler = !empty($data['sampler']) ? implode(", ", $data['sampler']) : "-";
+            //         .signature {
+            //             margin-top: 20px;
+            //             font-style: italic
+            //         }
+            //     </style>
+            //     <div class="container">
+            //         <div class="header">
+            //             <h2>Penjadwalan Pengambilan Sampling</h2>
+            //         </div>
+            //         <div class="content">
+            //             <p>Kepada ' . $dataEmail['client']->nama_pic_order . ',</p>
+            //             <p>&nbsp;' . $dataEmail['client']->nama_perusahaan . '</p>
+            //             <p>Saya harap email ini menemui Anda dalam keadaan baik. Saya ingin mengatur jadwal pengambilan sampling yang telah direncanakan dengan Anda.</p>';
+            //     // dd($this->value);
+            //     foreach ($this->value as $periode => $data) {
+            //         $tanggal = !empty($data['tanggal']) ? implode(", ", $this->translateTanggalArray($data['tanggal'])) : "-";
+            //         $jam_mulai = $data['jam_mulai'] ?? "-";
+            //         $jam_selesai = $data['jam_selesai'] ?? "-";
+            //         $sampler = !empty($data['sampler']) ? implode(", ", $data['sampler']) : "-";
 
-                    $body_text .= "
-                                <li>
-                                    <strong>Periode:</strong> " . self::translatePeriode($periode) . "<br>
-                                    <strong>Tanggal Pengambilan Sampling: </strong> $tanggal<br>
-                                    <strong>Waktu:</strong> $jam_mulai sd $jam_selesai WIB<br>
-                                </li><br>
-                            ";
-                }
-                $body_text .= '<p>Mohon konfirmasi kembali jadwal ini apakah telah sesuai dengan ketersediaan Anda. Jika ada perubahan yang perlu dilakukan atau pertanyaan lebih lanjut, silakan segera hubungi pihak sales kami (' . $sales->nama_lengkap . '-' . $sales->no_telpon . ') atau melalui telepon 021-5089-8988/89.</p>
-                        <p>Kami sangat menghargai kerjasama Anda dalam proses pengambilan sampling ini dan berharap semuanya berjalan lancar. Terima kasih atas perhatian Anda dan segera konfirmasi jadwal ini agar kami dapat mempersiapkan segala yang diperlukan.</p>
-                        <p>Terima kasih dan salam,</p>
-                        <a role="button" id="detailPdf" href="' . env('PORTAL_API') . $dataEmail['file'][0]['token'] . '" class="btn btn-primary">Lihat Detail</a>
-                        <p class="signature">' . $dataEmail['user']['nama_lengkap'] . ' <br>' . $dataEmail['user']['cost_center'] . ' <br>INTI SURYA LABORATARIUM <br>' . $dataEmail['user']['email'] . ' <br>' . $dataEmail['user']['no_telpon'] . ' <br>
-                        </p>
-                    </div>
-                </div>';
+            //         $body_text .= "
+            //                     <li>
+            //                         <strong>Periode:</strong> " . self::translatePeriode($periode) . "<br>
+            //                         <strong>Tanggal Pengambilan Sampling: </strong> $tanggal<br>
+            //                         <strong>Waktu:</strong> $jam_mulai sd $jam_selesai WIB<br>
+            //                     </li><br>
+            //                 ";
+            //     }
+            //     $body_text .= '<p>Mohon konfirmasi kembali jadwal ini apakah telah sesuai dengan ketersediaan Anda. Jika ada perubahan yang perlu dilakukan atau pertanyaan lebih lanjut, silakan segera hubungi pihak sales kami (' . $sales->nama_lengkap . '-' . $sales->no_telpon . ') atau melalui telepon 021-5089-8988/89.</p>
+            //             <p>Kami sangat menghargai kerjasama Anda dalam proses pengambilan sampling ini dan berharap semuanya berjalan lancar. Terima kasih atas perhatian Anda dan segera konfirmasi jadwal ini agar kami dapat mempersiapkan segala yang diperlukan.</p>
+            //             <p>Terima kasih dan salam,</p>
+            //             <a role="button" id="detailPdf" href="' . env('PORTAL_API') . $dataEmail['file'][0]['token'] . '" class="btn btn-primary">Lihat Detail</a>
+            //             <p class="signature">' . $dataEmail['user']['nama_lengkap'] . ' <br>' . $dataEmail['user']['cost_center'] . ' <br>INTI SURYA LABORATARIUM <br>' . $dataEmail['user']['email'] . ' <br>' . $dataEmail['user']['no_telpon'] . ' <br>
+            //             </p>
+            //         </div>
+            //     </div>';
+            // }
+
+            if ($path === 'QT') {
+                $view = 'TemplateEmailJadwal.sampling_qt';
+
+                $data = [
+                    'client' => $dataEmail['client'],
+                    'user'   => $dataEmail['user'],
+                    'sales'  => $sales,
+                    'file'   => $dataEmail['file'][0],
+                    'tanggal' => $this->value['tanggal'] ?? [],
+                    'jam_mulai'   => $this->value['jam_mulai'] ?? '-',
+                    'jam_selesai' => $this->value['jam_selesai'] ?? '-',
+                ];
+            } else if ($path === 'QTC') {
+                $view = 'TemplateEmailJadwal.sampling_qtc';
+
+                $data = [
+                    'client' => $dataEmail['client'],
+                    'user'   => $dataEmail['user'],
+                    'sales'  => $sales,
+                    'file'   => $dataEmail['file'][0],
+                    'values' => $this->value,
+                ];
             }
+
+            $body_text = view($view, $data)->render();
             $atasan_sales = GetAtasan::where('id', $dataEmail['client']->sales_id)->get();
 
             // $filterEmails = [
@@ -294,7 +319,7 @@ class EmailJadwal
 
             $idBcc = $atasan_sales->pluck('id')->toArray();
             $replyTo = ['admsales01@intilab.com'];
-            $subject = "Jadwal Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
+            $subject = "Penjadwalan Pengambilan Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
             $email = SendEmail::where('to', trim($dataEmail['client']->email_pic_order))
                 ->where('subject', $subject)
                 ->where('body', $body_text)
@@ -334,7 +359,7 @@ class EmailJadwal
             ]);
 
             DB::rollBack();
-            throw new Exception($templateMessage, 401,$ex);
+            throw new Exception($templateMessage, 401, $ex);
         }
     }
 
