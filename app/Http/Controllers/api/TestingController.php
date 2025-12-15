@@ -1099,6 +1099,7 @@ class TestingController extends Controller
                         return response()->json(["data" => $chekRegen], 200);
                     }
                 case 'cs_render':
+                    
                     $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
                         ->where('no_order',$request->no_order)
                         ->where('is_active',1)
@@ -1113,7 +1114,6 @@ class TestingController extends Controller
                     foreach ($orderDetail as $item) {
                         $jumlahBotol = 0;
                         $jumlahLabel = 0;
-
                         // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
                         if (isset($pSDetailMap[$item->no_sampel])) {
                             
