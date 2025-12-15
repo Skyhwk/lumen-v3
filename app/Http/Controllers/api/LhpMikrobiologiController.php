@@ -1,27 +1,23 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
-use App\Models\LhpsKebisinganDetail;
-use App\Models\LhpsKebisinganCustom;
-use App\Models\OrderDetail;
-use App\Services\GenerateQrDocumentLhp;
-use App\Services\LhpTemplate;
-use App\Services\PrintLhp;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\LhpsMicrobiologiDetail;
 use App\Models\LhpsMicrobiologiHeader;
-use App\Models\MasterRegulasi;
+use App\Models\OrderDetail;
 use App\Models\ParameterFdl;
+use App\Services\LhpTemplate;
+use App\Services\PrintLhp;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
 class LhpMikrobiologiController extends Controller
 {
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
         $parameterAllowed = json_decode($parameterAllowed->parameters, true);
 
@@ -60,87 +56,115 @@ class LhpMikrobiologiController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-    public function handleReject(Request $request) {
+    public function handleReject(Request $request)
+    {
         DB::beginTransaction();
         try {
             $header = LhpsMicrobiologiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-            if($header != null) {
+            if ($header != null) {
 
-                $header->is_approve = 0;
+                $header->is_approve  = 0;
                 $header->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
                 $header->rejected_by = $this->karyawan;
-                
+
                 // $header->file_qr = null;
                 $header->save();
 
                 OrderDetail::where('cfr', $request->cfr)->where('is_active', true)->update([
-                    'status' => 2,
-                    'is_approve' => 0,
+                    'status'      => 2,
+                    'is_approve'  => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    'rejected_by' => $this->karyawan
+                    'rejected_by' => $this->karyawan,
                 ]);
             }
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel '.$request->cfr.' berhasil!'
+                'message' => 'Reject no sampel ' . $request->cfr . ' berhasil!',
             ]);
         } catch (Exception $e) {
             DB::rollBack();
             return response()->json([
-                'message' => 'Terjadi kesalahan '.$e->getMessage(),
+                'message' => 'Terjadi kesalahan ' . $e->getMessage(),
             ], 401);
         }
     }
 
-    public function handleDownload(Request $request) {
+    public function handleDownload(Request $request)
+    {
         try {
             $header = LhpsMicrobiologiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-            
-                $fileName = $header->file_lhp;
+
+            $fileName = $header->file_lhp;
 
             return response()->json([
-                'file_name' =>  env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
-                'message' => 'Download file '.$request->cfr.' berhasil!'
+                'file_name' => env('APP_URL') . '/public/dokumen/LHP/' . $fileName,
+                'message'   => 'Download file ' . $request->cfr . ' berhasil!',
             ]);
         } catch (\Throwable $th) {
             return response()->json([
-                'message' => 'Error download file '.$th->getMessage(),
+                'message' => 'Error download file ' . $th->getMessage(),
             ], 401);
         }
-        
+
     }
 
-    public function rePrint(Request $request) 
+    public function rePrint(Request $request)
     {
         DB::beginTransaction();
         try {
-            $header = LhpsMicrobiologiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
-            $header->count_print = $header->count_print + 1; 
+            $header              = LhpsMicrobiologiHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
+            $header->count_print = $header->count_print + 1;
             $header->save();
-            $detailCollection = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
+            $detailCollection       = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
             $detailCollectionCustom = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
-            $fileName = LhpTemplate::setDataDetail($detailCollection)
-                ->setDataHeader($header)
-                ->setDataCustom($detailCollectionCustom)
-                ->useLampiran(true)
-                ->whereView('DraftMicrobio')
-                ->render('downloadLHPFinal');
+            
+            $validasi               = LhpsMicrobiologiDetail::where('id_header', $header->id)->get();
+            $parameters             = $validasi->pluck('parameter')->filter()->unique();
+            $totalParam             = $parameters->count();
+
+            $isUsingTable = ! $tableRegulasi->isEmpty();
+
+            $singleParam = $totalParam == 1;
+            $doubleParam = $totalParam == 2;
+
+            if ($singleParam && $isUsingTable) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio1ParamTable')
+                    ->render('downloadLHPFinal');
+            } else if ($doubleParam) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio2Param')
+                    ->render('downloadLHPFinal');
+            } else {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio1ParamNoTable')
+                    ->render('downloadLHPFinal');
+            }
 
             $header->file_lhp = $fileName;
             $header->save();
-            
+
             $servicePrint = new PrintLhp();
             $servicePrint->printByFilename($header->file_lhp, $detailCollection, 'non', $header->no_lhp);
-            if (!$servicePrint) {
+            if (! $servicePrint) {
                 DB::rollBack();
                 return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
             }
-            
+
             DB::commit();
 
             return response()->json([
-                'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!'
+                'message' => 'Berhasil Melakukan Reprint Data ' . $request->cfr . ' berhasil!',
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
