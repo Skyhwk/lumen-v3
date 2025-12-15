@@ -9,6 +9,7 @@ use App\Models\WsValueLingkungan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use App\Models\DustFallHeader;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -25,23 +26,46 @@ class GravimetriUdaraController extends Controller
 
     // 20-03-2025
     public function index(Request $request){
-        $dataLingkungan = LingkunganHeader::with('ws_value', 'order_detail')
+        $dataLingkungan = LingkunganHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
-            ->where('lingkungan_header.is_active', true)
+            ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
-        $dataDebu = DebuPersonalHeader::with('ws_value', 'order_detail')
+        $dataDustfall = DustFallHeader::with('ws_udara', 'order_detail', 'ws_value')
             ->where('is_approved', $request->approve)
-            ->where('debu_personal_header.is_active', true)
+            ->where('is_active', true)
             ->where('template_stp', $request->template_stp)
             ->get();
 
-        $data = $dataLingkungan->concat($dataDebu)->values();
+        $dataDebu = DebuPersonalHeader::with('ws_udara', 'order_detail', 'ws_value')
+            ->where('is_approved', $request->approve)
+            ->where('is_active', true)
+            ->where('template_stp', $request->template_stp)
+            ->get();
+
+        $data = collect()
+            ->concat($dataLingkungan)
+            ->concat($dataDustfall)
+            ->concat($dataDebu)
+            ->values();
+
         return Datatables::of($data)
             ->editColumn('data_pershift', function ($data) {
                 return $data->data_pershift ? json_decode($data->data_pershift, true) : null;
             })
+            ->editColumn('data_shift', function ($data) {
+                return $data->data_shift ? json_decode($data->data_shift, true) : null;
+            })
+            ->editColumn('inputan_analis', function ($data) {
+                if ($data instanceof DustFallHeader) {
+                    return $data->inputan_analis
+                        ? json_decode($data->inputan_analis, true)
+                        : null;
+                }
+                return null;
+            })
+
             // ->orderColumn('tanggal_terima', function ($query, $order) {
             //     $query->orderBy('tanggal_terima', $order);
             // })
@@ -93,12 +117,9 @@ class GravimetriUdaraController extends Controller
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
             if(is_null($data) || $data->is_approved == 1){
                 $data = DebuPersonalHeader::where('id', $request->id)->where('is_active', true)->first();
-                if(is_null($data)){
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Data udara gravimetri no sample ' . $data->no_sampel . ' tidak ditemukan'
-                    ],401);
-                }
+            }
+            if(is_null($data) || $data->is_approved == 1){
+                $data = DustFallHeader::where('id', $request->id)->where('is_active', true)->first();
             }
             if($data->is_approved == 1){
                 return response()->json([
@@ -134,6 +155,10 @@ class GravimetriUdaraController extends Controller
             $data = LingkunganHeader::where('id', $request->id)->where('is_active', true)->first();
             if(is_null($data)){
                 $data = DebuPersonalHeader::where('id', $request->id)->where('is_active', true)->first();
+
+            }
+            if(is_null($data)){
+                $data = DustFallHeader::where('id', $request->id)->where('is_active', true)->first();
             }
             $data->is_active = false;
             $data->deleted_at = Carbon::now()->format('Y-m-d H:i:s');

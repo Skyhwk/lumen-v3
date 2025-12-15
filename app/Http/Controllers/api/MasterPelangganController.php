@@ -20,6 +20,8 @@ use App\Models\MasterPelangganBlacklist;
 use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
 use Yajra\Datatables\Datatables;
+
+use App\Services\GetBawahan;
 use Carbon\Carbon;
 Carbon::setLocale('id');
 
@@ -31,15 +33,37 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
+
+            if ($jabatan == 157) {
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+
+                $karyawanNonAktif = MasterKaryawan::where('is_active', false)->pluck('id')->toArray();
+
+                $bawahan = array_merge($bawahan, $karyawanNonAktif);
+                
+                array_push($bawahan, 14);
+
+                if (!in_array($this->user_id, $bawahan)) {
+                    $bawahan[] = $this->user_id;
+                }
+
+                $data->whereIn('sales_id', $bawahan);
+            }
+
+
         }
 
         return Datatables::of($data)
@@ -49,6 +73,11 @@ class MasterPelangganController extends Controller
                 } else {
                     $query->whereDoesntHave('order_customer');
                 }
+            })
+            ->filterColumn('telpon', function ($query, $keyword) {
+                $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
+                    $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
+                });
             })
             ->make(true);
     }
@@ -60,14 +89,16 @@ class MasterPelangganController extends Controller
 
         $user = $request->attributes->get('user');
         if (isset($user->karyawan) && $user->karyawan != null) {
-            $cek_jabatan = DB::table('master_jabatan')->where('id', $user->karyawan->id_jabatan)->first();
-            if ($cek_jabatan->nama_jabatan == 'Sales Staff') {
-                $data->where('sales_penanggung_jawab', $user->karyawan->nama_lengkap);
+            $jabatan = $user->karyawan->id_jabatan;
+            if ($jabatan == 24) {
+                $data->where('sales_id', $this->user_id);
             }
 
-            if ($cek_jabatan->nama_jabatan == 'Sales Supervisor') {
-                $cek_bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('nama_lengkap')->toArray();
-                $data->whereIn('sales_penanggung_jawab', $cek_bawahan);
+            if ($jabatan == 21) {
+                $bawahan = MasterKaryawan::where('is_active', true)->whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                array_push($bawahan, $this->user_id);
+
+                $data->whereIn('sales_id', $bawahan);
             }
         }
 
@@ -149,8 +180,8 @@ class MasterPelangganController extends Controller
             $timestamp = DATE('Y-m-d H:i:s');
 
             if ($request->id != '') {
-                $response = $this->checkForBlacklistedCustomer($request->id, $request->nama_pelanggan, $request->kontak_pelanggan);
-                if ($response) return $response;
+                // $response = $this->checkForBlacklistedCustomer($request->id, $request->nama_pelanggan, $request->kontak_pelanggan);
+                // if ($response) return $response;
 
                 // Update existing customer
                 $pelanggan = MasterPelanggan::find($request->id);
@@ -163,16 +194,19 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',
                 ]);
 
                 // Tamabahan Patah
-                $sales_id = MasterKaryawan::where('nama_lengkap', $request->sales_penanggung_jawab)->first()->id;
-                $dataPelanggan['sales_id'] = $sales_id;
-                /* Update menambahkan trim by 565 : 2025-05-08*/
+                $sales = MasterKaryawan::where('nama_lengkap', $request->sales_penanggung_jawab)->first();
+                $dataPelanggan['sales_id'] = $sales->id;
+                $dataPelanggan['sales_penanggung_jawab'] = $sales->nama_lengkap;
+                
                 $dataPelanggan['nama_pelanggan'] = trim($dataPelanggan['nama_pelanggan']);
+                $dataPelanggan['npwp'] = trim($dataPelanggan['npwp']);
                 $dataPelanggan['id_cabang'] = $this->idcabang;
                 $dataPelanggan['updated_by'] = $this->karyawan;
                 $dataPelanggan['updated_at'] = $timestamp;
@@ -204,6 +238,7 @@ class MasterPelangganController extends Controller
                             $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->first();
                             if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
                                 DB::rollback();
+                                // dd($noTlp, $sameTelNumber, $pelanggan);
                                 return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
                             };
 
@@ -298,6 +333,7 @@ class MasterPelangganController extends Controller
                         }
                     }
                 }
+
             } else {
                 $response = $this->checkForBlacklistedCustomer(null, $request->nama_pelanggan, $request->kontak_pelanggan);
                 if ($response) return $response;
@@ -325,6 +361,7 @@ class MasterPelangganController extends Controller
                     'nama_pelanggan',
                     'wilayah',
                     'sub_kategori',
+                    'npwp',
                     'bahan_pelanggan',
                     'merk_pelanggan',
                     'sales_penanggung_jawab',

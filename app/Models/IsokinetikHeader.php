@@ -44,4 +44,18 @@ class IsokinetikHeader extends Sector{
     {
         return $this->belongsTo('App\Models\DataLapanganIsokinetikHasil', 'id_lapangan', 'id_lapangan');
     }
+
+    public function ws_value_cerobong(){
+        return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_isokinetik');
+    }
+    
+    public function parameter_emisi()
+    {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 5);
+    }
+
+    public function ws_value()
+    {
+        return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_isokinetik')->where('is_active', true);
+    }
 }

@@ -8,7 +8,7 @@ use App\Models\{QuotationKontrakH, QuotationKontrakD, QuotationNonKontrak};
 use App\Models\{KontakPelanggan, AlamatPelanggan, PicPelanggan};
 use App\Models\{OrderHeader, OrderDetail};
 use App\Models\{SamplingPlan, Jadwal};
-use App\Models\{Ftc, FtcT};
+use App\Models\{Ftc, FtcT, QrPsikologi};
 use App\Models\{
     MasterCabang,
     MasterKategori,
@@ -2173,13 +2173,43 @@ class RequestQuotationController extends Controller
             }
 
             if (isset($data_lama->id_order) && $data_lama->id_order != null) {
+                // Update QR Psikologi Data
+                $qr_psikologi = QrPsikologi::where('id_quotation', $data_lama->id_order)
+                    ->where('is_active', true)
+                    ->orderBy('created_at', 'desc')
+                    ->limit(2)
+                    ->get();
+
+                foreach ($qr_psikologi as $psikologi) {
+
+                    // Decode kolom data JSON ke array
+                    $json = json_decode($psikologi->data, true);
+
+                    if (!is_array($json)) {
+                        continue; // skip jika JSON tidak valid
+                    }
+
+                    // update no document
+                    $json['no_document'] = $data->no_document;
+
+                    // encode kembali ke JSON
+                    $psikologi->data = json_encode($json);
+
+                    // update id_quotation jika diperlukan
+                    $psikologi->id_quotation = $data->id;
+
+                    $psikologi->save();
+                }
+
                 $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                    // ->whereNull('nilai_pelunasan')
                     ->where('is_active', true)
                     ->get();
 
                 $invoiceNumbersTobeChecked = [];
                 foreach ($invoices as $invoice) {
-                    if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    if($invoice->nilai_pelunasan == null) {
                         $invoice->is_generate = false;
                         $invoice->is_emailed = false;
 
@@ -2913,25 +2943,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -3038,12 +3068,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4288,25 +4318,25 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_transportasi = $data_wilayah->wilayah_data[$c]->harga_transportasi;
                                         // HARGA TRANSPORTASI TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total !== '')
-                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi);
+                                            $dataD->harga_transportasi_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_transportasi_total);
                                         // HARGA SATUAN PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil !== '' ? $dataD->harga_personil = $data_wilayah->wilayah_data[$c]->harga_personil : $dataD->harga_personil = 0;
                                         // HARGA PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total !== '')
-                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_personil);
+                                            $dataD->harga_perdiem_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total);
                                         // HARGA 24 JAM PERSONIL
                                         isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil !== '' ? $dataD->harga_24jam_personil = $data_wilayah->wilayah_data[$c]->harga_24jam_personil : $dataD->harga_24jam_personil = 0;
                                         // HARGA 24 JAM PERSONIL TOTAL (CALCULATE ON CLIENT)
                                         if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total !== '')
-                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil);
+                                            $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4413,12 +4443,12 @@ class RequestQuotationController extends Controller
                                             $dataD->harga_24jam_personil_total = (int) str_replace('.', '', $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total);
 
                                         // PERDIEM, JAM, TRANSPORT
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi) && $data_wilayah->wilayah_data[$c]->harga_transportasi != '')
-                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_personil) && $data_wilayah->wilayah_data[$c]->harga_personil != '')
-                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_personil;
-                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil != '')
-                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_transportasi_total) && $data_wilayah->wilayah_data[$c]->harga_transportasi_total != '')
+                                            $transport = $data_wilayah->wilayah_data[$c]->harga_transportasi_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total) && $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total != '')
+                                            $perdiem = $data_wilayah->wilayah_data[$c]->harga_perdiem_personil_total;
+                                        if (isset($data_wilayah->wilayah_data[$c]->harga_24jam_personil_total) && $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total != '')
+                                            $jam = $data_wilayah->wilayah_data[$c]->harga_24jam_personil_total;
                                     }
                                 } else {
                                     $dataD->transportasi = null;
@@ -4850,6 +4880,39 @@ class RequestQuotationController extends Controller
                     $dataD->biaya_akhir = $biaya_akhir;
                     //==========================END BIAYA DI LUAR PAJAK======================================
                     $dataD->save();
+
+
+                    // =====================UPDATE DATE QR PSIKOLOGI=====================================
+                    $data_lama = $dataH->data_lama ? json_decode($dataH->data_lama) : null;
+                    if(isset($data_lama->id_order) && $data_lama->id_order != null){
+                        $qr_psikologi = QrPsikologi::where('id_quotation', $data_lama->id_order)
+                            ->where('periode', $dataD->periode_kontrak)
+                            ->where('is_active', true)
+                            ->orderBy('created_at', 'desc')
+                            ->limit(2)
+                            ->get();
+
+                        foreach ($qr_psikologi as $psikologi) {
+
+                            // Decode kolom data JSON ke array
+                            $json = json_decode($psikologi->data, true);
+
+                            if (!is_array($json)) {
+                                continue; // skip jika JSON tidak valid
+                            }
+
+                            // update no document
+                            $json['no_document'] = $dataH->no_document;
+
+                            // encode kembali ke JSON
+                            $psikologi->data = json_encode($json);
+
+                            // update id_quotation jika diperlukan
+                            $psikologi->id_quotation = $dataH->id;
+
+                            $psikologi->save();
+                        }
+                    }
                 }
                 // =====================END PROSES DETAIL DATA=====================================
 
@@ -5090,12 +5153,14 @@ class RequestQuotationController extends Controller
 
                     if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                         $invoices = Invoice::where('no_quotation', $dataOld->no_document)
+                            // ->whereNull('nilai_pelunasan')
                             ->where('is_active', true)
                             ->get();
 
                         $invoiceNumbersTobeChecked = [];
                         foreach ($invoices as $invoice) {
-                            if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            if($invoice->nilai_pelunasan == null) {
                                 $invoice->is_generate = false;
                                 $invoice->is_emailed = false;
 

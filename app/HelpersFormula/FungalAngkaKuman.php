@@ -9,8 +9,8 @@ class FungalAngkaKuman {
     public function index($data, $id_parameter, $mdl) {
 
         // C = Jumlah Koloni (CFU) / Volume udara (mL)
-        if(floatval($data->volume) > 0 ){
-            $rumus = number_format(((array_sum($data->jumlah_coloni) / count($data->jumlah_coloni)) / $data->volume), 2);
+        if(floatval(array_sum($data->volume) / count($data->volume)) > 0 ){
+            $rumus = number_format(((array_sum($data->jumlah_coloni) / count($data->jumlah_coloni)) / (array_sum($data->volume) / count($data->volume))), 0);
         }else{
             $rumus = 0;
         }

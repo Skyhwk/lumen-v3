@@ -656,19 +656,25 @@ class AppsBasController extends Controller
                 'tanggal_sampling' => $request->tanggal_sampling,
             ])->where('is_active', true)->orderBy('id', 'desc')
                 ->get();
-
             $persiapanHeaders = $dataList
+            ->filter(function ($item) use ($expectednoSampel) {
+                $no_sampel = json_decode($item->no_sampel, true) ?? [];
+                return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
+            })
+            ->groupBy('no_order');
+            
+            /* $persiapanHeaders = $dataList
                 ->filter(function ($item) use ($expectednoSampel) {
                     $no_sampel = json_decode($item->no_sampel, true) ?? [];
                     return count(array_intersect($no_sampel, $expectednoSampel)) > 0;
                 })
-                ->keyBy('no_order');
+                ->keyBy('no_order'); */
 
             // Add detail_bas_documents to each item
             foreach ($finalResult as &$item) {
                 if (isset($persiapanHeaders[$item['no_order']])) {
-                    $header = $persiapanHeaders[$item['no_order']];
-
+                    
+                    $header = $persiapanHeaders[$item['no_order']]->first();
                     if ($header->detail_bas_documents) {
                         $item['detail_bas_documents'] = json_decode($header->detail_bas_documents, true);
 
@@ -692,6 +698,7 @@ class AppsBasController extends Controller
                             }
                         }
                     } else {
+                        
                         $item['detail_bas_documents'] = [];
 
                         if ($header->catatan || $header->informasi_teknis || $header->tanda_tangan_bas || $header->waktu_mulai || $header->waktu_selesai) {
@@ -756,6 +763,7 @@ class AppsBasController extends Controller
                         $item['tanda_tangan_bas'] = [];
                     }
                 } else {
+                    dd('sssq');
                     $item['detail_bas_documents'] = [];
                     $item['catatan'] = '';
                     $item['informasi_teknis'] = '';
@@ -4308,6 +4316,13 @@ class AppsBasController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
+            ],
+            [
+                "parameter" => "Isopropil Alkohol",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailLingkunganKerja::class,
+                "model2" => DetailSenyawaVolatile::class
             ]
         ];
 

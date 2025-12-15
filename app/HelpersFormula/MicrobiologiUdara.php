@@ -18,7 +18,11 @@ class MicrobiologiUdara
             $count = 0;
 
             foreach ($data->jumlah_coloni as $key => $value) {
-                $rumus = $value / $data->volume;
+                if($data->volume[$key] <= 0){
+                    $rumus = $value / 1;
+                } else {
+                    $rumus = $value / $data->volume[$key];
+                }
                 $nilai = $key + 1;
 
                 // simpan hasil per shift (as array asosiatif tunggal)
@@ -32,7 +36,7 @@ class MicrobiologiUdara
             // hitung hasil rata-rata
             $hasil = $count > 0 ? $total / $count : 0;
 
-            $processed['hasil'] = round($hasil, 4);
+            $processed['hasil'] = round($hasil, 0);
             $processed['data_pershift'] = $data_pershift;
 
             return $processed;

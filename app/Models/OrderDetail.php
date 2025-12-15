@@ -1,14 +1,14 @@
 <?php
-
 namespace App\Models;
 
 use App\Models\Sector;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class OrderDetail extends Sector
 {
-    protected $table = "order_detail";
+    protected $table   = "order_detail";
     public $timestamps = false;
+
+    protected $guarded = [];
 
     public function orderHeader()
     {
@@ -135,29 +135,15 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(DataLapanganErgonomi::class, 'no_sampel', 'no_sampel');
     }
-    public function lhps_air()
-    {
-        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
-    }
+    
     public function lhpp_psikologi()
     {
         return $this->belongsTo(LhppUdaraPsikologiHeader::class, 'no_order', 'no_order');
     }
     public function lhp_psikologi()
     {
-        return $this->belongsTo(LhpUdaraPsikologiHeader::class, 'no_order', 'no_order');
+        return $this->belongsTo(LhpUdaraPsikologiHeader::class, 'cfr', 'no_cfr');
     }
-
-    public function lhps_emisi()
-    {
-        return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
-    }
-
-    public function lhps_emisi_c()
-    {
-        return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
-    }
-
     public function lingkunganHeader()
     {
         return $this->belongsTo(LingkunganHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
@@ -183,7 +169,29 @@ class OrderDetail extends Sector
         return $this->belongsTo(MasterKategori::class, 'kategori_2', 'id');
     }
 
-    //Udara
+    public function lhps_air()
+    {
+        return $this->belongsTo(LhpsAirHeader::class, 'no_sampel', 'no_sampel')->with('lhpsAirDetail', 'lhpsAirCustom')->where('is_active', true);
+    }
+    public function lhps_padatan()
+    {
+        return $this->belongsTo(LhpsPadatanHeader::class, 'no_sampel', 'no_sampel')->with('lhpsPadatanDetail', 'lhpsPadatanCustom')->where('is_active', true);
+    }
+
+    public function lhps_emisi()
+    {
+        return $this->belongsTo(LhpsEmisiHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiDetail')->where('is_active', true);
+    }
+    public function lhps_emisi_c()
+    {
+        return $this->belongsTo(LhpsEmisiCHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiCDetail')->where('is_active', true);
+    }
+
+    public function lhps_emisi_isokinetik()
+    {
+        return $this->belongsTo(LhpsEmisiIsokinetikHeader::class, 'cfr', 'no_lhp')->with('lhpsEmisiIsokinetikDetail', 'lhpsEmisiIsokinetikCustom')->where('is_active', true);
+    }
+
     public function lhps_getaran()
     {
         return $this->belongsTo(LhpsGetaranHeader::class, 'cfr', 'no_lhp')->with('lhpsGetaranDetail')->where('is_active', true);
@@ -192,9 +200,13 @@ class OrderDetail extends Sector
     {
         return $this->belongsTo(LhpsKebisinganHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganDetail')->where('is_active', true);
     }
+    public function lhps_kebisingan_personal()
+    {
+        return $this->belongsTo(LhpsKebisinganPersonalHeader::class, 'cfr', 'no_lhp')->with('lhpsKebisinganPersonalDetail')->where('is_active', true);
+    }
     public function lhps_ling()
     {
-        return $this->belongsTo(LhpsLingHeader::class, 'no_sampel', 'no_sampel')->with('lhpsLingDetail')->where('is_active', true);
+        return $this->belongsTo(LhpsLingHeader::class, 'cfr', 'no_lhp')->with('lhpsLingDetail')->where('is_active', true);
     }
     public function lhps_medanlm()
     {
@@ -211,12 +223,26 @@ class OrderDetail extends Sector
 
     public function lhps_ergonomi()
     {
-        return $this->belongsTo(LhpsErgonomiHeader::class, 'no_sampel', 'no_sampel')->where('is_active', true);
+        return $this->belongsTo(DraftErgonomiFile::class, 'cfr', 'no_lhp');
     }
 
     public function lhps_iklim()
     {
         return $this->belongsTo(LhpsIklimHeader::class, 'cfr', 'no_lhp')->with('lhpsIklimDetail')->where('is_active', true);
+    }
+
+    public function lhps_swab_udara()
+    {
+        return $this->belongsTo(LhpsSwabTesHeader::class, 'cfr', 'no_lhp')->with('lhpsSwabTesDetail')->where('is_active', true);
+    }
+    public function lhps_microbiologi()
+    {
+        return $this->belongsTo(LhpsMicrobiologiHeader::class, 'cfr', 'no_lhp')->with('lhpsMicrobiologiDetailSampel')->where('is_active', true);
+    }
+
+    public function dataLapanganSenyawaVolatil()
+    {
+        return $this->hasMany(DetailSenyawaVolatile::class, 'no_sampel', 'no_sampel');
     }
 
     public function t_fct()
@@ -330,6 +356,17 @@ class OrderDetail extends Sector
         return $this->belongsTo(KebisinganHeader::class, 'no_sampel', 'no_sampel');
     }
 
+    public function swabTesHeader()
+    {
+        return $this->belongsTo(SwabTestHeader::class, 'no_sampel', 'no_sampel');
+    }
+
+    public function swabOnMicrobio()
+    {
+        return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%");
+    }
+
+
     public function getAnyHeaderUdara()
     {
         if ($this->pencahayaanHeader()->exists()) {
@@ -340,6 +377,12 @@ class OrderDetail extends Sector
         }
         if ($this->kebisinganHeader()->exists()) {
             return $this->KebisinganHeader;
+        }
+        if ($this->swabTesHeader()->exists()) {
+            return $this->SwabTesHeader;
+        }
+        if ($this->swabOnMicrobio()->exists()) {
+            return $this->swabOnMicrobio;
         }
         return null;
     }
@@ -474,7 +517,7 @@ class OrderDetail extends Sector
     public function scopeWithAnyDataLapangan($query)
     {
         // pakai new static biar aman di konteks static scope
-        return $query->with((new static)->anyDataLapanganRelations);
+        return $query->with((new static )->anyDataLapanganRelations);
     }
 
     public function getAnyDataLapanganAttribute()
@@ -495,4 +538,74 @@ class OrderDetail extends Sector
 
         return $hasil->isNotEmpty() ? $hasil : null;
     }
+
+    public function udaraLingkungan()
+    {
+        return $this->hasMany(LingkunganHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approved', true);
+    }
+
+    public function udaraSubKontrak()
+    {
+        return $this->hasMany(Subkontrak::class, 'no_sampel', 'no_sampel')->with('ws_value_linkungan', 'ws_udara')->where('is_approve', true);
+    }
+
+    public function udaraDirect()
+    {
+        return $this->hasMany(DirectLainHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
+    }
+
+    public function udaraPartikulat()
+    {
+        return $this->hasMany(PartikulatHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara', 'ws_value_linkungan')->where('is_approve', true);
+    }
+
+    public function udaraMicrobio()
+    {
+        return $this->hasMany(MicrobioHeader::class, 'no_sampel', 'no_sampel')->with('ws_udara')->where('is_approved', true);
+    }
+
+    public function udaraDebu()
+    {
+        return $this->hasMany(DebuPersonalHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
+    }
+
+    public function dustFall()
+    {
+        return $this->hasMany(DustFallHeader::class, 'no_sampel', 'no_sampel')->with('ws_value','ws_udara')->where('is_approved', true)->where('is_active', true);
+    }
+
+    // emisi isokinetik
+
+    public function isoHeader()
+    {
+        return $this->hasMany(IsokinetikHeader::class, 'no_sampel', 'no_sampel')->with('method1', 'method2', 'method3', 'method4', 'method5', 'method6', 'ws_value')->where('is_approve', true);
+    }
+
+    public function lhps_hygene()
+    {
+        return $this->belongsTo(LhpsHygieneSanitasiHeader::class, 'cfr', 'no_lhp');
+    }
+
+    // barangkali kepakai
+    // public function isoBeratMolekul()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikBeratMolekul::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoHasil()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikHasil::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoKadarAir()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikKadarAir::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoKecepatan()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikPenentuanKecepatanLinier::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+    // public function isoPartikulat()
+    // {
+    //     return $this->hasMany(DataLapanganIsokinetikPenentuanPartikulat::class, 'no_sampel', 'no_sampel')->with('ws_emisi_c')->where('is_approve', true);
+    // }
+
 }

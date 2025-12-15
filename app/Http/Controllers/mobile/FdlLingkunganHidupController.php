@@ -209,18 +209,7 @@ class FdlLingkunganHidupController extends Controller
 
     public function getShift(Request $request)
     {
-        // $importantKeyword = [
-        //     'As', 'Ba', 'Cl-', 'Cl2', 'Co', 'Cr', 'Cu', 'Dustfall', 'Fe', 'H2S', 'HCl',
-        //     'HF', 'Hg', 'Kelembaban', 'Mn', 'NH3', 'Ni', 'NO2', 'NOx', 'O3', 'Ox',
-        //     'Passive NO2', 'Passive SO2', 'Pb', 'PM 10', 'PM 2.5', 'Sb', 'Se', 'Sn',
-        //     'SO2', 'Suhu', 'TSP', 'Zn', 'Aluminium'
-        // ];
-
         $parameter_tsp = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','parameter_tsp_lh')->first();
-
-        // $parameter_no2 = [
-        //     "NO2", "NO2 (24 Jam)", "NO2 (8 Jam)", "NO2 (6 Jam)", "NOx","NO2 8J (LK-pm)","NO2 8J (LK-µg)","NO2 SS (LK-pm)","NO2 SS (LK-µg)",
-        // ];
         $data = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
         $lh_parameter = DetailLingkunganHidup::where('no_sampel', $request->no_sample);
         if($request->shift == 'L1'){
@@ -326,9 +315,23 @@ class FdlLingkunganHidupController extends Controller
             $param_fin = '[' . $pp4 . ',' . $pp2 . ']';
         }
         
-        
-        // Hapus parameter yang ada di $existing_parameters
-        $filtered_param = array_values(array_diff($nilai_param2, $lh_parameter));
+        // Buang Dustfall dari kedua array sebelum di-diff
+        $nilai_param2_filtered = array_filter($nilai_param2, function($v) {
+            return strtolower($v) !== 'dustfall';
+        });
+
+        $lh_parameter_filtered = array_filter($lh_parameter, function($v) {
+            return strtolower($v) !== 'dustfall';
+        });
+
+        // Jalankan array_diff seperti biasa
+        $filtered_param = array_values(array_diff($nilai_param2_filtered, $lh_parameter_filtered));
+
+        // Tambahkan kembali Dustfall jika ada
+        if (in_array('Dustfall', $nilai_param2)) {
+            $filtered_param[] = 'Dustfall';
+        }
+
         // Buat output JSON yang sesuai
         $param_fin = json_encode($filtered_param, JSON_UNESCAPED_UNICODE);
         $parameterVolatile = ParameterFdl::select("parameters")->where('is_active', 1)->where('nama_fdl','senyawa_volatile_lh')->first();
@@ -430,8 +433,7 @@ class FdlLingkunganHidupController extends Controller
                     }
                 }
             }
-            
-            
+                    
             if(isset($request->param) && $request->param != null){
                 foreach ($request->param as $in => $a) {
                     $pengukuran = array();
@@ -452,11 +454,13 @@ class FdlLingkunganHidupController extends Controller
                             ];
                         }
                     } else if (str_contains($a, 'Dustfall')) {
+                        // dd($request->diameter_botol[$a]);
                         if ($request->keterangan_alat[$a] != '') {
                             if($request->keterangan_alat[$a] == 'pemasangan_alat'){
                                 $pengukuran = [
                                     'keterangan' => $request->keterangan_alat[$a] ?? null,
                                     'tanggal_pemasangan' => $request->tanggal_pemasangan[$a] ?? null,
+                                    'diameter_botol' => $request->diameter_botol[$a] . ' cm' ?? null,
                                     'luas_botol' => ($request->luas_botol[$a] ?? null) ? $request->luas_botol[$a] . ' m2' : null,
                                 ];
                             }else{
@@ -553,7 +557,7 @@ class FdlLingkunganHidupController extends Controller
                     }
                     
                     $shift2 = $request->shift_pengambilan;
-                    if ($request->kateg_uji[$in] == null || $request->kateg_uji[$in] == '') {
+                    if ($request->kateg_uji[$in] == null || $request->kateg_uji[$in] == '' || $request->kateg_uji[$in] == 0) {
                         $shift_peng = 'Sesaat';
                         $shift2 = 'Sesaat';
                     } else if ($request->kateg_uji[$in] == '24 Jam') {
@@ -717,10 +721,10 @@ class FdlLingkunganHidupController extends Controller
                 $data->save();
             }
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
-                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                 $orderDetail->save();
             }
 
@@ -758,7 +762,7 @@ class FdlLingkunganHidupController extends Controller
             $no_sampel = strtoupper(trim($header->no_sampel));
             DetailLingkunganHidup::where('no_sampel', $no_sampel)->delete();
 
-            $this->resultx = "Data Sampling FDL Lingkungan Hidup Dengan No Sample $no_sampel berhasil disimpan oleh $this->karyawan";
+            $this->resultx = "Data Sampling FDL Lingkungan Hidup Dengan No Sample $no_sampel berhasil hapus oleh $this->karyawan";
 
             $header->delete();
 

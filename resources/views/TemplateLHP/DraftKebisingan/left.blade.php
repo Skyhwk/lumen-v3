@@ -11,19 +11,22 @@
                 </tr>
             </thead>
             <tbody>
+                @php $totdat = count($detail); @endphp
                 @foreach ($detail as $k => $yy)
+                    @php
+                    $i = $k + 1;
+                    @endphp
                     <tr>
-                        <td class="custom">{{ $k + 1 }}</td>
-                        <td width="7%" style="text-align: right; border-right: none; vertical-align: top;" class="custom4">
-                            <sup style="font-size: 7px;">{{ $yy['no_sampel'] }}</sup>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $i }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="10%" style="text-align: right; border-right: none;"> 
+                            <sup  style="font-size: 5px; margin-top: -10px;">{{ $yy['no_sampel'] }}</sup> 
                         </td>
-                        <td width="35%" style="border-left: none; text-align: left; word-wrap: break-word; white-space: normal;" class="custom">
+                        <td class="{{ $i == $totdat ? 'pd-3-solid' : 'pd-3-dot' }}" width="32%" style="border-left: none; text-align: left;"> 
                             {{ $yy['lokasi_keterangan'] }}
                         </td>
-                        <td class="custom">{{ $yy['hasil_uji'] }}</td>
-                        <td class="custom">{{ $yy['paparan'] }}</td>
-                        <td class="custom">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
-                    </tr>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['hasil_uji'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $yy['paparan'] }}</td>
+                        <td class="{{ $i == $totdat ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{\App\Helpers\Helper::tanggal_indonesia($yy['tanggal_sampling'])}}</td>
                 @endforeach
             </tbody>
         </table>

@@ -55,6 +55,9 @@
         td.text-left {
             text-align: left;
         }
+        td.text-center {
+            text-align: center;
+        }
 
         .table-title {
             text-align: left;
@@ -282,96 +285,59 @@
     <div class="container">
         <div class="content-layout clearfix">
             <div class="column-left">
-                <table cellpadding="4" cellspacing="0">
+                <div class="table-title">Komponen</div>
+                <table cellpadding="4" cellspacing="0" style="table-layout: fixed; width: 100%;">
                     <thead>
                         <tr>
                             <td style="width:5%;">No</td>
-                            <td style="width:30%;">VARIABEL PENGUKURAN</td>
-                            <td style="width:10%;">AWAL</td>
-                            <td style="width:10%;">AKHIR</td>
-                            <td style="width:45%;">KETERANGAN</td>
+                            <td style="width:55%;">VARIABEL PENGUKURAN</td>
+                            <td style="width:20%;">SATUAN</td>
+                            <td style="width:20%;">HASIL</td>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Jarak Tangan Horizontal (cm)</td>
-                            <td>{{ $pengukuran->lokasi_tangan->horizontal_awal  }}</td>
-                            <td>{{ $pengukuran->lokasi_tangan->horizontal_akhir }}</td>
-                            <td class="text-left">Jarak horizontal/proyeksi tangan yang memegang beban dengan titik
-                                pusat tubuh</td>
+                            <td class="text-left">Jarak Angkut Vertikal</td>
+                            <td>cm</td>
+                            <td>{{ $pengukuran->jarak_vertikal }}</td>
                         </tr>
                         <tr>
                             <td>2</td>
-                            <td class="text-left">Jarak Tangan Vertikal (cm)</td>
-                            <td>{{ $pengukuran->lokasi_tangan->vertikal_awal }}</td>
-                            <td>{{ $pengukuran->lokasi_tangan->vertikal_akhir }}</td>
-                            <td class="text-left">Jarak vertikal posisi tangan yang memegang beban terhadap lantai</td>
+                            <td class="text-left">Berat Beban Angkat</td>
+                            <td>kg</td>
+                            <td>{{ $pengukuran->berat_beban }}</td>
+                            
                         </tr>
                         <tr>
                             <td>3</td>
-                            <td class="text-left">Sudut Asimetris (°)</td>
-                            <td>{{$pengukuran->sudut_asimetris->awal}}</td>
-                            <td>{{$pengukuran->sudut_asimetris->akhir}}</td>
-                            <td class="text-left">Sudut asimetri gerakan yang dibentuk antara bagian dan kaki</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div class="table-title">DATA PENGAMBIL</div>
-                <table cellpadding="4" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <td style="width:5%;">No</td>
-                            <td style="width:30%;">VARIABEL PENGUKURAN</td>
-                            <td style="width:15%;">HASIL</td>
-                            <td style="width:50%;">KETERANGAN</td>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td class="text-left">Jarak Vertikal (cm)</td>
-                            <td>{{$pengukuran->jarak_vertikal}}</td>
-                            <td class="text-left">Jarak perpindahan beban secara vertikal antara tempat asal sampai
-                                tujuan</td>
-                        </tr>
-                        <tr>
-                            <td>2</td>
-                            <td class="text-left">Berat Beban (kg)</td>
-                            <td>{{$pengukuran->berat_beban}}</td>
-                            <td class="text-left">Jumlah beban atau barang material yang dibombong/diangkat/dipindahkan
-                                pekeria</td>
-                        </tr>
-                        <tr>
-                            <td>3</td>
-                            <td class="text-left">Frekuensi (jumlah angkat/menit)</td>
-                            <td>{{$pengukuran->frekuensi}}</td>
-                            <td class="text-left">Jumlah pengangkatan beban setiap menit</td>
+                            <td class="text-left">Frekuensi Angkat</td>
+                            <td>kali/menit</td>
+                            <td>{{$pengukuran->frekuensi_jumlah_angkatan}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
-                            <td class="text-left">Durasi Waktu Kerja</td>
-                            <td>{{$pengukuran->durasi_jam_kerja}}</td>
-                            <td class="text-left">Jumlah waktu aktual durasi pekerjaan dalam hitungan jam</td>
+                            <td class="text-left">Durasi Angkat</td>
+                            <td>Jam</td>
+                            <td>{{$pengukuran->durasi_jam_kerja_awal}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
-                            <td class="text-left">Kondisi Objek</td>
-                            <td></td>
-                            <td class="text-left">Kondisi handling objek, terdiri dari pilihan (Bagus/Sedang/Jelek)</td>
+                            <td class="text-left">Klasifikasi Pegangan</td>
+                            <td>-</td>
+                            <td>{{$pengukuran->kopling_tangan}}</td>
                         </tr>
                     </tbody>
                 </table>
 
-                <div class="table-title">DATA VARIABEL PEKERJA</div>
-                <table cellpadding="4" cellspacing="0">
+                <div class="table-title">VARIABEL PEMBEBANAN</div>
+                <table cellpadding="4" cellspacing="0" style="table-layout: fixed; width: 100%;">
                     <thead>
                         <tr>
                             <td style="width:5%;">No</td>
-                            <td style="width:65%;">DATA VARIABEL</td>
-                            <td style="width:15%;">AWAL</td>
-                            <td style="width:15%;">AKHIR</td>
+                            <td style="width:55%;">DATA VARIABEL</td>
+                            <td style="width:20%;">ASAL</td>
+                            <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -379,67 +345,66 @@
                             <td>1</td>
                             <td class="text-left">Konstanta Beban</td>
                             <td>{{$pengukuran->konstanta_beban_awal}}</td>
-                            <td>{{$pengukuran->konstanta_beban_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->konstanta_beban_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
                             <td class="text-left">Pengali Horizontal</td>
                             <td>{{$pengukuran->pengali_horizontal_awal}}</td>
-                            <td>{{$pengukuran->pengali_horizontal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_horizontal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>3</td>
                             <td class="text-left">Pengali Vertikal</td>
                             <td>{{$pengukuran->pengali_vertikal_awal}}</td>
-                            <td>{{$pengukuran->pengali_vertikal_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_vertikal_akhir}}</td>
                         </tr>
                         <tr>
                             <td>4</td>
                             <td class="text-left">Pengali Jarak</td>
                             <td>{{$pengukuran->pengali_jarak_awal}}</td>
-                            <td>{{$pengukuran->pengali_jarak_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_jarak_akhir}}</td>
                         </tr>
                         <tr>
                             <td>5</td>
                             <td class="text-left">Pengali Asimetris</td>
                             <td>{{$pengukuran->pengali_asimetris_awal}}</td>
-                            <td>{{$pengukuran->pengali_asimetris_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_asimetris_akhir}}</td>
                         </tr>
                         <tr>
                             <td>6</td>
                             <td class="text-left">Pengali Frekuensi</td>
                             <td>{{$pengukuran->pengali_frekuensi_awal}}</td>
-                            <td>{{$pengukuran->pengali_frekuensi_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_frekuensi_akhir}}</td>
                         </tr>
                         <tr>
                             <td>7</td>
                             <td class="text-left">Pengali Kopling</td>
                             <td>{{$pengukuran->pengali_kopling_awal}}</td>
-                            <td>{{$pengukuran->pengali_kopling_akhir}}</td>
+                            <td class="text-center">{{$pengukuran->pengali_kopling_akhir}}</td>
                         </tr>
                     </tbody>
                 </table>
-
-                <div class="table-title">HASIL AKHIR</div>
-                <table cellpadding="4" cellspacing="0">
+                <div class="table-title">HASIL PERHITUNGAN</div>
+                <table cellpadding="4" cellspacing="0" style="table-layout: fixed; width: 100%;">
                     <thead>
                         <tr>
                             <td style="width:5%;">No</td>
-                            <td style="width:65%;">JENIS HASIL</td>
-                            <td style="width:15%;">AWAL</td>
-                            <td style="width:15%;">AKHIR</td>
+                            <td style="width:55%;">JENIS HASIL</td>
+                            <td style="width:20%;">ASAL</td>
+                            <td style="width:20%;">TUJUAN</td>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>1</td>
-                            <td class="text-left">Recommended Weight Limit (RWL)</td>
+                            <td class="text-left">Nilai Beban Angkat Yang disarankan (RWL)</td>
                             <td>{{$pengukuran->nilai_beban_rwl_awal}}</td>
                             <td>{{$pengukuran->nilai_beban_rwl_akhir}}</td>
                         </tr>
                         <tr>
                             <td>2</td>
-                            <td class="text-left">Lifting Index</td>
+                            <td class="text-left">Lifting Index (LI)</td>
                             <td>{{$pengukuran->lifting_index_awal}}</td>
                             <td>{{$pengukuran->lifting_index_akhir}}</td>
                         </tr>
@@ -452,7 +417,22 @@
                         <table cellpadding="4" cellspacing="0" style="margin-top:0;">
                             <tbody>
                                 <tr>
-                                    <td height="60" style="vertical-align: top; text-align: left;"></td>
+                                    <td style="width:5%;">1.</td>
+                                    <td style="vertical-align: top; text-align: left;">
+                                        Berat Beban Aktual = {{$pengukuran->berat_beban}} kg, Berat Beban Disarankan (RWL) = {{$pengukuran->nilai_beban_rwl_awal}} kg - {{$pengukuran->nilai_beban_rwl_akhir}} kg
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:5%;">2.</td>
+                                    <td style="vertical-align: top; text-align: left;">
+                                        LI Asal yaitu {{$pengukuran->lifting_index_awal}},masuk tingkat resiko <b>{{$pengukuran->result_li_awal['tingkatResiko']}}</b>,{{$pengukuran->result_li_awal['result']}}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:5%;">3.</td>
+                                    <td style="vertical-align: top; text-align: left;">
+                                        LI Tujuan yaitu {{$pengukuran->lifting_index_akhir}},masuk tingkat resiko <b>{{$pengukuran->result_li_akhir['tingkatResiko']}}</b>,{{$pengukuran->result_li_akhir['result']}}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -462,7 +442,12 @@
                         <table cellpadding="4" cellspacing="0" style="margin-top:0;">
                             <tbody>
                                 <tr>
-                                    <td height="60" style="vertical-align: top; text-align: left;"></td>
+                                    <td style="vertical-align: top; text-align: left;">
+                                        {{$personal->divisi}}
+                                        @if($personal->aktivitas_ukur != null && $personal->aktivitas_ukur != '')
+                                            ,<br> {{$personal->aktivitas_ukur}}
+                                        @endif
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -471,6 +456,7 @@
 
             </div>
             <div class="column-right">
+                <div class="table-title">&nbsp;</div>
                 <div style="padding-top:0;">
                     <table cellpadding="4" cellspacing="0">
                         <thead>
@@ -484,13 +470,13 @@
                             <tr>
                                 <td>{{$personal->no_lhp}}</td>
                                 <td>{{$personal->no_sampel}}</td>
-                                <td>Ergonomi - RWL</td>
+                                <td>ERGONOMI</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <div style="padding: 5px;">
+                <div style="padding: 2px;">
                     <div class="info-header">Informasi Pelanggan</div>
                     <table class="info-table">
                         <tr>
@@ -501,9 +487,10 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
+                    <!-- informasi sampling -->
                     <div class="info-header">Informasi Sampling</div>
                     <table class="info-table">
                         <tr>
@@ -512,11 +499,17 @@
                             <td style="width: 72%;text-align:start; ">{{$personal->tanggal_sampling}}</td>
                         </tr>
                         <tr>
-                            <td style="width: 25%; text-align:start;">Periode Analisa</td>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;"></td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran dan Perhitungan)</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Recommended Weight Limit (RWL) Observasi Sistem</td>
                         </tr>
                     </table>
+                    <!-- individu -->
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
                     <table class="info-table">
                         <tr>
@@ -525,9 +518,16 @@
                             <td style="width: 72%;text-align:start; ">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
+                            <td style="width: 25%; text-align:start;">Usia</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->divisi}}</td>
+                            <td style="text-align:start;">{{ $personal->usia }} Tahun</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Lama Berkerja</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">
+                                {{$personal->lama_kerja}}
+                            </td>
                         </tr>
                     </table>
                 </div>
@@ -547,25 +547,17 @@
                             <tr>
                                 <td>&lt;1</td>
                                 <td>Rendah</td>
-                                <td class="text-left" style="font-size: 9px;">Nilai ini masih dalam kategori selamat
-                                    bagi sebagian besar pekerja, sehingga tidak perlu ada tindakan perbaikan pekerjaan.
-                                    Namun pekerja dengan keterbatasan perlu mendapat perhatian khusus.</td>
+                                <td class="text-left" style="font-size: 9px;">Tidak ada masalah dengan pekerjaan mengangkat, maka tidak diperlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat dipertahankan < 1.</td>
                             </tr>
                             <tr>
-                                <td>1 &lt; SI &lt; 3</td>
+                                <td>1 - &lt; 3</td>
                                 <td>Sedang</td>
-                                <td class="text-left" style="font-size: 9px;">Nilai ini tentunya akan meningkatkan
-                                    risiko terhadap sebagian pekerja. Sehingga perlu dilakukan perbaikan atau
-                                    perancangan kembali pada penanganan material yang membutuhkan material handling
-                                    dengan LI antara 1 dan 3.</td>
+                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                             <tr>
-                                <td>&gt;3</td>
+                                <td>&ge; 3</td>
                                 <td>Tinggi</td>
-                                <td class="text-left" style="font-size: 9px;">Pekerjaan berisiko pada sebagian besar
-                                    pekerja. Sebagian besar operator tidak dapat melakukan pekerjaan dengan aman bila
-                                    nilai LI melebihi 3. Dalam hal ini perbaikan secara administratif saja tidak cukup,
-                                    namun solusi yang terbaik adalah dengan mendesain ulang sistem kerja.</td>
+                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permasalahan dari parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -577,40 +569,30 @@
                     ** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Peraturan Menteri Ketenagakerjaan Republik
                     Indonesia Nomor 5 Tahun 2018.
                 </div>
-                <div class="signature-section">
-                    @if($ttd != null)
-                        @if($ttd->qr_path != null)
-                            <table class="signature-table">
-                                <tr>
-                                    <td class="signature-left"></td>
-                                    <td class="signature-right">
-                                        <div class="signature-date">
-                                            {{ $ttd->tanggal }}
-                                        </div><br>
-                                        <div class="signature-text">
-                                                <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                        </div>
-                                    </td>
-                                </tr>
-                            </table>
-                        @else
-                            <table class="signature-table">
-                                <tr>
-                                    <td class="signature-left"></td>
-                                    <td class="signature-right" style="text-align: center;">
-                                        <div class="signature-date">
-                                            Tangerang, 13 Agustus 2025
-                                        </div><br><br><br>
-                                        <div class="signature-text">
-                                            <strong>(Abidah Walfathiyyah)</strong><br>
-                                            <span>Technical Control Supervisor</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </table>
-                        @endif
-                    @endif
-                </div>
+                <table style="width: 100%; margin-top: 10px; border: none;">
+                        <tr>
+                        <td style="width: 50%; border: none;"></td>
+
+                        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+                            
+                            <div style="margin-bottom: 5px;">
+                                Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
+                            </div>
+
+                            @if($ttd && $ttd->qr_path)
+                                <br><br>
+                                <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
+                            @else
+                                <br><br><br>
+                                <div style="font-weight: bold; text-decoration: underline;">
+                                    (Abidah Walfathiyyah)
+                                </div>
+                                <div>Technical Control Supervisor</div>
+                            @endif
+
+                        </td>
+                    </tr>
+                </table>
             </div>
         </div>
     </div>

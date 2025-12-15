@@ -136,6 +136,40 @@ class FdlKebisinganPersonalController extends Controller
         }
     }
 
+    public function convertHourToMinute($hour)
+	{
+		if ($hour == null || $hour == "")
+			return 0;
+		$minutes = $hour * 60;
+		return $minutes;
+	}
+
+	private function getNabKebisingan($menit)
+	{
+		if ($menit >= 0.94 && $menit < 1.88) {
+			return 112;
+		} elseif ($menit >= 1.88 && $menit < 3.75) {
+			return 109;
+		} elseif ($menit >= 3.75 && $menit < 7.5) {
+			return 106;
+		} elseif ($menit >= 7.5 && $menit < 15) {
+			return 103;
+		} elseif ($menit >= 15 && $menit < 30) {
+			return 100;
+		} elseif ($menit >= 30 && $menit < 60) {
+			return 97;
+		} elseif ($menit >= 60 && $menit < 120) {
+			return 94;
+		} elseif ($menit >= 120 && $menit < 240) {
+			return 91;
+		} elseif ($menit >= 240 && $menit < 480) {
+			return 88;
+		} elseif ($menit >= 480) {
+			return 85;
+		}
+		return null;
+	}
+
     public function approve(Request $request){
         if (isset($request->id) && $request->id != null) {
             $data = DataLapanganKebisinganPersonal::where('id', $request->id)->first();
@@ -146,6 +180,20 @@ class FdlKebisinganPersonalController extends Controller
 
             // pecah berdasarkan tanda ;
             list($id, $nama) = explode(";", $firstItem);
+
+            $jam = $data->waktu_pengukuran ?? null;
+
+            $jamOnly = (int) trim(explode('Jam', $jam)[0]);
+            
+            // Ambil menit
+            $minutePart = explode('Jam', $jam)[1];     // " 00 Menit"
+            $minuteOnly = (int) trim(str_replace('Menit', '', $minutePart));
+
+            $jamToMenit = $this->convertHourToMinute($jamOnly);
+            $totalMenit = $jamOnly !== null ? $jamToMenit + $minuteOnly : null;
+            
+            // hitung NAB
+            $nab = isset($totalMenit) ? $this->getNabKebisingan($totalMenit) : null;
             
             $data->is_approve  = true;
             $data->approved_by = $this->karyawan;
@@ -169,6 +217,15 @@ class FdlKebisinganPersonalController extends Controller
             $header->approved_by = $this->karyawan;
             $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
             $header->save();
+            $wsValue = WsValueUdara::where('no_sampel', $data->no_sampel)->where('is_active', true)->first();
+            if(!$wsValue){
+                $wsValue = new WsValueUdara;
+            }
+            $wsValue->no_sampel = $data->no_sampel;
+            $wsValue->id_kebisingan_header = $header->id;
+            $wsValue->hasil1 = $data->value_kebisingan;
+            $wsValue->nab = $nab;
+            $wsValue->save();
 
             app(NotificationFdlService::class)->sendApproveNotification('Kebisingan Personal', $data->no_sampel, $this->karyawan, $data->created_by);
 

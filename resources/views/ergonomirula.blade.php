@@ -5,7 +5,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 10pt; /* Reduced from 11pt */
+            font-size: 10px; /* Reduced from 11pt */
             background-color: white;
             margin: 0;
             padding: 0;
@@ -20,7 +20,7 @@
 
         h1 {
             text-align: center;
-            font-size: 12px; /* Reduced from 16pt */
+            font-size: 10px; /* Reduced from 16pt */
             font-weight: bold;
             text-decoration: underline;
             margin-bottom: 5px;
@@ -46,7 +46,10 @@
         th, td {
             padding: 3px; /* Reduced from 4px */
             text-align: center;
-            font-size: 9pt; /* Reduced from 10pt */
+            font-size: 10px; /* Reduced from 10pt */
+
+            white-space: nowrap; 
+            overflow: hidden;
         }
 
         .text-left {
@@ -57,7 +60,7 @@
             text-align: center;
             font-weight: bold;
             padding: 3px;
-            font-size: 9pt;
+            font-size: 10px;
         }
 
         .table-secondary {
@@ -91,31 +94,41 @@
             font-weight: normal;
             width: 110px; /* Reduced from 120px */
             float: left;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-value {
             margin-left: 110px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .info-header {
             font-weight: bold;
             margin-top: 6px; /* Reduced from 8px */
             margin-bottom: 2px; /* Reduced from 3px */
-            font-size: 9pt;
+            font-size: 9px;
             clear: both;
         }
 
         .info-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             margin-top: 4px;
             line-height: 1.1;
         }
 
+        .info-table td {
+            
+            padding: 3px;
+            font-size: 10px; /* Pastikan semua data tabel adalah 9px */
+            
+            /* SOLUSI KUNCI 2: Memastikan teks boleh wrapping, sehingga tidak menyusut paksa */
+            white-space: normal; 
+            word-wrap: break-word;
+        }
+
         .arrow {
             text-align: center;
-            font-size: 16pt; /* Reduced from 18pt */
+            font-size: 16px; /* Reduced from 18pt */
             margin: 4px 0;
             display: inline-block;
             vertical-align: middle;
@@ -125,7 +138,7 @@
             border: 1px solid #000;
             padding: 6px; /* Reduced from 8px */
             margin-top: 8px;
-            font-size: 9pt;
+            font-size: 9px;
         }
 
         .watermark {
@@ -138,7 +151,7 @@
             z-index: -1;
             pointer-events: none;
             transform: rotate(-45deg);
-            font-size: 100pt; /* Reduced from 120pt */
+            font-size: 100px; /* Reduced from 120pt */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -165,7 +178,7 @@
         }
 
         .footer-note {
-            font-size: 7pt; /* Reduced from 8pt */
+            font-size: 7px; /* Reduced from 8pt */
             text-align: center;
             margin-top: 8px;
             font-style: italic;
@@ -236,27 +249,28 @@
             <!-- Left side - Tables -->
             <div class="table-main">
                 <!-- Tabel A -->
+                <!-- Tabel Acuan Skor Risiko -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="8%">No</td>
                         <td rowspan="2" width="30%">Jenis Skoring</td>
-                        <td colspan="5" width="65%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
+                        <td colspan="5" width="62%" class="table-title">Skor Tabel A (Lengan dan Pergelangan Tangan)</td>
                     </tr>
                     <tr>
-                        <td>Nilai</td>
-                        <td>Skoring (1)</td>
-                        <td>Beban (2)</td>
-                        <td>Otot (3)</td>
-                        <td>Total Skor Tabel A (1+2+3)</td>
+                        <td width="10%">Nilai</td>
+                        <td width="10%">Skoring (1)</td>
+                        <td width="10%">Beban (2)</td>
+                        <td width="10%">Otot (3)</td>
+                        <td width="22%">Total Skor Tabel A (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
                         <td class="text-left">Lengan Atas</td>
                         <td> {{$pengukuran->lengan_atas}} </td>
-                        <td rowspan="4">{{$pengukuran->total_skor_a}}</td>
+                        <td rowspan="4">{{$pengukuran->nilai_tabel_a}}</td>
                         <td rowspan="4">{{$pengukuran->beban_a}}</td>
                         <td rowspan="4">{{$pengukuran->aktivitas_otot_a}}</td>
-                        <td rowspan="4">{{$pengukuran->nilai_tabel_a}}</td>
+                        <td rowspan="4">{{$pengukuran->total_skor_a}}</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -274,29 +288,27 @@
                         <td>{{$pengukuran->tangan_memuntir}}</td>
                     </tr>
                 </table>
-
-                <!-- Tabel B -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td rowspan="2" width="5%">No</td>
+                        <td rowspan="2" width="8%">No</td>
                         <td rowspan="2" width="30%">Jenis Skoring</td>
-                        <td colspan="5" width="65%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
+                        <td colspan="5" width="62%" class="table-title">Skor Tabel B (Leher, Badan, Kaki)</td>
                     </tr>
                     <tr>
-                        <td>Nilai</td>
-                        <td>Skoring (1)</td>
-                        <td>Beban (2)</td>
-                        <td>Otot (3)</td>
-                        <td>Total Skor Tabel B (1+2+3)</td>
+                        <td width="10%">Nilai</td>
+                        <td width="10%">Skoring (1)</td>
+                        <td width="10%">Beban (2)</td>
+                        <td width="10%">Otot (3)</td>
+                        <td width="22%">Total Skor Tabel B (1+2+3)</td>
                     </tr>
                     <tr>
                         <td>1</td>
                         <td class="text-left">Leher</td>
                         <td>{{$pengukuran->leher}}</td>
-                        <td rowspan="3">{{$pengukuran->total_skor_b}}</td>
+                        <td rowspan="3">{{$pengukuran->nilai_tabel_b}}</td>
                         <td rowspan="3">{{$pengukuran->beban_b}}</td>
                         <td rowspan="3">{{$pengukuran->aktivitas_otot_b}}</td>
-                        <td rowspan="3">{{$pengukuran->nilai_tabel_b}}</td>
+                        <td rowspan="3">{{$pengukuran->total_skor_b}}</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -309,19 +321,18 @@
                         <td>{{$pengukuran->kaki}}</td>
                     </tr>
                 </table>
-
                 <div style="width: 25%; float: left;">
                     <!-- Skor RULA Box -->
                     <table style="width: 100%; float: left;" cellpadding="3" cellspacing="0">
                         <tr>
-                            <td>SKOR RULA</td>
+                            <td><b>SKOR RULA</b></td>
                         </tr>
                         <tr>
                             <td>Skoring Tabel A & Tabel B</td>
                         </tr>
                     </table>
                 </div>
-                <div style="width: 10%; float: left; text-align: center;font-size: 16pt;">→</div>
+                <div style="width: 10%; float: left; text-align: center;font-size: 16px;">→</div>
                 <div style="
                     width: 55px;
                     height: 25px;
@@ -333,13 +344,10 @@
                 ">
                     {{$pengukuran->skor_rula}}
                 </div>
-
                 <div style="clear: both;"></div>
-
-                <!-- Tabel Acuan Skor Risiko -->
                 <table cellpadding="3" cellspacing="0">
                     <tr>
-                        <td colspan="6" class="text-left">Tabel Acuan Skor Risiko dan Tindakan Penanganan**</td>
+                        <td colspan="6" class="text-left">Tabel Acuan Skor Risiko dan Tindakan Perbaikan**</td>
                     </tr>
                     <tr>
                         <td>Skor RULA</td>
@@ -349,29 +357,32 @@
                     </tr>
                     <tr>
                         <td>1 - 2</td>
-                        <td>0</td>
+                        <td>1</td>
                         <td>Rendah</td>
                         <td colspan="3">Tidak ada tindakan yang diperlukan</td>
                     </tr>
                     <tr>
                         <td>3 - 4</td>
-                        <td>1</td>
+                        <td>2</td>
                         <td>Sedang</td>
                         <td colspan="3">Mungkin diperlukan tindakan</td>
                     </tr>
                     <tr>
                         <td>5 - 6</td>
-                        <td>2</td>
+                        <td>3</td>
                         <td>Tinggi</td>
                         <td colspan="3">Diperlukan tindakan</td>
                     </tr>
                     <tr>
                         <td>7</td>
-                        <td>3</td>
+                        <td>4</td>
                         <td>Sangat Tinggi</td>
                         <td colspan="3">Diperlukan tindakan saat ini</td>
                     </tr>
                 </table>
+                
+
+                
 
                 <!-- Kesimpulan -->
                 <div>
@@ -396,7 +407,7 @@
                         <tr>
                             <td>{{$personal->no_lhp}}</td>
                             <td>{{$personal->no_sampel}}</td>
-                            <td>Ergonomi - RULA</td>
+                            <td>ERGONOMI</td>
                         </tr>
                     </tbody>
                 </table>
@@ -407,7 +418,7 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Nama Pelanggan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="width: 72%;text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                            <td style="width: 72%;text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Alamat / Lokasi Sampling</td>
@@ -422,8 +433,17 @@
                             <td style="width: 3%;">:</td>
                             <td style="width: 72%; text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="width: 72%;text-align:start;">Pengamatan Langsung - RULA (Rapid Upper Limb Assessment)</td>
+                        </tr>
                     </table>
-
                     <div class="info-header">Data Individu/Pekerja yang Diukur</div>
                     <table class="info-table">
                         <tr>
@@ -439,67 +459,42 @@
                         <tr>
                             <td style="width: 25%; text-align:start;">Jenis Pekerjaan</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{$personal->aktivitas_ukur}}</td>
+                            <td style="width: 72%;text-align:start;">{{$personal->aktivitas_ukur}}</td>
                         </tr>
                         <tr>
                             <td style="width: 25%; text-align:start;">Lama Bekerja</td>
                             <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ $personal->lama_kerja }}</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Jenis Analisa</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengumpulan Data (Pengukuran & Skoring)</td>
-                        </tr>
-                        <tr>
-                            <td style="width: 25%; text-align:start;">Metode Analisa*</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">Pengamatan Langsung - RULA</td>
+                            <td style="width: 72%;text-align:start;">{{ $personal->lama_kerja }}</td>
                         </tr>
                     </table>
                     <div class="info-note">
                         * Metode Analisa Mengacu kepada Jenis Metode yang Direkomendasikan pada
                         Pedoman Teknis Pemeriksaan K3 Pengelolaan Tambahan Peraturan Menteri
                         Ketenagakerjaan RI No.5 Tahun 2018.<br>
-                        ** Tabel Acuan Skor Risiko mengacu kepada Handbook Human Factors and Ergonomic
+                        ** Tabel Acuan Skor Risiko mengacu kepada <i>Handbook Human Factors and Ergonomics Methods by Neville Stanton et al, 2005.</i>
                     </div>
                 </div>
             </div>
 
-            <div class="signature-section">
-                @if($ttd != null)
-                    @if($ttd->qr_path != null)
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right">
-                                    <div class="signature-date">
-                                        {{ $ttd->tanggal }}
-                                    </div><br>
-                                    <div class="signature-text">
-                                            <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @else
-                        <table class="signature-table">
-                            <tr>
-                                <td class="signature-left"></td>
-                                <td class="signature-right" style="text-align: center;">
-                                    <div class="signature-date">
-                                        Tangerang, 13 Agustus 2025
-                                    </div><br><br><br>
-                                    <div class="signature-text">
-                                        <strong>(Abidah Walfathiyyah)</strong><br>
-                                        <span>Technical Control Supervisor</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    @endif
-                @endif
-            </div>
+            <table style="width: 100%; margin-top: 7px; border: none;">
+                <tr>
+                    <td colspan="2" style="border: none; text-align: right; vertical-align: top;">
+                        <div style="margin-bottom: 5px;">
+                            Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
+                        </div>
+                        @if($ttd && $ttd->qr_path)
+                            <br><br>
+                            <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
+                        @else
+                            <br><br>
+                            <div style="font-weight: bold; text-decoration: underline;">
+                                (Abidah Walfathiyyah)
+                            </div>
+                            <div>Technical Control Supervisor</div>
+                        @endif
+                    </td>
+                </tr>
+            </table>
             <div style="clear: both;"></div>
         </div>
     </div>

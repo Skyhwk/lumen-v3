@@ -10,7 +10,8 @@ use App\Models\LhpsIklimHeaderHistory;
 use App\Models\LhpsIklimDetail;
 use App\Models\LhpsIklimCustom;
 use App\Models\LhpsIklimDetailHistory;
-
+use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\OrderHeader;
 use App\Models\MasterSubKategori;
 use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
@@ -207,7 +208,7 @@ class DraftUdaraIklimKerjaController extends Controller
             $pengesahan = PengesahanLhp::where('berlaku_mulai', '<=', $request->tanggal_lhp)
                 ->orderByDesc('berlaku_mulai')
                 ->first();
-
+            // dd($request->metode_sampling);
             $parameter = explode(', ', $request->parameter);
             $header->no_order = $request->no_order ? $request->no_order : NULL;
             $header->no_lhp = $request->no_lhp ? $request->no_lhp : NULL;
@@ -218,14 +219,13 @@ class DraftUdaraIklimKerjaController extends Controller
             $header->parameter_uji = json_encode($parameter);
             $header->nama_pelanggan = $request->nama_perusahaan ? $request->nama_perusahaan : NULL;
             $header->alamat_sampling = $request->alamat_sampling ? $request->alamat_sampling : NULL;
-            $header->keterangan = ($request->keterangan != '') ? $request->keterangan : NULL;
+            $header->keterangan = ($request->keterangan_header != '') ? $request->keterangan_header : NULL;
             $header->sub_kategori = $request->jenis_sampel ? $request->jenis_sampel : NULL;
-            $header->metode_sampling = $request->metode_sampling ? $request->metode_sampling : [];
+            $header->metode_sampling = ($request->metode_sampling) ? $request->metode_sampling : NULL; //ok
             // $header->tanggal_sampling = $request->tanggal_tugas ? $request->tanggal_tugas : NULL;
             $header->periode_analisa = $request->periode_analisa ? $request->periode_analisa : NULL;
             $header->nama_karyawan = $pengesahan->nama_karyawan ?? 'Abidah Walfathiyyah';
             $header->jabatan_karyawan = $pengesahan->jabatan_karyawan ?? 'Technical Control Supervisor';
-
             $header->regulasi = $request->regulasi ? json_encode($request->regulasi) : NULL;
             $header->regulasi_custom = $request->regulasi_custom ? json_encode($request->regulasi_custom) : NULL;
             $header->tanggal_lhp = $request->tanggal_lhp ? $request->tanggal_lhp : NULL;
@@ -272,6 +272,7 @@ class DraftUdaraIklimKerjaController extends Controller
                     $cleaned_indeks_suhu = $this->cleanArrayKeys($request->indeks_suhu_basah);
                     $cleaned_kondisi = $this->cleanArrayKeys($request->kondisi);
                     $cleaned_tanggal_sampling = $this->cleanArrayKeys($request->tanggal_sampling);
+                    $cleaned_lokasi = $this->cleanArrayKeys($request->keterangan);
 
                     if (array_key_exists($val, $cleaned_no_sampel)) {
                         $detail = new LhpsIklimDetail;
@@ -281,7 +282,7 @@ class DraftUdaraIklimKerjaController extends Controller
                         $detail->keterangan = $cleaned_lokasi[$val] ?? null;
                         $detail->indeks_suhu_basah = $cleaned_indeks_suhu[$val] ?? null;
                         $detail->kecepatan_angin = $cleaned_kecepatan_angin[$val] ?? null;
-                        $detail->suhu_temperatur = $cleaned_suhu_temperatur[$val] ?? null;
+                        $detail->suhu_temperatur = $cleaned_indeks_suhu[$val] ?? null;
                         $detail->kondisi = $cleaned_kondisi[$val] ?? null;
                         $detail->tanggal_sampling = $cleaned_tanggal_sampling[$val] ?? null;
                     }
@@ -388,14 +389,6 @@ class DraftUdaraIklimKerjaController extends Controller
 
                 // $fileName = 'LHP-IKLIM_KERJA-' . str_replace("/", "-", $header->no_lhp) . '.pdf';
                 $header->file_lhp = $fileName;
-                // if ($header->is_revisi == 1) {
-                //     $header->is_revisi = 0;
-                //     $header->is_generated = 0;
-                //     $header->count_revisi++;
-                //     if ($header->count_revisi > 2) {
-                //         $this->handleApprove($request, false);
-                //     }
-                // }
                 $header->save();
             }
 
@@ -408,6 +401,7 @@ class DraftUdaraIklimKerjaController extends Controller
             ], 201);
         } catch (\Exception $th) {
             DB::rollBack();
+            dd($th);
             return response()->json([
                 'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
                 'line' => $th->getLine(),
@@ -641,6 +635,7 @@ class DraftUdaraIklimKerjaController extends Controller
             ]);
         }
     }
+
     public function updateTanggalLhp(Request $request)
     {
         DB::beginTransaction();
@@ -723,6 +718,7 @@ class DraftUdaraIklimKerjaController extends Controller
             ], 500);
         }
     }
+    
     public function handleApprove(Request $request, $isManual = true)
     {
         try {
@@ -777,11 +773,6 @@ class DraftUdaraIklimKerjaController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
-                // dd($data->id_kategori_2);
 
                 $data->save();
                 HistoryAppReject::insert([
@@ -803,23 +794,31 @@ class DraftUdaraIklimKerjaController extends Controller
                     $qr->save();
                 }
 
-                $detail = LhpsIklimDetail::where('id_header', $data->id)->get();
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
 
-                // $servicePrint = new PrintLhp();
-                // $servicePrint->printByFilename($data->file_lhp, $detail);
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
 
-                // if (!$servicePrint) {
-                //     DB::rollBack();
-                //     return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);
-                // }
-
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
-
-                if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
+                ->first();
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $data->no_lhp,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
+                
             } else {
                 DB::rollBack();
                 return response()->json([

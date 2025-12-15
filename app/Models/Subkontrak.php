@@ -34,10 +34,16 @@ class Subkontrak extends Sector
         return $this->belongsTo('App\Models\OrderDetail', 'no_sampel', 'no_sampel')->where('is_active', true);
     }
 
-    public function master_parameter()
+    public function master_parameter_air()
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 1);
     }
+
+    public function master_parameter_padatan()
+    {
+        return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 6);
+    }
+    
     public function parameter_udara()
     {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('is_active', true)->where('id_kategori', 4);
@@ -60,6 +66,11 @@ class Subkontrak extends Sector
     {
         return $this->belongsTo('App\Models\WsValueLingkungan', 'id', 'id_subkontrak')->where('is_active', true);
     }
+    
+    public function ws_udara()
+    {
+        return $this->belongsTo('App\Models\WsValueUdara', 'id', 'id_subkontrak')->where('is_active', true);
+    }
     public function ws_value_cerobong()
     {
         return $this->belongsTo('App\Models\WsValueEmisiCerobong', 'id', 'id_subkontrak');
@@ -76,6 +87,11 @@ class Subkontrak extends Sector
 
     public function TrackingDua(){
         return $this->belongsTo('App\Models\FtcT', 'no_sampel', 'no_sample')->where('is_active', true);
+    }
+
+    public function detail_lapangan_microbiologi()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
     }
 
 }

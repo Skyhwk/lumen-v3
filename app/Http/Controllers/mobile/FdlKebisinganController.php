@@ -66,7 +66,6 @@ class FdlKebisinganController extends Controller
     public function store(Request $request)
     {
         DB::beginTransaction();
-        // dd($request);
         try {
             $cek = DataLapanganKebisingan::where('no_sampel', strtoupper(trim($request->no_sample)))->get();
             $nilai_array = [];
@@ -153,7 +152,32 @@ class FdlKebisinganController extends Controller
             }
 
             if ($request->kebisingan) {
-                $data->value_kebisingan = json_encode($request->kebisingan);
+                $nilai = [];
+                foreach ($request->kebisingan as $value) {
+
+                    // ubah ke string agar desimal tidak hilang
+                    $str = (string)$value;
+
+                    // cek ada titik atau tidak
+                    if (strpos($str, '.') !== false) {
+                        // pisahkan integer dan desimal
+                        [$int, $des] = explode('.', $str);
+
+                        // ambil hanya 1 digit desimal tanpa pembulatan
+                        $des = substr($des, 0, 1);
+
+                        // jika desimal kosong (misal "63."), set jadi "0"
+                        if ($des === "") $des = "0";
+
+                        $nilai[] = $int . '.' . $des;
+                    } else {
+                        // tidak ada desimal → tambahkan ".0"
+                        $nilai[] = $str . '.0';
+                    }
+                }
+
+
+                $data->value_kebisingan = json_encode($nilai);
             }
             if ($request->jam_pemaparan) {
                 $data->jam_pemaparan = $request->jam_pemaparan;
@@ -183,7 +207,7 @@ class FdlKebisinganController extends Controller
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
 
-            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
             if($orderDetail->tanggal_terima == null){
                 $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');

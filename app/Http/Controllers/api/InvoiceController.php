@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\RecordPembayaranInvoice;
 use App\Services\GenerateToken;
 use App\Http\Controllers\Controller;
+use App\Models\Withdraw;
 use App\Services\RenderInvoice;
 use App\Services\SendEmail;
 use App\Services\GetAtasan;
@@ -40,11 +41,11 @@ class InvoiceController extends Controller
                 ->groupBy('no_invoice');
 
             $data = Invoice::select(
+                DB::raw('MAX(invoice.id) AS id'),
                 'invoice.no_invoice',
                 DB::raw('MAX(invoice.created_by) AS created_by'),
                 DB::raw('MAX(faktur_pajak) AS faktur_pajak'),
                 DB::raw('floor(SUM(invoice.nilai_tagihan)) AS total_tagihan'),
-                DB::raw('MAX(jabatan_pj) AS jabatan_pj'),
                 DB::raw('MAX(rekening) AS rekening'),
                 DB::raw('MAX(keterangan) AS keterangan'),
                 DB::raw('MAX(nama_pj) AS nama_pj'),
@@ -86,11 +87,58 @@ class InvoiceController extends Controller
                 ->where('invoice.is_active', true)
                 ->where('is_whitelist', false)
                 ->where('order_header.is_active', true)
-                ->orderBy('invoice.no_invoice', 'DESC')
-                ->get();
+                ->orderBy('invoice.no_invoice', 'DESC');
 
-            return Datatables::of($data)->make(true);
+            return Datatables::of($data)
+                ->addColumn('history', function ($row) {
+                    $record = RecordPembayaranInvoice::where('no_invoice', $row->no_invoice)
+                        ->where('is_active', true)
+                        ->orderByDesc('id')
+                        ->get()
+                        ->map(function ($r) {
+                            return [
+                                'type' => 'record',
+                                'nilai_pembayaran' => $r->nilai_pembayaran,
+                                'nilai_pengurangan' => null,
+                                'jenis_pengurangan' => null,
+                                'tanggal_pembayaran' => $r->tgl_pembayaran,
+                                'keterangan' => $r->keterangan,
+                                'created_by' => $r->created_by,
+                                'created_at' => $r->created_at,
+                            ];
+                        });
 
+                    $withdraw = Withdraw::where('no_invoice', $row->no_invoice)
+                        ->orderByDesc('id')
+                        ->get()
+                        ->map(function ($w) {
+                            return [
+                                'type' => 'withdraw',
+                                'nilai_pembayaran' => null,
+                                'nilai_pengurangan' => $w->nilai_pembayaran,
+                                'jenis_pengurangan' => $w->keterangan_pelunasan,
+                                'tanggal_pembayaran' => $w->created_at,
+                                'keterangan' => $w->keterangan_tambahan,
+                                'created_by' => $w->created_by,
+                                'created_at' => $w->created_at,
+                            ];
+                        });
+
+                    $history = $record->merge($withdraw);
+
+                    return $history;
+                })
+                ->filterColumn('nama_customer', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->where('order_header.nama_perusahaan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('consultant', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->Where('order_header.konsultan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->make(true);
         } catch (\Throwable $th) {
             dd($th);
         }
@@ -120,12 +168,10 @@ class InvoiceController extends Controller
                 }
 
                 $nilaiPembayaran = $getNilai->nilai_pembayaran + preg_replace('/[Rp., ]/', '', $request->nilai_pelunasan);
-
             } else {
 
                 $nilaiPembayaran = preg_replace('/[Rp., ]/', '', $request->nilai_pelunasan);
                 $sisaPembayaran = preg_replace('/[Rp., ]/', '', $request->nilai_tagihan) - preg_replace('/[Rp., ]/', '', $request->nilai_pelunasan) - preg_replace('/[Rp., ]/', '', $request->nilai_pengurangan);
-
             }
 
             //insert ke tabel record pembayaran invoice
@@ -195,6 +241,4 @@ class InvoiceController extends Controller
             'message' => "Invoice " . $request->no_invoice . " Has Been Updated."
         ]);
     }
-
-
 }

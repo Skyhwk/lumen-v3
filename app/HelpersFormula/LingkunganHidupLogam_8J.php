@@ -27,6 +27,7 @@ class LingkunganHidupLogam_8J
         $C = null;
         $C1 = null;
         $C2 = null;
+        $C14 = null;
         $w1 = null;
         $w2 = null;
         $b1 = null;
@@ -41,51 +42,46 @@ class LingkunganHidupLogam_8J
         $data_pershift = null;
 
 
-        $arr_hasil = [];
+        $C = $C15 = $C16 = [];
 
-        $Vstd = round(($data->average_flow * $data->durasi) / 1000, 1);
-        if ((float) $Vstd <= 0) {
-            $C = 0;
-            $Qs = 0;
-            $C1 = 0;
-        } else {
-            foreach($data->ks as $key => $value) {
-                if($data->tipe_data == 'ambient'){
-                    $rawC = (($value - $data->kb[$key]) * ($data->vl / 1000) * 1) / $Vstd;
-                }else if($data->tipe_data == 'ulk'){
-                    $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
-                }
+        foreach($data->ks as $key => $value) {
+            $Vstd = round(($data->array_qs[$key] * $data->durasi_array[$key]) / 1000, 4);
+            if ((float) $Vstd <= 0) {
+                $rawC = 0;
+                $Qs = 0;
+                $C = 0;
+            } else {
+                $rawC = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd;
 
                 $result = round($rawC, 4);
-
-                array_push($arr_hasil, $result);
             }
+            $Vstd_alt = round(($data->flow_array[$key] * $data->durasi_array[$key]) / 1000, 4);
+            if ((float) $Vstd_alt <= 0) {
+                $C15_result = 0;
+            } else {
+                $rawC15 = (($value - $data->kb[$key]) * $data->vl * $data->st) / $Vstd_alt;
+                $C15_result = round($rawC15, 4);
+            }
+
+            $C16_result = $result / 1000;
+            
+            array_push($C, $result);
+            array_push($C15, $C15_result);
+            array_push($C16, round($C16_result, 4));
         }
         $vl = $data->vl;
 
-        // tipe data = ambient, ulk, volatile
-        if($data->tipe_data == 'ulk'){
-            $C1 = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
+        $C = count($C) > 0 ? round(array_sum($C) / count($C), 4) : 0;
+        $C15 = count($C15) > 0 ? round(array_sum($C15) / count($C15), 4) : 0;
+        $C16 = count($C16) > 0 ? round(array_sum($C16) / count($C16), 4) : 0;
 
-            if(!is_null($mdl) && $C1 < 0.000013) {
-                $C1 = '<0.000013';
-            }
+        $satuan = 'ug/Nm3';
 
-            $satuan = 'mg/m³';
-
-            $data_pershift = [
-                'Shift 1' => $arr_hasil[0] ?? null,
-                'Shift 2' => $arr_hasil[1] ?? null,
-                'Shift 3' => $arr_hasil[2] ?? null
-            ];
-        }else if($data->tipe_data == 'ambient') {
-            $C = count($arr_hasil) > 0 ? round(array_sum($arr_hasil) / count($arr_hasil), 4) : 0;
-
-            if(!is_null($mdl) && $C < 0.0128) {
-                $C = '<0.0128';
-            }
-            $satuan = 'ug/Nm³';
-        }
+        $data_pershift = [
+            'Shift 1' => $C[0] ?? null,
+            'Shift 2' => $C[1] ?? null,
+            'Shift 3' => $C[2] ?? null
+        ];
 
         // dd($C, $C1, $C2);
 
@@ -111,6 +107,9 @@ class LingkunganHidupLogam_8J
             'C' => $C,
             'C1' => $C1,
             'C2' => $C2,
+            'C14' => $C14,
+            'C15' => $C15,
+            'C16' => $C16,
             'vl' => $vl,
             'st' => $st,
             'Vstd' => $Vstd,

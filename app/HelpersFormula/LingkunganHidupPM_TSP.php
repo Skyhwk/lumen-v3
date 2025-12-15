@@ -44,6 +44,8 @@ class LingkunganHidupPM_TSP
 
         $use_vstd = ['TSP','TSP (24 Jam)'];
         $use_V = ['TSP (6 Jam)','TSP (8 Jam)'];
+
+        $C_value = $C1_value = $C15_value = $C16_value = [];
         // dd(in_array($data->tipe_data, $use_vstd));
         if (in_array($data->parameter, $use_vstd)) {
             $Vstd = \str_replace(",", "",number_format($data->nilQs * $data->durasi, 4));
@@ -57,21 +59,7 @@ class LingkunganHidupPM_TSP
                 $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
             }
 
-            if ($id_parameter == 342) {
-                if (floatval($C) < 1.5151)
-                    $C = '<1.5151';
-                if (floatval($C1) < 0.0015)
-                    $C1 = '<0.0015';
-            } else if ($id_parameter == 343) {
-                // if (floatval($C) < 0.0631)
-                // 	$C = '<0.0631';
-                // if (floatval($C1) < 0.000063)
-                // 	$C1 = '<0.000063';
-                if (floatval($C) < 1)
-                    $C = '<1';
-                if (floatval($C1) < 0.001)
-                    $C1 = '<0.001';
-            }
+            $satuan = 'ug/Nm3';
         } else if (in_array($data->parameter, $use_V)) {
             // dd($rerataFlow, $dur);
             $V = \str_replace(",", "",($data->average_flow * $data->durasi));
@@ -100,6 +88,8 @@ class LingkunganHidupPM_TSP
                 if (floatval($C1) < 0.001)
                     $C1 = '<0.001';
             }
+
+            $satuan = 'mg/m3';
         }
 
         $w1 = $data->w1;

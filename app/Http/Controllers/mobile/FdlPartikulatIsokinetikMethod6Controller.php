@@ -114,6 +114,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
         DB::beginTransaction();
         try {
             $check = DataLapanganIsokinetikHasil::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+            $method2 = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
             if ($check) {
                 return response()->json([
                     'message' => 'No sample ' . strtoupper(trim($request->no_sample)) . ' Sudah Terinput Pada Method 6.!'
@@ -121,8 +122,7 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
             } else {
                 $data = new DataLapanganIsokinetikHasil();
 
-                if ($request->id_lapangan != '')
-                    $data->id_lapangan = $request->id_lapangan;
+                $data->id_lapangan = $method2->id_lapangan;
                 if (strtoupper(trim($request->no_sample)) != '')
                     $data->no_sampel = strtoupper(trim($request->no_sample));
                 if ($request->impinger1 != '')
@@ -174,10 +174,10 @@ class FdlPartikulatIsokinetikMethod6Controller extends Controller
                 $data->save();
 
                 // UPDATE ORDER DETAIL
-                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->first();
+                $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
 
                 if($orderDetail->tanggal_terima == null){
-                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                    $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                     $orderDetail->save();
                 }
 

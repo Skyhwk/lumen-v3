@@ -13,6 +13,7 @@ use App\Models\MasterSubKategori;
 use App\Models\MasterKaryawan;
 use App\Models\Parameter;
 use App\Models\IsokinetikHeader;
+use App\Models\WsValueEmisiCerobong;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -231,347 +232,6 @@ class FdlPartikulatIsokinetikController extends Controller
             }
         }
     }
-
-    // public function index(Request $request)
-    // {
-    //     if ($request->method == 1) {
-    //         $this->autoBlock(DataLapanganIsokinetikSurveiLapangan::class);
-    //         $data = DataLapanganIsokinetikSurveiLapangan::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_survei', function ($query, $keyword) {
-    //                 $query->where('no_survei', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('titik_koordinat', function ($query, $keyword) {
-    //                 $query->where('titik_koordinat', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('sumber_emisi', function ($query, $keyword) {
-    //                 $query->where('sumber_emisi', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('merk', function ($query, $keyword) {
-    //                 $query->where('merk', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kecepatan', function ($query, $keyword) {
-    //                 $query->where('kecepatan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('diameter_cerobong', function ($query, $keyword) {
-    //                 $query->where('diameter_cerobong', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('bentuk_cerobong', function ($query, $keyword) {
-    //                 $query->where('bentuk_cerobong', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('jam_operasi', function ($query, $keyword) {
-    //                 $query->where('jam_operasi', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('proses_filtrasi', function ($query, $keyword) {
-    //                 $query->where('proses_filtrasi', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('waktu_survei', function ($query, $keyword) {
-    //                 $query->where('waktu_survei', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('ukuran_lubang', function ($query, $keyword) {
-    //                 $query->where('ukuran_lubang', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('jumlah_lubang_sampling', function ($query, $keyword) {
-    //                 $query->where('jumlah_lubang_sampling', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('lebar_platform', function ($query, $keyword) {
-    //                 $query->where('lebar_platform', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('jarak_upstream', function ($query, $keyword) {
-    //                 $query->where('jarak_upstream', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('jarak_downstream', function ($query, $keyword) {
-    //                 $query->where('jarak_downstream', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kategori_upstream', function ($query, $keyword) {
-    //                 $query->where('kategori_upstream', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kategori_downstream', function ($query, $keyword) {
-    //                 $query->where('kategori_downstream', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('lintas_partikulat', function ($query, $keyword) {
-    //                 $query->where('lintas_partikulat', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kecepatan_linier', function ($query, $keyword) {
-    //                 $query->where('kecepatan_linier', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     } else if ($request->method == 2) {
-    //         $this->autoBlock(DataLapanganIsokinetikPenentuanKecepatanLinier::class);
-    //         $data = DataLapanganIsokinetikPenentuanKecepatanLinier::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_survei', function ($query, $keyword) {
-    //                 $query->where('no_survei', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_sampel', function ($query, $keyword) {
-    //                 $query->where('no_sampel', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('id_lapangan', function ($query, $keyword) {
-    //                 $query->where('id_lapangan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('diameter_cerobong', function ($query, $keyword) {
-    //                 $query->where('diameter_cerobong', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('suhu', function ($query, $keyword) {
-    //                 $query->where('suhu', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kelembapan', function ($query, $keyword) {
-    //                 $query->where('kelembapan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('tekanan_udara', function ($query, $keyword) {
-    //                 $query->where('tekanan_udara', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kp', function ($query, $keyword) {
-    //                 $query->where('kp', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('cp', function ($query, $keyword) {
-    //                 $query->where('cp', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('tekPa', function ($query, $keyword) {
-    //                 $query->where('tekPa', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('waktu_pengukuran', function ($query, $keyword) {
-    //                 $query->where('waktu_pengukuran', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('dP', function ($query, $keyword) {
-    //                 $query->where('dP', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('TM', function ($query, $keyword) {
-    //                 $query->where('TM', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('Ps', function ($query, $keyword) {
-    //                 $query->where('Ps', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('kecLinier', function ($query, $keyword) {
-    //                 $query->where('kecLinier', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     } else if ($request->method == 3) {
-    //         $this->autoBlock(DataLapanganIsokinetikBeratMolekul::class);
-    //         $data = DataLapanganIsokinetikBeratMolekul::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('id_lapangan', function ($query, $keyword) {
-    //                 $query->where('id_lapangan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_sampel', function ($query, $keyword) {
-    //                 $query->where('no_sampel', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('diameter', function ($query, $keyword) {
-    //                 $query->where('diameter', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('waktu', function ($query, $keyword) {
-    //                 $query->where('waktu', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('suhu_cerobong', function ($query, $keyword) {
-    //                 $query->where('suhu_cerobong', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('O2', function ($query, $keyword) {
-    //                 $query->where('O2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('CO', function ($query, $keyword) {
-    //                 $query->where('CO', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('CO2', function ($query, $keyword) {
-    //                 $query->where('CO2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('NO', function ($query, $keyword) {
-    //                 $query->where('NO', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('NOx', function ($query, $keyword) {
-    //                 $query->where('NOx', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('NO2', function ($query, $keyword) {
-    //                 $query->where('NO2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('SO2', function ($query, $keyword) {
-    //                 $query->where('SO2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('O2Mole', function ($query, $keyword) {
-    //                 $query->where('O2Mole', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('CO2Mole', function ($query, $keyword) {
-    //                 $query->where('CO2Mole', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('COMole', function ($query, $keyword) {
-    //                 $query->where('COMole', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('Ts', function ($query, $keyword) {
-    //                 $query->where('Ts', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('N2Mole', function ($query, $keyword) {
-    //                 $query->where('N2Mole', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('MdMole', function ($query, $keyword) {
-    //                 $query->where('MdMole', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     } else if ($request->method == 4) {
-    //         $this->autoBlock(DataLapanganIsokinetikKadarAir::class);
-    //         $data = DataLapanganIsokinetikKadarAir::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_sampel', function ($query, $keyword) {
-    //                 $query->where('no_sampel', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('id_lapangan', function ($query, $keyword) {
-    //                 $query->where('id_lapangan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('diameter_cerobong', function ($query, $keyword) {
-    //                 $query->where('diameter_cerobong', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('waktu', function ($query, $keyword) {
-    //                 $query->where('waktu', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('bws', function ($query, $keyword) {
-    //                 $query->where('bws', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('ms', function ($query, $keyword) {
-    //                 $query->where('ms', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('vs', function ($query, $keyword) {
-    //                 $query->where('vs', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     } else if ($request->method == 5) {
-    //         $this->autoBlock(DataLapanganIsokinetikPenentuanPartikulat::class);
-    //         $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_sampel', function ($query, $keyword) {
-    //                 $query->where('no_sampel', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('id_lapangan', function ($query, $keyword) {
-    //                 $query->where('id_lapangan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('diameter', function ($query, $keyword) {
-    //                 $query->where('diameter', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('titik_lintas_partikulat', function ($query, $keyword) {
-    //                 $query->where('titik_lintas_partikulat', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('data_Y', function ($query, $keyword) {
-    //                 $query->where('data_Y', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('Delta_H', function ($query, $keyword) {
-    //                 $query->where('Delta_H', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('dn_req', function ($query, $keyword) {
-    //                 $query->where('dn_req', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('k_iso', function ($query, $keyword) {
-    //                 $query->where('k_iso', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('delta_H_req', function ($query, $keyword) {
-    //                 $query->where('delta_H_req', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('waktu', function ($query, $keyword) {
-    //                 $query->where('waktu', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('dn_actual', function ($query, $keyword) {
-    //                 $query->where('dn_actual', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger1', function ($query, $keyword) {
-    //                 $query->where('impinger1', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger2', function ($query, $keyword) {
-    //                 $query->where('impinger2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger3', function ($query, $keyword) {
-    //                 $query->where('impinger3', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger4', function ($query, $keyword) {
-    //                 $query->where('impinger4', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('Vs', function ($query, $keyword) {
-    //                 $query->where('Vs', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('dgmAwal', function ($query, $keyword) {
-    //                 $query->where('dgmAwal', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     } else if ($request->method == 6) {
-    //         $this->autoBlock(DataLapanganIsokinetikHasil::class);
-    //         $data = DataLapanganIsokinetikHasil::with('detail')->orderby('id', 'desc');
-
-    //         return Datatables::of($data)
-    //             ->filterColumn('created_by', function ($query, $keyword) {
-    //                 $query->where('created_by', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('no_sampel', function ($query, $keyword) {
-    //                 $query->where('no_sampel', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('id_lapangan', function ($query, $keyword) {
-    //                 $query->where('id_lapangan', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger1', function ($query, $keyword) {
-    //                 $query->where('impinger1', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger2', function ($query, $keyword) {
-    //                 $query->where('impinger2', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger3', function ($query, $keyword) {
-    //                 $query->where('impinger3', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('impinger4', function ($query, $keyword) {
-    //                 $query->where('impinger4', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('totalBobot', function ($query, $keyword) {
-    //                 $query->where('totalBobot', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('Collector', function ($query, $keyword) {
-    //                 $query->where('Collector', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('v_wtr', function ($query, $keyword) {
-    //                 $query->where('v_wtr', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('v_gas', function ($query, $keyword) {
-    //                 $query->where('v_gas', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('bws_frac', function ($query, $keyword) {
-    //                 $query->where('bws_frac', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('bws_aktual', function ($query, $keyword) {
-    //                 $query->where('bws_aktual', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('ps', function ($query, $keyword) {
-    //                 $query->where('ps', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('avgVs', function ($query, $keyword) {
-    //                 $query->where('avgVs', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('qs', function ($query, $keyword) {
-    //                 $query->where('qs', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('qs_act', function ($query, $keyword) {
-    //                 $query->where('qs_act', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('avg_Tm', function ($query, $keyword) {
-    //                 $query->where('avg_Tm', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->filterColumn('persenIso', function ($query, $keyword) {
-    //                 $query->where('persenIso', 'like', '%' . $keyword . '%');
-    //             })
-    //             ->make(true);
-    //     }
-    // }
 
     public function index(Request $request)
     {
@@ -796,7 +456,7 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 5) {
             $this->autoBlock(DataLapanganIsokinetikPenentuanPartikulat::class);
-            $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail','survei');
+            $data = DataLapanganIsokinetikPenentuanPartikulat::with('detail','survei', 'method3');
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -858,7 +518,7 @@ class FdlPartikulatIsokinetikController extends Controller
                 ->make(true);
         } else if ($request->method == 6) {
             $this->autoBlock(DataLapanganIsokinetikHasil::class);
-            $data = DataLapanganIsokinetikHasil::with('detail','survei');
+            $data = DataLapanganIsokinetikHasil::with('detail','survei','method5');
 
             return Datatables::of($data)
                 ->filterColumn('created_by', function ($query, $keyword) {
@@ -950,10 +610,12 @@ class FdlPartikulatIsokinetikController extends Controller
         if (isset($request->id) && $request->id != null) {
             if ($request->method == 1) {
                 $data = DataLapanganIsokinetikSurveiLapangan::where('id', $request->id)->first();
+                $panjang = $data->lfw / 100; // cm ke meter
+                $lebar = $data->lnw / 100; // cm ke meter
                 if($data->bentuk_cerobong == "Persegi"){
-                    $data->luas_penampang = number_format($panjang * $lebar, 2, '.', ',');
+                    $data->luas_penampang = number_format($panjang * $lebar, 4, '.', '');
                 }else{
-                    $data->luas_penampang = number_format(3.14 * 0.25 * $diameter * $diameter, 2, '.', ',');
+                    $data->luas_penampang = number_format(3.14 * pow($data->diameter_cerobong / 2, 2), 4, '.', '');
                 }
                 $data->is_approve = true;
                 $data->approved_by = $this->karyawan;
@@ -970,28 +632,7 @@ class FdlPartikulatIsokinetikController extends Controller
                 DB::beginTransaction();
                 try {
                     $data = DataLapanganIsokinetikPenentuanKecepatanLinier::where('id', $request->id)->first();
-                    // $method1 = DataLapanganIsokinetikSurveiLapangan::where('id', $data->id_lapangan)->where('is_approve', true)->first();
-                    // $header = IsokinetikHeader::where('no_sampel', $data->no_sampel)->first();
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
-
-                    // if ($method1) {
-                    //     if (!$header) {
-                    //         $header = new IsokinetikHeader(); // <- penting!
-                    //     }
-
-                    //     $header->no_sampel = $data->no_sampel;
-                    //     $header->id_lapangan = $data->id_lapangan;
-                    //     $header->id_parameter = 396;
-                    //     $header->parameter = "Iso-Traverse";
-                    //     $header->tanggal_terima = $order->tanggal_terima;
-                    //     $header->template_stp = 55;
-                    //     $header->is_approve = true;
-                    //     $header->approved_by = $this->karyawan;
-                    //     $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
-                    //     $header->created_by = $this->karyawan;
-                    //     $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                    //     $header->save();
-                    // }
 
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
@@ -1042,7 +683,6 @@ class FdlPartikulatIsokinetikController extends Controller
                 DB::beginTransaction();
                 try {
                     $data = DataLapanganIsokinetikPenentuanPartikulat::where('id', $request->id)->first();
-
                     $method3 = DataLapanganIsokinetikBeratMolekul::where('no_sampel', $data->no_sampel)
                         ->where('is_approve', true)
                         ->get();
@@ -1050,10 +690,18 @@ class FdlPartikulatIsokinetikController extends Controller
                         ->where('is_approve', true)
                         ->first();
 
-                    // Validasi awal
-                    if (!$data || $method3->isEmpty() || !$method4) {
-                        return response()->json(['message' => 'Data tidak lengkap untuk diproses.'], 400);
+                    $notApproved = [];
+                    if (!$method3)
+                        $notApproved[] = 'Berat Molekul';
+                    if (!$method4)
+                        $notApproved[] = 'Kadar Air';
+
+                    if (count($notApproved)) {
+                        return response()->json([
+                            'message' => 'Data berikut belum dilakukan approved: ' . implode(', ', $notApproved)
+                        ], 400);
                     }
+
 
                     // rata-rata dari method 3
                     $avgO2Mole = sprintf("%.7f", $method3->avg('O2Mole'));
@@ -1068,10 +716,12 @@ class FdlPartikulatIsokinetikController extends Controller
                     // Perhitungan
                     $n2Mole = sprintf("%.7f", $avgO2Mole + $avgCO2Mole + $avgCOMole);
                     $md = sprintf("%.7f", (44 * $avgCO2Mole) + (28 * $avgCOMole) + (32 * $avgO2Mole) + (28 * $n2Mole));
-
+                    
                     $nCO2 = sprintf("%.7f", ($avgCO2 * 10000 * 44 * 1000) / 21500);
-
-                    $combustion = sprintf("%.7f", (($nCO2 / ($nCO2 + $avgCO)) * 100) / 100);
+                    
+                    $combustion = ($nCO2 + $avgCO) == 0 
+                                ? 0 
+                                : sprintf("%.7f", ($nCO2 / ($nCO2 + $avgCO)) * 100);
 
                     // Asumsi mdMole sama dengan $md (kalau memang kamu ada variabel mdMole sebelumnya, bisa ganti)
                     $mdMole = (float) $md;
@@ -1095,11 +745,17 @@ class FdlPartikulatIsokinetikController extends Controller
                     $data->save();
 
                     $method6 = DataLapanganIsokinetikHasil::where('no_sampel', $data->no_sampel)->first();
+                    
                     // GAS VOL
-                    $parsed = json_decode($data->DGM, true); // true agar jadi array asosiatif
-                    $avgDGM = $parsed[0]['avgDGM'];
+                    $nilaiDGM = $data->DGM[0]['nilaiDGM'];
 
-                    $gas_vol = number_format($avgDGM / 1000, 4, '.', ',');
+                    $lastHole = array_key_last($nilaiDGM);
+
+                    $lastValue = end($nilaiDGM[$lastHole]);
+
+                    $hitung = $lastValue - $data->dgmAwal;
+
+                    $gas_vol = number_format($hitung / 1000, 4, '.', '');
                     
                     $method6->gas_vol = $gas_vol;
                     $method6->save();
@@ -1114,20 +770,37 @@ class FdlPartikulatIsokinetikController extends Controller
                     DB::rollBack();
                     return response()->json([
                         'message' => 'Terjadi kesalahan saat menyimpan data.',
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
+                        'line' => $e->getLine()
                     ], 500);
                 }
             } else if ($request->method == 6) {
                 try {
-                    DB::beginTransaction();
 
                     $data = DataLapanganIsokinetikHasil::where('id', $request->id)->first();
-
                     $method1 = DataLapanganIsokinetikSurveiLapangan::where('id', $data->id_lapangan)->where('is_approve', 1)->first();
                     $method2 = DataLapanganIsokinetikPenentuanKecepatanLinier::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method3 = DataLapanganIsokinetikBeratMolekul::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method4 = DataLapanganIsokinetikKadarAir::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
                     $method5 = DataLapanganIsokinetikPenentuanPartikulat::where('no_sampel', $data->no_sampel)->where('is_approve', 1)->first();
+                    
+                    $notApproved = [];
+                    if (!$method1)
+                        $notApproved[] = 'Survei Lapangan';
+                    if (!$method2)
+                        $notApproved[] = 'Penentuan Kecepatan Linier';
+                    if (!$method3)
+                        $notApproved[] = 'Berat Molekul';
+                    if (!$method4)
+                        $notApproved[] = 'Kadar Air';
+                    if (!$method5)
+                        $notApproved[] = 'Penentuan Partikulat';
+
+                    if (count($notApproved)) {
+                        return response()->json([
+                            'message' => 'Data berikut belum dilakukan approved: ' . implode(', ', $notApproved)
+                        ], 400);
+                    }
 
                     // Fungsi Rata-rata
                     function getAverageFromData($data) {
@@ -1173,48 +846,63 @@ class FdlPartikulatIsokinetikController extends Controller
 
                     $konstanta1 = $selisih;
 
-                    $ukuranLubang = $method1->ukuran_lubang * 10; // Convert cm to mm
-                    $diameterCerobong = NULL;
+                    $ukuranLubang = number_format($method1->ukuran_lubang / 100, 2, '.', ''); // Convert cm to m
+                    $diameterCerobong = $method1->diameter_cerobong; // in m
 
-                    if($method1->bentuk_cerobong == "Persegi"){
-                        $diameterCm = $method1->diameter_cerobong ?? NULL;
+                    $dataDp = $method5->dP;
+                    $totalDp = 0;
+                    $countDp = 0;
 
-                        if(isset($diameterCm)){
-                            $radiusMeter = ($diameterCm / 100) / 2;
-                            $diameterCerobong = M_PI * $radiusMeter * $radiusMeter;
+                    foreach ($dataDp as $item) {
+                        foreach ($item as $key => $value) {
+
+                            // hanya ambil key yang mengandung "avgDp"
+                            if (strpos($key, 'avgDp') !== false) {
+
+                                // ubah ke float
+                                $nilai = (float) $value;
+
+                                $totalDp += $nilai;
+                                $countDp++;
+                            }
                         }
-                    } else {
-                        $panjang = $method1->lfw ?? 0;
-                        $lebar   = $method1->lnw ?? 0;
-
-                        // Konversi dari cm ke meter, lalu hitung luas persegi panjang
-                        $diameterCerobong = ($panjang / 100) * ($lebar / 100);
                     }
 
-                    $notApproved = [];
-                    if (!$method1)
-                        $notApproved[] = 'Survei Lapangan';
-                    if (!$method2)
-                        $notApproved[] = 'Penentuan Kecepatan Linier';
-                    if (!$method3)
-                        $notApproved[] = 'Berat Molekul';
-                    if (!$method4)
-                        $notApproved[] = 'Kadar Air';
-                    if (!$method5)
-                        $notApproved[] = 'Penentuan Partikulat';
+                    $rataRata = $countDp > 0 ? $totalDp / $countDp : 0;
 
-                    if (count($notApproved)) {
-                        return response()->json([
-                            'message' => 'Data berikut belum disetujui: ' . implode(', ', $notApproved)
-                        ], 400);
-                    }
+                    // Format 2 angka di belakang koma
+                    $rataRataDp = number_format($rataRata, 2, '.', '');
+
+
                     $order = OrderDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
 
                     if (!$order) {
                         return response()->json(['message' => 'Order tidak ditemukan.'], 404);
                     }
 
-                    $parameterOrder = $order->parameter;
+                    $persenCO = $method3->CO / 10000;
+                    $persenCO2 = $method3->CO2;
+                    // $combustion = number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
+                    $combustion = ($persenCO + $persenCO2) == 0
+                        ? "0.0000"
+                        : number_format(($persenCO2 / ($persenCO + $persenCO2)) * 100, 4, '.', '');
+
+                    $parameterOrder = is_string($order->parameter)
+                        ? json_decode($order->parameter, true)
+                        : $order->parameter;
+
+                    $avg_dgm = $method5->DGM;   // hasil dari database (JSON decode ke array)
+
+                    $gas_vol = $avg_dgm[0]['avgDGM'] / 1000; // convert to m3
+                    $rata_suhu_gas = $data->avgTS - 273; // convert to Celsius
+                    $berat_molekul_basah_method6 = abs(($method3->MdMole * (1 - $data->bws_frac)) + (18 * $data->bws_frac));
+
+                    $dnActual = $method5->dn_actual / 1000; // convert to meter
+                    $luasPenampang = number_format((($dnActual * $dnActual * 3.14) / 4), 8, '.', ''); // luas penampang nozzle in m2
+
+                    // selisih tekanan barometer
+                    $selisihTekananBarometerMethod2 = number_format(abs($method2->Ps - $method2->tekanan_udara), 1, '.', '');
+                    $selisihTekananBarometerMethod5 = number_format(abs($data->ps - $method2->tekanan_udara), 1, '.', '');
 
                     $listParameters = [
                         "395;Iso-Debu",
@@ -1226,15 +914,13 @@ class FdlPartikulatIsokinetikController extends Controller
                         "401;Iso-Combust",
                         "402;Iso-ResTime"
                     ];
-
                     foreach ($listParameters as $item) {
                         [$id_param, $nama_param] = explode(';', $item);
-
-                        if (stripos($parameterOrder, $nama_param) !== false) {
-
-                            
+                        
+                        if (is_array($parameterOrder) && in_array("$id_param;$nama_param", $parameterOrder)) {
                             $header = IsokinetikHeader::where('no_sampel', $data->no_sampel)
-                                ->where('id_parameter', $id_param)->where('is_active', 1)
+                                ->where('id_parameter', $id_param)
+                                ->where('is_active', 1)
                                 ->first();
 
                             if (!$header) {
@@ -1245,49 +931,146 @@ class FdlPartikulatIsokinetikController extends Controller
                                 $header->parameter = $nama_param;
                                 $header->template_stp = 55;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
-                                $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                                $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
-                                $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                                if($nama_param == "Iso-Velo"){
-                                    $header->rata_rata_tekanan_pitot = $konstanta4;
-                                    $header->selisih_tekanan_barometer = $selisih;
-                                }
-                                if($nama_param == "Iso-Debu"){
-                                    $header->konstanta_4 = $konstanta4;
-                                    $header->Konstanta_1 = $selisih;
-                                }
-                                if($nama_param == "Iso-Traverse"){
-                                    $header->ukuran_lubang = $ukuranLubang;
-                                    $header->diameter_cerobong = $diameterCerobong;
-                                }
+                                $header->created_at = Carbon::now();
                             } else {
                                 $header->id_lapangan = $data->id_lapangan;
                                 $header->tanggal_terima = $order->tanggal_terima ?? now();
-                                $header->is_approve = true;
+                                $header->is_approved = true;
                                 $header->approved_by = $this->karyawan;
-                                $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+                                $header->approved_at = Carbon::now();
                                 $header->created_by = $this->karyawan;
-                                $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
-                                if($nama_param == "Iso-Velo"){
-                                    $header->rata_rata_tekanan_pitot = $konstanta4;
-                                    $header->selisih_tekanan_barometer = $selisih;
-                                }
-                                if($nama_param == "Iso-Debu"){
-                                    $header->konstanta_4 = $konstanta4;
-                                    $header->Konstanta_1 = $selisih;
-                                }
-                                if($nama_param == "Iso-Traverse"){
-                                    $header->ukuran_lubang = $ukuranLubang;
-                                    $header->diameter_cerobong = $diameterCerobong;
-                                }
+                                $header->created_at = Carbon::now();
                             }
 
+                            // Simpan dulu supaya $header->id ada
+                            $header->save();
+
+                            // --- Ambil atau buat wsValue ---
+                            $wsValue = WsValueEmisiCerobong::where('no_sampel', $data->no_sampel)
+                                ->where('id_isokinetik', $header->id)
+                                ->where('is_active', 1)
+                                ->first();
+
+                            if (!$wsValue) {
+                                $wsValue = new WsValueEmisiCerobong();
+                                $wsValue->no_sampel = $data->no_sampel;
+                                $wsValue->id_isokinetik = $header->id;
+                                $wsValue->is_active = 1;
+                            }
+
+                            // Tambahkan hasil_isokinetik sesuai jenis parameter
+                            switch ($nama_param) {
+                                // DONE
+                                case 'Iso-Velo':
+
+                                    $hasilIso = [
+                                        'rata_rata_tekanan_pitot_method_2' => $method2->dP,
+                                        'rata_rata_tekanan_pitot_method_5' => $rataRataDp,
+                                        'selisih_tekanan_barometer_method_2' => $selisihTekananBarometerMethod2,
+                                        'selisih_tekanan_barometer_method_5' => $selisihTekananBarometerMethod5,
+                                        'kp' => $method2->kp,
+                                        'cp' => $method2->cp,
+                                        'tekanan_barometer' => $method2->tekanan_udara,
+                                        'kecepatan_linier_method_5' => $method5->Vs,
+                                        'kecepatan_volumetrik_aktual' => $data->qs_act
+                                    ];
+                                    break;
+
+                                case 'Iso-Debu':
+                                    $header->konstanta_4 = $konstanta4;
+                                    $header->Konstanta_1 =0.3923;
+
+                                    $hasilIso = [
+                                        'koefisien_dry_gas' => $method5->data_Y,
+                                        'delta_h_calibrate' => $method5->Delta_H,
+                                        'konstanta_1' => 0.3923,
+                                        'konstanta_2' => 0.001357,
+                                        'konstanta_4' => 4.2484,
+                                        'konstanta_5' => 0.0006068,
+                                        'volume_sampel_dari_dry_gas' => $gas_vol,
+                                        'volume_sampel_gas_standar' => $data->v_gas,
+                                        'rata_rata_suhu_gas_buang' => $rata_suhu_gas,
+                                        'tekanan_gas_buang' => $data->ps,
+                                        'diameter_nozzle' => number_format($dnActual, 4, '.', ''),
+                                        'luas_penampang_nozzle' => $luasPenampang,
+                                        'kecepatan_volumetrik_standar' => $data->qs,
+                                    ];
+                                    break;
+
+                                // DONE
+                                case 'Iso-Traverse':
+                                    $header->ukuran_lubang = $ukuranLubang;
+                                    $header->diameter_cerobong = $diameterCerobong;
+                                    $hasilIso = [
+                                        'traverse_poin_partikulat' => $method1->lintas_partikulat,
+                                        'traverse_poin_kecepatan_linier' => $method1->titik_lintas_kecepatan_linier_s,
+                                        'diameter_cerobong' => $diameterCerobong,
+                                        'ukuran_lubang_sampling' => $ukuranLubang,
+                                        'jumlah_lubang_sampling' => $method1->jumlah_lubang_sampling,
+                                        'luas_penampang_cerobong' => $method1->luas_penampang,
+                                        'jarak_upstream' => $method1->jarak_upstream,
+                                        'jarak_downstream' => $method1->jarak_downstream,
+                                        'kategori_upstream' => $method1->kategori_upstream,
+                                        'kategori_downstream' => $method1->kategori_downstream,
+                                    ];
+                                    break;
+                                case 'Iso-Combust':
+                                    $hasilIso = [
+                                        'effisiensi_pembakaran' => $combustion,  
+                                    ];
+                                    $wsValue->c5 = $combustion;
+                                    break;
+                                // DONE
+                                case 'Iso-DMW': 
+                                    $hasilIso = [
+                                        'berat_molekul_kering_method3' => $method3->MdMole,
+                                        'berat_molekul_kering_method5' => $method3->MdMole,
+                                        'co2_method3' => $method3->CO2Mole,
+                                        'co_method3' => number_format($method3->COMole, 8, '.', ''),
+                                        'o2_method3' => $method3->O2Mole,
+                                        'n2_method3' => number_format($method3->N2Mole, 4, '.', ''),
+                                        'konsentrasi_nox' => $method5->NOx,
+                                        'konsentrasi_o2' => $method3->O2,
+                                        'konsentrasi_co' => $method5->CO,
+                                        'konsentrasi_co2' => $method3->CO2,
+                                        'konsentrasi_so2' => $method5->SO2,
+                                        'rata_suhu_cerobong_method3' => $method3->suhu_cerobong
+                                    ];
+                                    break;
+                                case 'Iso-Moisture':
+                                    $hasilIso = [
+                                        'durasi_waktu' => $method5->Total_time,
+                                        'kadar_air' => number_format($method4->kadar_air, 2, '.', ''),
+                                        'berat_molekul_basah_method4' => number_format($method4->ms, 2, '.', ''),
+                                        'berat_molekul_basah_method5' => number_format($berat_molekul_basah_method6, 2, '.', ''),
+                                        // 'volume_uap_air' => $gas_vol,
+                                        'volume_uap_air' => $data->v_wtr,
+                                        'uap_air_dalam_aliran_gas' => $data->bws_aktual,
+                                        // 'kadar_air_hasil' => $data->bws_aktual
+                                    ];
+                                    break;
+                                case 'Iso-Percent':
+                                    $hasilIso = [
+                                        'persen_sampling_isokinetik' => $data->persenIso
+                                    ];
+                                    $wsValue->c5 = $data->persenIso;
+                                    break;
+                                default:
+                                    $hasilIso = [];
+                            }
+
+                            // Simpan hasil_isokinetik di kedua tabel
+                            $wsValue->hasil_isokinetik = json_encode($hasilIso);
+                            $wsValue->created_by = $this->karyawan;
+                            $wsValue->created_at = Carbon::now();
+                            $wsValue->save();
                             $header->save();
                         }
                     }
-
                     $data->is_approve = true;
                     $data->approved_by = $this->karyawan;
                     $data->approved_at = Carbon::now();
@@ -1304,7 +1087,8 @@ class FdlPartikulatIsokinetikController extends Controller
                 } catch (\Exception $e) {
                     DB::rollBack();
                     return response()->json([
-                        'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+                        'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                        'line' => $e->getLine()
                     ], 500);
                 }
             }

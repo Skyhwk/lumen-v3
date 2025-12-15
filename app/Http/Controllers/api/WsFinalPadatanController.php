@@ -221,7 +221,7 @@ class WsFinalPadatanController extends Controller
 						'message' => 'Gagal Approve'
 					], 401);
 				}
-			} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 || $request->template_stp == 34) {
+			} else if ($request->template_stp == 7 || $request->template_stp == 2 || $request->template_stp == 5 || $request->template_stp == 6 || $request->template_stp == 8 || $request->template_stp == 76 || $request->template_stp == 34 || $request->template_stp == 80) {
 				if ($request->id) {
 					$data = Colorimetri::where('parameter', $request->parameter)->where('lhps', 1)->where('template_stp', empty($request->template_stp) ? null : $request->template_stp)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
 					if ($data) {
@@ -287,6 +287,7 @@ class WsFinalPadatanController extends Controller
 			DB::rollBack();
 			return response()->json([
 				'message' => 'Gagal Approve because ' . $th->getMessage(),
+				'line' => $th->getLine(),
 				'success' => false,
 				'status' => 401
 			], 401);

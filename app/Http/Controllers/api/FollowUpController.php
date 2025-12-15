@@ -32,7 +32,7 @@ class FollowUpController extends Controller
     {
         $pelanggan = MasterPelanggan::with('kontak_pelanggan')->where('is_active', true);
         $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-
+        
         switch ($jabatan) {
             case 24: // Sales Staff
                 $pelanggan->where('sales_id', $this->user_id);
@@ -45,9 +45,10 @@ class FollowUpController extends Controller
                 $pelanggan->whereIn('sales_id', $bawahan);
                 break;
         }
+        
         $pelanggan = $pelanggan->orderBy('master_pelanggan.id', 'desc');
-
-        return Datatables::eloquent($pelanggan)
+        
+        return Datatables::of($pelanggan)
             ->filterColumn('kontak_pelanggan', function ($query, $keyword) {
                 $query->whereHas('kontak_pelanggan', function ($q) use ($keyword) {
                     $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
@@ -154,7 +155,9 @@ class FollowUpController extends Controller
             ->first();
 
         if ($cekLog) {
-            if ($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+            $karyawan_now = $request->attributes->get('user');
+
+            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -199,6 +202,10 @@ class FollowUpController extends Controller
                 $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
                 break;
 
+            case 148: // Sales Staff
+                $dfus->where('dfus.sales_penanggung_jawab', $this->karyawan);
+                break;
+
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
                     ->pluck('nama_lengkap')
@@ -217,15 +224,28 @@ class FollowUpController extends Controller
             ->filterColumn('pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->where('p.nama_pelanggan', 'like', "%{$keyword}%");
             })
-            ->filterColumn('keterangan_tambahan', function ($query, $keyword) {
-                $query->whereHas('keteranganTambahan', fn($q) => 
-                $q->where('keterangan_perkenalan', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_proposal', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_review_manager', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_negosiasi_harga', 'like', "%{$keyword}%")
-                ->orWhere('keterangan_maintain_call', 'like', "%{$keyword}%")
-                ->orWhere('proposal', 'like', "%{$keyword}%")
-            );
+            ->filterColumn('keterangan_tambahan', function($query, $value){
+                $data = json_decode($value, true);
+                $kategori = $data['kategori'] ?? null;
+                $keyword  = $data['keyword'] ?? null;
+
+                if(!$keyword) return;
+
+                $query->whereHas('keteranganTambahan', function($q) use ($kategori, $keyword){
+                    if($kategori){
+                        return $q->where($kategori, 'like', "%$keyword%");
+                    }
+
+                    // fallback kalau kategori kosong
+                    $q->where(function($x) use ($keyword){
+                        $x->where('keterangan_perkenalan', 'like', "%$keyword%")
+                        ->orWhere('keterangan_proposal', 'like', "%$keyword%")
+                        ->orWhere('keterangan_review_manager', 'like', "%$keyword%")
+                        ->orWhere('keterangan_negosiasi_harga', 'like', "%$keyword%")
+                        ->orWhere('keterangan_maintain_call', 'like', "%$keyword%")
+                        ->orWhere('proposal', 'like', "%$keyword%");
+                    });
+                });
             })
             // ->addColumn('status_order', fn($row) => OrderHeader::where('id_pelanggan', $row->id_pelanggan)->where('is_active', true)->exists() ? 'REPEAT' : 'NEW')
             ->addColumn('status_order', fn() => "Coming Soon")
@@ -412,9 +432,12 @@ class FollowUpController extends Controller
                             ->select('master_karyawan.nama_lengkap', 'log_webphone.created_at', 'log_webphone.number')
                             ->orderBy('log_webphone.created_at', 'desc')
                             ->first();
-                        // dd($cekLog, $request->sales_penanggung_jawab, 'stop');
+
+                        $karyawan_now = $request->attributes->get('user');
+
                         if ($cekLog) {
-                            if ($cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+
+                            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
                                 return response()->json([
                                     'status' => 'error',
                                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -425,7 +448,7 @@ class FollowUpController extends Controller
                         $dfus = new DFUS;
                         $dfus->id_pelanggan = $request->id_pelanggan;
                         $dfus->kontak = $request->kontak;
-                        $dfus->sales_penanggung_jawab = $request->sales_penanggung_jawab;
+                        $dfus->sales_penanggung_jawab = ($karyawan_now->karyawan->id_jabatan != 148) ?  $request->sales_penanggung_jawab : $this->karyawan;
                         $dfus->tanggal = $request->tanggal;
                         $dfus->jam = $request->jam;
                         $dfus->created_by = $this->karyawan;
@@ -444,7 +467,6 @@ class FollowUpController extends Controller
     {
         $type = $request->input('type', 'harian');
         $tanggal = $request->input('date', Carbon::now()->format('Y-m-d'));
-        $batchSize = 1000;
 
         $hariIndo = [
             'Sunday' => 'Minggu',
@@ -460,9 +482,14 @@ class FollowUpController extends Controller
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $headers = ['No', 'Hari', 'Tanggal', 'Jam', 'Nama Pelanggan', 'No. Telepon', 'PIC Pelanggan', 'E-Mail PIC', 'No. Telepon PIC', 'Sales Penanggung Jawab', 'Call Status', 'Forecast FU', 'Forecast PO', 'Status', 'Keterangan'];
-        $col = 'A';
+        $headers = [
+            'No', 'Hari', 'Tanggal', 'Jam', 'Nama Pelanggan', 'No. Telepon',
+            'PIC Pelanggan', 'E-Mail PIC', 'No. Telepon PIC', 'Sales Penanggung Jawab',
+            'Call Status', 'Forecast FU', 'Forecast PO', 'Status', 'Status Call', 'Keterangan'
+        ];
 
+        // Set header kolom
+        $col = 'A';
         foreach ($headers as $header) {
             $sheet->setCellValue($col . '1', $header);
             $sheet->getColumnDimension($col)->setAutoSize(true);
@@ -472,13 +499,18 @@ class FollowUpController extends Controller
         $sheet->getStyle("A1:O1")->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F81BD']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER
+            ],
         ]);
 
-        $baseQuery = DFUS::query();
+        // ✅ Build query langsung tanpa batch
+        $baseQuery = DFUS::with(['pelanggan', 'keteranganTambahan']);
 
         if ($type === 'bulanan') {
-            $baseQuery->whereMonth('tanggal', date('m', strtotime($tanggal)))->whereYear('tanggal', date('Y', strtotime($tanggal)));
+            $baseQuery->whereMonth('tanggal', date('m', strtotime($tanggal)))
+                    ->whereYear('tanggal', date('Y', strtotime($tanggal)));
         } else {
             $baseQuery->whereDate('tanggal', $tanggal);
         }
@@ -492,113 +524,102 @@ class FollowUpController extends Controller
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)
                     ->pluck('nama_lengkap')
                     ->toArray();
-
-                array_push($bawahan, $this->karyawan);
+                $bawahan[] = $this->karyawan;
                 $baseQuery->whereIn('sales_penanggung_jawab', $bawahan);
                 break;
-
-            default:
-                // no extra filter
-                break;
         }
 
-        $totalRecords = $baseQuery->count();
-        $totalBatches = ceil($totalRecords / $batchSize);
+        // 🚀 Ambil semua data langsung
+        $dfusData = $baseQuery
+            ->orderBy('tanggal', 'desc')
+            ->orderBy('jam')
+            ->get();
+        
+            return response()->json(['data' => $dfusData], 200);
+        // $rowNumber = 2;
 
-        $rowNumber = 2;
-        for ($batch = 0; $batch < $totalBatches; $batch++) {
-            $offset = $batch * $batchSize;
+        // foreach ($dfusData as $index => $row) {
+        //     $hari = $hariIndo[Carbon::parse($row->tanggal)->format('l')];
+        //     $callStatus = '-';
 
-            $dfusQuery = clone $baseQuery;
-            $dfusQuery->with('pelanggan')
-                ->orderBy('dfus.tanggal', 'desc')
-                ->orderBy('dfus.jam')
-                ->offset($offset)
-                ->limit($batchSize);
+        //     if (!empty($row->log_webphone)) {
+        //         $statusList = [];
 
-            $dfusBatch = $dfusQuery->get();
+        //         foreach ($row->log_webphone as $log) {
+        //             $durasi = explode(":", $log->time ?? "");
+        //             $jam = (int)($durasi[0] ?? 0);
+        //             $menit = (int)($durasi[1] ?? 0);
+        //             $detik = (int)($durasi[2] ?? 0);
 
-            foreach ($dfusBatch as $index => $row) {
-                $globalIndex = $offset + $index;
-                $hari = $hariIndo[Carbon::parse($row->tanggal)->format('l')];
+        //             $formatDurasi = [];
+        //             if ($jam > 0) $formatDurasi[] = "{$jam} jam";
+        //             if ($menit > 0) $formatDurasi[] = "{$menit} menit";
+        //             if ($detik > 0 || empty($formatDurasi)) $formatDurasi[] = "{$detik} detik";
 
-                $callStatus = '-';
-                if (!empty($row->log_webphone)) {
-                    $logs = $row->log_webphone;
-                    $statusList = [];
+        //             $statusLog = $log->status_call ?? '-';
+        //             if (!empty($log->time)) {
+        //                 $statusLog .= "\n" . implode(" ", $formatDurasi);
+        //             }
+        //             $statusLog .= "\n" . Carbon::parse($log->created_at)->translatedFormat('d F Y H:i:s');
 
-                    foreach ($logs as $log) {
-                        $durasi = explode(":", $log->time ?? "");
-                        $jam = isset($durasi[0]) ? (int)$durasi[0] : 0;
-                        $menit = isset($durasi[1]) ? (int)$durasi[1] : 0;
-                        $detik = isset($durasi[2]) ? (int)$durasi[2] : 0;
+        //             $statusList[] = $statusLog;
+        //         }
 
-                        $formatDurasi = [];
-                        if ($jam > 0) $formatDurasi[] = "{$jam} jam";
-                        if ($menit > 0) $formatDurasi[] = "{$menit} menit";
-                        if ($detik > 0 || empty($formatDurasi)) $formatDurasi[] = "{$detik} detik";
+        //         $callStatus = implode("\n\n", $statusList);
+        //     }
 
-                        $statusLog = $log->status_call ?? '-';
-                        if (!empty($log->time)) {
-                            $statusLog .= "\n" . implode(" ", $formatDurasi);
-                        }
-                        $statusLog .= "\n" . Carbon::parse($log->created_at)->translatedFormat('d F Y H:i:s');
+        //     $sheet->setCellValue('A' . $rowNumber, $index + 1);
+        //     $sheet->setCellValue('B' . $rowNumber, $hari);
+        //     $sheet->setCellValue('C' . $rowNumber, $row->tanggal);
+        //     $sheet->setCellValue('D' . $rowNumber, $row->jam ?? '-');
+        //     $sheet->setCellValue('E' . $rowNumber, $row->pelanggan->nama_pelanggan ?? '-');
+        //     $sheet->setCellValue('F' . $rowNumber, $row->kontak ?? '-');
+        //     $sheet->setCellValue('G' . $rowNumber, $row->pic_pelanggan ?? '-');
+        //     $sheet->setCellValue('H' . $rowNumber, $row->email_pic ?? '-');
+        //     $sheet->setCellValue('I' . $rowNumber, $row->no_pic ?? '-');
+        //     $sheet->setCellValue('J' . $rowNumber, $row->sales_penanggung_jawab ?? '-');
+        //     $sheet->setCellValue('K' . $rowNumber, $callStatus);
+        //     $sheet->setCellValue('L' . $rowNumber, $row->forecast ?? '-');
+        //     $sheet->setCellValue('M' . $rowNumber, $row->forecast_po ?? '-');
+        //     $sheet->setCellValue('N' . $rowNumber, ($row->status == 'qt') ? 'Quotation' : (($row->status == 'req_qt') ? 'Request Quotation' : '-'));
+        //     $sheet->setCellValue('O' . $rowNumber, $row->keterangan ?? '-');
+        //     $sheet->setCellValue('P' . $rowNumber, self::getKeteranganTambahanActive($row->keteranganTambahan) ?? '-');
 
-                        $statusList[] = $statusLog;
-                    }
+        //     $sheet->getStyle('K' . $rowNumber)->getAlignment()->setWrapText(true);
+        //     $rowNumber++;
+        // }
 
-                    $callStatus = implode("\n\n", $statusList);
-                }
+        // // Apply border dan alignment
+        // $highestRow = $sheet->getHighestRow();
+        // $highestColumn = $sheet->getHighestColumn();
+        // $cellRange = "A1:$highestColumn$highestRow";
 
-                $sheet->setCellValue('A' . $rowNumber, $globalIndex + 1);
-                $sheet->setCellValue('B' . $rowNumber, $hari);
-                $sheet->setCellValue('C' . $rowNumber, $row->tanggal);
-                $sheet->setCellValue('D' . $rowNumber, $row->jam ?? '-');
-                $sheet->setCellValue('E' . $rowNumber, $row->pelanggan->nama_pelanggan ?? '-');
-                $sheet->setCellValue('F' . $rowNumber, $row->kontak ?? '-');
-                $sheet->setCellValue('G' . $rowNumber, $row->pic_pelanggan ?? '-');
-                $sheet->setCellValue('H' . $rowNumber, $row->email_pic ?? '-');
-                $sheet->setCellValue('I' . $rowNumber, $row->no_pic ?? '-');
-                $sheet->setCellValue('J' . $rowNumber, $row->sales_penanggung_jawab ?? '-');
-                $sheet->setCellValue('K' . $rowNumber, $callStatus);
-                $sheet->setCellValue('L' . $rowNumber, $row->forecast ?? '-');
-                $sheet->setCellValue('M' . $rowNumber, $row->forecast_po ?? '-');
-                $sheet->setCellValue('N' . $rowNumber, ($row->status == 'qt') ? 'Quotation' : (($row->status == 'req_qt') ? 'Request Quotation' : '-'));
-                $sheet->setCellValue('O' . $rowNumber, $row->keterangan ?? '-');
+        // $sheet->getStyle($cellRange)->applyFromArray([
+        //     'borders' => [
+        //         'allBorders' => [
+        //             'borderStyle' => Border::BORDER_THIN,
+        //             'color' => ['argb' => '000000']
+        //         ]
+        //     ],
+        //     'alignment' => [
+        //         'horizontal' => Alignment::HORIZONTAL_CENTER,
+        //         'vertical' => Alignment::VERTICAL_CENTER
+        //     ]
+        // ]);
 
-                $sheet->getStyle('K' . $rowNumber)->getAlignment()->setWrapText(true);
+        // foreach (['E', 'F', 'G', 'H', 'K'] as $col) {
+        //     $sheet->getStyle("{$col}2:{$col}{$highestRow}")
+        //           ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        // }
 
-                $rowNumber++;
+        // // Save file
+        // $path = public_path('dfus/');
+        // $fileName = 'DFUS_' . str_replace('-', '_', $tanggal) . '.xlsx';
+        // (new Xlsx($spreadsheet))->save($path . $fileName);
 
-                unset($row);
-            }
-
-            unset($dfusBatch);
-
-            if (function_exists('gc_collect_cycles'))
-                gc_collect_cycles();
-        }
-
-        $highestRow = $sheet->getHighestRow();
-        $highestColumn = $sheet->getHighestColumn();
-        $cellRange = "A1:$highestColumn$highestRow";
-
-        $sheet->getStyle($cellRange)->applyFromArray([
-            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => '000000']]],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
-        ]);
-
-        foreach (['E', 'F', 'G', 'H', 'K'] as $col) {
-            $sheet->getStyle("{$col}2:{$col}{$highestRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-        }
-
-        $path = public_path() . '/dfus/';
-        $writer = new Xlsx($spreadsheet);
-        $fileName = 'DFUS_' . str_replace('-', '_', $tanggal) . '.xlsx';
-        $writer->save($path . $fileName);
-
-        return response()->json(['data' => $fileName], 200);
+        // return response()->json(['data' => $fileName], 200);
     }
+
 
     public function getDetailKeterangan(Request $request)
     {
@@ -642,6 +663,29 @@ class FollowUpController extends Controller
             $keterangan->save();
             return response()->json(['message' => 'Data berhasil disimpan', 'success' => true, 'data'=> $keterangan], 200);
         } catch (\Exception $th) {
+            return  response()->json(['error' => $th], 400);
+        }
+    }
+
+    public function updateStatusCalling(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $dfus = DFUS::where('id', $request->id)->first();
+            $dfus->keterangan = $request->status;
+            $dfus->save();
+
+            if($request->status == 'NI'){
+                $request->id = MasterPelanggan::where('id_pelanggan', $dfus->id_pelanggan)->first()->id;
+                $request->alasan = 'Nomor Invalid';
+                $mpController = new MasterPelangganController($request);
+
+                $mpController->blacklist($request);
+            }
+            DB::commit();
+            return response()->json(['message' => 'Berhasil Update Status Calling ke ' . $request->status .  ($request->status == 'NI' ? ', serta menambahkan ke blacklist.' : ''), 'success' => true], 200);
+        } catch (\Exception $th) {
+            DB::rollBack();
             return  response()->json(['error' => $th], 400);
         }
     }

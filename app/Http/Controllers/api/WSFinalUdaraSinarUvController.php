@@ -85,7 +85,7 @@ class WSFinalUdaraSinarUvController extends Controller
         }
 
         $data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-            ->orderByDesc('max_id');
+            ->orderBy('tanggal_terima');
 
         return Datatables::of($data)
             ->make(true);
@@ -157,38 +157,6 @@ class WSFinalUdaraSinarUvController extends Controller
                     ->addSelect(DB::raw("'sinar_uv' as data_type"))
                     ->get();
                 $method = Parameter::where('id', $idParameter)->first()->method ?? '-';
-
-
-                foreach ($data as $item) {
-                    $waktu = $item->datalapangan->waktu_pemaparan ?? null;
-
-                    if ($waktu !== null) {
-                        if ($waktu >= 1 && $waktu < 5) {
-                            $item->nab = 0.05;
-                        } elseif ($waktu >= 5 && $waktu < 10) {
-                            $item->nab = 0.01;
-                        } elseif ($waktu >= 10 && $waktu < 15) {
-                            $item->nab = 0.005;
-                        } elseif ($waktu >= 15 && $waktu < 30) {
-                            $item->nab = 0.0033;
-                        } elseif ($waktu >= 30 && $waktu < 60) {
-                            $item->nab = 0.0017;
-                        } elseif ($waktu >= 60 && $waktu < 120) {
-                            $item->nab = 0.0008;
-                        } elseif ($waktu >= 120 && $waktu < 240) {
-                            $item->nab = 0.0004;
-                        } elseif ($waktu >= 240 && $waktu < 480) {
-                            $item->nab = 0.0002;
-                        } elseif ($waktu >= 480) {
-                            $item->nab = 0.0001;
-                        } else {
-                            $item->nab = null;
-                        }
-                    } else {
-                        $item->nab = null;
-                    }
-
-                }
 
                 return Datatables::of($data)
                     ->addColumn('method', function ($item) use ($method) {

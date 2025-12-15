@@ -1,6 +1,8 @@
 <?php
 
 namespace App\Http\Controllers\api;
+
+use App\Helpers\EmailLhpRilisHelpers;
 use App\Models\HistoryAppReject;
 
 use App\Models\lhpsSinarUVCustom;
@@ -30,6 +32,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
 use App\Models\KonfirmasiLhp;
 use App\Models\LinkLhp;
+use App\Models\OrderHeader;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -49,7 +52,7 @@ class DraftUlkSinarUvController extends Controller
             ->where('is_active', true)
             ->where('kategori_2', '4-Udara')
             ->where('kategori_3', "27-Udara Lingkungan Kerja")
-            ->where('parameter', 'like', '%Sinar UV%')
+            ->whereJsonContains('parameter', '324;Sinar UV')
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();
@@ -191,7 +194,7 @@ class DraftUlkSinarUvController extends Controller
                 'no_lhp' => $request->no_lhp ?: null,
                 'no_qt' => $request->no_penawaran ?: null,
                 'status_sampling' => $request->type_sampling ?: null,
-                // 'tanggal_sampling'=> $request->tanggal_sampling ?: null,
+                'tanggal_sampling'=> implode(', ', $request->tanggal_sampling) ?: null,
                 'tanggal_terima' => $request->tanggal_terima ?: null,
                 'parameter_uji' => json_encode($parameter_uji),
                 'nama_pelanggan' => $request->nama_perusahaan ?: null,
@@ -281,18 +284,12 @@ class DraftUlkSinarUvController extends Controller
             $fileName = LhpTemplate::setDataDetail(LhpsSinarUVDetail::where('id_header', $header->id)->get())
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
+                ->useLampiran(true)
                 ->whereView('DraftUlkSinarUv')
                 ->render('downloadLHPFinal');
 
             $header->file_lhp = $fileName;
-            // if ($header->is_revisi == 1) {
-            //     $header->is_revisi = 0;
-            //     $header->is_generated = 0;
-            //     $header->count_revisi++;
-            //     if ($header->count_revisi > 2) {
-            //         $this->handleApprove($request, false);
-            //     }
-            // }
+            
             $header->save();
 
             DB::commit();
@@ -439,9 +436,14 @@ class DraftUlkSinarUvController extends Controller
                     }
                 }
 
-                $mainData = collect($mainData)->sortBy(function ($item) {
-                    return mb_strtolower($item['parameter']);
-                })->values()->toArray();
+                // $mainData = collect($mainData)->sortBy(function ($item) {
+                //     return mb_strtolower($item['parameter']);
+                // })->values()->toArray();
+                $mainData = collect($mainData)->sortBy([
+                    ['tanggal_sampling', 'asc'],
+                    ['no_sampel', 'asc'],
+                    ['parameter', 'asc']
+                ])->values()->toArray();
 
                 foreach ($otherRegulations as $id => $regulations) {
                     $otherRegulations[$id] = collect($regulations)->sortBy(function ($item) {
@@ -490,7 +492,7 @@ class DraftUlkSinarUvController extends Controller
         $keterangan = '';
         if ($lapangan) {
             if ($lapangan->keterangan_2 === '-') {
-                $keterangan = $lapangan->aktivitas_pekerja ?? '';
+                $keterangan = $lapangan->keterangan ?? '';
             } else {
                 $keter = strpos($lapangan->keterangan_2, ':') !== false
                     ? explode(":", $lapangan->keterangan_2)
@@ -512,6 +514,7 @@ class DraftUlkSinarUvController extends Controller
             'siku' => $siku,
             'betis' => $betis,
             'nab' => $ws->nab ?? null,
+            'tanggal_sampling' => $ws->order_detail->tanggal_sampling ?? null,
         ];
     }
 
@@ -630,10 +633,10 @@ class DraftUlkSinarUvController extends Controller
                 $data->is_approve = 1;
                 $data->approved_at = Carbon::now()->format('Y-m-d H:i:s');
                 $data->approved_by = $this->karyawan;
-                if ($data->count_print < 1) {
-                    $data->is_printed = 1;
-                    $data->count_print = $data->count_print + 1;
-                }
+                // if ($data->count_print < 1) {
+                //     $data->is_printed = 1;
+                //     $data->count_print = $data->count_print + 1;
+                // }
                 $data->save();
                 HistoryAppReject::insert([
                     'no_lhp' => $data->no_lhp,
@@ -653,13 +656,30 @@ class DraftUlkSinarUvController extends Controller
                     $qr->data = json_encode($dataQr);
                     $qr->save();
                 }
-                $periode = OrderDetail::where('cfr', $data->no_lhp)->where('is_active', true)->first()->periode ?? null;
-                $cekLink = LinkLhp::where('no_order', $data->no_order)->where('periode', $periode)->first();
 
-                if($cekLink) {
-                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $periode);
+                $cekDetail = OrderDetail::where('cfr', $data->no_lhp)
+                    ->where('is_active', true)
+                    ->first();
+
+                $cekLink = LinkLhp::where('no_order', $data->no_order);
+                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                $cekLink = $cekLink->first();
+
+                if ($cekLink) {
+                    $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
+
+                $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)->first();
+
+                EmailLhpRilisHelpers::run([
+                    'cfr'              => $request->cfr,
+                    'no_order'         => $data->no_order,
+                    'nama_pic_order'   => $orderHeader->nama_pic_order ?? '-',
+                    'nama_perusahaan'  => $data->nama_pelanggan,
+                    'periode'          => $cekDetail->periode,
+                    'karyawan'         => $this->karyawan
+                ]);
             } else {
                 DB::rollBack();
                 return response()->json([

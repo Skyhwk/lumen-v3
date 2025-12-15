@@ -3,35 +3,59 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\SalesIn;
-use App\Models\SalesInDetail;
-use App\Models\Invoice;
-use App\Models\OrderHeader;
-use Carbon\Carbon;
-use DataTables;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+
+use App\Models\SalesIn;
+use App\Models\Invoice;
+use App\Models\Withdraw;
+use App\Models\OrderHeader;
+use App\Models\SalesInDetail;
+use App\Models\RecordPembayaranInvoice;
 
 class UangMasukController extends Controller
 {
     public function index(Request $request)
     {
-        $data = SalesIn::with(['detail'])->where('is_active', true)->whereYear('tanggal_masuk', $request->year);
-        if($request->status == 'Undefined') $data = $data->whereIn('status', ["Undefined", "Quotation"]);
-        if($request->status != 'Undefined') $data = $data->whereIn('status', ["Invoice", "Done"]);
-        $data = $data->orderBy('id', 'DESC');
+        $data = SalesIn::with('detail')
+            ->whereYear('tanggal_masuk', $request->year)
+            ->whereIn('status', $request->status == 'Undefined' ? ["Undefined", "Incomplete", "Quotation"] : ["Invoice", "Done"])
+            ->where('is_active', true)
+            ->orderBy('id', 'DESC');
 
         return datatables()->of($data)->make(true);
     }
 
     public function getPenawaran(Request $request)
     {
-        $data = OrderHeader::with(['getInvoice'])
+        $data = OrderHeader::with(['getInvoice.recordWithdraw'])
             ->where('is_active', true)
-            ->where('no_document', 'like', '%'.$request->search.'%')
+            ->where('no_document', 'like', '%' . $request->search . '%')
             ->groupBy('no_document', 'no_order', 'nama_perusahaan', 'biaya_akhir')
             ->orderBy('no_document', 'ASC')
-            ->get(['no_document', 'no_order', 'nama_perusahaan', 'biaya_akhir' ]);
+            ->get(['no_document', 'no_order', 'nama_perusahaan', 'biaya_akhir'])
+            ->map(function ($item) {
+                if (!$item->biaya_akhir)
+                    return null;
+                if ($item->getInvoice->isEmpty())
+                    return null;
+
+                $filteredInvoices = $item->getInvoice->filter(function ($inv) {
+                    $tagihan = floatval($inv->nilai_tagihan ?? 0);
+                    $totalWithdraw = $inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0;
+                    $pelunasan = $totalWithdraw > 0 ? floatval($totalWithdraw) + floatval($inv->nilai_pelunasan ?? 0) : floatval($inv->nilai_pelunasan ?? 0);
+
+                    return $tagihan > $pelunasan;
+                })->values();
+
+                if ($filteredInvoices->isNotEmpty()) {
+                    $item->setRelation('getInvoice', $filteredInvoices);
+                    return $item;
+                }
+
+                return null;
+            })->filter()->values();
 
         return response()->json([
             'message' => 'data hasbeen show',
@@ -43,117 +67,247 @@ class UangMasukController extends Controller
     {
         DB::beginTransaction();
         try {
-            if(isset($request->no_pelunasan_invoice) && count($request->no_pelunasan_invoice) > 0){
-                $no = 0;
-                $deleteOld = SalesInDetail::where('id_header', $request->id)->delete();
-                $updateHeader = SalesIn::where('id', $request->id)->first();
-                $array_id_invoice = (\explode(',', $request->no_invoice[0])) ?? null;
-                foreach ($request->no_pelunasan_invoice as $no_invoice => $nilai_pelunasan) {
+            $salesIn = SalesIn::where('id', $request->id)->first();
+            foreach ($request->nilai_pelunasan as $no_invoice => $nilai_pelunasan) {
+                $nilai_pengurangan = $request->nilai_pengurangan[$no_invoice] ?? 0;
 
-                    $dataDetail = new SalesInDetail();
-                    $dataDetail->id_header = $request->id;
-                    $dataDetail->no_penawaran = $request->no_penawaran[$no] ?? null;
-                    $dataDetail->id_invoice = $array_id_invoice[$no] ?? null;
-                    $dataDetail->no_invoice = $no_invoice;
-                    $dataDetail->nominal_pelunasan = \str_replace(['.',','] , ['', '.'], $nilai_pelunasan);
-                    $dataDetail->nilai_pengurangan = empty($request->nilai_pengurangan[$no_invoice]) ? null : \str_replace(['.',','] , ['', '.'], $request->nilai_pengurangan[$no_invoice]) ?? null;
-                    $dataDetail->kurang_bayar = empty($request->kurang_bayar[$no_invoice]) ? null : \str_replace(['.',','] , ['', '.'], $request->kurang_bayar[$no_invoice]) ?? null;
-                    $dataDetail->lebih_bayar = empty($request->lebih_bayar[$no_invoice]) ? null : \str_replace(['.',','] , ['', '.'], $request->lebih_bayar[$no_invoice]) ?? null;
-                    $dataDetail->keterangan = empty($request->keterangan) ? null : $request->keterangan ?? null;
-                    $dataDetail->proccessed_by = $this->karyawan;
-                    $dataDetail->proccessed_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataDetail->save();
+                $dataDetail = new SalesInDetail();
+                $dataDetail->id_header = $request->id;
+                $dataDetail->no_penawaran = $request->no_penawaran;
+                $dataDetail->id_invoice = $request->id_invoice[$no_invoice];
+                $dataDetail->no_invoice = $no_invoice;
+                $dataDetail->nominal_pelunasan = str_replace(['.', ','], ['', '.'], $nilai_pelunasan);
+                $dataDetail->nilai_pengurangan = str_replace(['.', ','], ['', '.'], $nilai_pengurangan);
+                $dataDetail->kurang_bayar = str_replace(['.', ','], ['', '.'], $request->kurang_bayar[$no_invoice]);
+                $dataDetail->lebih_bayar = str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]);
+                $dataDetail->keterangan = $request->keterangan ?? null;
+                $dataDetail->proccessed_by = $this->karyawan;
+                $dataDetail->proccessed_at = Carbon::now()->format('Y-m-d H:i:s');
+                $dataDetail->save();
 
-                    $getNilai = DB::table('record_pembayaran_invoice')
-                        ->select(DB::raw('SUM(nilai_pembayaran) AS nilai_pembayaran'))
+                $getNilai = RecordPembayaranInvoice::select(DB::raw('SUM(nilai_pembayaran) AS nilai_pembayaran'))
+                    ->where('no_invoice', $no_invoice)
+                    ->where('is_active', true)
+                    ->groupBy('no_invoice', )
+                    ->first();
+
+                if ($getNilai) {
+                    $getSisa = RecordPembayaranInvoice::select(DB::raw('sisa_pembayaran'))
                         ->where('no_invoice', $no_invoice)
                         ->where('is_active', true)
-                        ->groupBy('no_invoice', )
+                        ->orderBy('id', 'DESC')
                         ->first();
 
-                    if ($getNilai != null) {
-                        $getSisa = DB::table('record_pembayaran_invoice')
-                            ->select(DB::raw('sisa_pembayaran'))
-                            ->where('no_invoice', $no_invoice)
-                            ->where('is_active', true)
-                            ->orderBy('id', 'DESC')
-                            ->first();
-
-                        if ($getSisa->sisa_pembayaran != 0) {
-                            $sisaPembayaran = $getSisa->sisa_pembayaran - floatval(\str_replace(['.',','] , ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice] ?? 0));
-                        } else {
-                            $sisaPembayaran = $getSisa->sisa_pembayaran;
-                        }
-
-                        $nilaiPembayaran = $getNilai->nilai_pembayaran + floatval(\str_replace(['.',','] , ['', '.'], $nilai_pelunasan));
-
+                    if ($getSisa->sisa_pembayaran) {
+                        $sisaPembayaran = $getSisa->sisa_pembayaran - floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $nilai_pengurangan ?? 0));
                     } else {
-
-                        $nilaiPembayaran = floatval(\str_replace(['.',','] , ['', '.'], $nilai_pelunasan));
-                        $sisaPembayaran = floatval(\str_replace(['.',','] , ['', '.'], $request->nilai_tagihan[$no_invoice])) - floatval(\str_replace(['.',','] , ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice] ?? 0));
-
+                        $sisaPembayaran = $getSisa->sisa_pembayaran;
                     }
 
-                    //insert ke tabel record pembayaran invoice
-                    $insert = [
-                        'no_invoice' => $no_invoice,
-                        'tgl_pembayaran' => $updateHeader->tanggal_masuk,
-                        'nilai_pembayaran' => \str_replace(['.',','] , ['', '.'], $nilai_pelunasan),
-                        'nilai_pengurangan' => empty($request->nilai_pengurangan[$no_invoice]) ? null : \str_replace(['.',','] , ['', '.'], $request->nilai_pengurangan[$no_invoice]) ?? 0,
-                        'lebih_bayar' => empty($request->lebih_bayar[$no_invoice]) ? null : \str_replace(['.',','] , ['', '.'], $request->lebih_bayar[$no_invoice]) ?? null,
-                        'sisa_pembayaran' => $sisaPembayaran,
-                        'keterangan' => $request->keterangan,
-                        'status' => 0,
-                        'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                        'created_by' => $this->karyawan,
-                    ];
+                    $nilaiPembayaran = $getNilai->nilai_pembayaran + floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan));
+                } else {
+                    $nilaiPembayaran = floatval(str_replace(['.', ','], ['', '.'], $nilai_pelunasan));
+                    $sisaPembayaran = floatval(str_replace(['.', ','], ['', '.'], $request->nilai_tagihan[$no_invoice])) - floatval(\str_replace(['.', ','], ['', '.'], $nilai_pelunasan)) - floatval(str_replace(['.', ','], ['', '.'], $nilai_pengurangan ?? 0));
+                }
 
-                    DB::table('record_pembayaran_invoice')
-                        ->insert($insert);
+                RecordPembayaranInvoice::insert([
+                    'id_sales_in_detail' => $dataDetail->id,
+                    'no_invoice' => $no_invoice,
+                    'tgl_pembayaran' => $salesIn->tanggal_masuk,
+                    'nilai_pembayaran' => str_replace(['.', ','], ['', '.'], $nilai_pelunasan),
+                    'nilai_pengurangan' => str_replace(['.', ','], ['', '.'], $nilai_pengurangan),
+                    'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
+                    'sisa_pembayaran' => $sisaPembayaran,
+                    'keterangan' => $request->keterangan,
+                    'status' => 0,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                    'created_by' => $this->karyawan,
+                ]);
 
-                    //update ke tabel invoice
-                    $update = [
-                        'tgl_pelunasan' => $updateHeader->tanggal_masuk,
-                        'nilai_pelunasan' => $nilaiPembayaran + floatval(str_replace(['.', ','], ['', '.'], $request->nilai_pengurangan[$no_invoice] ?? 0)),
+                Invoice::where('no_invoice', $no_invoice)
+                    ->update([
+                        'tgl_pelunasan' => $salesIn->tanggal_masuk,
+                        'nilai_pelunasan' => $nilaiPembayaran,
                         'keterangan_pelunasan' => $request->keterangan,
-                    ];
+                        'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
+                    ]);
 
-                    DB::table('invoice')
-                        ->where('no_invoice', $no_invoice)
-                        ->update($update);
-
-                    $no++;
+                if (isset($request->jenis_pelunasan[$no_invoice]) && $nilai_pengurangan) {
+                    $withdraw = new Withdraw();
+                    $withdraw->id_sales_in_detail = $dataDetail->id;
+                    $withdraw->no_invoice = $no_invoice;
+                    $withdraw->nilai_pembayaran = str_replace(['.', ','], ['', '.'], $nilai_pengurangan);
+                    $withdraw->sisa_tagihan = $sisaPembayaran;
+                    $withdraw->keterangan_pelunasan = $request->jenis_pelunasan[$no_invoice];
+                    $withdraw->keterangan_tambahan = $request->keterangan_pelunasan[$no_invoice] ?? null;
+                    $withdraw->created_by = $this->karyawan;
+                    $withdraw->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                    $withdraw->save();
                 }
-                
-                $updateHeader->status = "Done";
-                $updateHeader->save();
-            } else {
-                foreach($request->no_penawaran as $key => $no_penawaran){
-                    $dataDetail = new SalesInDetail();
-                    $dataDetail->id_header = $request->id;
-                    $dataDetail->no_penawaran = $no_penawaran;
-                    $dataDetail->keterangan = empty($request->keterangan) ? null : $request->keterangan ?? null;
-                    $dataDetail->proccessed_by = $this->userid;
-                    $dataDetail->proccessed_at = Carbon::now()->format('Y-m-d H:i:s');
-                    $dataDetail->save();
-                }
-
-                $updateHeader = SalesIn::where('id', $request->id)->first();
-                $updateHeader->status = "Quotation";
-                $updateHeader->save();
             }
 
-            DB::commit();
+            $sisa = (float) str_replace(['.', ','], ['', '.'], $request->sisa_akhir);
 
-            return response()->json([
-                'message' => 'Data has been processed successfully.'
-            ], 201);
+            if ($sisa > 0) {
+                $salesIn->sisa = $sisa;
+                $salesIn->status = "Incomplete";
+            } else {
+                $salesIn->sisa = null;
+                $salesIn->status = "Done";
+            }
+
+            $salesIn->save();
+
+            DB::commit();
+            return response()->json(['message' => 'Data has been processed successfully.'], 201);
         } catch (\Throwable $th) {
             DB::rollback();
             dd($th);
-            return response()->json([
-                'message' => $th->getMessage()
-            ], 401);
+            return response()->json(['message' => $th->getMessage()], 401);
+        }
+    }
+
+    // case 1, invoice baru dibayar 1x
+    // case 2, invoice dibayar 2x atau lebih
+    public function deleteDetail(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $salesInDetail = SalesInDetail::find($request->id);
+            if (!$salesInDetail)
+                return response()->json(['message' => 'Sales In Detail Not Found'], 404);
+
+            $invoice = Invoice::find($salesInDetail->id_invoice);
+            if (!$invoice)
+                return response()->json(['message' => 'Invoice Not Found'], 404);
+
+            $salesIn = SalesIn::find($salesInDetail->id_header);
+            if (!$salesIn)
+                return response()->json(['message' => 'Sales In Not Found'], 404);
+
+            // UPDATE INVOICE
+            $newNilaiPelunasan = (float) $invoice->nilai_pelunasan - (float) $salesInDetail->nominal_pelunasan;
+            if ($newNilaiPelunasan > 0) {
+                $invoice->tgl_pelunasan = $salesIn->tanggal_masuk;
+                $invoice->nilai_pelunasan = $newNilaiPelunasan;
+            } else {
+                $invoice->tgl_pelunasan = null;
+                $invoice->nilai_pelunasan = null;
+            }
+            if ($salesInDetail->lebih_bayar)
+                $invoice->lebih_bayar = null;
+            $invoice->updated_by = $this->karyawan;
+            $invoice->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $invoice->save();
+
+            // UPDATE SALES IN
+            $sumPelunasan = SalesInDetail::where('id_header', $salesIn->id)
+                // ->where('id_invoice', $invoice->id)
+                ->where('is_active', true)
+                ->where('id', '!=', $salesInDetail->id)
+                ->sum('nominal_pelunasan');
+
+            $newSisa = (float) $salesIn->nominal - (float) $sumPelunasan;
+            if ($newSisa > 0) {
+                if ($newSisa == $salesIn->nominal) {
+                    $salesIn->sisa = null;
+                    $salesIn->status = "Undefined";
+                } else {
+                    $salesIn->sisa = $newSisa;
+                    $salesIn->status = "Incomplete";
+                }
+            } else {
+                $salesIn->sisa = null;
+                $salesIn->status = "Undefined";
+            }
+            $salesIn->updated_by = $this->karyawan;
+            $salesIn->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $salesIn->save();
+
+            // DELETE WITHDRAW
+            if ($salesInDetail->nilai_pengurangan && $salesInDetail->nilai_pengurangan > 0) {
+                $withdraw = Withdraw::where('id_sales_in_detail', $salesInDetail->id)->first();
+                if (!$withdraw)
+                    return response()->json(['message' => 'Withdraw Record Not Found'], 404);
+
+                // $withdraw->is_active = false;
+                // $withdraw->save();
+                $withdraw->delete();
+            }
+
+            // DELETE RECORD PEMBAYARAN INVOICE + RECALCULATION
+            $recordPembayaranInvoice = RecordPembayaranInvoice::where('id_sales_in_detail', $salesInDetail->id)->first();
+            if (!$recordPembayaranInvoice) {
+                $recordPembayaranInvoice = RecordPembayaranInvoice::where('no_invoice', $salesInDetail->no_invoice)->where('nilai_pembayaran', $salesInDetail->nominal_pelunasan)->first();
+                if (!$recordPembayaranInvoice)
+                    return response()->json(['message' => 'Record Pembayaran Invoice Not Found'], 404);
+            }
+            ;
+
+            $recordPembayaranInvoice->is_active = false;
+            $recordPembayaranInvoice->deleted_by = $this->karyawan;
+            $recordPembayaranInvoice->deleted_at = Carbon::now()->format('Y-m-d H:i:s');
+            $recordPembayaranInvoice->save();
+
+            $penguranganRestore = (float) $recordPembayaranInvoice->nilai_pengurangan;
+            $pembayaranRestore = (float) $recordPembayaranInvoice->nilai_pembayaran;
+
+            $recordsAfter = RecordPembayaranInvoice::where('no_invoice', $recordPembayaranInvoice->no_invoice)
+                ->where('is_active', true)
+                ->where('id', '>', $recordPembayaranInvoice->id)
+                ->orderBy('id')
+                ->get();
+
+            foreach ($recordsAfter as $rec) {
+                if ($penguranganRestore > 0) {
+                    if ($rec->nilai_pengurangan > 0) {
+                        $rec->sisa_pembayaran += $penguranganRestore;
+                    } else {
+                        $rec->nilai_pengurangan += $penguranganRestore;
+                    }
+                }
+
+                if ($pembayaranRestore > 0)
+                    $rec->sisa_pembayaran += $pembayaranRestore;
+
+                $rec->save();
+            }
+
+            // DELETE SALES IN DETAIL + RECALCULATION
+            $salesInDetail->is_active = false;
+            $salesInDetail->updated_by = $this->karyawan;
+            $salesInDetail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $salesInDetail->save();
+
+            $penguranganRestore = (float) $salesInDetail->nilai_pengurangan;
+            $pembayaranRestore = (float) $salesInDetail->nominal_pelunasan;
+
+            $recordsAfter = SalesInDetail::where('no_invoice', $salesInDetail->no_invoice)
+                ->where('is_active', true)
+                ->where('id', '>', $salesInDetail->id)
+                ->orderBy('id')
+                ->get();
+
+            foreach ($recordsAfter as $rec) {
+                if ($penguranganRestore > 0) {
+                    if ($rec->nilai_pengurangan > 0) {
+                        $rec->kurang_bayar += $penguranganRestore;
+                    } else {
+                        $rec->nilai_pengurangan += $penguranganRestore;
+                    }
+                }
+
+                if ($pembayaranRestore > 0)
+                    $rec->kurang_bayar += $pembayaranRestore;
+
+                $rec->save();
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'Sales In Detail has been deleted successfully'], 200);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 }

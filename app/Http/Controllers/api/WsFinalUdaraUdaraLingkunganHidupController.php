@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
+use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 
 use App\Models\MasterRegulasi;
@@ -32,6 +33,7 @@ use App\Models\ErgonomiHeader;
 use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
 use App\Models\DebuPersonalHeader;
+use App\Models\DustFallHeader;
 
 class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 {
@@ -47,7 +49,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			->whereJsonDoesntContain('parameter', ["318;Psikologi"])
 			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
-			->orderBy('id', "desc");
+			->orderBy('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}
@@ -57,8 +59,6 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 		$minutes = $hour * 60;
 		return $minutes;
 	}
-
-
 
 	public function detail(Request $request)
 	{
@@ -76,7 +76,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->addSelect(DB::raw("'direct' as data_type"))
 				->get();
 
-			$lingkunganData = LingkunganHeader::with('ws_udara')
+			$lingkunganData = LingkunganHeader::with(['ws_udara', 'ws_value_linkungan'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approved', 1)
 				->where('status', 0)
@@ -84,7 +84,15 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
 				->addSelect(DB::raw("'lingkungan' as data_type"))
 				->get();
-			$subkontrak = Subkontrak::with(['ws_value_linkungan'])
+			$dustfallData = DustFallHeader::with(['ws_udara'])
+				->where('no_sampel', $request->no_sampel)
+				->where('is_approved', 1)
+				->where('is_active', 1)
+				->where('status', 0)
+				->select('id', 'no_sampel', 'id_parameter', 'parameter', 'lhps', 'is_approved', 'approved_by', 'approved_at', 'created_by', 'created_at', 'status', 'is_active')
+				->addSelect(DB::raw("'dustfall' as data_type"))
+				->get();
+			$subkontrak = Subkontrak::with(['ws_udara'])
 				->where('no_sampel', $request->no_sampel)
 				->where('is_approve', 1)
 				->where('is_active', 1)
@@ -103,6 +111,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			$combinedData = collect()
 				->merge($lingkunganData)
+				->merge($dustfallData)
 				->merge($subkontrak)
 				->merge($directData)
 				->merge($partikulat);
@@ -122,6 +131,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					case 'partikulat':
 						$item->source = 'Partikulat';
 						break;
+					case 'dustfall':
+						$item->source = 'Dust Fall';
+						break;
 				}
 				return $item;
 			});
@@ -132,12 +144,12 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					->select('durasi_pengambilan')
 					->where('parameter', $item->parameter)
 					->first();
-				$bakuMutu = MasterBakumutu::where("id_parameter", $item->id_parameter)
+				$bakuMutu = MasterBakumutu::where("parameter", $item->parameter)
 					->where('id_regulasi', $id_regulasi)
 					->where('is_active', 1)
 					->select('baku_mutu', 'satuan', 'method', 'nama_header')
 					->first();
-					// dd($bakuMutu,  $item->id_parameter, $id_regulasi);
+				// dd($bakuMutu,  $item->id_parameter, $id_regulasi);
 				$item->durasi = $dataLapangan->durasi_pengambilan ?? null;
 				$item->satuan = $bakuMutu->satuan ?? null;
 				$item->baku_mutu = $bakuMutu->baku_mutu ?? null;
@@ -148,62 +160,131 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			// dd($processedData);
 
 
-			return Datatables::of($processedData)
-				->addColumn('nilai_uji', function ($item) {
-					$satuanIndexMap = [
-						"µg/m³" => 17,
-						"µg/m3" => 17,
-						"mg/m³" => 16,
-						"mg/m3" => 16,
-						"BDS" => 15,
-						"CFU/M²" => 14,
-						"CFU/M2" => 14,
-						"CFU/25cm²" => 13,
-						"CFU/25cm2" => 13,
-						"°C" => 12,
-						"CFU/100 cm²" => 11,
-						"CFU/100 cm2" => 11,
-						"CFU/m²" => 10,
-						"CFU/m2" => 10,
-						"CFU/m³" => 9,
-						"CFU/m3" => 9,
-						"m/s" => 8,
-						"f/cc" => 7,
-						"Ton/km²/Bulan" => 6,
-						"Ton/km2/Bulan" => 6,
-						"%" => 5,
-						"ppb" => 4,
-						"ppm" => 3,
-						"mg/nm³" => 2,
-						"mg/nm3" => 2,
-						"μg/Nm³" => 1,
-						"μg/Nm3" => 1
-					];
-				
-					$index = $satuanIndexMap[$item->satuan] ?? 1;
-				
-					if (!$item->ws_udara) {
-						return $item->ws_value_lingkungan->f_koreksi_c ?? $item->ws_value_lingkungan->C ?? '-';
-					}
-				
-					$fKoreksiKey = "f_koreksi_$index";
-					$hasilKey = "hasil$index";
-				
-					$nilai = $item->ws_udara->$fKoreksiKey
-						?? $item->ws_udara->$hasilKey
-						?? $item->ws_value_lingkungan->f_koreksi_c
-						?? null;
+			$getSatuan = new HelperSatuan;
 
-					if (in_array($item->satuan, ["mg/m³", "mg/m3"]) && !$nilai) {
-						$fKoreksi2 = $item->ws_udara->f_koreksi_2 ?? null;
-						$hasil2 = $item->ws_udara->hasil2 ?? null;
-						$nilai = $fKoreksi2 ?? $hasil2 ?? $nilai;
+			return Datatables::of($processedData)
+				->addColumn('nilai_uji', function ($item) use ($getSatuan) {
+					// ambil satuan dan index (boleh null)
+					$satuan = $item->satuan ?? null;
+					$index  = $getSatuan->udara($satuan);
+
+					// pilih sumber hasil: ws_udara dulu, kalau ga ada pakai ws_value_linkungan
+					$source = $item->ws_udara ?? $item->ws_value_linkungan ?? null;
+					if (!$source) return 'noWs';
+
+					// pastikan array
+					$hasil = is_array($source) ? $source : $source->toArray();
+					// helper kecil: cek tersedia dan tidak kosong
+					$has = function ($key) use ($hasil) {
+						return isset($hasil[$key]) && $hasil[$key] !== null && $hasil[$key] !== '';
+					};
+
+					// jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
+					if ($index === null) {
+						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
+						if ($has('f_koreksi_c')) return $hasil['f_koreksi_c'];
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "f_koreksi_c{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+
+						// 2) C (tanpa nomor) lalu C1..C16
+						if ($has('C')) return $hasil['C'];
+						for ($i = 1; $i <= 16; $i++) {
+							$k = "C{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// 3) f_koreksi_1..f_koreksi_17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "f_koreksi_{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// 4) hasil1..hasil17
+						for ($i = 1; $i <= 17; $i++) {
+							$k = "hasil{$i}";
+							if ($has($k)) return $hasil[$k];
+						}
+
+						// kalau semua gagal
+						return '-';
 					}
-				
-					return $nilai ?? '-';
+
+					// bila index diketahui, cek urutan preferensi khusus index itu
+					$keysToTry = [
+						"f_koreksi_c{$index}", // contoh: f_koreksi_c3
+						"C{$index}",           // contoh: C3
+						"f_koreksi_{$index}",  // contoh: f_koreksi_3
+						"hasil{$index}"
+					];
+
+					if ($index == 17) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 15) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} if ($index == 16) {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					} else {
+						foreach ($keysToTry as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
+							if ($has($k)) {
+								if($hasil[$k] != null) {
+									return $hasil[$k];
+								}
+							}
+						}
+					}
+
+					return '-';
 				})
 				->make(true);
-
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
@@ -543,6 +624,55 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 							'status' => 200,
 						], 200);
 					}
+				} else if ($request->data_type == 'partikulat') {
+					$data = PartikulatHeader::where('parameter', $request->parameter)->where('lhps', 1)->where('no_sampel', $request->no_sampel)->first();
+					// dd($data);
+					if ($data) {
+						$cek = PartikulatHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = PartikulatHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
+				} else if ($request->data_type == 'dustfall') {
+					$data = DustFallHeader::where('parameter', $request->parameter)
+						->where('lhps', 1)
+						->where('no_sampel', $request->no_sampel)
+						->first();
+						
+					if ($data) {
+						$cek = DustFallHeader::where('id', $data->id)->first();
+						$cek->lhps = 0;
+						$cek->save();
+
+						return response()->json([
+							'message' => 'Data has ben Rejected',
+							'success' => true,
+							'status' => 201,
+						], 201);
+					} else {
+						$dat = DustFallHeader::where('id', $request->id)->first();
+						$dat->lhps = 1;
+						$dat->save();
+
+						return response()->json([
+							'message' => 'Data has ben Approved',
+							'success' => true,
+							'status' => 200,
+						], 200);
+					}
 				} else {
 					$data = SinarUvHeader::where('parameter', $request->parameter)
 						->where('lhps', 1)
@@ -572,9 +702,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					], 201);
 				}
 			} else {
-                return response()->json([
-                    'message' => 'Gagal Approve : Data tidak termasuk kategori lingkungan hidup',
-                ], 404);
+				return response()->json([
+					'message' => 'Gagal Approve : Data tidak termasuk kategori lingkungan hidup',
+				], 404);
 			}
 		} else {
 			return response()->json([
@@ -686,7 +816,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			// Ambil hasil_c sampai hasil_c16 secara dinamis
 			$hasilC = [];
-			for ($i = 0; $i <= 16; $i++) {
+			for ($i = 0; $i <= 18; $i++) {
 				$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 				$hasilC[$i] = html_entity_decode($request->$key ?? '');
 			}
@@ -723,7 +853,6 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			->where('is_active', 1)
 			->where('parameter', 'like', '%' . $parameter . '%')
 			->first();
-
 		try {
 			// Fungsi bantu
 			function removeSpecialChars($value)
@@ -737,30 +866,32 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			}
 
 			function applyFormula($value, float $factor)
-				{
-					$cleaned = removeSpecialChars($value);
-					if ($cleaned === null || $cleaned === '') return null;
+			{
+				$cleaned = removeSpecialChars($value);
+				if ($cleaned === null || $cleaned === '') return null;
 
-					$num = floatval($cleaned);
-					if (is_nan($num)) return null;
+				$num = floatval($cleaned);
+				if (is_nan($num)) return null;
 
-					if (cekSpecialChar($value)) {
-						$result = (($num / 0.3856) * ($factor / 100)) + ($num / 0.3856);
-					} else {
-						$result = ($num * ($factor / 100)) + $num;
-					}
-
-					// kalau hasil 0.0, ubah jadi null
-					return ($result == 0.0 ? null : $result);
+				if (cekSpecialChar($value)) {
+					$result = (($num / 0.3856) * ($factor / 100)) + ($num / 0.3856);
+				} else {
+					$result = ($num * ($factor / 100)) + $num;
 				}
 
+				return ($result);
+			}
 
 			// Hitung hasil untuk semua C
 			$hasil = [];
 			foreach ($hasilC as $i => $val) {
 				// kalau index 0 -> hasilc, sisanya hasilc1, hasilc2, dst.
 				$key = ($i === 0) ? 'hasilc' : "hasilc{$i}";
-				$hasil[$key] = (empty($val)) ? null : applyFormula($val, $faktor_koreksi);
+				if ($val === null || $val === '' || $val === '-') {
+                    $hasil[$key] = null;
+                } else {
+                    $hasil[$key] = applyFormula($val, $faktor_koreksi);
+                }
 			}
 
 			// Contoh kondisi O3
@@ -768,6 +899,24 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				if ($hasil['hasilc'] < 0.1419) $hasil['hasilc'] = '<0.1419';
 				if ($hasil['hasilc1'] < 0.00014) $hasil['hasilc1'] = '<0.00014';
 				if ($hasil['hasilc2'] < 0.00007) $hasil['hasilc2'] = '<0.00007';
+			}
+			
+			if ($parameter == 'C O' || $parameter == 'CO' || $parameter == 'CO (8 Jam)' || $parameter == 'CO (24 Jam)' || $parameter == 'CO (6 Jam)') {
+				if ($hasil['hasilc2'] < 0.01) $hasil['hasilc2'] = '<0.01';
+				if ($hasil['hasilc15'] < 11.45) $hasil['hasilc15'] = '<11.45';
+				if ($hasil['hasilc16'] < 0.01145) $hasil['hasilc16'] = '<0.01145';
+			}
+            
+            if ($parameter == 'SO2' || $parameter == 'SO2 (6 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (24 Jam)') {
+				if ($hasil['hasilc'] < 25.91) $hasil['hasilc'] = '<25.91';
+				if ($hasil['hasilc2'] < 0.00082) $hasil['hasilc2'] = '<0.00082';
+				if ($hasil['hasilc16'] < 0.0259) $hasil['hasilc16'] = '<0.0259';
+			}
+            
+            if ($parameter == 'NO2' || $parameter == 'NO2 (6 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (24 Jam)') {
+				if ($hasil['hasilc'] < 5.83) $hasil['hasilc'] = '<5.83';
+				if ($hasil['hasilc2'] < 0.00025) $hasil['hasilc2'] = '<0.00025';
+				if ($hasil['hasilc16'] < 0.00583) $hasil['hasilc16'] = '<0.00583';
 			}
 
 			return $hasil;
@@ -789,9 +938,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 		$parameter = $request->parameter;
 		$faktor_koreksi = (float)$request->faktor_koreksi;
 
-		// Ambil hasil_c sampai hasil_c16
+		// Ambil hasil_c sampai hasil_c19
 		$hasilC = [];
-		for ($i = 0; $i <= 16; $i++) {
+		for ($i = 0; $i <= 18; $i++) {
 			$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 			$hasilC[$i] = $request->$key ?? null;
 		}
@@ -1000,6 +1149,5 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			DB::rollback();
 			throw $th;
 		}
-
 	}
 }

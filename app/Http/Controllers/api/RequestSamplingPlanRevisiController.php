@@ -14,6 +14,7 @@ use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\OrderHeader;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
@@ -139,7 +140,7 @@ class RequestSamplingPlanRevisiController extends Controller
             ->orderBy('nama_lengkap')
             ->get();
         $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('id', [21, 56, 311, 531, 95, 112, 377, 531,171,39])
+            ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
@@ -182,7 +183,7 @@ class RequestSamplingPlanRevisiController extends Controller
         }
     }
 
-  public function addJadwal(Request $request)
+    public function addJadwal(Request $request)
     {
         // dd($request->all());
         try {
@@ -242,5 +243,14 @@ class RequestSamplingPlanRevisiController extends Controller
     {
         $data = MasterDriver::where('is_active', true);
         return Datatables::of($data)->make(true);
+    }
+
+    public function chekOrder(Request $request)
+    {
+        $chekNoQty = OrderHeader::where('no_document', $request->no_quotation)->where('is_revisi',0)->first();
+
+        return response()->json([
+            "data" => $chekNoQty ? true : false
+        ], 200);
     }
 }

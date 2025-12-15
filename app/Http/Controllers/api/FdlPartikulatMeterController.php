@@ -174,7 +174,24 @@ class FdlPartikulatMeterController extends Controller
 
                 $isFinalApprove = ($TotalApprove + 1) >= $approveCountNeeded;
 
-                if (!in_array($parameterData, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'])) {
+                $pmList = [
+                    'PM 10',
+                    'PM 2.5',
+                    'PM 10 (8 Jam)',
+                    'PM 2.5 (8 Jam)',
+                    'PM 10 (24 Jam)',
+                    'PM 2.5 (24 Jam)',
+                ];
+
+                $kategori = $po->kategori_3;
+
+                if ($kategori === '27-Udara Lingkungan Kerja') {
+                    $isValidPM = in_array($parameterData, $pmList);
+                } else {
+                    $isValidPM = in_array($parameterData, $pmList) && !str_contains($parameterData, '24 Jam');
+                }
+
+                if ($isValidPM) {
                     if ($isFinalApprove) {
                         $functionObj = Formula::where('id_parameter', $parameter->id)
                             ->where('is_active', true)
@@ -185,7 +202,7 @@ class FdlPartikulatMeterController extends Controller
                             $function = $functionObj->function;
                             if(in_array($parameterData, [
                                 'PM 10', 'PM 2.5', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)', 
-                                // 'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
+                                'PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'
                             ])){
                                 $function = 'DirectPartikulatPM';
                             }
@@ -223,6 +240,8 @@ class FdlPartikulatMeterController extends Controller
                                 'is_active' => 1,
                                 'hasil1' => $data_kalkulasi['c1'] ?? null, // naik setelah tanggal 10-10-2025
                                 'hasil2' => $data_kalkulasi['c2'] ?? null, // naik setelah tanggal 10-10-2025
+                                'hasil16' => $data_kalkulasi['c16'] ?? null, // naik setelah tanggal 10-10-2025
+                                'hasil17' => $data_kalkulasi['c17'] ?? null, // naik setelah tanggal 10-10-2025
                                 'satuan' => $data_kalkulasi['satuan'] ?? null,
                             ]
                         );

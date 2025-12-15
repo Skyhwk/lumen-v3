@@ -913,14 +913,16 @@ class BasOnlineController extends Controller
                 
                 return $dataBas[0]["filename"];
             }
-            $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+            // $kategori_request = json_decode($persiapanHeaderKategori->detail_bas_documents)[0]->no_sampel;
+            $noSample = json_decode($persiapanHeaderKategori->no_sampel, true);
             
+
             // Get No Sample
-            $noSample = [];
-            foreach ($kategori_request as $item) {
-                // $parts = explode(" - ", $item);
-                array_push($noSample, $request->no_order . '/' . $item);
-            }
+            // $noSample = [];
+            // foreach ($kategori_request as $item) {
+            //     // $parts = explode(" - ", $item);
+            //     array_push($noSample, $request->no_order . '/' . $item);
+            // }
           
             // Ambil data sampling plan
             $sp = SamplingPlan::where('id', $infoSampling['id_sp'])
@@ -982,6 +984,7 @@ class BasOnlineController extends Controller
                 'no_order' => $request->no_order,
                 'no_quotation' => $request->no_document,
                 'tanggal_sampling' => $request->tanggal_sampling,
+                'is_active' =>1,
             ])->get();
            
             
@@ -1164,7 +1167,7 @@ class BasOnlineController extends Controller
 
         $detailDocuments = json_decode($dataHeader->detail_bas_documents, true);
 
-        // dd($detailDocuments);
+        
 
         $selectedDetail = [
             'catatan' => '',
@@ -1597,7 +1600,7 @@ class BasOnlineController extends Controller
 
             $pdf->WriteHTML('</table>');
         }
-
+        
         $catatan = $selectedDetail['catatan'] ?? '';
         $informasiTeknis = $selectedDetail['informasi_teknis'] ?? '';
         $tandaTangan = $selectedDetail['tanda_tangan'] ?? [];
@@ -2780,6 +2783,34 @@ class BasOnlineController extends Controller
                 "requiredCount" => 3,
                 "category" => "4-Udara",
                 "model" => DataLapanganIklimPanas::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "E. coli (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "S. aureus (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Salmonella (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
+                "model2" => null
+            ],
+            [
+                "parameter" => "Shigella sp. (SWAB)",
+                "requiredCount" => 3,
+                "category" => "4-Udara",
+                "model" => DataLapanganSwab::class,
                 "model2" => null
             ],
             [
@@ -3979,7 +4010,7 @@ class BasOnlineController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
-                "model2" => DetailLingkunganHidup::class
+                "model2" => DetailSenyawaVolatile::class
             ],
             [
                 "parameter" => "Metanol",
@@ -3987,6 +4018,13 @@ class BasOnlineController extends Controller
                 "category" => "4-Udara",
                 "model" => DetailLingkunganKerja::class,
                 "model2" => DetailLingkunganHidup::class
+            ],
+            [
+                "parameter" => "Isopropil Alkohol",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DetailLingkunganKerja::class,
+                "model2" => DetailSenyawaVolatile::class
             ]
         ];
         $padatanParam = ["Al","Sb","Ag","As","Ba","Fe","B","Cd","Ca","Co","Mn","Na","Ni","Hg","Se","Zn","Tl","Cu","Sn","Pb","Ti","Cr","V","F","NO2","Cr6+","Mo","NO3","CN","Sulfida","Cl-","OG","Chloride", "E.Coli (MM)", "Salmonella (MM)", "Shigella Sp. (MM)", "Vibrio Ch (MM)", "S.Aureus"];

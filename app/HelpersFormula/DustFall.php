@@ -37,21 +37,23 @@ class DustFall {
 		$tekanan_udara = null;
 		$suhu = null;
 
-		$w2 = $data->w2;
-		$w1 = $data->w1;
+		$w2 = array_sum([$data->bki1, $data->bki2]) / 2;
+		$w1 = array_sum([$data->bk1, $data->bk2]) / 2;
 		$vl = $data->vl;
-		$a = $data->a;
-		$t = $data->t;
+        // A= (1/4×3.14x5²)/10000
+		$a = (0.25 * 3.14 * pow($data->luas_botol, 2)) / 10000;
+		$t = $data->selisih_hari;
+        // C13 (Ton/Km²/Bulan) = (((W2-W1)*30*V)/(A*T*0.250))
 		$rumus = number_format(((($w2-$w1) * 30 * $vl) / ($a * $t * 0.250)), 4);
 
         $satuan = "Ton/Km²/Bulan";
 
 		$data = [
-            'tanggal_terima' => $data->tgl_terima,
-            'flow' => $data->flow,
-            'durasi' => $data->waktu,
-            'tekanan_u' => $data->tekanan_udara,
-            'suhu' => $data->suhu,
+            'tanggal_terima' => $data->tanggal_terima,
+            'flow' => null,
+            'durasi' => null,
+            'tekanan_u' => null,
+            'suhu' => null,
             'k_sample' => $ks,
             'k_blanko' => $kb,
             'Qs' => $Qs,

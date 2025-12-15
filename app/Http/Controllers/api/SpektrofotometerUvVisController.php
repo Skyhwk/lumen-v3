@@ -29,49 +29,50 @@ class SpektrofotometerUvVisController extends Controller
             ->where('is_approved', $request->approve)
             ->where('colorimetri.is_active', true)
             ->where('colorimetri.is_total', false)
-            ->where('template_stp', $request->template_stp);
+            ->where('template_stp', $request->template_stp)
+            ->select('colorimetri.*');
         return Datatables::of($data)
-            ->orderColumn('tanggal_terima', function ($query, $order) {
-                $query->orderBy('tanggal_terima', $order);
+            ->addColumn('tanggal_terima', function ($item) {
+                return $item->order_detail->tanggal_terima ?? '-';
             })
-            ->orderColumn('created_at', function ($query, $order) {
-                $query->orderBy('created_at', $order);
+
+            ->addColumn('kategori_3', function ($item) {
+                return $item->order_detail->kategori_3 ?? '-';
             })
-            ->orderColumn('no_sampel', function ($query, $order) {
-                $query->orderBy('no_sampel', $order);
+
+            ->filterColumn('tanggal_terima', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('tanggal_terima', 'like', "%{$keyword}%");
+                });
             })
+
+            ->filterColumn('kategori_3', function ($query, $keyword) {
+                $query->whereHas('order_detail', function ($query) use ($keyword) {
+                    $query->where('kategori_3', 'like', "%{$keyword}%");
+                });
+            })
+
             ->filter(function ($query) use ($request) {
+
                 if ($request->has('columns')) {
                     $columns = $request->get('columns');
+
                     foreach ($columns as $column) {
-                        if (isset($column['search']) && !empty($column['search']['value'])) {
+
+                        if (!empty($column['search']['value'])) {
+
                             $columnName = $column['name'] ?: $column['data'];
                             $searchValue = $column['search']['value'];
 
-                            // Skip columns that aren't searchable
-                            if (isset($column['searchable']) && $column['searchable'] === 'false') {
-                                continue;
+                            // HANYA BOLEH FILTER KOLOM colorimetri
+                            if (in_array($columnName, [
+                                'parameter',
+                                'jenis_pengujian',
+                                'created_at'
+                            ])) {
+                                $query->where("colorimetri.$columnName", 'like', "%{$searchValue}%");
                             }
 
-                            // Special handling for date fields
-                            if ($columnName === 'tanggal_terima') {
-                                // Assuming the search value is a date or part of a date
-                                $query->whereDate('tanggal_terima', 'like', "%{$searchValue}%");
-                            }
-                            // Handle created_at separately if needed
-                            elseif ($columnName === 'created_at') {
-                                $query->whereDate('created_at', 'like', "%{$searchValue}%");
-                            }
-                            // Standard text fields
-                            elseif (
-                                in_array($columnName, [
-                                    'no_sampel',
-                                    'parameter',
-                                    'jenis_pengujian'
-                                ])
-                            ) {
-                                $query->where($columnName, 'like', "%{$searchValue}%");
-                            }
                         }
                     }
                 }

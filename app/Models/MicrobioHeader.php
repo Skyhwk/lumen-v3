@@ -20,7 +20,17 @@ class MicrobioHeader extends Sector{
         return $this->belongsTo(OrderDetail::class, 'no_sampel', 'no_sampel');
     }
 
+    public function detail_lapangan()
+    {
+        return $this->belongsTo(DetailMicrobiologi::class, 'no_sampel', 'no_sampel');
+    }
+
     public function ws_value()
+    {
+        return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
+    }
+    
+    public function ws_udara()
     {
         return $this->hasOne(WsValueUdara::class, 'id_microbiologi_header', 'id');
     }

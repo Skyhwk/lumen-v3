@@ -94,6 +94,10 @@ class WsFinalAirController extends Controller
 			});
 
 		return Datatables::of($data)
+			->editColumn('hasil_json', function ($item) {
+				$hasil = json_decode($item->hasil_json ?? '{}', true);
+				return $hasil ?? [];
+			})
 			->make(true);
 	}
 
@@ -484,6 +488,12 @@ class WsFinalAirController extends Controller
 				default:
 					$hasil = ''; // or handle unexpected parameter
 					break;
+			}
+			$paramIcp = ["Ag","Ag Terlarut","Ag Total","Al","Al Terlarut","Al Total","As","As Terlarut","As Total","B","B Terlarut","B Total","Ba","Ba Terlarut","Ba Total","Br","Ca","Ca (Hardness)","Ca Terlarut","Ca Total","Cd","Cd Terlarut","Cd Total","Co","Co Terlarut","Co Total","Cr","Cr Terlarut","Cr Total","Cu","Cu Terlarut","Cu Total","Fe","Fe Terlarut","Fe Total","Hg","Hg Terlarut","Hg Total","Mg","Mg Total","Mn","Mn Terlarut","Mn Total","Mo","Mo Terlarut","Mo Total","Na","Ni","Ni Terlarut","Ni Total","Pb","Pb Terlarut","Pb Total","Potasium","Sb Terlarut","Sb Total","Se","Se Terlarut","Se Total","Sn","Sn Terlarut","Sn Total","Strontium","Ti","Ti Terlarut","Ti Total","Tl","Tl Terlarut","Tl Total","V","V Terlarut","V Total","Zn","Zn Terlarut","Zn Total","Br Total","Mg Terlarut","Alkyl Hg Total","Ag Terlarut (NA)","Al Terlarut (NA)","As Terlarut (NA)","As Total (NA)","B Terlarut (NA)","B Total (NA)","Ba Terlarut (NA)","Ba Total (NA)","Ca Terlarut (NA)","Ca Total (NA)","Cd Terlarut (NA)","Cd Total (NA)","Co Terlarut (NA)","Co Total (NA)","Cr Terlarut (NA)","Cr Total (NA)","Cu Terlarut (NA)","Cu Total (NA)","K Terlarut","K Terlarut (NA)","K Total","K Total (NA)","Merkuri (Hg) Terlarut ","Mg Terlarut (NA)","Mg Total (NA)","Mn Terlarut (NA)","Mn Total (NA)","Na Terlarut","Na Terlarut (NA)","Na Total","Na Total (NA)","Ni Terlarut (NA)","Ni Total (NA)","Pb Terlarut (NA)","Pb Total (NA)","Sb Terlarut (NA)","Sb Total (NA)","Se Terlarut (NA)","Se Total (NA)","Sn Terlarut (NA)","Sn Total (NA)","Ti Terlarut (NA)","Ti Total (NA)","Zn Terlarut (NA)","Zn Total (NA)","Fe Terlarut (NA)"];
+			if (in_array($parameter, $paramIcp)) {
+				if ($faktor_koreksi ) {
+					$hasil = (float) str_replace('<', '', $hasilPengujian) * ($faktor_koreksi / 100);
+				}
 			}
 			return $hasil;
 		} catch (\Exception $e) {

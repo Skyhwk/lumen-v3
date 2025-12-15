@@ -155,7 +155,7 @@ class SamplingPlanController extends Controller
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler =  MasterKaryawan::with('jabatan')
-                ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35,171])
+                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
@@ -807,7 +807,7 @@ class SamplingPlanController extends Controller
         DB::beginTransaction();
         try {
             $timestamp = Carbon::now()->format('Y-m-d H:i:s');
-            $cek = SamplingPlan::where('id', $request->id)->first();
+            $cek = SamplingPlan::where('id', $request->id)->where('is_active', true)->first();
             $checkJadwal = JadwalServices::on('no_quotation', $cek->no_quotation)->countJadwalApproved();
             $chekQoutations = JadwalServices::on('no_quotation', $cek->no_quotation)
                 ->on('quotation_id', $cek->quotation_id)->countQuotation();

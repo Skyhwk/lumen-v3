@@ -8,84 +8,310 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\MasterKaryawan;
 use App\Http\Controllers\Controller;
+use App\Models\QuotationKontrakD;
+use App\Services\GetBawahan;
+use App\Services\GroupedCfrByLhp;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Datatables;
 use Exception;
 
 class StatusOrderController extends Controller
 {
+
+    
+
+    public function detail(Request $request)
+    {
+        $orderHeader = OrderHeader::find($request->id_order_header);
+        
+        $groupedData = (new GroupedCfrByLhp($orderHeader, $request->periode))->get();
+        
+        return response()->json(['groupedCFRs' => $groupedData], 200);
+    }
+    //==== masak
     public function index(Request $request)
     {
         try {
-            if ($request->mode == 'non_kontrak') {
-                $data = QuotationNonKontrak::with([
-                    'sales',
-                    'sampling' => function ($q) {
-                        $q->orderBy('periode_kontrak', 'asc');
-                    },
-                    'orderHeader.invoices'
-                ])
-                    ->where('id_cabang', $request->cabang)
-                    ->whereHas('orderHeader')
-                    // ->where('flag_status', '!=', 'ordered')
-                    // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
-            } else if ($request->mode == 'kontrak') {
-                $data = QuotationKontrakH::with([
-                    'sales',
-                    'detail',
-                    'sampling' => function ($q) {
-                        $q->orderBy('periode_kontrak', 'asc');
-                    },
-                    'orderHeader.invoices'
-                ])
-                    ->where('id_cabang', $request->cabang)
-                    ->whereHas('orderHeader')
-                    // ->where('flag_status', '!=', 'ordered')
-                    // ->where('is_active', true)
-                    ->where('is_approved', true)
-                    ->where('is_emailed', true)
-                    ->whereYear('tanggal_penawaran', $request->year)
-                    ->orderBy('tanggal_penawaran', 'desc');
-            }
-
+            $mode = $request->mode;
+            $filterStatusType = $request->input('filter_status_type');
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-            if ($jabatan == 24 || $jabatan == 86) { // sales staff || Secretary Staff
-                $data->where('sales_id', $this->user_id);
-            } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) { // sales supervisor || sales manager || senior sales manager
-                $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
-                array_push($bawahan, $this->user_id);
-                $data->whereIn('sales_id', $bawahan);
+
+            // ===== STEP 1: QUERY SEDERHANA DENGAN INDEX =====
+            if ($mode == 'non_kontrak') {
+                // Query BASE - hanya filter utama (cepat dengan index)
+                $data = QuotationNonKontrak::query()
+                    ->with([
+                        'sales',
+                        'sampling' => function ($q) {
+                            $q->orderBy('periode_kontrak', 'asc');
+                        },
+                        'orderHeader.getInvoice.recordWithdraw',
+                        'link_lhp' // Eager load untuk cek status
+                    ])
+                    ->where('id_cabang', $request->cabang)
+                    ->where('is_approved', true)
+                    ->where('is_emailed', true)
+                    ->whereYear('tanggal_penawaran', $request->year)
+                    ->whereMonth('tanggal_penawaran', '>=', 11)
+                    ->whereHas('orderHeader') // Harus punya order
+                    ->orderBy('tanggal_penawaran', 'desc');
+
+                // Filter jabatan
+                if ($jabatan == 24 || $jabatan == 86) {
+                    $data->where('sales_id', $this->user_id);
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
+                    // $bawahan = GetBawahan::where('id', $this->user_id)->pluck('id')->toArray();
+                    // $bawahan[] = $this->user_id;
+
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereIn('sales_id', $bawahan);
+                }
+
+                $rawData = $data->get();
+
+            } else if ($mode == 'kontrak') {
+                // Query kontrak - sederhana
+                $data = QuotationKontrakD::query()
+                    ->select('request_quotation_kontrak_D.*')
+                    ->with([
+                        'header.sales',
+                        'header.sampling' => function ($q) {
+                            $q->orderBy('periode_kontrak', 'asc');
+                        },
+                        'header.orderHeader.getInvoice.recordWithdraw',
+                        'header.link_lhp'
+                    ])
+                    ->whereHas('header', function ($q) use ($request) {
+                        $q->where('id_cabang', $request->cabang)
+                            ->where('is_approved', true)
+                            ->where('is_emailed', true)
+                            ->where('is_active', true)
+                            ->whereYear('tanggal_penawaran', $request->year)
+                            ->whereMonth('tanggal_penawaran', '>=', 11)
+                            ->whereHas('orderHeader');
+                    });
+
+                // Filter jabatan
+                
+                if ($jabatan == 24 || $jabatan == 86) {
+                    $data->whereHas('header', function ($q) {
+                        $q->where('sales_id', $this->user_id);
+                    });
+                } else if ($jabatan == 21 || $jabatan == 15 || $jabatan == 154) {
+                    // $bawahan[] = $this->user_id;
+                    $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
+                    $data->whereHas('header', function ($q) use ($bawahan) {
+                        $q->whereIn('sales_id', $bawahan);
+                    });
+                }
+
+                $data->orderBy('id', 'desc');
+                $rawData = $data->get();
             }
 
-            return DataTables::of($data)
+            // ===== STEP 2: MAPPING COLLECTION + LOGIC BUSINESS =====
+            $mappedData = $rawData->map(function ($item) use ($mode, $filterStatusType) {
+                // Calculate status untuk setiap item
+                $status = $this->calculateItemStatus($item, $mode);
+                
+                // Filter berdasarkan status (di PHP, bukan SQL)
+                if ($filterStatusType === 'completed' && $status !== 'completed') {
+                    return null;
+                }
+                if ($filterStatusType === 'incompleted' && $status !== 'incompleted') {
+                    return null;
+                }
+
+                // Build data untuk DataTable
+                return $this->mapItemForDataTable($item, $mode, $status);
+            })->filter()->values(); // Remove null values & reindex
+
+            // ===== STEP 3: KIRIM KE DATATABLE =====
+            // Gunakan DataTables::collection() untuk array/collection
+            return DataTables::collection($mappedData)
+                // Semua column sudah ada di array, langsung akses
                 ->addColumn('count_jadwal', function ($row) {
-                    return $row->sampling ? $row->sampling->sum(function ($sampling) {
-                        return $sampling->jadwal->count();
-                    }) : 0;
-                })
-                ->addColumn('count_detail', function ($row) {
-                    return $row->detail ? $row->detail->count() : 0;
+                    return $row['count_jadwal'];
                 })
                 ->addColumn('total_invoice', function ($row) {
-                    if (!$row->orderHeader) return 0;
-                    return $row->orderHeader->invoices->count();
+                    return $row['total_invoice'];
                 })
                 ->addColumn('nilai_pelunasan', function ($row) {
-                    if (!$row->orderHeader || $row->orderHeader->invoices->isEmpty()) return '-';
-                    $totalPelunasan = $row->orderHeader->invoices->sum('nilai_pelunasan');
-
-                    return $totalPelunasan;
+                    return $row['nilai_pelunasan'];
                 })
+                ->addColumn('invoice', function ($row) {
+                    return $row['invoice'];
+                })
+                ->editColumn('link_lhp', function ($row) {
+                    return $row['link_lhp'];
+                })
+                // Filter custom untuk search
+                ->filter(function ($instance) use ($request, $mode) {
+                    $globalSearch = $request->input('search.value');
+                    $columns = $request->input('columns');
+                    \Log::info('Columns received:', $columns);
+                    $instance->collection = $instance->collection->filter(function ($row) use ($globalSearch, $columns, $mode) {
+                        $row = (array) $row;
+                        // ===== LOGIKA GLOBAL SEARCH =====
+                        if ($globalSearch) {
+                            $searchableColumns = ['no_document', 'pelanggan_ID', 'nama_perusahaan', 'konsultan','status_sampling','sales','invoice_searchable'];
+                            foreach ($searchableColumns as $key) {
+                                if (stripos($row[$key] ?? '', $globalSearch) !== false) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+
+                        // ===== LOGIKA PER KOLOM SEARCH =====
+                        foreach ($columns as $column) {
+                            $columnSearch = $column['search']['value'] ?? null;
+                            $dataKey = $column['data'] ?? null;
+                            
+                            // Perbaikan handling null/array untuk stripos
+            
+                            if ($columnSearch && $dataKey) {
+        
+                                // --- MODIFIKASI DIMULAI DARI SINI ---
+                                
+                                // Jika kolom yang dicari adalah 'invoice' (Array), alihkan ke 'invoice_searchable' (String)
+                                if ($dataKey === 'invoice') {
+                                    $searchValue = $row['invoice_searchable'] ?? '';
+                                } else {
+                                    // Untuk kolom lain, ambil normal
+                                    $searchValue = $this->getNestedValue($row, $dataKey, $mode);
+                                }
+
+                                // ------------------------------------
+
+                                // Pengecekan standar (sama seperti kodemu)
+                                if (is_array($searchValue)) {
+                                    return false; 
+                                }
+
+                                if ($searchValue === null || stripos((string)$searchValue, $columnSearch) === false) {
+                                    return false;
+                                }
+                            }
+                        }
+                        
+                        return true;
+                    });
+                })
+
                 ->make(true);
+
         } catch (Exception $e) {
             return response()->json([
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
+    }
+
+    /**
+     * HELPER: Hitung status item (completed/incompleted)
+     */
+    private function calculateItemStatus($item, $mode)
+    {
+        if ($mode == 'non_kontrak') {
+            // 1. Cek LHP
+            $lhpCompleted = $item->link_lhp && $item->link_lhp->is_completed;
+            
+            // 2. Cek Invoice - HARUS ADA dan SEMUA LUNAS
+            $hasInvoice = false;
+            $allInvoicesPaid = false;
+            
+            if ($item->orderHeader && $item->orderHeader->getInvoice && $item->orderHeader->getInvoice->isNotEmpty()) {
+                $hasInvoice = true;
+                $allInvoicesPaid = true;
+                
+                foreach ($item->orderHeader->getInvoice as $invoice) {
+                    // Jika pelunasan NULL atau kurang dari tagihan = belum lunas
+                    if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                        $allInvoicesPaid = false;
+                        break;
+                    }
+                }
+            }
+
+            // COMPLETED = LHP Complete + Ada Invoice + Semua Invoice Lunas
+            return ($lhpCompleted && $hasInvoice && $allInvoicesPaid) ? 'completed' : 'incompleted';
+
+        } else if ($mode == 'kontrak') {
+            // 1. Check LHP untuk periode ini
+            $lhpCompleted = false;
+            if ($item->header && $item->header->link_lhp) {
+                $lhp = $item->header->link_lhp->where('periode', $item->periode_kontrak)->first();
+                $lhpCompleted = $lhp && $lhp->is_completed;
+            }
+
+            // 2. Check invoice untuk periode ini - HARUS ADA dan SEMUA LUNAS
+            $hasInvoice = false;
+            $allInvoicesPaid = false;
+            
+            if ($item->header && $item->header->orderHeader && $item->header->orderHeader->getInvoice) {
+                $invoices = $item->header->orderHeader->getInvoice
+                    ->where('periode', $item->periode_kontrak);
+                
+                if ($invoices->isEmpty()) {
+                    $invoices = $item->header->orderHeader->getInvoice->where('periode', 'all');
+                }
+
+                if ($invoices->isNotEmpty()) {
+                    $hasInvoice = true;
+                    $allInvoicesPaid = true;
+                    
+                    foreach ($invoices as $invoice) {
+                        if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                            $allInvoicesPaid = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // COMPLETED = LHP Complete + Ada Invoice + Semua Invoice Lunas
+            return ($lhpCompleted && $hasInvoice && $allInvoicesPaid) ? 'completed' : 'incompleted';
+        }
+
+        return 'incompleted';
+    }
+
+    private function getNestedValue($array, $key, $mode = null)
+    {
+        // Handle kasus khusus untuk sales
+        \Log::info('Columns received:', ['key' => $key]);
+        if ($key === 'sales') {
+            // Pastikan $array['sales'] ada DAN berupa array sebelum akses key di dalamnya
+            if (isset($array['sales']) && is_array($array['sales'])) {
+                return $array['sales']['nama_lengkap'] ?? null;
+            }
+            return null; // Return null jika sales tidak ada atau format salah
+        }
+        
+        // Jika key sederhana (tanpa dot)
+        if (!str_contains($key, '.')) {
+            return $array[$key] ?? null;
+        }
+        
+        // Jika key nested (contoh: 'sales.nama_lengkap')
+        $keys = explode('', $key);
+        $value = $array;
+        
+        foreach ($keys as $k) {
+            if (is_array($value) && isset($value[$k])) {
+                $value = $value[$k];
+            } else {
+                return null;
+            }
+        }
+        
+        return $value;
     }
 
     private function initializeSteps($orderDate)
@@ -99,141 +325,234 @@ class StatusOrderController extends Controller
         ];
     }
 
-    private function detectActiveStep($steps)
+    // Helper function untuk akses nested value
+    // private function getNestedValue($array, $key)
+    // {
+    //     // Jika key sederhana (tanpa dot), langsung return
+    //     if (!str_contains($key, '.')) {
+    //         return $array[$key] ?? null;
+    //     }
+        
+    //     // Jika key nested (contoh: 'sales.nama_lengkap')
+    //     $keys = explode('.', $key);
+    //     $value = $array;
+        
+    //     foreach ($keys as $k) {
+    //         if (is_array($value) && isset($value[$k])) {
+    //             $value = $value[$k];
+    //         } else {
+    //             return null;
+    //         }
+    //     }
+        
+    //     return $value;
+    // }
+
+    /**
+     * HELPER: Map item ke format DataTable
+     */
+    private function mapItemForDataTable($item, $mode, $status)
     {
-        $search = collect(['order', 'sampling', 'analisa', 'drafting', 'lhp_release'])
-            ->search(fn($step) => empty($steps[$step]['date']));
+        if ($mode == 'non_kontrak') {
+            $invoicesData = $this->getInvoicesForItem($item, $mode);
+            return [
+                'id' => $item->id,
+                'no_document' => $item->no_document,
+                'filename' => $item->filename,
+                'tanggal_penawaran' => $item->tanggal_penawaran,
+                'pelanggan_ID' => $item->pelanggan_ID, // Tambahan
+                'nama_perusahaan' => $item->nama_perusahaan, // Tambahan
+                'konsultan' => $item->konsultan, // Tambahan
+                'status_sampling' => $item->status_sampling, // Tambahan
+                'sales' => $item->sales ? $item->sales->nama_lengkap : null,
+                'status' => $status,
+                'count_jadwal' => $item->sampling ? $item->sampling->sum(function ($sampling) {
+                    return $sampling->jadwal->count();
+                }) : 0,
+                'total_invoice' => $item->orderHeader ? $item->orderHeader->getInvoice->count() : 0,
+                'nilai_pelunasan' => $item->orderHeader && $item->orderHeader->getInvoice 
+                    ? $item->orderHeader->getInvoice->sum('nilai_pelunasan') 
+                    : 0,
+                'invoice' => $this->getInvoicesForItem($item, $mode),
+                'invoice_searchable' => !empty($invoicesData) 
+                ? implode(', ', array_column($invoicesData, 'no_invoice')) 
+                : null,
+                'link_lhp' => json_decode($item->link_lhp, true),
+                'order_header'=>[
+                    'id' =>  $item->orderHeader ? $item->orderHeader->id : null,
+                    'tanggal_order' =>  $item->orderHeader ? $item->orderHeader->tanggal_order : null,
+                    'no_order' =>  $item->orderHeader ? $item->orderHeader->no_order : null,
+                ],
+                // Original object untuk akses lain
+                '_original' => $item
+            ];
 
-        return $search === false ? 5 : $search;
-    }
-
-    private function detectActiveStepByGroup($details)
-    {
-        $search = collect(['order', 'sampling', 'analisa', 'drafting', 'lhp_release'])
-            ->search(fn($step) => $details->contains(fn($d) => empty($d->steps[$step]['date'])));
-
-        return $search === false ? 5 : $search;
-    }
-
-    private function getGroupedCFRs($orderHeader)
-    {
-        try {
-            $orderDetails = OrderDetail::select('id', 'id_order_header', 'cfr', 'periode', 'no_sampel', 'keterangan_1', 'tanggal_terima', 'status', 'kategori_2', 'kategori_3')
-                ->with([
-                    'TrackingSatu:id,no_sample,ftc_sd,ftc_verifier,ftc_laboratory',
-                    'lhps_air',
-                    'lhps_emisi',
-                    'lhps_emisi_c',
-                    'lhps_getaran',
-                    'lhps_kebisingan',
-                    'lhps_ling',
-                    'lhps_medanlm',
-                    'lhps_pencahayaan',
-                    'lhps_sinaruv',
-                    'lhps_iklim',
-                    'lhps_ergonomi',
-                ])
-                ->where([
-                    'id_order_header' => $orderHeader->id,
-                    'is_active' => true
-                ])->get();
-
-            $groupedData = $orderDetails->groupBy(['cfr', 'periode'])->map(fn($periodGroups) =>
-            $periodGroups->map(function ($itemGroup) use ($orderHeader) {
-                $mappedDetails = $itemGroup->map(function ($item) use ($orderHeader) {
-                    $steps = $this->initializeSteps($orderHeader->tanggal_order);
-
-                    $track = $item->TrackingSatu;
-
-                    $lhps = collect([
-                        $item->lhps_air,
-                        $item->lhps_emisi,
-                        $item->lhps_emisi_c,
-                        $item->lhps_getaran,
-                        $item->lhps_kebisingan,
-                        $item->lhps_ling,
-                        $item->lhps_medanlm,
-                        $item->lhps_pencahayaan,
-                        $item->lhps_sinaruv,
-                        $item->lhps_iklim,
-                        $item->lhps_ergonomi,
-                    ])->first(fn($lhps) => $lhps !== null);
-
-                    $tglSampling = optional($track)->ftc_verifier
-                        ?? optional($track)->ftc_sd
-                        ?? ($lhps->created_at ?? null)
-                        ?? $item->tanggal_terima;
-
-                    $labelSampling = optional($track)->ftc_verifier
-                        ? 'Sampling'
-                        : (optional($track)->ftc_sd
-                            ? 'Sampel Diterima'
-                            : (($lhps->created_at ?? null)
-                                ? 'Direct'
-                                : ($item->tanggal_terima ? 'Sampling' : null)));
-                    $kategori_validation = ['13-Getaran', "14-Getaran (Bangunan)", '15-Getaran (Kejut Bangunan)', '16-Getaran (Kenyamanan & Kesehatan)', "17-Getaran (Lengan & Tangan)", "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "21-Iklim Kerja", "23-Kebisingan", "24-Kebisingan (24 Jam)", "25-Kebisingan (Indoor)", "28-Pencahayaan"];
-                    if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
-
-                    $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
-
-                    if (in_array($item->kategori_3, $kategori_validation)) {
-                        $steps['analisa']['date'] = $tglSampling;
-                    } else {
-                        if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
-                    }
-
-                    $steps['drafting']['date'] = $lhps->created_at ?? null;
-
-                    $steps['lhp_release']['date'] = $lhps->approved_at ?? null;
-
-                    $steps['activeStep'] = $this->detectActiveStep($steps);
-
-                    $item->steps = $steps;
-
-                    return $item;
-                });
-
-                $stepsByCFR = $this->initializeSteps($orderHeader->tanggal_order);
-                foreach (['sampling', 'analisa', 'drafting', 'lhp_release'] as $step) {
-                    // Cek SEMUA detail sudah punya tanggal untuk step ini
-                    $allCompleted = $mappedDetails->every(function ($detail) use ($step) {
-                        return !empty($detail->steps[$step]['date']);
-                    });
-
-                    if ($allCompleted) {
-                        // ...isi tanggal parent-nya, ambil yang paling awal.
-                        $earliestDate = $mappedDetails->pluck("steps.{$step}.date")->filter()->min();
-                        $label = $mappedDetails->first()->steps[$step]['label']; // Ambil label dari item pertama
-                        $stepsByCFR[$step] = ['label' => $label, 'date' => $earliestDate];
-                    }
+        } else if ($mode == 'kontrak') {
+            $invoicesData = [];
+            
+            // Optimasi: Cek dulu apakah ada invoices sebelum filter
+            if ($item->header && $item->header->orderHeader && $item->header->orderHeader->getInvoice && $item->header->orderHeader->getInvoice->isNotEmpty()) {
+                $filtered = $item->header->orderHeader->getInvoice
+                    ->where('periode', $item->periode_kontrak)
+                    ->where('no_quotation', $item->header->no_document);
+                
+                if ($filtered->isEmpty()) {
+                    $filtered = $item->header->orderHeader->getInvoice
+                        ->where('periode', 'all')
+                        ->where('no_quotation', $item->header->no_document);
                 }
+                
+                // PENTING: Ambil hanya field yang dibutuhkan
+                $invoicesData = $filtered->map(function($inv) {
+                    return [
+                        'id' => $inv->id,
+                        'no_invoice' => $inv->no_invoice,
+                        'no_quotation' => $inv->no_quotation,
+                        'nilai_tagihan' => $inv->nilai_tagihan,
+                        'nilai_pelunasan' => $inv->nilai_pelunasan,
+                        'tgl_pelunasan' => $inv->tgl_pelunasan,
+                        'record_withdraw' => $inv->recordWithdraw ? $inv->recordWithdraw->map(function($rw) {
+                            return [
+                                'id' => $rw->id,
+                                'nilai_pembayaran' => $rw->nilai_pembayaran
+                            ];
+                        })->toArray() : []
+                    ];
+                })->values()->toArray();
+            }
 
-                $stepsByCFR['activeStep'] = $this->detectActiveStepByGroup($mappedDetails);
+            $lhpData = null;
+            if ($item->header && $item->header->link_lhp && $item->header->link_lhp->isNotEmpty()) {
+                $lhp = $item->header->link_lhp->where('periode', $item->periode_kontrak)->first();
+                if ($lhp) {
+                    $lhpData = [
+                        'id' => $lhp->id,
+                        'no_quotation' => $lhp->no_quotation,
+                        'periode' => $lhp->periode,
+                        'jumlah_lhp' => $lhp->jumlah_lhp,
+                        'jumlah_lhp_rilis' => $lhp->jumlah_lhp_rilis,
+                        'is_completed' => $lhp->is_completed
+                    ];
+                }
+            }
 
-                return [
-                    'cfr' => $itemGroup->first()->cfr,
-                    'periode' => $itemGroup->first()->periode,
-                    'keterangan_1' => $itemGroup->pluck('keterangan_1')->toArray(),
-                    'kategori_3' => $itemGroup->pluck('kategori_3')->toArray(),
-                    'no_sampel' => $itemGroup->pluck('no_sampel')->toArray(),
-                    'total_no_sampel' => $itemGroup->count(),
-                    'order_details' => $mappedDetails->toArray(),
-                    'steps' => $stepsByCFR
-                ];
-            }))->flatten(1)->values();
-
-            return $groupedData;
-        } catch (\Throwable $th) {
-            dd($th);
+            return [
+                'id' => $item->header->id,
+                'no_document' => $item->header->no_document ?? null,
+                'filename' => $item->header->filename ?? null,
+                'periode_kontrak' => $item->periode_kontrak,
+                'tanggal_penawaran' => $item->header->tanggal_penawaran ?? null,
+                'pelanggan_ID' => $item->header->pelanggan_ID ?? null,
+                'nama_perusahaan' => $item->header->nama_perusahaan ?? null,
+                'konsultan' => $item->header->konsultan ?? null,
+                'status_sampling' => $item->header->status_sampling ?? null,
+                'sales' => $item->header->sales ? $item->header->sales->nama_lengkap :null,
+                'status' => $status,
+                'count_jadwal' => $item->header && $item->header->sampling && $item->header->sampling->isNotEmpty()
+                    ? $item->header->sampling->sum(function ($sampling) {
+                        return $sampling->jadwal ? $sampling->jadwal->count() : 0;
+                    }) : 0,
+                'total_invoice' => count($invoicesData),
+                'nilai_pelunasan' => collect($invoicesData)->sum('nilai_pelunasan'),
+                'invoice_searchable' => !empty($invoicesData) 
+                ? implode(', ', array_column($invoicesData, 'no_invoice')) 
+                : null,
+                'invoice' => $invoicesData,
+                'link_lhp' => $lhpData,
+                'order_header'=>[
+                    'id' =>  $item->header->orderHeader->id,
+                    'tanggal_order' =>  $item->header->orderHeader->tanggal_order,
+                    'no_order' =>  $item->header->orderHeader->no_order,
+                ],
+                // PENTING: Jangan simpan full object, hanya data minimal untuk fallback
+                '_original' => [
+                    'id' => $item->id,
+                        'periode_kontrak' => $item->periode_kontrak,
+                        'piutang' => $item->header->piutang ?? 0,
+                    'status_sampling' => $item->header->status_sampling ?? null,
+                    'konsultan' => $item->header->konsultan ?? null,
+                    'pelanggan_ID' => $item->header->pelanggan_ID ?? null,
+                    'nama_perusahaan' => $item->header->nama_perusahaan ?? null,
+                ]
+            ];
         }
     }
 
-    public function detail(Request $request)
+    /**
+     * HELPER: Get invoices untuk item (RAW untuk status checking)
+     */
+    private function getInvoicesForItemRaw($item, $mode)
     {
-        $orderHeader = OrderHeader::find($request->id_order_header);
+        if ($mode == 'non_kontrak') {
+            if (!$item->orderHeader || !$item->orderHeader->getInvoice || $item->orderHeader->getInvoice->isEmpty()) {
+                return [];
+            }
+            
+            // Untuk non-kontrak, ambil semua invoice dari order
+            return $item->orderHeader->getInvoice->toArray();
+        }
+        
+        if ($mode == 'kontrak') {
+            if (!$item->header || !$item->header->orderHeader || !$item->header->orderHeader->getInvoice || $item->header->orderHeader->getInvoice->isEmpty()) {
+                return [];
+            }
+            
+            $invoices = $item->header->orderHeader->getInvoice
+                ->where('periode', $item->periode_kontrak)
+                ->where('no_quotation', $item->header->no_document);
+            
+            if ($invoices->isEmpty()) {
+                $invoices = $item->header->orderHeader->getInvoice
+                    ->where('periode', 'all')
+                    ->where('no_quotation', $item->header->no_document);
+            }
+            
+            return $invoices->values()->toArray();
+        }
+        
+        return [];
+    }
 
-        $groupedData = $this->getGroupedCFRs($orderHeader);
+    /**
+     * HELPER: Get invoices untuk item (untuk display)
+     */
+    private function getInvoicesForItem($item, $mode)
+    {
+        return $this->getInvoicesForItemRaw($item, $mode);
+    }
 
-        return response()->json(['groupedCFRs' => $groupedData], 200);
+    /**
+     * HELPER: Calculate total pelunasan
+     */
+    private function calculateTotalPelunasan($item, $mode)
+    {
+        $invoices = $this->getInvoicesForItemRaw($item, $mode);
+        
+        if (empty($invoices)) {
+            return 0;
+        }
+        
+        $total = 0;
+        foreach ($invoices as $invoice) {
+            $total += $invoice['nilai_pelunasan'] ?? $invoice->nilai_pelunasan ?? 0;
+        }
+        
+        return $total;
+    }
+
+    /**
+     * HELPER: Get LHP untuk kontrak
+     */
+    private function getLhpForKontrak($item)
+    {
+        if (!$item->header || !$item->header->link_lhp) {
+            return null;
+        }
+        
+        $filtered = $item->header->link_lhp
+            ->where('periode', $item->periode_kontrak)
+            ->first();
+        
+        return json_decode($filtered, true);
     }
 }

@@ -9,6 +9,7 @@ use App\Models\{
     QuotationNonKontrak,
     Jadwal,
     AnalystFormula,
+    Colorimetri,
     OrderHeader,
     OrderDetail,
     Invoice,
@@ -24,7 +25,33 @@ use App\Models\{
     DataLapanganAir,
     LhpUdaraPsikologiHeader,
     SampelTidakSelesai,
-    MasterKaryawan
+    MasterKaryawan,
+    QrDocument,
+    DataLapanganPartikulatMeter,
+    DetailSenyawaVolatile,
+    DetailLingkunganHidup,
+    DataLapanganDirectLain,
+    DetailLingkunganKerja,
+    DetailMicrobiologi,
+    DataLapanganKebisinganPersonal,
+    DataLapanganKebisingan,
+    DataLapanganCahaya,
+    DataLapanganGetaran,
+    DataLapanganGetaranPersonal,
+    DataLapanganIklimPanas,
+    DataLapanganIklimDingin,
+    DataLapanganSwab,
+    DataLapanganErgonomi,
+    DataLapanganDebuPersonal,
+    DataLapanganMedanLM,
+    DataLapanganSinarUV,
+    DataLapanganPsikologi,
+    DataLapanganEmisiKendaraan,
+    DataLapanganEmisiCerobong,
+    DataLapanganIsokinetikHasil,
+    Gravimetri,
+    Titrimetri,
+    WsValueAir
 };
 use App\Services\{
     GetAtasan,
@@ -47,12 +74,17 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
+use Mpdf\Mpdf;
+
+Carbon::setLocale('id');
+
 
 
 class TestingController extends Controller
 {
     public function show(Request $request)
-    {
+    { 
+        
         try {
             //code...
 
@@ -405,7 +437,6 @@ class TestingController extends Controller
                         return response()->json(['message' => $ex->getMessage(), 'line' => $ex->getLine()], 400);
                     }
                 case 'global label':
-
                     if ($request->mode == 'byrangetanggal') {
                         DB::beginTransaction();
                         try {
@@ -1067,6 +1098,523 @@ class TestingController extends Controller
                         $chekRegen = HargaParameter::whereIn('nama_parameter', $parameter)->get(['nama_parameter', 'regen', 'nama_kategori']);
                         return response()->json(["data" => $chekRegen], 200);
                     }
+                case 'cs_render':
+                    $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
+                        ->where('no_order',$request->no_order)
+                        ->where('is_active',1)
+                        ->select('no_quotation','no_sampel','tanggal_sampling','file_koding_sampel','parameter','kategori_2','kategori_3','konsultan','no_order','keterangan_1','nama_perusahaan')
+                        ->get();
+                    $noSampel = $orderDetail->pluck('no_sampel')->unique();
+                    $pSDetailMap =PersiapanSampelDetail::whereIn('no_sampel', $noSampel)
+                    ->select('id_persiapan_sampel_header','no_sampel', 'parameters') // Hanya ambil kolom yg perlu
+                    ->get()
+                    ->keyBy('no_sampel');
+                    $idPsh=null;
+                    foreach ($orderDetail as $item) {
+                        $jumlahBotol = 0;
+                        $jumlahLabel = 0;
+
+                        // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
+                        if (isset($pSDetailMap[$item->no_sampel])) {
+                            
+                            $psd = $pSDetailMap[$item->no_sampel]; // Langsung ambil data, tanpa loop
+                            $idPsh=$psd->id_persiapan_sampel_header;
+                            $parameters = json_decode($psd->parameters);
+
+                            if (is_array($parameters) || is_object($parameters)) {
+                                foreach ($parameters as $category) {
+                                    foreach ($category as $key => $values) {
+                                        if (is_object($values) && isset($values->disiapkan)) {
+                                            $disiapkan = (int) $values->disiapkan;
+                                            $jumlahBotol += $disiapkan;
+                                            $jumlahLabel += ($disiapkan * 2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        $item->jumlah_botol = $jumlahBotol;
+                        $item->jumlah_label = $jumlahLabel;
+                        $item->status_c1 = $this->checkLengthData($item->kategori_2, $item->kategori_3, json_decode($item->parameter), $item->no_sampel);
+                    }
+                    $psHeader =PersiapanSampelHeader::where('id',$idPsh)->where('is_active',1)->first();
+                    $ttd =json_decode($psHeader->detail_cs_documents,true);
+                    
+                    $noDocument = explode('/', $psHeader->no_document);
+                    $noDocument[1] = 'CS';
+                    $noDocument = implode('/', $noDocument);
+                    
+                    $qr_img = '';
+                    $qr = QrDocument::where('id_document', $psHeader->id)
+                        ->where('type_document', 'coding_sample')
+                        ->whereJsonContains('data->no_document', $noDocument)
+                        ->first();
+                    if ($qr) {
+                        $qr_data = json_decode($qr->data, true);
+                        if (isset($qr_data['no_document']) && $qr_data['no_document'] == $noDocument) {
+                            $qr_img = '<img src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="50px" height="50px"><br>' . $qr->kode_qr;
+                        }
+                    }
+
+                    $signatureData = (object) [
+                        'ttd_sampler' => $ttd[0]['ttd_sampler_cs'],
+                        'ttd_pic'     => $ttd[0]['ttd_pic_cs'],
+                        'nama_pic'    => $ttd[0]['nama_pic_cs'],
+                        'nama_sampler'=> $ttd[0]['nama_sampler_cs'],
+                    ];
+                    
+                    try {
+                        $pdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => 'A4',
+                            'margin_header' => 3,
+                            'margin_bottom' => 3,
+                            'margin_footer' => 3,
+                            'setAutoTopMargin' => 'stretch',
+                            'setAutoBottomMargin' => 'stretch',
+                            'orientation' => 'P'
+                        ]);
+
+                        $konsultan = '';
+                        if ($orderDetail->first()->konsultan)
+                            $konsultan = ' (' . $orderDetail->first()->konsultan . ')';
+                        $micro_time_float = microtime(true);
+                        $microtime_unique = str_replace('.', '_', (string) $micro_time_float);
+                        $base_filename = 'RE_DOC_CS_' . $orderDetail->first()->no_order;
+                        $filename = $base_filename . '_' . $microtime_unique . '.pdf';
+                        
+                        $pdf->setFooter([
+                            'odd' => [
+                                'C' => [
+                                    'content' => 'Hal {PAGENO} dari {nbpg}',
+                                    'font-size' => 6,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#606060'
+                                ],
+                                'R' => [
+                                    'content' => 'Note : Dokumen ini diterbitkan otomatis oleh sistem <br> {DATE YmdGi}',
+                                    'font-size' => 5,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'L' => [
+                                    'content' => '' . $qr_img . '',
+                                    'font-size' => 4,
+                                    'font-style' => 'I',
+                                    'font-family' => 'serif',
+                                    'color' => '#000000'
+                                ],
+                                'line' => -1,
+                            ]
+                        ]);
+
+                        $pdf->WriteHTML('
+                            <!DOCTYPE html>
+                                <html>
+                                    <head>
+                                        <style>
+                                            .custom1 { font-size: 12px; font-weight: bold; }
+                                            .custom2 { font-size: 15px; font-weight: bold; text-align: center; padding: 5px; }
+                                            .custom3 { font-size: 12px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                            .custom4 { font-size: 12px; font-weight: bold; border: 1px solid #000000;padding: 5px;}
+                                            .custom5 { font-size: 10px; border: 1px solid #000000; padding: 5px;}
+                                            .custom6 { font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000000; padding: 5px;}
+                                        </style>
+                                    </head>
+                                    <body>
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLE</br><p style="text-align: center; font-size: x-small;">' . $noDocument . '</p></td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4" style="text-align: center;">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+
+                        $pdf->defaultheaderline = 0;
+                        $pdf->SetHeader('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <td class="custom1" width="200">PT INTI SURYA LABORATORIUM</td>
+                                            <td class="custom2" width="320">CODING SAMPLING</td>
+                                            <td class="custom3">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</td>
+                                        </tr>
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                        <tr>
+                                            <td class="custom4">
+                                                <table width="100%">
+                                                    <tr><td style="font-size: 9px;">NO QUOTE :</td></tr>
+                                                    <tr><td style="text-align: center;">' . $orderDetail->first()->no_quotation . '</td></tr>
+                                                </table>
+                                            </td>
+                                            <td width="120" class="custom4">' . $orderDetail->first()->nama_perusahaan . $konsultan . '</td>
+                                            <td class="custom3">' . $orderDetail->first()->no_order . '</td>
+                                        </tr>
+
+                                        <tr><td colspan="3" style="padding: 2px;"></td></tr>
+                                    </table>
+                        ');
+                        
+                        $pdf->WriteHTML('
+                                    <table width="100%" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
+                                        <tr>
+                                            <th class="custom6" width="90">CS</th>
+                                            <th class="custom6" width="70">KATEGORI</th>
+                                            <th class="custom6">DESKRIPSI</th>
+                                            <th class="custom6" width="128">BARCODE</th>
+                                            <th class="custom6" width="28">CS</t>
+                                            <th class="custom6" width="28">C-1</th>
+                                            <th class="custom6" width="28">C-2</t>
+                                            <th class="custom6" width="28">C-3</th>
+                                        </tr>
+                        ');
+
+                        foreach ($orderDetail as $item) {
+                            
+                            $pdf->WriteHTML('
+                                        <tr>
+                                            <td class="custom5" width="90">' . $item->no_sampel . '</td>
+                                            <td class="custom5" width="70">' . explode("-", $item->kategori_3)[1] . '</td>
+                                            <td class="custom5" height="60">' . $item->keterangan_1 . '</td>
+                                            <td class="custom5" width="128"><img src="' . public_path() . '/barcode/sample/' . $item->file_koding_sampel . '" style="height: 30px; width:180px;"></td>
+                                            <td class="custom5" width="28">' . $item->jumlah_botol . '</td>
+                                            <td class="custom5" width="28" style="text-align: center;">' . ($item->status_c1 == 1 ? '✔' : '') . '</td>
+                                            <td class="custom5" width="28"></td>
+                                            <td class="custom5" width="28"></td>
+                                        </tr>
+                            ');
+                        }
+                        $sign_sampler = $this->decodeImageToBase64($signatureData->ttd_sampler);
+                        $sign_pic = null;
+                        if($signatureData->ttd_pic != null)$sign_pic = $this->decodeImageToBase64($signatureData->ttd_pic);
+                        if($sign_sampler->status === 'error' || $sign_pic && $sign_pic->status === 'error'){
+                            return response()->json([
+                                'message' => $sign_pic->message ?? $sign_sampler->message
+                            ],400);
+                        }
+                        $ttd_sampler = $signatureData->ttd_sampler && $sign_sampler->status !== 'error' ? '<img src="' . $sign_sampler->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+                        $ttd_pic = $signatureData->ttd_pic && $sign_pic->status !== 'error' ? '<img src="' . $sign_pic->base64 . '" style="height: 60px; max-width: 150px;">' : '';
+
+                        $pdf->WriteHTML('</table>'); // Tutup table sebelumnya
+
+                        // Buat table baru untuk signature
+                        $signatureTable = '
+                        <table class="table" width="100%" style="border: none; margin-top: 20px;">
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center; height: 80px;">' . $ttd_sampler . '</td>
+                                <td style="border: none; width: 20%; text-align: center; height: 80px;"></td>
+                                <td style="border: none; width: 20%; text-align: center; height: 80px;"></td>
+                                <td style="border: none; width: 30%; text-align: center; height: 80px;">' . $ttd_pic . '</td>
+                            </tr>
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>' . strtoupper($signatureData->nama_sampler) . '</strong></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>' . strtoupper($signatureData->nama_pic) . '</strong></td>
+                            </tr>
+                            <tr>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>Sampler</strong></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 20%; text-align: center;"></td>
+                                <td style="border: none; width: 30%; text-align: center;"><strong>Penanggung Jawab</strong></td>
+                            </tr>
+                        </table>';
+
+                        $pdf->WriteHTML($signatureTable);
+
+                        // Tutup HTML document
+                        $pdf->WriteHTML('</body></html>');
+                            $dir = public_path("cs");
+
+                            if (!file_exists($dir)) {
+                                mkdir($dir, 0755, true);
+                            }
+                            $pdf->Output(public_path() . '/dokumen/cs/' . $filename, 'F');
+                            return response()->json(['status' => false, 'data' => $filename], 200);
+                        } catch (\Exception $ex) {
+                            return response()->json([
+                                'message' => $ex->getMessage(),
+                                'line' => $ex->getLine(),
+                                'file' => $ex->getFile(),
+                            ], 500);
+                        }
+                    
+                case 'sni_ergonomi':
+                    DB::beginTransaction();
+
+                    try {
+
+                        $datas = DataLapanganErgonomi::where('method', 8)
+                            ->whereIn('no_sampel', $request->no_sampel)
+                            ->get();
+
+                        foreach ($datas as $data) {
+                            $pengukuran = json_decode($data->pengukuran, true) ?? [];
+
+                            // ===============================
+                            // CONFIG DURASI
+                            // ===============================
+                            $durasiConfig = [
+                                // ===== ATAS =====
+                                'Leher' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Rotasi Lengan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Gerakan Lengan Sedang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Kuliat Tertekan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Getaran Lokal' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+
+                                'Bahu' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Pergelangan Tangan' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Gerakan Lengan Intensif' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Memencet atau Menjepit' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Menggunakan Telapak Tangan' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Mengetik Berselang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                                'Temperatur' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                                'Pencahayaan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+
+                                'Penggenggam Kuat' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 3,
+                                ],
+                                'Mengetik Intensif' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 3,
+                                ],
+
+                                // ===== BAWAH =====
+                                'Tubuh Membungkuk 20°-45°' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Tubuh Menekuk 30°' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Gerakan Paha' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Pergelangan Kaki' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Aktivitas Pergelangan Kaki' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Duduk Tanpa Sandaran' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Tubuh Tertekan Benda' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Getaran Seluruh Tubuh' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Beban Sedang' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 1,
+                                    '50-100%' => 2,
+                                ],
+                                'Beban Berat' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Tubuh Membungkuk >45°' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Tubuh Pemuntiran Torso' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Posisi Berlutut' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+                                'Lutut Untuk Memukul' => [
+                                    '0-25%'  => 1,
+                                    '25-50%' => 2,
+                                    '50-100%' => 3,
+                                ],
+
+                                'Duduk Tanpa Pijakan' => [
+                                    '0-25%'  => 0,
+                                    '25-50%' => 0,
+                                    '50-100%' => 1,
+                                ],
+                            ];
+
+                            // ===============================
+                            // AMAN TARIK DATA
+                            // ===============================
+                            $atas  = (isset($pengukuran['Tubuh_Bagian_Atas'])  && is_array($pengukuran['Tubuh_Bagian_Atas']))
+                                        ? $pengukuran['Tubuh_Bagian_Atas']  : [];
+
+                            $bawah = (isset($pengukuran['Tubuh_Bagian_Bawah']) && is_array($pengukuran['Tubuh_Bagian_Bawah']))
+                                        ? $pengukuran['Tubuh_Bagian_Bawah'] : [];
+
+                            $manualHandling = $pengukuran['Manual_Handling'] ?? 'Tidak';
+
+                            // ===============================
+                            // MANUAL HANDLING
+                            // ===============================
+                            $totalPoin1 = 0;
+                            $totalPoin2 = 0;
+
+                            if (is_array($manualHandling)) {
+
+                                if (
+                                    isset($manualHandling['Posisi Angkat Beban']) &&
+                                    isset($manualHandling['Estimasi Berat Benda'])
+                                ) {
+                                    $totalPoin1 = $this->hitungRisiko(
+                                        $manualHandling['Posisi Angkat Beban'],
+                                        $manualHandling['Estimasi Berat Benda']
+                                    );
+                                }
+
+                                if (isset($manualHandling['Faktor Resiko']) && is_array($manualHandling['Faktor Resiko'])) {
+                                    foreach ($manualHandling['Faktor Resiko'] as $faktor) {
+                                        if (is_array($faktor)) {
+                                            foreach ($faktor as $nilai) {
+                                                if ($nilai !== 'Tidak') {
+                                                    $skor = intval(explode('-', $nilai)[0] ?? 0);
+                                                    $totalPoin2 += $skor;
+                                                }
+                                            }
+                                        } 
+                                        // elseif ($faktor !== 'Tidak') {
+                                        //     $skor = intval(explode('-', $faktor)[0] ?? 0);
+                                        //     $totalPoin2 += $skor;
+                                        // }
+                                    }
+                                }
+                                $manualHandling['Total Poin 1'] = $totalPoin1;
+                                $manualHandling['Faktor Resiko']['Total Poin 2'] = $totalPoin2;
+                                $manualHandling['Total Poin Akhir'] = $totalPoin1 + $totalPoin2;
+                            }
+
+                            // ===============================
+                            // HITUNG + PERBAIKI
+                            // ===============================
+                            $hasilAtas  = $this->hitungDurasiDanPerbaiki($atas, $durasiConfig, $data->no_sampel);
+                            $hasilBawah = $this->hitungDurasiDanPerbaiki($bawah, $durasiConfig, $data->no_sampel);
+                            $jumlahSkorPostur = $hasilAtas['total'] + $hasilBawah['total'];
+
+                            // ===============================
+                            // SIMPAN ULANG
+                            // ===============================
+                            $pengukuran['Tubuh_Bagian_Atas']   = $hasilAtas['data'];
+                            $pengukuran['Tubuh_Bagian_Bawah'] = $hasilBawah['data'];
+                            $pengukuran['Jumlah_Skor_Postur'] = $jumlahSkorPostur;
+                            $pengukuran['Manual_Handling']   = $manualHandling;
+
+                            $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+                            $data->pengukuran = json_encode($pengukuran, JSON_UNESCAPED_UNICODE);
+                            $data->save();
+                        }
+                        DB::commit();  // semua sukses baru dikunci ke DB
+
+                        return response()->json(['message' => 'Proses selesai'], 200);
+
+                    } catch (\Throwable $e) {
+
+                        DB::rollBack();  // SEMUA perubahan dibatalkan
+
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'Terjadi error, semua data dibatalkan',
+                            'error' => $e->getMessage(),
+                            'line' => $e->getLine()
+                        ], 500);
+                    }
+
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -1797,7 +2345,7 @@ class TestingController extends Controller
                     dd($e);
                     DB::rollBack();
                     $errorCount++;
-                    FacadesLog::error('Error processing document: ' . $data->no_document, [
+                    Log::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine()
                     ]);
@@ -1812,7 +2360,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            FacadesLog::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
+            Log::error('Critical error in changeDataPendukungSamplingKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
             ]);
@@ -2649,148 +3197,46 @@ class TestingController extends Controller
         ];
     }
 
-    // public function fixDetailStructure(Request $request)
-    // {
-    //     try {
-    //         // Ambil data yang mungkin struktur detailnya berubah
-    //         $dataList = QuotationKontrakH::with('quotationKontrakD')
-    //             ->whereIn('no_document', $request->no_document)
-    //             ->where('is_active', true)
-    //             ->get();
-
-    //         $fixedCount = 0;
-    //         $errorCount = 0;
-    //         $errorDetails = [];
-
-    //         foreach ($dataList as $data) {
-    //             DB::beginTransaction();
-    //             try {
-    //                 $dataDetail = $data->quotationKontrakD;
-
-    //                 $index = 1;
-    //                 foreach ($dataDetail as $detail) {
-    //                     $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-    //                     // $dsDetail = reset($dsDetail);
-    //                     // dd($dsDetail);
-    //                     // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
-    //                     $originalStructure = (object) [
-    //                         $index => (object) [
-    //                             "periode_kontrak" => $detail->periode_kontrak,
-    //                             "data_sampling" => $dsDetail
-    //                         ]
-    //                     ];
-    //                     // dd($dsDetail, $originalStructure);
-
-    //                     $detail->data_pendukung_sampling = json_encode($originalStructure);
-    //                     $detail->save();
-    //                     $index++;
-    //                     $fixedCount++;
-    //                 }
-
-    //                 // dd($dataDetail);
-
-    //                 DB::commit();
-    //                 return response()->json([
-    //                     'message' => 'Fix detail structure completed',
-    //                     "data" => $originalStructure
-    //                 ]);
-
-    //             } catch (Throwable $th) {
-    //                 DB::rollback();
-    //                 $errorCount++;
-    //                 $errorDetails[] = [
-    //                     'document' => $data->no_document,
-    //                     'error' => $th->getMessage()
-    //                 ];
-    //                 Log::error('Error fixing detail structure: ' . $data->no_document, [
-    //                     'error' => $th->getMessage(),
-    //                     'trace' => $th->getTraceAsString()
-    //                 ]);
-    //             }
-    //         }
-
-    //         return response()->json([
-    //             'message' => 'Fix detail structure completed',
-    //             'fixed' => $fixedCount,
-    //             'errors' => $errorCount,
-    //             'total_documents' => count($dataList),
-    //             'error_details' => $errorDetails
-    //         ], 200);
-
-    //     } catch (Throwable $th) {
-    //         DB::rollback();
-    //         Log::error('System error in fixDetailStructure', [
-    //             'error' => $th->getMessage(),
-    //             'trace' => $th->getTraceAsString()
-    //         ]);
-
-    //         return response()->json([
-    //             'message' => 'Terjadi kesalahan sistem',
-    //             'error' => app()->environment('local') ? $th->getMessage() : 'Internal Server Error'
-    //         ], 500);
-    //     }
-    // }
-
     public function fixDetailStructure(Request $request)
     {
        
         try {
+            // Ambil data yang mungkin struktur detailnya berubah
             $dataList = QuotationKontrakH::with('quotationKontrakD')
                 ->whereIn('no_document', $request->no_document)
                 ->where('is_active', true)
                 ->get();
             
             $fixedCount = 0;
-            $skippedCount = 0;
             $errorCount = 0;
             $errorDetails = [];
              
             foreach ($dataList as $data) {
                 DB::beginTransaction();
                 try {
-                    foreach ($data->quotationKontrakD as $detail) {
+                    $dataDetail = $data->quotationKontrakD;
+
+                    $index = 1;
+                    foreach ($dataDetail as $detail) {
                         $dsDetail = json_decode($detail->data_pendukung_sampling, true);
-
-                        // ⚙️ 1. Cek apakah sudah sesuai struktur (sudah punya "periode_kontrak")
-                        $isValidStructure = false;
-
-                        if (is_array($dsDetail)) {
-                            foreach ($dsDetail as $key => $item) {
-
-                                // 🔹 Case 1: Struktur lama tapi sudah dikonversi (pakai key angka dan ada periode_kontrak)
-                                if (is_array($item) && array_key_exists('periode_kontrak', $item)) {
-                                    $isValidStructure = true;
-                                    break;
-                                }
-
-                                // 🔹 Case 2: Format array langsung [{ "periode_kontrak": ..., "data_sampling": ... }]
-                                if (array_key_exists('periode_kontrak', $dsDetail)) {
-                                    $isValidStructure = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if ($isValidStructure) {
-                            // ✅ Sudah sesuai struktur → skip
-                            $skippedCount++;
-                            continue;
-                        }
-
-                        // ⚙️ 2. Kalau belum sesuai, bentuk ulang struktur
-                        $index = 1;
+                        // $dsDetail = reset($dsDetail);
+                        // dd($dsDetail);
+                        // $dsDetail = $dsDetail['data_sampling'][0]['data_sampling'];
                         $originalStructure = (object) [
                             $index => (object) [
                                 "periode_kontrak" => $detail->periode_kontrak,
                                 "data_sampling" => $dsDetail
                             ]
                         ];
+                        // dd($dsDetail, $originalStructure);
 
                         $detail->data_pendukung_sampling = json_encode($originalStructure);
                         $detail->save();
-
+                        $index++;
                         $fixedCount++;
                     }
+
+                    // dd($dataDetail);
 
                     DB::commit();
                 } catch (Throwable $th) {
@@ -2810,12 +3256,12 @@ class TestingController extends Controller
             return response()->json([
                 'message' => 'Fix detail structure completed',
                 'fixed' => $fixedCount,
-                'skipped' => $skippedCount,
                 'errors' => $errorCount,
                 'total_documents' => count($dataList),
                 'error_details' => $errorDetails
             ], 200);
         } catch (Throwable $th) {
+            DB::rollback();
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
@@ -3194,42 +3640,6 @@ class TestingController extends Controller
         }
     }
 
-    public function decodeImageToBase64($filename)
-    {
-        // Path penyimpanan
-        $path = public_path('dokumen/bas/signatures');
-
-        // Path file lengkap
-        $filePath = $path . '/' . $filename;
-
-        // Periksa apakah file ada
-        if (!file_exists($filePath)) {
-            return (object) [
-                'status' => 'error',
-                'message' => 'File tidak ditemukan'
-            ];
-        }
-
-        // Baca konten file
-        $imageContent = file_get_contents($filePath);
-
-        // Konversi ke base64
-        $base64Image = base64_encode($imageContent);
-
-        // Deteksi tipe file
-        $fileType = $this->detectFileType($imageContent);
-
-        // Tambahkan data URI header sesuai tipe file
-        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
-
-        // Kembalikan respons
-        return (object) [
-            'status' => 'success',
-            'base64' => $base64WithHeader,
-            'file_type' => $fileType
-        ];
-    }
-
     private function detectFileType($fileContent)
     {
         // Signature file untuk berbagai format
@@ -3458,5 +3868,767 @@ class TestingController extends Controller
                 'detail' => $th->getLine()
             ], 500);
         }
+    }
+
+    public function recalculateTotalColiformAutomated(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            // Ambil semua no_sampel yang perlu direkalkulasi
+            $noSampelList = Colorimetri::where('parameter', 'like', '%Total Coliform%')
+                ->where('created_by', 'SYSTEM')
+                ->whereDate('created_at', $request->tanggal)
+                ->where('is_active', true)
+                ->pluck('no_sampel')
+                ->unique()
+                ->toArray();
+
+            if (empty($noSampelList)) {
+                return response()->json([
+                    'message' => 'Tidak ada data untuk direkalkulasi pada tanggal tersebut.'
+                ], 404);
+            }
+
+            // Load semua data sekaligus untuk mengurangi query
+            $orderDetails = OrderDetail::whereIn('no_sampel', $noSampelList)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $titrimetriData = Titrimetri::where('parameter', 'like', '%BOD%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $colorimetriData = Colorimetri::where('parameter', 'like', '%NH3%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            $gravimetriData = Gravimetri::where('parameter', 'like', '%TSS%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('no_sampel');
+
+            // Load WsValueAir data
+            $titrimetriIds = $titrimetriData->pluck('id')->toArray();
+            $colorimetriIds = $colorimetriData->pluck('id')->toArray();
+            $gravimetriIds = $gravimetriData->pluck('id')->toArray();
+
+            $wsValueTitri = WsValueAir::whereIn('id_titrimetri', $titrimetriIds)
+                ->get()
+                ->keyBy('id_titrimetri');
+
+            $wsValueColori = WsValueAir::whereIn('id_colorimetri', $colorimetriIds)
+                ->get()
+                ->keyBy('id_colorimetri');
+
+            $wsValueGravi = WsValueAir::whereIn('id_gravimetri', $gravimetriIds)
+                ->get()
+                ->keyBy('id_gravimetri');
+
+            // Load Total Coliform data
+            $totalColiformData = Colorimetri::where('parameter', 'like', '%Total Coliform%')
+                ->whereIn('no_sampel', $noSampelList)
+                ->get()
+                ->keyBy('no_sampel');
+
+            // Definisi parameter sekali saja
+            $parameterDefs = [
+                'bod' => ["BOD", "BOD (B-23-NA)", "BOD (B-23)"],
+                'tss' => ["TSS", "TSS (APHA-D-23-NA)", "TSS (APHA-D-23)", "TSS (IKM-SP-NA)", "TSS (IKM-SP)"],
+                'nh3' => ["NH3", "NH3-N", "NH3-N Bebas", "NH3-N (3-03-NA)", "NH3-N (3-03)", "NH3-N (30-25-NA)", "NH3-N (30-25)", "NH3-N (T)", "NH3-N (T-NA)"]
+            ];
+
+            $successCount = 0;
+            $colorimetriUpdates = [];
+            $wsValueUpdates = [];
+
+            // Proses setiap sampel
+            foreach ($noSampelList as $no_sampel) {
+                $orderDetail = $orderDetails->get($no_sampel);
+                if (!$orderDetail) continue;
+
+                $dataTitri = $titrimetriData->get($no_sampel);
+                $dataColori = $colorimetriData->get($no_sampel);
+                $dataGravi = $gravimetriData->get($no_sampel);
+
+                if (!$dataTitri || !$dataColori || !$dataGravi) continue;
+
+                $hasilTitri = $wsValueTitri->get($dataTitri->id);
+                $hasilColori = $wsValueColori->get($dataColori->id);
+                $hasilGravi = $wsValueGravi->get($dataGravi->id);
+
+                if (!$hasilTitri || !$hasilColori || !$hasilGravi) continue;
+
+                // Hitung acuan berdasarkan kategori
+                $acuan = $this->calculateAcuan(
+                    $orderDetail,
+                    $dataTitri,
+                    $dataColori,
+                    $dataGravi,
+                    $hasilTitri,
+                    $hasilColori,
+                    $hasilGravi,
+                    $parameterDefs
+                );
+
+                if (empty($acuan)) continue;
+
+                // Hitung hasil Total Coliform
+                $hasil = $this->calculateTotalColiform($acuan, $orderDetail->kategori_3);
+
+                // Simpan untuk bulk update
+                $insert = $totalColiformData->get($no_sampel);
+                if ($insert) {
+                    $colorimetriUpdates[] = [
+                        'id' => $insert->id,
+                        'hp' => $hasil['value'],
+                        'note' => $hasil['note']
+                    ];
+
+                    $wsValueUpdates[] = [
+                        'id_colorimetri' => $insert->id,
+                        'no_sampel' => $no_sampel,
+                        'hasil' => $hasil['value']
+                    ];
+
+                    $successCount++;
+                }
+            }
+
+            // Bulk update Colorimetri
+            foreach ($colorimetriUpdates as $update) {
+                Colorimetri::where('id', $update['id'])
+                    ->update([
+                        'hp' => $update['hp'],
+                        'note' => $update['note']
+                    ]);
+            }
+
+            // Bulk upsert WsValueAir
+            foreach ($wsValueUpdates as $wsUpdate) {
+                WsValueAir::updateOrCreate(
+                    ['id_colorimetri' => $wsUpdate['id_colorimetri']],
+                    [
+                        'no_sampel' => $wsUpdate['no_sampel'],
+                        'hasil' => $wsUpdate['hasil']
+                    ]
+                );
+            }
+
+            DB::commit();
+            return response()->json([
+                'message' => "Rekalkulasi Total Coliform Berhasil untuk tanggal {$request->tanggal}",
+                'total_processed' => $successCount
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+
+    /**
+     * Hitung acuan berdasarkan kategori dan parameter
+     */
+    private function calculateAcuan($orderDetail, $dataTitri, $dataColori, $dataGravi, $hasilTitri, $hasilColori, $hasilGravi, $parameterDefs)
+    {
+        $acuan = [];
+        $isDomestik = $orderDetail->kategori_3 == '2-Air Limbah Domestik';
+
+        // BOD
+        if (in_array($dataTitri->parameter, $parameterDefs['bod'])) {
+            $acuanValue = $isDomestik ? 30 : 50;
+            $acuan['BOD'] = [
+                'hasil' => $hasilTitri->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilTitri->hasil) ? $hasilTitri->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilTitri->hasil)
+                    ? (($acuanValue - $hasilTitri->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        // TSS
+        if (in_array($dataGravi->parameter, $parameterDefs['tss'])) {
+            $acuanValue = $isDomestik ? 30 : 200;
+            $acuan['TSS'] = [
+                'hasil' => $hasilGravi->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilGravi->hasil) ? $hasilGravi->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilGravi->hasil)
+                    ? (($acuanValue - $hasilGravi->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        // NH3
+        if (in_array($dataColori->parameter, $parameterDefs['nh3'])) {
+            $acuanValue = $isDomestik ? 10 : 5;
+            $acuan['NH3'] = [
+                'hasil' => $hasilColori->hasil,
+                'acuan' => $acuanValue,
+                'greater' => is_numeric($hasilColori->hasil) ? $hasilColori->hasil > $acuanValue : false,
+                'turun_naik' => is_numeric($hasilColori->hasil)
+                    ? (($acuanValue - $hasilColori->hasil) / $acuanValue) * 100
+                    : 100
+            ];
+        }
+
+        return $acuan;
+    }
+
+    /**
+     * Hitung Total Coliform berdasarkan acuan
+     */
+    private function calculateTotalColiform($acuan, $kategori)
+    {
+        // Hitung average turun naik + 25
+        $average_turun_naik = (array_sum(array_column($acuan, 'turun_naik')) / count($acuan)) + 25;
+
+        // Tentukan acuan total coliform
+        $acuanTotalColi = $kategori == '3-Air Limbah Industri' ? 1000 : 3000;
+
+        // Hitung temp result
+        $temp_result = $average_turun_naik > 0
+            ? $acuanTotalColi - (abs(($average_turun_naik / 100) * $acuanTotalColi))
+            : $acuanTotalColi + (abs(($average_turun_naik / 100) * $acuanTotalColi));
+
+        $temp_result = $this->mround($temp_result, 10);
+
+        // Cari closest key
+        $isGreater = $temp_result >= 1600;
+        $closest = $this->searchClosestKey(abs($temp_result) / 10, $isGreater);
+        $hasil = $closest['key'];
+
+        if ($hasil < 1) {
+            $hasil = '<1';
+        }
+
+        // Generate note
+        $split_note = str_split((string) $closest['value']);
+        $note = implode('-', $split_note);
+
+        return [
+            'value' => $hasil,
+            'note' => $note
+        ];
+    }
+
+    private function getRequiredCount($parameter)
+    {
+        $map = [
+            'Debu (P8J)' => 2,
+            'Dustfall' => 2,
+            'Dustfall (S)' => 2,
+            'Kebisingan (P8J)' => 2,
+            'PM 10 (Personil)' => 2,
+            'PM 2.5 (Personil)' => 2,
+
+            'CO (6 Jam)' => 3,
+            'CO (8 Jam)' => 3,
+            'CO2 (8 Jam)' => 3,
+            'H2S (3 Jam)' => 3,
+            'H2S (8 Jam)' => 3,
+            'HC (3 Jam)' => 3,
+            'HC (6 Jam)' => 3,
+            'HC (8 Jam)' => 3,
+            'HCHO (8 Jam)' => 3,
+            'HCNM (3 Jam)' => 3,
+            'HCNM (6 Jam)' => 3,
+            'HCNM (8 Jam)' => 3,
+            'ISBB (8 Jam)' => 3,
+            'Metil Merkaptan (8 Jam)' => 3,
+            'Metil Sulfida (8 Jam)' => 3,
+            'NH3 (8 Jam)' => 3,
+            'NO2 (6 Jam)' => 3,
+            'NO2 (8 Jam)' => 3,
+            'O3 (8 Jam)' => 3,
+            'Pb (6 Jam)' => 3,
+            'Pb (8 Jam)' => 3,
+            'PM 10 (8 Jam)' => 3,
+            'PM 2.5 (8 Jam)' => 3,
+            'SO2 (6 Jam)' => 3,
+            'SO2 (8 Jam)' => 3,
+            'Stirena (8 Jam)' => 3,
+            'Toluene (8 Jam)' => 3,
+            'TSP (6 Jam)' => 3,
+            'TSP (8 Jam)' => 3,
+            'VOC (8 Jam)' => 3,
+            'Xylene (8 Jam)' => 3,
+            'HCl (8 Jam)' => 3,
+            'Fe (8 Jam)' => 3,
+            'T.Bakteri (8 Jam)' => 3,
+            'T. Jamur (8 Jam)' => 3,
+            'Laju Ventilasi (8 Jam)' => 3,
+            'Iklim Kerja Dingin (Cold Stress) - 8 Jam' => 3,
+            'Al. Hidrokarbon (8 Jam)' => 3,
+            'T. Bakteri (KUDR - 8 Jam)' => 3,
+            'T. Jamur (KUDR - 8 Jam)' => 3,
+            'Karbon Hitam (8 jam)' => 3,
+            'N-Hexane Personil (8 Jam)' => 3,
+            'Siklohexane - 8 Jam' => 3,
+            'Silica Crystaline 8 Jam' => 3,
+
+            'CH4 (24 Jam)' => 4,
+            'CO (24 Jam)' => 4,
+            'CO2 (24 Jam)' => 4,
+            'Get. Bangunan (24J)' => 4,
+            'H2S (24 Jam)' => 4,
+            'NH3 (24 Jam)' => 4,
+            'NO2 (24 Jam)' => 4,
+            'SO2 (24 Jam)' => 4,
+            'Cl2 (24 Jam)' => 4,
+
+            'Pb (24 Jam)' => 5,
+            'PM 10 (24 Jam)' => 5,
+            'PM 2.5 (24 Jam)' => 5,
+            'TSP (24 Jam)' => 5,
+
+            'Kebisingan (24 Jam)' => 7,
+
+            'Kebisingan (8 Jam)' => 8,
+        ];
+
+        return $map[$parameter] ?? 1;
+    }
+
+    public function checkLengthData($category2, $category3, $parameters, $no_sampel) {
+        $parameters = array_reduce($parameters, function ($carry, $item) {
+            $parameterName = explode(";", $item)[1];
+            $carry[$parameterName] = $this->getRequiredCount($parameterName);
+            return $carry;
+        }, []);
+        // dd($parameters);
+
+        if($category2 == "4-Udara") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["11-Udara Ambient", "27-Udara Lingkungan Kerja", "12-Udara Angka Kuman"])) {
+                    $partikulatMeter = DataLapanganPartikulatMeter::where('no_sampel', $no_sampel)->count();
+                    if($partikulatMeter < $requiredCount){
+                        if ($category3 == "11-Udara Ambient") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else if ($parameter == "HCNM (3 Jam)" || $parameter == "HC (3 Jam)") {
+                                if (DetailSenyawaVolatile::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganHidup::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "27-Udara Lingkungan Kerja") {
+                            if ($parameter == "C O") {
+                                if (DataLapanganDirectLain::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            } else {
+                                if (DetailLingkunganKerja::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                            }
+                        }
+        
+                        if ($category3 == "12-Udara Angka Kuman") {
+                            if (DetailMicrobiologi::where('no_sampel', $no_sampel)->where('parameter', $parameter)->count() < $requiredCount) return 0;
+                        }
+                    }else {
+                        return 0;
+                    }
+                }
+
+                else if ($category3 == "23-Kebisingan") {
+                    if ($parameter == "Kebisingan (8 Jam)") {
+                        if (DataLapanganKebisinganPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } else {
+                        if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+        
+                else if ($category3 == "24-Kebisingan (24 Jam)") {
+                    if (DataLapanganKebisingan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "28-Pencahayaan") {
+                    $jumlah = DataLapanganCahaya::where('no_sampel', $no_sampel)->count();
+
+                    if($jumlah < $requiredCount) return 0;
+
+                }
+        
+                else if (in_array($category3, ["19-Getaran (Mesin)", "15-Getaran (Kejut Bangunan)", "13-Getaran", "14-Getaran (Bangunan)", "18-Getaran (Lingkungan)"])) {
+                    if (DataLapanganGetaran::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if (in_array($category3, ["17-Getaran (Lengan & Tangan)", "20-Getaran (Seluruh Tubuh)"])) {
+                    if (DataLapanganGetaranPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+        
+                else if ($category3 == "21-Iklim Kerja") {
+                    if ($parameter == "ISBB") {
+                        if (DataLapanganIklimPanas::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    } elseif ($parameter == "IKD (CS)") {
+                        if (DataLapanganIklimDingin::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+                
+                else if ($category3 == "46-Udara Swab Test") {
+                    if (DataLapanganSwab::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                else if($category3 == "53-Ergonomi") {
+                    if(DataLapanganErgonomi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+
+                else {
+                    if(in_array($parameter, ["Debu (P8J)", "PM 10 (Personil)", "PM 2.5 (Personil)", "Karbon Hitam (8 jam)"])) {
+                        if(DataLapanganDebuPersonal::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if(in_array($parameter, ["Medan Magnit Statis", "Power Density", "Medan Listrik", "Gelombang Elektro"])) {
+                        if(DataLapanganMedanLM::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Sinar UV") {
+                        if(DataLapanganSinarUV::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else if($parameter == "Psikologi") {
+                        if(DataLapanganPsikologi::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+
+                    else {
+                        return 0;
+                    }
+                }
+        
+            }
+        }else if($category2 == "5-Emisi") {
+            foreach ($parameters as $parameter => $requiredCount) {
+                if (in_array($category3, ["32-Emisi Kendaraan (Solar)", "31-Emisi Kendaraan (Bensin)", "116-Emisi Kendaraan (Gas)"])) {
+                    if (DataLapanganEmisiKendaraan::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                }
+                if ($category3 == "34-Emisi Sumber Tidak Bergerak") {
+                    $emisiCerobong = DataLapanganEmisiCerobong::where('no_sampel', $no_sampel)->count();
+                    if ($emisiCerobong < $requiredCount) {
+                        if (DataLapanganIsokinetikHasil::where('no_sampel', $no_sampel)->count() < $requiredCount) return 0;
+                    }
+                }
+
+                // return 1;
+            }
+        } else if($category2 == "1-Air") {
+            if (DataLapanganAir::where('no_sampel', $no_sampel)->exists()) {
+                return  1;
+            }else{
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    public function decodeImageToBase64($filename)
+    {
+        // Path penyimpanan
+        $path = public_path('dokumen/cs/signatures');
+        
+        // Path file lengkap
+        $filePath = $path . '/' . $filename;
+
+        // Periksa apakah file ada
+        if (!file_exists($filePath)) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'File tidak ditemukan'
+            ];
+        }
+
+        // Baca konten file
+        $imageContent = file_get_contents($filePath);
+        if($imageContent === false) {
+            return (object) [
+                'status' => 'error',
+                'message' => 'Gagal membaca file'
+            ];
+        }
+
+        // Konversi ke base64
+        $base64Image = base64_encode($imageContent);
+
+        // Deteksi tipe file
+        $fileType = $this->detectFileType($imageContent);
+
+        // Tambahkan data URI header sesuai tipe file
+        $base64WithHeader = 'data:image/' . $fileType . ';base64,' . $base64Image;
+
+        // Kembalikan respons
+        return (object) [
+            'status' => 'success',
+            'base64' => $base64WithHeader,
+            'file_type' => $fileType
+        ];
+    }
+
+    public function recoverInvoice(Request $request) {
+        $invoices = Invoice::where(function ($query) {
+            $query->where('updated_at', '>=', Carbon::now()->startOfDay());
+        })->get()->pluck('no_invoice')->toArray();
+
+        return response()->json($invoices);
+    
+    }
+
+    private function searchClosestKey($temp_result, $isLoop = false)
+    {
+        $rows = $this->tableReversedMPN;
+        $closest = null;
+        $closestDiff = PHP_FLOAT_MAX;
+
+        do {
+            foreach ($rows as $r) {
+                $diff = abs($r["key"] - $temp_result);
+
+                if ($diff < $closestDiff) {
+                    $closestDiff = $diff;
+                    $closest = $r;
+                }
+            }
+
+            if ($closest !== null) {
+                return [
+                    "value" => $closest["value"],
+                    "key"   => $closest["key"]
+                ];
+            }
+
+            $temp_result /= 10;
+
+            if (!$isLoop) {
+                break;
+            }
+        } while ($temp_result > 0.000001);
+
+        return [
+            "value" => "000",
+            "key"   => null
+        ];
+    }
+
+    private function mround($number, $multiple)
+    {
+        return round($number / $multiple) * $multiple;
+    }
+
+    private $tableReversedMPN = [
+        ["key" => 1.8, "value" => "001"],
+        ["key" => 3.6, "value" => "011"],
+        ["key" => 3.7, "value" => "020"],
+        ["key" => 5.5, "value" => "021"],
+        ["key" => 5.6, "value" => "030"],
+        ["key" => 2, "value" => "100"],
+        ["key" => 4, "value" => "101"],
+        ["key" => 6, "value" => "102"],
+        ["key" => 4, "value" => "110"],
+        ["key" => 6.1, "value" => "111"],
+        ["key" => 8.1, "value" => "112"],
+        ["key" => 6.1, "value" => "120"],
+        ["key" => 8.2, "value" => "121"],
+        ["key" => 8.3, "value" => "130"],
+        ["key" => 10, "value" => "131"],
+        ["key" => 11, "value" => "140"],
+        ["key" => 4.5, "value" => "200"],
+        ["key" => 6.8, "value" => "201"],
+        ["key" => 9.1, "value" => "202"],
+        ["key" => 6.8, "value" => "210"],
+        ["key" => 9.2, "value" => "211"],
+        ["key" => 12, "value" => "212"],
+        ["key" => 8.3, "value" => "220"],
+        ["key" => 12, "value" => "221"],
+        ["key" => 14, "value" => "222"],
+        ["key" => 12, "value" => "230"],
+        ["key" => 14, "value" => "231"],
+        ["key" => 15, "value" => "240"],
+        ["key" => 7.8, "value" => "300"],
+        ["key" => 11, "value" => "301"],
+        ["key" => 13, "value" => "302"],
+        ["key" => 11, "value" => "310"],
+        ["key" => 14, "value" => "311"],
+        ["key" => 17, "value" => "312"],
+        ["key" => 14, "value" => "320"],
+        ["key" => 17, "value" => "321"],
+        ["key" => 20, "value" => "322"],
+        ["key" => 17, "value" => "330"],
+        ["key" => 21, "value" => "331"],
+        ["key" => 24, "value" => "332"],
+        ["key" => 21, "value" => "340"],
+        ["key" => 24, "value" => "341"],
+        ["key" => 25, "value" => "350"],
+        ["key" => 13, "value" => "400"],
+        ["key" => 17, "value" => "401"],
+        ["key" => 21, "value" => "402"],
+        ["key" => 25, "value" => "403"],
+        ["key" => 17, "value" => "410"],
+        ["key" => 21, "value" => "411"],
+        ["key" => 26, "value" => "412"],
+        ["key" => 31, "value" => "413"],
+        ["key" => 22, "value" => "420"],
+        ["key" => 26, "value" => "421"],
+        ["key" => 32, "value" => "422"],
+        ["key" => 38, "value" => "423"],
+        ["key" => 27, "value" => "430"],
+        ["key" => 33, "value" => "431"],
+        ["key" => 39, "value" => "432"],
+        ["key" => 34, "value" => "440"],
+        ["key" => 40, "value" => "441"],
+        ["key" => 47, "value" => "442"],
+        ["key" => 41, "value" => "450"],
+        ["key" => 48, "value" => "451"],
+        ["key" => 23, "value" => "500"],
+        ["key" => 31, "value" => "501"],
+        ["key" => 43, "value" => "502"],
+        ["key" => 58, "value" => "503"],
+        ["key" => 33, "value" => "510"],
+        ["key" => 46, "value" => "511"],
+        ["key" => 63, "value" => "512"],
+        ["key" => 84, "value" => "513"],
+        ["key" => 49, "value" => "520"],
+        ["key" => 70, "value" => "521"],
+        ["key" => 94, "value" => "522"],
+        ["key" => 120, "value" => "523"],
+        ["key" => 150, "value" => "524"],
+        ["key" => 79, "value" => "530"],
+        ["key" => 110, "value" => "531"],
+        ["key" => 140, "value" => "532"],
+        ["key" => 170, "value" => "533"],
+        ["key" => 210, "value" => "534"],
+        ["key" => 130, "value" => "540"],
+        ["key" => 170, "value" => "541"],
+        ["key" => 220, "value" => "542"],
+        ["key" => 280, "value" => "543"],
+        ["key" => 350, "value" => "544"],
+        ["key" => 430, "value" => "545"],
+        ["key" => 240, "value" => "550"],
+        ["key" => 350, "value" => "551"],
+        ["key" => 540, "value" => "552"],
+        ["key" => 920, "value" => "553"],
+        ["key" => 1600, "value" => "554"]
+    ];
+
+    private function hitungRisiko($posisi, $berat)
+    {
+        $poin = 0;
+
+        if ($posisi == 'Pengangkatan dengan jarak dekat') {
+            if ($berat == 'Berat benda >23Kg') $poin = 5;
+            elseif ($berat == 'Berat benda Sekitar 7 - 23 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak sedang') {
+            if ($berat == 'Berat benda >16Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 5 - 16 Kg') $poin = 3;
+        } elseif ($posisi == 'Pengangkatan dengan jarak jauh') {
+            if ($berat == 'Berat benda >13Kg') $poin = 6;
+            elseif ($berat == 'Berat benda Sekitar 4.5 - 13 Kg') $poin = 3;
+        }
+
+        return $poin;
+    }
+
+    private function hitungDurasiDanPerbaiki($data, $durasiConfig, $no_sampel)
+    {
+        $total = 0;
+
+        // PENGAMAN UTAMA
+        if (!is_array($data)) {
+            return [
+                'total' => 0,
+                'data'  => $data // kembalikan apa adanya
+            ];
+        }
+
+        foreach ($data as $kategoriKey => $kategori) {
+
+            if (!is_array($kategori)) {
+                continue;
+            }
+
+            foreach ($kategori as $key => $value) {
+
+                // ================================
+                // ✅ KHUSUS FAKTOR KONTROL
+                // ================================
+                if ($key === 'Faktor Kontrol' && is_string($value)) {
+
+                    // Skip jika "Tidak"
+                    if (stripos($value, 'Tidak') !== false) {
+                        continue;
+                    }
+
+                    // Ambil angka dari string (1 atau 2)
+                    if (preg_match('/(\d+)/', $value, $match)) {
+                        $nilai = (int) $match[1];
+                    } else {
+                        continue; // tidak ada angka → skip
+                    }
+
+                    $total += $nilai;
+
+                    continue;
+                }
+
+                // ================================
+                // ✅ JIKA ADA "Durasi Gerakan"
+                // ================================
+                if (is_array($value) && isset($value['Durasi Gerakan'])) {
+
+                    if (strpos($value['Durasi Gerakan'], ';') === false) {
+                        continue;
+                    }
+
+                    [$index, $range] = explode(';', $value['Durasi Gerakan']);
+                    $range = trim($range);
+
+                    if (!isset($durasiConfig[$key])) {
+                        continue;
+                    }
+
+                    $configList = $durasiConfig[$key];
+
+                    if (!isset($configList[$range])) {
+                        continue;
+                    }
+
+                    $nilai = $configList[$range];
+
+                    $data[$kategoriKey][$key]['Durasi Gerakan'] = $nilai . ';' . $range;
+
+                    $total += $nilai;
+                }elseif ($value !== 'Tidak') {
+
+                    if (!isset($durasiConfig[$key][1])) {
+                        continue;
+                    }
+
+                    $nilai = $durasiConfig[$key][1];
+                    $total += $nilai;
+                }
+                if (
+                    isset($value['Overtime'])
+                ) {
+                    $total += (float) $value['Overtime'];
+                }
+            }
+        }
+
+
+        return [
+            'total' => $total,
+            'data'  => $data
+        ];
     }
 }

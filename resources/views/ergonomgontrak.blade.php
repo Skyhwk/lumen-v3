@@ -3,305 +3,436 @@
 <head>
     <meta charset="UTF-8">
     <title>Laporan Hasil Pengujian</title>
+    <style>
+        /* RESET & PAGE SETUP */
+        * { box-sizing: border-box; }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 8pt;
+            line-height: 1.1;
+            color: #000;
+            margin: 0; padding: 0;
+        }
 
-    @if(!empty($spesifik))
-        <style>{!! $spesifik !!}</style>
-    @endif
+        /* UTILITY */
+        .bold { font-weight: bold; }
+        .text-center { text-align: center; }
+        .valign-top { vertical-align: top; }
+
+        /* LAYOUT UTAMA */
+        .main-layout-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: none;
+            table-layout: fixed;
+        }
+        .col-kiri { width: 155mm; padding-right: 4mm; vertical-align: top; }
+        .col-kanan { width: 110mm; vertical-align: top; }
+
+        /* BOX STYLE */
+        .section {
+            margin-bottom: 5px;
+            /* border: 1px solid #000; */
+            padding: 3px;
+        }
+        .section-title {
+            font-weight: bold;
+            /* text-decoration: underline; */
+            margin-bottom: 4px;
+            font-size: 8pt;
+            /* text-transform: uppercase; */
+            /* background-color: #f2f2f2; */
+            padding: 2px;
+        }
+
+        /* TABEL UMUM (Compact) */
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table td { padding: 1px 2px; vertical-align: top; }
+        .label-col { width: 40%; }
+        .separator-col { width: 3%; text-align: center; }
+        .value-col { width: 58%; }
+
+        /* TABEL BORDERED (Compact Default) */
+        .bordered-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2px;
+        }
+        .bordered-table th, .bordered-table td {
+            border: 1px solid #000;
+            padding: 1px 2px;
+            font-size: 8pt;
+        }
+
+        /* --- PERBAIKAN KHUSUS BODY MAP (DIBESARKAN) --- */
+        .body-map-container { width: 100%; border-collapse: collapse; }
+        
+        /* 1. Area Gambar Diperlebar */
+        .body-map-img-cell {
+            width: 200px; /* Ukuran diperbesar agar tidak pecah */
+            vertical-align: middle; /* Posisi vertikal tengah agar rapi */
+            text-align: center;
+            padding-right: 10px;
+        }
+
+        /* 2. Tabel Bagian Tubuh Dibuat Lebih Renggang (Spacious) */
+        .spacious-table th, .spacious-table td {
+            border: 1px solid #000;
+            padding: 5px 4px; /* Padding diperbesar agar tabel lebih tinggi menyamai gambar */
+            font-size: 9pt;   /* Font sedikit dibesarkan agar seimbang */
+        }
+
+        /* Header LHP & Lainnya */
+        .lhp-header { width: 100%; border-collapse: collapse; margin-bottom: 5px;}
+        .lhp-header th, .lhp-header td { border: 1px solid #000; padding: 2px; text-align: center; font-size: 12px; }
+        .lhp-header th { background-color: #e0e0e0; font-weight: bold; }
+
+        
+        .box-conclusion {
+            border: 1px solid #000;
+            padding: 3px;
+            min-height: 20px;
+            font-size: 8pt;
+            background-color: #fff;
+            margin-top: 2px;
+        }
+        .main-title {
+            text-align: center; font-weight: bold; font-size: 11pt;
+            margin-bottom: 8px; text-decoration: underline; text-transform: uppercase;
+        }
+        .signature-box { width: 50mm;        /* Tentukan lebar agar tidak memenuhi baris */
+    float: right;       /* Paksa elemen mengapung ke sisi KANAN */
+    text-align: center; /* Isi teks (QR & Nama) tetap rata tengah didalam kotak ini */
+    margin-top: 5px;
+    margin-right: 5px; }
+    </style>
 </head>
 <body>
-    <div class="page-container">
-        <!-- DIV main-header-title LAPORAN HASIL PENGUJIAN -->
-        <div class="two-column-layout">
-            <!-- KIRI -->
-            <div class="column column-left">
+    <table class="main-layout-table">
+        <tr>
+            <td class="col-kiri">
+                
                 <div class="section">
-                    <div class="section-title">HASIL ANALISIS SURVEI AWAL GANGGUAN OTOT DAN RANGKA</div>
-                    <table class="info-table">
+                    <div class="section-title">HASIL SURVEI KELUHAN GANGGUAN OTOT DAN RANGKA</div>
+                    <table class="data-table">
                         <tr>
-                            <td class="label-column">1. Tangan Dominan</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->tangan_dominan }}</div>
-                            </td>
+                            <td width="70%">1. Tangan Dominan</td>
+                            <td width="2%">:</td>
+                            <td class="value-col">{{ $pengukuran->identitas_umum->tangan_dominan }}</td>
                         </tr>
                         <tr>
-                            <td class="label-column">2. Mata Kerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->masa_kerja }}</div>
-                            </td>
+                            <td width="70%">2. Masa Kerja</td>
+                            <td width="2%">:</td>
+                            <td class="value-col">{{ $pengukuran->identitas_umum->masa_kerja }}</td>
                         </tr>
                         <tr>
-                            <td class="label-column">3. Merasakan Kelelahan Mental Setelah Bekerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->lelah_mental }}</div>
-                            </td>
+                            <td width="70%">3. Kelelahan Mental (Setelah Bekerja)</td>
+                            <td width="2%">:</td>
+                            <td class="value-col">{{ $pengukuran->identitas_umum->lelah_mental }}</td>
                         </tr>
                         <tr>
-                            <td class="label-column">4. Merasakan Kelelahan Fisik Setelah Bekerja</td>
-                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->lelah_fisik }}</div>
-                            </td>
+                            <td width="70%">4. Kelelahan Fisik (Setelah Bekerja)</td>
+                            <td width="2%">:</td>
+                            <td class="value-col">{{ $pengukuran->identitas_umum->lelah_fisik }}</td>
                         </tr>
                         <tr>
-                            <td class="label-column">5. Merasakan Ketidaknyamanan/Nyeri/Sakit Dalam Satu Tahun Terakhir
+                            <td width="70%">5. Rasa Sakit/Nyeri/Ketidaknyamanan (1 Tahun Terakhir)</td>
+                            <td width="2%">:</td>
+                            <td class="value-col">{{ $pengukuran->identitas_umum->rasa_sakit }}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="section">
+                    
+                    <table class="body-map-container">
+                        <tr>
+                            <td class="body-map-img-cell">
+                                <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}" 
+                                     style="width: 100%; max-width: 190px; height: auto;" alt="Body Map">
                             </td>
-                            <td> <div class="text-input-space">{{ $pengukuran->identitas_umum->rasa_sakit }}</div>
+                            <td class="valign-top">
+                                <table class="bordered-table spacious-table">
+                                    <thead>
+                                        <tr style="background-color: #f9f9f9;">
+                                            <th style="text-align: left;">Bagian Tubuh</th>
+                                            <th style="text-align: left;">Sisi Tubuh (Jika Ada Keluhan)</th>
+                                            <th style="width: 45px;">Skor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @php
+                                            if (!function_exists('formatBagianTubuh')) {
+                                                function formatBagianTubuh($data)
+                                                {
+                                                    if (empty($data)) {
+                                                        return '-';
+                                                    }
+
+                                                    if ($data === 'Kedua' || $data === 'kedua') {
+                                                        return 'Keduanya';
+                                                    }
+
+                                                    // Selain itu → tampilkan apa adanya
+                                                    return $data;
+                                                }
+                                            }
+                                        @endphp
+                                        <tr>
+                                            <td>1. Leher</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_leher->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_leher !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_leher->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>2. Bahu</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_bahu->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_bahu->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>3. Punggung Atas</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>4. Lengan</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_lengan->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lengan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lengan->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>5. Siku</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_siku->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_siku !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_siku->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>6. Punggung Bawah</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>7. Tangan</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_tangan->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_tangan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_tangan->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>8. Pinggul</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_pinggul->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_pinggul !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_pinggul->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>9. Paha</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_paha->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_paha !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_paha->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>10. Lutut</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_lutut->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lutut !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lutut->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>11. Betis</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_betis->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_betis !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_betis->poin : 1 }}</td></tr>
+                                        <tr>
+                                            <td>12. Kaki</td>
+                                            <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_kaki->bagian_tubuh ?? null) }}</td>
+                                            <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_kaki->poin : 1 }}</td></tr>
+                                    </tbody>
+                                </table>
                             </td>
                         </tr>
                     </table>
-                    <div class="bold">KESIMPULAN SURVEI AWAL</div>
-                    <div class="text-input-space" style="min-height: 30px;">Pekerja memiliki risiko bahaya ergonomi
-                    </div>
-                </div>
+                    @php
+                    $keluhanData = [
+                        ["Leher", $pengukuran->keluhan_bagian_tubuh->sakit_leher],
+                        ["Bahu", $pengukuran->keluhan_bagian_tubuh->sakit_bahu],
+                        ["Punggung Atas", $pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas],
+                        ["Lengan", $pengukuran->keluhan_bagian_tubuh->sakit_lengan],
+                        ["Siku", $pengukuran->keluhan_bagian_tubuh->sakit_siku],
+                        ["Punggung Bawah", $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah],
+                        ["Tangan", $pengukuran->keluhan_bagian_tubuh->sakit_tangan],
+                        ["Pinggul", $pengukuran->keluhan_bagian_tubuh->sakit_pinggul],
+                        ["Paha", $pengukuran->keluhan_bagian_tubuh->sakit_paha],
+                        ["Lutut", $pengukuran->keluhan_bagian_tubuh->sakit_lutut],
+                        ["Betis", $pengukuran->keluhan_bagian_tubuh->sakit_betis],
+                        ["Kaki", $pengukuran->keluhan_bagian_tubuh->sakit_kaki],
+                    ];
 
-                <div class="section">
-                    <div class="section-title">HASIL ANALISIS SURVEI LANJUTAN GANGGUAN OTOT DAN RANGKA</div>
-                    <div class="image-placeholder-container">
-                        <div class="image-placeholder">
-                            <img src="{{ public_path('dokumen/img_ergo/gotrak/anatomygontrak.png') }}"
-                            style="width: 160px; height: auto; object-fit: contain; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; display: block; margin: 0 auto;"
-                            alt="Body Map"/>
-                        </div>
-                        <div class="body-parts-list-container">
-                            <table class="body-parts-list">
-                                <tr>
-                                    <td><span>1 = Leher</span></td>
-                                    <td>
-                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_leher !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_leher->poin : 0 }}</div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><span>2 = Bahu</span></td>
-                                    <td>
-                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_bahu->poin : 0 }}</div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><span>3 = Punggung Atas</span></td>
-                                    <td>
-                                        <div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->poin : 0 }}</div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><span>4 = Lengan</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lengan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lengan->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>5 = Siku</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_siku !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_siku->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>6 = Punggung Bawah</span></td>
-                                    <td><div class="input-line">{{( $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>7 = Tangan</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_tangan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_tangan->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>8 = Pinggul</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_pinggul !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_pinggul->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>9 = Paha</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_paha !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_paha->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>10 = Lutut</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lutut !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lutut->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>11 = Betis</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_betis !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_betis->poin : 0 }}</div></td>
-                                </tr>
-                                <tr>
-                                    <td><span>12 = Kaki</span></td>
-                                    <td><div class="input-line">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_kaki->poin : 0 }}</div></td>
-                                </tr>
-                            </table>
-                            
-                            <div class="section">
-                                <div class="section-title">ANALISIS POTENSI BAHAYA</div>
-                                <div class="analysis-content">Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki keluhan sering pada bagian</div>
-                            </div>
-                            
-                            <div class="section">
-                                <div class="section-title">KESIMPULAN SURVEI LANJUTAN</div>
-                                <div class="conclusion-content">Pengukuran ergonomi pada pekerja atas nama Jaja Harudin pada divisi/departemen shift powder memiliki tingkat risiko keluhan sebagai berikut:</div>
-                            </div>
+                    
+
+                    $higherNumber = 0;
+                    $returnKeluhan = [];
+
+                    foreach ($keluhanData as $item) {
+                        if (!is_array($item) || count($item) < 2) {
+                            continue;
+                        }
+
+                        [$label, $value] = $item;
+
+                        if (!$value || is_string($value)) {
+                            continue;
+                        }
+
+                        if (is_array($value) || is_object($value)) {
+                            $poin = isset($value->poin) ? intval($value->poin) : 0;
+                            if ($poin === $higherNumber) {
+                                $returnKeluhan[] = $label;
+                            } elseif ($poin > $higherNumber) {
+                                $higherNumber = $poin;
+                                $returnKeluhan = [$label];
+                            }
+                        }
+                    }
+
+                    @endphp
+                    <div style="margin-top: 15px;">
+                        <span class="bold">KESIMPULAN SURVEI KELUHAN GANGGUAN OTOT DAN RANGKA</span>
+                        <div class="box-conclusion p-1">
+                            Pengukuran ergonomi pada pekerja tersebut memiliki skor keluhan tertinggi pada bagian: 
+                            @foreach($returnKeluhan as $index => $item)
+                                {{ $index === 0 ? $item : ( $index > 0 ? ', ' . $item : '' )}}
+                            @endforeach
                         </div>
                     </div>
                 </div>
-            </div>
-            <!-- KANAN -->
-            <div class="column column-right">
-                <table class="lhp-info-table info-table">
-                    <tbody>
-                        <tr>
-                            <th>No. LHP</th>
-                            <th>No. Sampel</th>
-                            <th>Jenis Sampel</th>
-                        </tr>
-                        <tr>
-                            <td>{{ $personal->no_lhp }}</td>
-                            <td>{{ $personal->no_sampel }}</td>
-                            <td>Ergonomi</td>
-                        </tr>
-                    </tbody>
+            </td>
+
+            <td class="col-kanan">
+                <table class="lhp-header">
+                    <tr><th>No. LHP</th><th>No. Sampel</th><th>Jenis Sampel</th></tr>
+                    <tr><td>{{ $personal->no_lhp }}</td>
+                    <td>{{ $personal->no_sampel }}</td>
+                    <td>ERGONOMI</td></tr>
                 </table>
 
                 <div class="section">
-                    <span class="bold">Informasi Pelanggan</span>
+                    <div class="section-title">Informasi Pelanggan</div>
                     <table class="info-table">
                         <tr>
-                            <td style="width: 120px;">Nama Pelanggan</td>
-                            <td> <div class="text-input-space">{{ $personal->nama_pelanggan }}</div>
-                            </td>
+                            <td style="width: 40%;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
                         </tr>
                         <tr>
-                            <td>Alamat / Lokasi Sampling</td>
-                            <td> <div class="text-input-space">{{ $personal->alamat_pelanggan }}</div>
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-                <div class="section">
-                    <span class="bold">Informasi Sampling</span>
-                    <table class="info-table">
-                        <tr>
-                            <td style="width: 120px;">Metode Sampling</td>
-                            <td> SNI 9011:2021</td>
-                        </tr>
-                        <tr>
-                            <td>Tanggal Sampling</td>
-                            <td> <div class="text-input-space">{{ $personal->tanggal_sampling }}</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Periode Analisis</td>
-                            <td> <div class="text-input-space">{{ $personal->periode_analisis }}</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Jenis Analisis</td>
-                            <td> Kuesioner</td>
-                        </tr>
-                        <tr>
-                            <td>Metode Analisis*</td>
-                            <td> Identifikasi Keluhan Gangguan Otot dan Rangka</td>
+                            <td style="width: 40%;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
                     </table>
                 </div>
 
                 <div class="section">
-                    <span class="bold">Data Individu/Pekerja yang Diukur</span>
-                    <table class="info-table" style="margin-bottom: 10px;">
+                    <div class="section-title">Informasi Sampling</div>
+                    <table class="info-table" width="100%">
                         <tr>
-                            <td style="width: 120px;">Nama</td>
-                            <td> <div class="text-input-space">{{ $personal->nama_pekerja }}</div>
-                            </td>
+                            <td style="width: 40%;">Tanggal Sampling</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
                         <tr>
-                            <td>Posisi/Jabatan</td>
-                            <td> <div class="text-input-space">{{ $personal->jabatan }}</div>
-                            </td>
+                            <td style="width: 40%;">Metode Sampling*</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">SNI 9011:2021</td>
                         </tr>
                     </table>
+                </div>
 
-                    <table>
+                <div class="section">
+                    <div class="section-title">Data Individu / Pekerja yang diukur</div>
+                    <table class="info-table" width="100%">
+                        <tr>
+                            <td style="width: 40%;">Nama</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->nama_pekerja }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 40%;">Posisi / Jabatan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start;">{{ $personal->jabatan }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <!-- aktivitas -->
+                <div style="height: 15px; clear: both;">&nbsp;</div>
+                <div class="section">
+                    <table class="bordered-table text-center" >
                         <thead>
-                            <tr>
-                                <th style="width: 10%;">No.</th>
-                                <th style="width: 60%;">Uraian Tugas Singkat</th>
-                                <th style="width: 30%;">Waktu/Durasi Kerja (Jam/Minggu)</th>
+                            <tr style="background-color: #f9f9f9;">
+                                <th style="width: 10%;">No</th>
+                                <th style="width: 60%;">Uraian Tugas</th>
+                                <th style="width: 30%;">Durasi</th>
                             </tr>
                         </thead>
                         <tbody>
+                            {{-- Loop data, tapi kalau kosong otomatis lari ke @empty --}}
+                        @forelse($personal->aktifitas_k3->uraian as $item)
                             <tr>
-                                <td class="centered-text">1</td>
+                                <td style="text-align: center;">{{ $loop->iteration }}</td>
                                 <td>
-                                    <div class="text-input-space"></div>
+                                    {{ $item->Uraian }}
                                 </td>
                                 <td>
-                                    <div class="text-input-space"></div>
+                                        {{ $item->jam }} Jam : {{ $item->menit }} Menit
                                 </td>
                             </tr>
+                        @empty
+                            {{-- Bagian ini jalan otomatis kalau data kosong --}}
                             <tr>
-                                <td class="centered-text">2</td>
-                                <td>
-                                    <div class="text-input-space"></div>
-                                </td>
-                                <td>
-                                    <div class="text-input-space"></div>
-                                </td>
+                                <td class="text-center">1</td>
+                                <td></td>
+                                <td></td>
                             </tr>
+                            <tr>
+                                <td class="text-center">2</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        @endforelse
                         </tbody>
                     </table>
                 </div>
-
+                <div style="height: 15px; clear: both;">&nbsp;</div>
                 <div class="section">
-                    <div class="section-title">Tingkat Risiko Keluhan Gangguan Otot dan Rangka **</div>
-                    <table>
+                    <div class="section-title">Analisis Tingkat Risiko Keluhan GOTRAK*</div>
+                    <table class="bordered-table">
                         <thead>
-                            <tr>
-                                <th class="centered-text">Skor Keluhan</th>
-                                <th class="centered-text">Tingkat Risiko Keluhan</th>
+                            <tr style="background-color: #f9f9f9;">
+                                <th style="width: 17%;">Skor</th>
+                                <th>Tingkat Risiko</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td class="centered-text">1 - 4</td>
-                                <td>Tingkat risiko rendah</td>
-                            </tr>
-                            <tr>
-                                <td class="centered-text">5 - 7</td>
-                                <td>Tingkat risiko sedang</td>
-                            </tr>
-                            <tr>
-                                <td class="centered-text">8 - 16</td>
-                                <td>Tingkat risiko tinggi</td>
-                            </tr>
+                            <tr><td class="text-center">1 - 4</td>
+                            <td class="text-center">Rendah</td></tr>
+                            <tr><td class="text-center">6</td>
+                            <td class="text-center">Sedang</td></tr>
+                            <tr><td class="text-center">8 - 16</td>
+                            <td class="text-center">Tinggi</td></tr>
                         </tbody>
                     </table>
-                    <div class="notes">
-                        * Metode Analisis Mengacu kepada Standar Nasional Indonesia Nomor 9011 Tahun 2021 Pengukuran dan
-                        Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
-                        <br>** Tabel Klasifikasi Tingkat Risiko Mengacu kepada Standar Nasional Indonesia Nomor 9011
-                        Tahun 2021 Tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
+                    <div style="height: 15px; clear: both;">&nbsp;</div>
+                    <div style="font-size: 6pt; margin-top: 15px; font-style: italic; color: #444;">
+                        *Tabel Analisis Tingkat Risiko Keluhan GOTRAK mengacu kepada SNI 9011:2021 tentang Pengukuran dan Evaluasi Potensi Bahaya Ergonomi di Tempat Kerja
                     </div>
-                    <div class="signature-section">
-                        @if($ttd != null)
-                            @if($ttd->qr_path != null)
-                                <table class="signature-table">
-                                    <tr>
-                                        <td class="signature-left"></td>
-                                        <td class="signature-right">
-                                            <div class="signature-date">
-                                                {{ $ttd->tanggal }}
-                                            </div><br>
-                                            <div class="signature-text">
-                                                    <img src="{{ $ttd->qr_path }}" width="25" height="25" alt="ttd">
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            @else
-                                <table class="signature-table">
-                                    <tr>
-                                        <td class="signature-left"></td>
-                                        <td class="signature-right" style="text-align: center;">
-                                            <div class="signature-date">
-                                                Tangerang, 13 Agustus 2025
-                                            </div><br><br><br>
-                                            <div class="signature-text">
-                                                <strong>(Abidah Walfathiyyah)</strong><br>
-                                                <span>Technical Control Supervisor</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            @endif
-                        @endif
-                    </div>
+
+                    <table style="width: 100%; margin-top: 10px; border: none;">
+                        <tr>
+                            <td style="width: 50%; border: none;"></td>
+
+                            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+                                
+                                <div style="margin-bottom: 5px;">
+                                    Tangerang, {{ $ttd->tanggal ?? '13 Agustus 2025' }}
+                                </div>
+
+                                @if($ttd && $ttd->qr_path)
+                                <br><br><br>
+                                    <img src="{{ $ttd->qr_path }}" style="width: 50px; height: 50px; display: inline-block;" alt="QR TTD">
+                                @else
+                                    <br><br><br>
+                                    <div style="font-weight: bold; text-decoration: underline;">
+                                        (Abidah Walfathiyyah)
+                                    </div>
+                                    <div>Technical Control Supervisor</div>
+                                @endif
+
+                            </td>
+                        </tr>
+                    </table>
                 </div>
-            </div>
-            <div style="clear: both;"></div>
-        </div>
-    </div>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

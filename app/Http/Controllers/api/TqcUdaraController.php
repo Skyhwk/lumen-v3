@@ -33,7 +33,7 @@ class TqcUdaraController extends Controller
 {
     public function index(Request $request)
     {
-        $data = OrderDetail::with('wsValueAir', 'dataLapanganAir')->where('is_active', true)->where('status', 1)->where('kategori_2', '4-Udara')->orderBy('id', 'desc');
+        $data = OrderDetail::with('wsValueAir', 'dataLapanganAir')->where('is_active', true)->where('status', 1)->where('kategori_2', '4-Udara')->orderBy('tanggal_terima');
         return Datatables::of($data)->make(true);
     }
 

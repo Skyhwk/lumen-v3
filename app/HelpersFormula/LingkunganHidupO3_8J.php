@@ -55,7 +55,7 @@ class LingkunganHidupO3_8J
 
                 $C14 = $C2;
                 $Vu_alt = \str_replace(",", "", number_format($value * $data->durasi[$key], 4));
-                $C16 = \str_replace(",", "", number_format(floatval($item_ks[$key]) / floatval($Vu_alt), 5));
+                $C16 = \str_replace(",", "", number_format((floatval($item_ks[$key]) / floatval($Vu_alt)) * 1000, 5));
                 $C15 = $C16;
 
                 $C_value[$key_ks][$key] = $C;
@@ -112,13 +112,19 @@ class LingkunganHidupO3_8J
             $C1 = '<0.00014';
         if (floatval($C2) < 0.00007)
             $C2 = '<0.00007';
+        if (floatval($C14) < 0.00007)
+            $C14 = '<0.00007';
+        if (floatval($C15) < 0.1419)
+            $C15 = '<0.1419';
+        if (floatval($C16) < 0.00014)
+            $C16 = '<0.00014';
 
 
         // dd($avg_pershift);
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,
-            'flow' => array_sum($data->average_flow) / count($data->average_flow),
-            'durasi' => array_sum($data->durasi) / count($data->durasi),
+            'flow' => round(array_sum($data->average_flow) / count($data->average_flow),4),
+            'durasi' => round(array_sum($data->durasi) / count($data->durasi), 4),
             // 'durasi' => $waktu,
             'tekanan_u' => $data->tekanan,
             'suhu' => $data->suhu,

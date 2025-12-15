@@ -143,8 +143,8 @@ class EmailJadwal
             $this->tanggal_penawaran = $dataEmail['client']->tanggal_penawaran;
             $this->quotation_id = $request->quotation_id;
 
-            // get Token
             $token_ = $this->servisRenderJadwal();
+
             if ($token_) {
                 $dataEmail['file'][0] = [
                     'token' => $token_
@@ -153,6 +153,7 @@ class EmailJadwal
                 SamplingPlan::where('id', $request->sampling_id)
                     ->update(['is_approved' => false]);
             }
+
             if ($path == 'QT') {
                 $tanggal = (isset($this->value['tanggal'])) ? implode(", ", $this->value['tanggal']) : "-";
                 $jam_mulai = (isset($this->value['jam_mulai'])) ? $this->value['jam_mulai'] : "-";
@@ -273,20 +274,21 @@ class EmailJadwal
             }
             $atasan_sales = GetAtasan::where('id', $dataEmail['client']->sales_id)->get();
 
-            $filterEmails = [
-                'inafitri@intilab.com',
-                'kika@intilab.com',
-                'trialif@intilab.com',
-                'manda@intilab.com',
-                'amin@intilab.com',
-                'daud@intilab.com',
-                'faidhah@intilab.com',
-            ];
+            // $filterEmails = [
+            //     'inafitri@intilab.com',
+            //     'kika@intilab.com',
+            //     'trialif@intilab.com',
+            //     'manda@intilab.com',
+            //     'amin@intilab.com',
+            //     'daud@intilab.com',
+            //     'faidhah@intilab.com',
+            // ];
 
             $emailBcc = $atasan_sales->pluck('email')->toArray();
-            if (count(array_intersect($filterEmails, $emailBcc)) > 0) {
-                $emailBcc[] = 'admsales04@intilab.com';
-            }
+            // if (count(array_intersect($filterEmails, $emailBcc)) > 0) {
+            // }
+            $emailBcc[] = 'admsales03@intilab.com';
+            $emailBcc[] = 'admsales04@intilab.com';
             $emailBcc[] = 'luthfi@intilab.com';
             $emailBcc[] = 'sales@intilab.com';
 
@@ -294,7 +296,6 @@ class EmailJadwal
             $replyTo = ['admsales01@intilab.com'];
             $subject = "Jadwal Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
             $email = SendEmail::where('to', trim($dataEmail['client']->email_pic_order))
-                // $email = SendEmail::where('to', 'dedi@intilab.com')
                 ->where('subject', $subject)
                 ->where('body', $body_text)
                 ->where('bcc', $emailBcc)

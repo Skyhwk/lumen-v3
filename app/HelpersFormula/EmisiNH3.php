@@ -40,13 +40,14 @@ class EmisiNH3
         // (ug/Nm3) = C2 x 1000
         $C = \str_replace(",", "", number_format(floatval($C1) * 1000, 4));
         // C3 (PPM) = (((A-B) x FP)/Vs)
-        $C2 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)) * (floatval($C1) / floatval($Vs)), 4));
+        $C2 = \str_replace(",", "", number_format((((floatval($ks) - floatval($kb)) * $data->fp) / floatval($Vs)), 4));
         $C3 = $C;
         $C4 = $C1;
+
         if (floatval($C1) < 0.0257)
             $C1 = '<0.0257';
-        if (floatval($C2) < 0.0369)
-            $C2 = '<0.0369';
+        if (floatval($C2) < 0.037)
+            $C2 = '<0.037';
 
         $satuan = "ppm";
         $data = [

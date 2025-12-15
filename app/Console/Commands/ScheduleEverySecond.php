@@ -1,20 +1,18 @@
 <?php
-
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Services\EmailBlast;
+use App\Helpers\WorkerDailyQSDSales;
 use App\Helpers\WorkerReassign;
 use App\Helpers\WorkerSummaryParameter;
 use App\Helpers\WorkerSummaryQSD;
-use App\Helpers\WorkerApproveAnalyst;
 use App\Helpers\WorkerUpdateKpiSales;
+use App\Services\EmailBlast;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class ScheduleEverySecond extends Command
 {
-    protected $signature = 'schedule:every-second';
+    protected $signature   = 'schedule:every-second';
     protected $description = 'Run the scheduler every second (manual loop)';
 
     public function handle()
@@ -27,11 +25,13 @@ class ScheduleEverySecond extends Command
 
                 WorkerSummaryQSD::run();
 
+                WorkerDailyQSDSales::run();
+
                 // WorkerApproveAnalyst::run();
 
                 WorkerSummaryParameter::run();
 
-                WorkerUpdateKpiSales::run();
+                // WorkerUpdateKpiSales::run();
 
                 // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {

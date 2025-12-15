@@ -172,8 +172,8 @@ class FdlLingkunganKerjaController extends Controller
                         'Suhu' => 'suhu',
                         'Kelembaban' => 'kelembapan',
                         'Laju Ventilasi' => 'auto_laju',
-                        // 'Kecepatan Angin' => 'auto_laju',
-                        // 'Kecepatan Angin (UA)' => 'auto_laju',
+                        'Kecepatan Angin' => 'auto_laju',
+                        'Kecepatan Angin (UA)' => 'auto_laju',
                         'Tekanan Udara' => 'tekanan_udara',
                         'Laju Ventilasi (8 Jam)' => 'auto_laju',
                         'Kelembaban 8J (LK)' => 'kelembapan',
@@ -196,130 +196,30 @@ class FdlLingkunganKerjaController extends Controller
                         ->get();
 
                     $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
-                    
-                    $c1 =NULL;
-                    $c2 =NULL;
-                    $c3 =NULL;
-                    $c4 =NULL;
-                    $c5 =NULL;
-                    $c6 =NULL;
-                    $c7 =NULL;
-                    $c8 =NULL;
-                    $c9 =NULL;
-                    $c10 =NULL;
-                    $c11 =NULL;
-                    $c12 =NULL;
 
                     // Aktifkan kembali ketika sudah di approve rumusnya oleh TA di spreadsheet
-                    // if ($filtered->isNotEmpty()) {
-                    //     foreach ($filtered as $p) {
-                    //         $masterParameter = Parameter::where('nama_lab', $p->parameter)->first();   
-                    //     }
-                    //     if(!empty($masterParameter)) {
-                    //         $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
-                    //         $data_parsing = $request->all();
-                    //         $data_parsing = (object) $data_parsing;
-                    //         $data_parsing->data_lapangan = collect($filtered)->all();
-                    //         $hasil = AnalystFormula::where('function', $function)
-                    //             ->where('data', $data_parsing)
-                    //             ->where('id_parameter', $masterParameter->id)
-                    //             ->process();
-
-                    //         // Simpan Header
-                    //         $header = LingkunganHeader::updateOrCreate(
-                    //             [
-                    //                 'no_sampel' => $data->no_sampel,
-                    //                 'parameter' => $masterParameter->nama_lab,
-                    //             ],
-                    //             [
-                    //                 'id_parameter' => $masterParameter->id ?? null,
-                    //                 'template_stp' => 30,
-                    //                 'tanggal_terima' => $tanggalTerima,
-                    //                 'created_by' => $this->karyawan,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'is_approved' => true,
-                    //                 'approved_by' => $this->karyawan,
-                    //                 'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
-                    //             ]
-                    //         );
-
-                    //         // id header
-                    //         $id_header = $header->id;
-
-                    //         // Simpan ke WsValueLingkungan
-                    //         WsValueLingkungan::updateOrCreate(
-                    //             [
-                    //                 'lingkungan_header_id' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
-                    //             ],
-                    //             [
-                    //                 'C' => $hasil['hasil'],
-                    //                 'tanggal_terima' =>$tanggalTerima,
-                    //                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                    //                 'created_by' => $this->karyawan,
-                    //             ]
-                    //         );
-
-                    //         // Simpan ke WsValueUdara
-                    //         WsValueUdara::updateOrCreate(
-                    //             [
-                    //                 'id_lingkungan_header' => $id_header,
-                    //                 'no_sampel' => $data->no_sampel,
-                    //             ],
-                    //             [
-                    //                 'hasil1' => $hasil['hasil'],
-                    //                 'satuan' => $hasil['satuan'],
-                    //             ]
-                    //         );
-                    //     }
-                    // }
-
-                    if(!empty($foundParams)) {
-                        // Loop setiap parameter
-                        foreach ($foundParams as $index => $param) {
-                            $column = $targetParams[$param];
-                            $is8Jam = Str::contains($param, ['8J', '8 Jam']);
-                            // $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
-                            $details = $is8Jam ? $details8Jam : $detailsSesaat;
-
-                            // Handle kolom auto_laju
-                            if ($column === 'auto_laju') {
-                                $lokasi = optional($details->first())->lokasi;
-                                $column = ($lokasi === 'Indoor') ? 'laju_ventilasi' : 'kecepatan_angin';
-                            }
-
-                            // Ambil rata-rata nilai parameter
-                            $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
-                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), 4) : null;
-                            // $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
-
-                            $satuan = null;
-                            $lowerParam = strtolower($param);
-
-                            if (Str::contains($lowerParam, 'suhu')) {
-                                $satuan = '°C';
-                                $c12 = $rataRata; //°C
-                            } elseif (Str::contains($lowerParam, 'kelembaban')) {
-                                $satuan = '%';
-                                $c5 = $rataRata; //%
-                            } elseif (Str::contains($lowerParam, 'laju ventilasi')) {
-                                $satuan = 'm/s';
-                                $c8 = $rataRata; //m/s
-                            // } elseif (Str::contains($lowerParam, 'kecepatan angin') || Str::contains($lowerParam, 'kecepatan angin (ua)')) {
-                            //     $satuan = 'm/s';
-                            //     $c8 = $rataRata; //m/s
-                            } elseif (Str::contains($lowerParam, 'tekanan udara')) {
-                                $satuan = 'mmHg';
-                            }
+                    if ($filtered->isNotEmpty()) {
+                        foreach ($filtered as $p) {
+                            $masterParameter = Parameter::where('nama_lab', $p->parameter)->first();   
+                        }
+                        if(!empty($masterParameter)) {
+                            $function = Formula::where('id_parameter', $masterParameter->id)->where('is_active', true)->first()->function;
+                            $data_parsing = $request->all();
+                            $data_parsing = (object) $data_parsing;
+                            $data_parsing->data_lapangan = collect($filtered)->all();
+                            $hasil = AnalystFormula::where('function', $function)
+                                ->where('data', $data_parsing)
+                                ->where('id_parameter', $masterParameter->id)
+                                ->process();
 
                             // Simpan Header
                             $header = LingkunganHeader::updateOrCreate(
                                 [
                                     'no_sampel' => $data->no_sampel,
-                                    'id_parameter' => $id_parameter[$index] ?? null,
+                                    'parameter' => $masterParameter->nama_lab,
                                 ],
                                 [
-                                    'parameter' => $param,
+                                    'id_parameter' => $masterParameter->id ?? null,
                                     'template_stp' => 30,
                                     'tanggal_terima' => $tanggalTerima,
                                     'created_by' => $this->karyawan,
@@ -340,18 +240,7 @@ class FdlLingkunganKerjaController extends Controller
                                     'no_sampel' => $data->no_sampel, // <- harus pakai no_sampel, bukan rata-rata
                                 ],
                                 [
-                                    'C' => $c1,
-                                    'C1' => $c2,
-                                    'C2' => $c3,
-                                    'C3' => $c4,
-                                    'C4' => $c5,
-                                    'C5' => $c6,
-                                    'C6' => $c7,
-                                    'C7' => $c8,
-                                    'C8' => $c9,
-                                    'C9' => $c10,
-                                    'C10' => $c11,
-                                    'C11' => $c12,
+                                    'C17' => $hasil['hasil'],
                                     'tanggal_terima' =>$tanggalTerima,
                                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                                     'created_by' => $this->karyawan,
@@ -365,20 +254,98 @@ class FdlLingkunganKerjaController extends Controller
                                     'no_sampel' => $data->no_sampel,
                                 ],
                                 [
-                                    'hasil1' => $c1,
-                                    'hasil2' => $c2,
-                                    'hasil3' => $c3,
-                                    'hasil4' => $c4,
-                                    'hasil5' => $c5,
-                                    'hasil6' => $c6,
-                                    'hasil7' => $c7,
-                                    'hasil8' => $c8,
-                                    'hasil9' => $c9,
-                                    'hasil10' => $c10,
-                                    'hasil11' => $c11,
-                                    'hasil12' => $c12,
-                                    'satuan' => $satuan,
+                                    'hasil18' => $hasil['hasil'],
+                                    'satuan' => $hasil['satuan'],
                                 ]
+                            );
+                        }
+                    }
+
+                    if(!empty($foundParams)) {
+                        // Loop setiap parameter
+                        foreach ($foundParams as $index => $param) {
+                            $column = $targetParams[$param];
+                            $is8Jam = Str::contains($param, ['8J', '8 Jam']);
+                            // $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
+                            $details = $is8Jam ? $details8Jam : $detailsSesaat;
+
+                            // Handle kolom auto_laju
+                            if ($column === 'auto_laju') {
+                                $lokasi = optional($details->first())->lokasi;
+                                $column = ($lokasi === 'Indoor') ? 'laju_ventilasi' : 'kecepatan_angin';
+                            }
+
+                            // Ambil rata-rata nilai parameter
+                            $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
+                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), 4) : null;
+                            $satuan = null;
+                            $lowerParam = strtolower($param);
+                            if(str_contains($lowerParam, 'kecepatan angin')) {
+                                $rataRata = round($rataRata * 3.6, 4);
+                            }
+                            
+                            // Simpan Header (tetap seperti punya kamu)
+
+                            $header = LingkunganHeader::updateOrCreate(
+                                [
+                                    'no_sampel' => $data->no_sampel,
+                                    'id_parameter' => $id_parameter[$index] ?? null,
+                                ],
+                                [
+                                    'parameter' => $param,
+                                    'template_stp' => 30,
+                                    'tanggal_terima' => $tanggalTerima,
+                                    'created_by' => $this->karyawan,
+                                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                                    'is_approved' => true,
+                                    'approved_by' => $this->karyawan,
+                                    'approved_at' => Carbon::now()->format('Y-m-d H:i:s')
+                                ]
+                            );
+
+                            $id_header = $header->id;
+
+                            // Mapping parameter -> field
+                            $map = [
+                                'suhu' => ['lingkungan' => 'C11', 'udara' => 'hasil12', 'satuan' => '°C'],
+                                'kelembaban' => ['lingkungan' => 'C4', 'udara' => 'hasil5', 'satuan' => '%'],
+                                'laju ventilasi' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
+                                'kecepatan angin' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
+                                // 'pertukaran udara' => ['lingkungan' => 'C17', 'udara' => 'hasil18', 'satuan' => 'km/jam'],
+                            ];
+
+                            // Default
+                            $lingkunganUpdate = [];
+                            $udaraUpdate = [];
+
+                            // Tentukan field berdasarkan parameter
+                            foreach ($map as $key => $conf) {
+                                if (Str::contains($lowerParam, $key)) {
+                                    $satuan = $conf['satuan'];
+                                    $lingkunganUpdate[$conf['lingkungan']] = $rataRata;
+                                    $udaraUpdate[$conf['udara']] = $rataRata;
+                                }
+                            }
+
+
+                            $udaraUpdate['satuan'] = $satuan;
+
+                            // ✅ Save Lingkungan
+                            WsValueLingkungan::updateOrCreate(
+                                [
+                                    'lingkungan_header_id' => $header->id,
+                                    'no_sampel' => $data->no_sampel,
+                                ],
+                                $lingkunganUpdate
+                            );
+
+                            // ✅ Save Udara
+                            WsValueUdara::updateOrCreate(
+                                [
+                                    'id_lingkungan_header' => $header->id,
+                                    'no_sampel' => $data->no_sampel,
+                                ],
+                                $udaraUpdate
                             );
                         }
                     }

@@ -9,6 +9,7 @@ use App\Models\OrderDetail;
 use App\Models\MetodeSampling;
 use App\Models\MasterBakumutu;
 use App\Models\Parameter;
+use App\Models\ParameterFdl;
 use App\Models\GenerateLink;
 use App\Services\TemplateLhps;
 use App\Services\GenerateQrDocumentLhp;
@@ -23,17 +24,79 @@ use Yajra\Datatables\Datatables;
 class LhpULKController extends Controller
 {
     public function index(Request $request){
-        $data = OrderDetail::with('lhps_ling','orderHeader','dataLapanganLingkunganKerja')->where('is_approve', true)->where('is_active', true)->where('kategori_2', '4-Udara')->where('kategori_3', '27-Udara Lingkungan Kerja')->where('status', 3)->orderBy('tanggal_terima', 'desc');
-        return Datatables::of($data)->make(true);
+        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+        $parameterAllowed = array_merge($parameterAllowed, [
+            'Sinar UV',
+            'Ergonomi',
+            'Gelombang Elektro',
+            'Medan Listrik',
+            'Medan Magnit Statis',
+            'Power Density',]);
+
+        $data = OrderDetail::selectRaw('
+                max(id) as id,
+                max(id_order_header) as id_order_header,
+                cfr,
+                GROUP_CONCAT(no_sampel SEPARATOR ",") as no_sampel,
+                MAX(nama_perusahaan) as nama_perusahaan,
+                MAX(konsultan) as konsultan,
+                MAX(no_quotation) as no_quotation,
+                MAX(no_order) as no_order,
+                MAX(parameter) as parameter,
+                MAX(regulasi) as regulasi,
+                GROUP_CONCAT(DISTINCT kategori_1 SEPARATOR ",") as kategori_1,
+                MAX(kategori_2) as kategori_2,
+                MAX(kategori_3) as kategori_3,
+                GROUP_CONCAT(DISTINCT keterangan_1 SEPARATOR ",") as keterangan_1,
+                GROUP_CONCAT(DISTINCT tanggal_sampling SEPARATOR ",") as tanggal_tugas,
+                GROUP_CONCAT(DISTINCT tanggal_terima SEPARATOR ",") as tanggal_terima
+            ')
+            ->with(['lhps_ling','orderHeader'])
+            ->where('is_active', true)
+            ->where('kategori_3', '27-Udara Lingkungan Kerja')
+            ->where('status', 3)
+            // ->where(function ($query) use ($parameterAllowed) {
+            //     foreach ($parameterAllowed as $param) {
+            //         $query->where('parameter', 'NOT LIKE', "%;$param%");
+            //     }
+            // })
+            // --- LOGIKA VALIDASI TANPA OR WHERE ---
+            ->where(function ($query) use ($parameterAllowed) {
+                // Syntax SQL menghitung jumlah parameter (berdasarkan separator ;)
+                $countSql = "(LENGTH(parameter) - LENGTH(REPLACE(parameter, ';', '')) + 1)";
+
+                foreach ($parameterAllowed as $param) {
+                    // Kita gunakan CASE WHEN di dalam whereRaw
+                    // Logika: 
+                    // 1. Apakah jumlah parameter <= 2?
+                    //    YA -> Cek apakah parameter TIDAK mengandung kata terlarang (NOT LIKE).
+                    //    TIDAK -> Return 1 (True/Lolos) karena validasi blacklist tidak berlaku.
+                    
+                    $query->whereRaw("
+                        CASE 
+                            WHEN $countSql <= 2 THEN parameter NOT LIKE ? 
+                            ELSE 1 
+                        END
+                    ", ["%;$param%"]);
+                }
+            })
+            ->groupBy('cfr');
+
+        return Datatables::of($data)
+            ->order(function ($query) {
+                $query->orderByRaw("MAX(tanggal_terima) DESC");
+            })
+            ->make(true);
+
     }
 
     public function handleReject(Request $request) {
         DB::beginTransaction();
         try {
-            $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
             $detail = LhpsLingDetail::where('id_header', $header->id)->get();
             $custom = LhpsLingCustom::where('id_header', $header->id)->get();
-
             if($header != null) {
 
                 $header->is_approved = 0;
@@ -43,7 +106,7 @@ class LhpULKController extends Controller
                 // $header->file_qr = null;
                 $header->save();
 
-                $data_order = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->update([
+                $data_order = OrderDetail::where('cfr', $request->no_lhp)->where('is_active', true)->update([
                     'status' => 2,
                     'is_approve' => 0,
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
@@ -53,7 +116,7 @@ class LhpULKController extends Controller
 
             DB::commit();
             return response()->json([
-                'message' => 'Reject no sampel '.$request->no_sampel.' berhasil!'
+                'message' => 'Reject no LHP '.$request->no_lhp.' berhasil!'
             ]);
         } catch (Exception $e) {
             DB::rollBack();
@@ -113,7 +176,7 @@ class LhpULKController extends Controller
     public function rePrint(Request $request) 
     {
         DB::beginTransaction();
-        $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+        $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1; 
 
         $detail = LhpsLingDetail::where('id_header', $header->id)->get();
@@ -122,7 +185,7 @@ class LhpULKController extends Controller
         if ($header != null) {
             if ($header->file_qr == null) {
                 $file_qr = new GenerateQrDocumentLhp();
-                $file_qr_path = $file_qr->insert('LHP_LINGKUNGAN_HIDUP', $header, $this->karyawan);
+                $file_qr_path = $file_qr->insert('LHP_LINGKUNGAN_KERJA', $header, $this->karyawan);
                 if ($file_qr_path) {
                     $header->file_qr = $file_qr_path;
                     $header->save();
@@ -143,7 +206,7 @@ class LhpULKController extends Controller
             $fileName = LhpTemplate::setDataDetail($detail)
                 ->setDataHeader($header)
                 ->setDataCustom($groupedByPage)
-                ->whereView('DraftUdaraAmbient')
+                ->whereView('DraftUdaraLingkunganKerja')
                 ->render('downloadLHP');
 
             $header->file_lhp = $fileName;
@@ -151,7 +214,7 @@ class LhpULKController extends Controller
         }
 
         $servicePrint = new PrintLhp();
-        $servicePrint->print($request->no_sampel);
+        $servicePrint->printByFilename($header->file_lhp, $detail);
         
         if (!$servicePrint) {
             DB::rollBack();

@@ -864,6 +864,7 @@ class ReadyOrderController extends Controller
             $dataOrderHeader->is_revisi = 0;
             $dataOrderHeader->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $dataOrderHeader->created_by = $this->karyawan;
+            $dataOrderHeader->sales_id = $dataQuotation->sales_id;
             $dataOrderHeader->save();
 
             $n = 1;
@@ -894,7 +895,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -1328,7 +1329,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -1395,7 +1396,8 @@ class ReadyOrderController extends Controller
                         }
                     }
 
-                    $number_imaginer = sprintf("%03d", $n);
+                    // $number_imaginer = sprintf("%03d", $n);
+                    $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
                     if ($dataQuotation->status_sampling != 'SD') {
                         $mark[] = $number_imaginer;
@@ -1463,6 +1465,17 @@ class ReadyOrderController extends Controller
                         $param_map = [];
                         foreach ($params as $param) {
                             $param_map[$param->nama_parameter] = $param;
+                        }
+
+                        $invalid = collect($param_map)->filter(function($p){
+                            return in_array($p->regen, ['-', '', null], true);
+                        });
+
+                        if ($invalid->isNotEmpty()) {
+                            $names = $invalid->pluck('nama_parameter')->implode(', ');
+                            return response()->json([
+                                'message' => 'Regen belum diset untuk parameter ' . $names . ' silahkan hubungi teknis.!'
+                            ], 400);
                         }
 
                         $botol_volumes = [];
@@ -1631,6 +1644,7 @@ class ReadyOrderController extends Controller
             $data->tanggal_order = Carbon::now()->format('Y-m-d');
             $data->updated_by = $this->karyawan;
             $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $data->sales_id = $dataQuotation->sales_id;
             $data->save();
 
             //update general order detail
@@ -1736,6 +1750,7 @@ class ReadyOrderController extends Controller
                 $dataOrderHeader->tanggal_order = Carbon::now()->format('Y-m-d');
                 $dataOrderHeader->created_at = Carbon::now()->format('Y-m-d H:i:s');
                 $dataOrderHeader->created_by = $this->karyawan;
+                $dataOrderHeader->sales_id = $dataQuotation->sales_id;
                 $dataOrderHeader->save();
 
                 $n = 1;
@@ -1778,7 +1793,7 @@ class ReadyOrderController extends Controller
                                     return isset($parts[1]) ? $parts[1] : '';
                                 }, $value->parameter);
 
-                                if ($value->kategori_1 == '1-Air') {
+                                if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                                     $no++;
                                     $no_cfr = $no_order . '/' . sprintf("%03d", $no);
                                 } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -2186,7 +2201,7 @@ class ReadyOrderController extends Controller
                         return isset($parts[1]) ? $parts[1] : '';
                     }, $value->parameter);
 
-                    if ($value->kategori_1 == '1-Air') {
+                    if ($value->kategori_1 == '1-Air' || $value->kategori_1 == '6-Padatan') {
                         $no_urut_cfr++;
                         $no_cfr = $no_order . '/' . sprintf("%03d", $no_urut_cfr);
                     } else if ($value->kategori_1 == "4-Udara" && $value->kategori_2 == "11-Udara Ambient") {
@@ -2516,6 +2531,7 @@ class ReadyOrderController extends Controller
             $updateHeader->tanggal_penawaran = $dataQuotation->tanggal_penawaran;
             $updateHeader->updated_by = $this->karyawan;
             $updateHeader->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $updateHeader->sales_id = $dataQuotation->sales_id;
             $updateHeader->save();
 
             $dataQuotation->flag_status = 'ordered';
@@ -2624,9 +2640,19 @@ class ReadyOrderController extends Controller
             "316;Power Density",
             "563;Medan Magnit Statis",
             "2117;Frekuensi Radio (LK)",
-            "236;Gelombang Elektro",
             "324;Sinar UV",
-            "309;Pencahayaan"
+            "309;Pencahayaan",
+            "266;Jumlah Bakteri Total",
+            "337;Total Bakteri",
+            "338;Total Bakteri (KB)",
+            "578;T.Bakteri (8 Jam)",
+            "587;T. Bakteri (1 Jam)",
+            "619;T. Bakteri (KUDR - 8 Jam)",
+            "579;T. Jamur (8 Jam)",
+            "586;T. Jamur (1 Jam)",
+            "620;T. Jamur (KUDR - 8 Jam)",
+            "2221;Total Jamur SS",
+            "2280;Total Jamur 8J",
         ];
 
         return in_array($value, $array);

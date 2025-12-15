@@ -37,13 +37,13 @@ class FdlEmisiKendaraanController extends Controller
                         $status_co = 'Parameter Tidak di uji';
                         $status_hc = 'Parameter Tidak di uji';
                         foreach ($cek_bakumutu as $keys => $val) {
-                            if ($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)') {
+                            if ($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)' || $val->parameter == 'CO (Gas)') {
                                 if ($cek_fdl->co <= $val->baku_mutu) {
                                     $status_co = 'Memenuhi Baku Mutu';
                                 } else {
                                     $status_co = 'Tidak Memenuhi Baku Mutu';
                                 }
-                            } else if ($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)') {
+                            } else if ($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)' || $val->parameter == 'HC (Gas)') {
                                 if ($cek_fdl->hc <= $val->baku_mutu) {
                                     $status_hc = 'Memenuhi Baku Mutu';
                                 } else {
@@ -58,17 +58,34 @@ class FdlEmisiKendaraanController extends Controller
                             }
                         }
 
-                        $datas[$key]['tgl_uji'] = DATE('Y-m-d', strtotime($cek_fdl->created_at));
-                        $datas[$key]['merk_kendaraan'] = $kendaraan->merk_kendaraan;
-                        $datas[$key]['transmisi'] = $kendaraan->transmisi;
-                        $datas[$key]['tahun_pembuatan'] = $kendaraan->tahun_pembuatan;
-                        $datas[$key]['no_polisi'] = $kendaraan->plat_nomor;
-                        $datas[$key]['no_mesin'] = $kendaraan->no_mesin;
-                        $datas[$key]['bahan_bakar'] = $kendaraan->jenis_bbm;
-                        $datas[$key]['kapasitas_cc'] = $kendaraan->cc . ' CC';
-                        $datas[$key]['co'] = $cek_fdl->co;
-                        $datas[$key]['hc'] = $cek_fdl->hc;
-                        $datas[$key]['opasitas'] = $cek_fdl->opasitas;
+                        $datas[$key] = [
+                            'tgl_uji'           => date('Y-m-d', strtotime($cek_fdl->created_at)),
+                            'merk_kendaraan'    => $kendaraan->merk_kendaraan,
+                            'transmisi'         => $kendaraan->transmisi,
+                            'tahun_pembuatan'   => $kendaraan->tahun_pembuatan,
+                            'no_polisi'         => $kendaraan->plat_nomor,
+                            'no_mesin'          => $kendaraan->no_mesin,
+                            'bahan_bakar'       => $kendaraan->jenis_bbm,
+                            'kapasitas_cc'      => $kendaraan->cc . ' CC',
+                            'hasil_uji' => [
+                                [
+                                    'param'  => 'CO',
+                                    'hasil'  => $cek_fdl->co,
+                                    'status' => $status_co
+                                ],
+                                [
+                                    'param'  => 'HC',
+                                    'hasil'  => $cek_fdl->hc,
+                                    'status' => $status_hc
+                                ],
+                                [
+                                    'param'  => 'Opasitas',
+                                    'hasil'  => $cek_fdl->opasitas,
+                                    'status' => $status
+                                ],
+                            ]
+                        ];
+
                     }
                     return response()->json([
                         'record' => $jumlah,
@@ -137,7 +154,7 @@ class FdlEmisiKendaraanController extends Controller
                 ], 401);
             }
         } else if (isset($request->no_sampel) && $request->no_sampel != null) {
-            $po_s = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+            $po_s = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
             return response()->json([
                 'client' => $po_s->nama_perusahaan,
                 'kategori_3' => explode('-', $po_s->kategori_3)[0],
@@ -155,23 +172,32 @@ class FdlEmisiKendaraanController extends Controller
         DB::beginTransaction();
         try {
             if (isset($request->kode_qr) && $request->kode_qr != null) {
-                
-                $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', $request->no_sampel)->where('is_active',true)->first();
+                $fdlKendaraan = DataLapanganEmisiKendaraan::where('no_sampel', trim($request->no_sampel))->where('is_active',true)->first();
                 if($fdlKendaraan){
                     return response()->json([
                         'message'=>'No Sampel sudah terinput'
                     ],401);
                 }
-                $id_regulasi = explode('-',  $request->regulasi[0])[0];
+                $id_regulasi = data_get($request->regulasi, '0')
+                    ? explode('-', data_get($request->regulasi, '0'))[0]
+                    : null;
+
                 $cek_qr = MasterQr::where('kode', $request->kode_qr)->first();
+                
+                if(!$cek_qr){
+                    return response()->json([
+                        'message'=>'Qr Code tidak ditemukan'
+                    ]);
+                }
+
                 if ($cek_qr->id_kendaraan != null) {
                     $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan);
-                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'))->orderBy('id', 'DESC')->first();
+                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)', '116-Emisi Kendaraan (Gas)'))->orderBy('id', 'DESC')->first();
                     $no_sequen = 'EMISI' . $cek_po->id;
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
 
-                    $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+                    $cek_po = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
                     if ($cek_po != null) {
                         $co2 = NULL;
                         $co = NULL;
@@ -186,7 +212,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_hc = NULL;
                         $data_o2 = NULL;
                         $data_opasitas = NULL;
-                        if ($request->jenis_kendaraan == 31) {
+                        if ($request->jenis_kendaraan == 31 || $request->jenis_kendaraan == 116) {
                             if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
                                 $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
                                 $data_co2 = json_encode($request->co2);
@@ -214,7 +240,7 @@ class FdlEmisiKendaraanController extends Controller
                         }
                         $data_fdl = new DataLapanganEmisiKendaraan;
                         // $data_fdl->id_po 	= $cek_po->id;
-                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->no_sampel = strtoupper(trim($request->no_sampel));
                         $data_fdl->data_co     = $data_co;
                         $data_fdl->data_co2     = $data_co2;
                         $data_fdl->data_hc     = $data_hc;
@@ -242,7 +268,7 @@ class FdlEmisiKendaraanController extends Controller
 
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
-                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->no_sampel            = strtoupper(trim($request->no_sampel));
                         $data_order->id_qr            = $cek_qr->id;
                         $data_order->id_fdl            = $data_fdl->id;
                         $data_order->id_kendaraan    = $cek_qr->id_kendaraan;
@@ -251,10 +277,13 @@ class FdlEmisiKendaraanController extends Controller
                         $data_order->created_at            = Carbon::now()->format('Y-m-d H:i:s');
                         $data_order->save();
 
-                        $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))
-                            ->first();
+                        $orderDetail = OrderDetail::where(
+                            'no_sampel',
+                            strtoupper(trim($request->no_sampel))
+                        )->first();
+
                         if($orderDetail->tanggal_terima == null){
-                            $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d H:i:s');
+                            $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
                             $orderDetail->save();
                         }
 
@@ -270,34 +299,17 @@ class FdlEmisiKendaraanController extends Controller
                         ], 401);
                     }
                 } else {
-                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)'))->orderBy('id', 'DESC')->first();
+                    $cek_po = OrderDetail::where('kategori_2', '5-Emisi')->whereIn('kategori_3', array('31-Emsisi Kendaraan (Bensin)', '32-Emisi Kendaraan (Solar)', '116-Emisi Kendaraan (Gas)'))->orderBy('id', 'DESC')->first();
                     $no_sequen = 'EMISI' . $cek_po->id;
                     $array1 = ["Co", "HC"];
                     $array2 = ["Opasitas (Solar)"];
-
-                    // $fields = [
-                    //     'merk_kendaraan' => 'Tolong isi merk kendaraan!',
-                    //     'tahun_pembuatan' => 'Tolong isi tahun pembuatan!',
-                    //     'bobot' => 'Tolong isi Bobot kendaraan!',
-                    //     'no_mesin' => 'Tolong isi no mesin!',
-                    //     'no_polisi' => 'Tolong isi no polisi!',
-                    //     'km' => 'Tolong isi km!',
-                    //     'kapasitas_cc' => 'Tolong isi cc!',
-                    //     'transmisi' => 'Tolong isi transmisi!',
-                    // ];
-
-                    // foreach ($fields as $key => $message) {
-                    //     if (!isset($request->$key) || $request->$key === null) {
-                    //         return response()->json(['message' => $message], 401);
-                    //     }
-                    // }
 
                     if (!isset($request->merk) || $request->merk === null) {
                         return response()->json(['message' => 'Tolong isi Merk Kendaraan!'], 401);
                     }
 
 
-                    $cek_po = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+                    $cek_po = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->first();
                     if ($cek_po != null) {
                         $co2 = NULL;
                         $co = NULL;
@@ -312,7 +324,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_hc = NULL;
                         $data_o2 = NULL;
                         $data_opasitas = NULL;
-                        if ($request->jenis_kendaraan == 31) {
+                        if ($request->jenis_kendaraan == 31 || $request->jenis_kendaraan == 116) {
                             if ($request->co2[0] != NULL && $request->co2[1] != NULL && $request->co2[2] != NULL) {
                                 $co2 = \str_replace(",", "", number_format(array_sum($request->co2) / 3, 2));
                                 $data_co2 = json_encode($request->co2);
@@ -338,7 +350,6 @@ class FdlEmisiKendaraanController extends Controller
                             if ($request->rpm[0] != NULL && $request->rpm[1] != NULL && $request->rpm[2] != NULL) $rpm  =  \str_replace(",", "", number_format(array_sum($request->rpm) / 3, 2));
                             if ($request->oli[0] != NULL && $request->oli[1] != NULL && $request->oli[2] != NULL) $oli  =  \str_replace(",", "", number_format(array_sum($request->oli) / 3, 2));
                         }
-
                         $kendaraan = MasterKendaraan::where('id', $cek_qr->id_kendaraan)->first();
                         if (!isset($kendaraan->id_kendaraan) || $kendaraan->id_kendaraan == null) {
                             $data_kendaraan = new MasterKendaraan;
@@ -346,6 +357,7 @@ class FdlEmisiKendaraanController extends Controller
                             $data_kendaraan->id_bbm        = $request->jenis_kendaraan;
                             if ($request->jenis_kendaraan == 31) $data_kendaraan->jenis_bbm     = "Bensin";
                             if ($request->jenis_kendaraan == 32) $data_kendaraan->jenis_bbm     = "Solar";
+                            if ($request->jenis_kendaraan == 116) $data_kendaraan->jenis_bbm     = "Gas";
                             $data_kendaraan->plat_nomor         = $request->no_plat;
                             $data_kendaraan->bobot_kendaraan    = $request->bobot;
                             $data_kendaraan->tahun_pembuatan    = $request->tahun;
@@ -371,7 +383,7 @@ class FdlEmisiKendaraanController extends Controller
                         // if($co2!=null && $co2 < 0.10) $co2 = "<0.10";
                         $data_fdl = new DataLapanganEmisiKendaraan;
                         // $data_fdl->id_po 	= $cek_po->id;
-                        $data_fdl->no_sampel = strtoupper($request->no_sampel);
+                        $data_fdl->no_sampel = strtoupper(trim($request->no_sampel));
                         $data_fdl->data_co     = $data_co;
                         $data_fdl->data_co2     = $data_co2;
                         $data_fdl->data_hc     = $data_hc;
@@ -399,7 +411,7 @@ class FdlEmisiKendaraanController extends Controller
 
                         $data_order = new DataLapanganEmisiOrder;
                         // $data_order->id_po			= $cek_po->id;
-                        $data_order->no_sampel            = strtoupper($request->no_sampel);
+                        $data_order->no_sampel            = strtoupper(trim($request->no_sampel));
                         $data_order->id_qr            = $cek_qr->id;
                         $data_order->id_fdl            = $data_fdl->id;
                         $data_order->id_kendaraan    = $data_kendaraan->id;
@@ -409,7 +421,7 @@ class FdlEmisiKendaraanController extends Controller
                         $data_order->save();
 
 
-                        $update_order = OrderDetail::where('no_sampel', strtoupper($request->no_sampel))->where('is_active', 1)->update([
+                        $update_order = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sampel)))->where('is_active', 1)->update([
                             'tanggal_terima' => Carbon::now()->format('Y-m-d'),
                         ]);
                         DB::commit();
@@ -483,13 +495,13 @@ class FdlEmisiKendaraanController extends Controller
                             $status_co = 'Parameter Tidak di uji';
                             $status_hc = 'Parameter Tidak di uji';
                             foreach ($cek_bakumutu as $keys => $val) {
-                                if ($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)') {
+                                if ($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)' || $val->parameter == 'CO (Gas)') {
                                     if ($cek_fdl->co <= $val->baku_mutu) {
                                         $status_co = 'Memenuhi Baku Mutu';
                                     } else {
                                         $status_co = 'Tidak Memenuhi Baku Mutu';
                                     }
-                                } else if ($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)') {
+                                } else if ($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)' || $val->parameter == 'HC (Gas)') {
                                     if ($cek_fdl->hc <= $val->baku_mutu) {
                                         $status_hc = 'Memenuhi Baku Mutu';
                                     } else {
@@ -634,6 +646,12 @@ class FdlEmisiKendaraanController extends Controller
         return $safeName;
     }
 
+    public function delete(Request $request){
+        $data = DataLapanganEmisiKendaraan::where('id', $request->id)->delete();
+        $emisiOrder = DataLapanganEmisiOrder::where('id_fdl', $request->id)->delete();
+        return response()->json(['message' => 'Data Berhasil dihapus'], 200);
+    }
+
     protected function autoBlock()
     {
         $tgl = Carbon::now()->subDays(3);
@@ -642,7 +660,7 @@ class FdlEmisiKendaraanController extends Controller
 
     public function getPerusahaan(Request $request)
     {
-        $data = OrderDetail::where('no_sampel', $request->no_sampel)->where('is_active', true)->select('nama_perusahaan')->first();
+        $data = OrderDetail::where('no_sampel', trim($request->no_sampel))->where('is_active', true)->select('nama_perusahaan')->first();
         return response()->json(['data' => $data], 200);
     }
 }

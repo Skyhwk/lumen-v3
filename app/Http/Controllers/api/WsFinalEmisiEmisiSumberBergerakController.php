@@ -31,13 +31,15 @@ class WsFinalEmisiEmisiSumberBergerakController extends Controller
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '5-Emisi')
 
-			->where('kategori_3', '!=', '34-Emisi Sumber Tidak Bergerak')
+			->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak', '119-Emisi Isokinetik'])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			// ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
 			// ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+			->whereMonth('tanggal_terima', explode('-', $request->date)[1])
+			->whereYear('tanggal_terima', explode('-', $request->date)[0])
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderByDesc('max_id');
+			->orderByDesc('tanggal_terima');
 
 		return Datatables::of($data)->make(true);
 	}

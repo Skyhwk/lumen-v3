@@ -1,4 +1,7 @@
 @if (!empty($custom))
+@php
+    $custom = collect($custom)->filter(fn($d) => empty($d->hasil_uji_json));
+@endphp
     <div class="left" style="page-break-before: always;">
         <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
             <thead>
@@ -25,7 +28,7 @@
                         $number = $k + 1;
                         $akr = !empty($v['akr']) ? $v['akr'] : '&nbsp;&nbsp;';
                         $satuan = (isset($v['satuan']) && $v['satuan'] != "null") ? $v['satuan'] : '';
-                        $hasilUji = isset($v['hasil_uji']) ? str_replace('.', ',', $v['hasil_uji']) : '';
+                        $hasilUji = isset($v['hasil_uji']) ? $v['hasil_uji'] : '';
                         $attr = isset($v['attr']) ? $v['attr'] : '';
                         $bakuMutu = isset($v['baku_mutu']) ? json_decode($v['baku_mutu'], true) : [];
                         $methode = isset($v['methode']) ? $v['methode'] : '';
