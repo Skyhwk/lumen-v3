@@ -110,7 +110,6 @@ class LhpSwabTesController extends Controller
         try {
             $header              = LhpsSwabTesHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             $header->count_print = $header->count_print + 1;
-            $header->save();
             $detail = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             $detail = collect($detail)->sortBy([
@@ -129,7 +128,7 @@ class LhpSwabTesController extends Controller
             // }
 
             $fileName = LhpTemplate::setDataDetail($detail)
-                ->setDataHeader($dataHeader)
+                ->setDataHeader($header)
                 ->useLampiran(true)
                 ->whereView('DraftSwabTes')
                 ->render('downloadLHPFinal');

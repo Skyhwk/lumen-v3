@@ -176,7 +176,7 @@ class LhpULKController extends Controller
     public function rePrint(Request $request) 
     {
         DB::beginTransaction();
-        $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+        $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1; 
 
         $detail = LhpsLingDetail::where('id_header', $header->id)->get();
