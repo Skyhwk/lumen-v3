@@ -6,6 +6,7 @@ use App\Models\LhpsMicrobiologiDetail;
 use App\Models\LhpsMicrobiologiHeader;
 use App\Models\OrderDetail;
 use App\Models\ParameterFdl;
+use App\Models\TabelRegulasi;
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;
 use Carbon\Carbon;
@@ -118,10 +119,26 @@ class LhpMikrobiologiController extends Controller
             $header->save();
             $detailCollection       = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
             $detailCollectionCustom = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
-            
-            $validasi               = LhpsMicrobiologiDetail::where('id_header', $header->id)->get();
-            $parameters             = $validasi->pluck('parameter')->filter()->unique();
-            $totalParam             = $parameters->count();
+
+            $id_regulasi = [];
+
+            $id_regulasi = [];
+
+            foreach (json_decode($header->regulasi, true) as $reg) {
+                $id_regulasi[] = explode('-', $reg)[0];
+            }
+
+            $tableRegulasi = TabelRegulasi::where(function ($q) use ($id_regulasi) {
+                foreach ($id_regulasi as $item) {
+                    $q->orWhereJsonContains('id_regulasi', $item);
+                }
+            })
+                ->where('is_active', 1)
+                ->get();
+
+            $validasi   = LhpsMicrobiologiDetail::where('id_header', $header->id)->get();
+            $parameters = $validasi->pluck('parameter')->filter()->unique();
+            $totalParam = $parameters->count();
 
             $isUsingTable = ! $tableRegulasi->isEmpty();
 
