@@ -2734,6 +2734,13 @@ class InputParameterController extends Controller
 
 				DB::beginTransaction();
 				try {
+					$inputan_analis = (object)[
+						'w2' => $request->w2,
+						'w1' => $request->w1,
+						'b2' => $request->b2,
+						'b1' => $request->b1
+					];
+
 					$header = new DebuPersonalHeader;
 					$header->no_sampel = $request->no_sample;
 					$header->parameter = $request->parameter;
@@ -2741,6 +2748,7 @@ class InputParameterController extends Controller
 					$header->id_parameter = $data_parameter->id;
 					$header->note = $request->note;
 					$header->tanggal_terima = $order_detail->tanggal_terima;
+					$header->inputan_analis = json_encode($inputan_analis);
 					$header->created_by = $this->karyawan;
 					$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 					$header->save();
@@ -3279,6 +3287,7 @@ class InputParameterController extends Controller
 		$data_ci_toArray = explode(";", $data_ci2_json[0]);
 		$nilaiDgm = null;
 		$tekanan_meteran = null;
+		$durasi = null;
 		foreach ($data_ci_toArray as $item) {
 			if (strpos($item, "Volume") !== false) {
 				// Menghilangkan spasi di sekitar string
@@ -3290,6 +3299,10 @@ class InputParameterController extends Controller
 				$item = str_replace(' ', '', $item);
 				$tekananData = explode(":", $item);
 				$tekanan_meteran = ($tekananData[1] !== "-" && isset($tekananData[1])) ? $tekananData[1] : 0;
+			}else if(strpos($item, "Durasi") !== false){
+				$item = str_replace(' ', '', $item);
+				$durasiData = explode(":", $item);
+				$durasi = ($durasiData[1] !== "-" && isset($durasiData[1])) ? $durasiData[1] : 0;
 			}
 		}
 		// dd($datlapangan);
@@ -3325,6 +3338,7 @@ class InputParameterController extends Controller
 		$data_parsing->nilaiDgm = $nilaiDgm;
 		$data_parsing->tekanan_meteran = $tekanan_meteran;
 		$data_parsing->tekanan_air = $tekananAir;
+		$data_parsing->durasi = $durasi;
 		$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 		$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3359,6 +3373,7 @@ class InputParameterController extends Controller
 			$data_kalkulasi['created_by'] = $this->karyawan;
 			WsValueEmisiCerobong::create($data_kalkulasi);
 
+            dd($data_kalkulasi);
 			DB::commit();
 			return (object)[
 				'message' => 'Value Parameter berhasil disimpan.!',
