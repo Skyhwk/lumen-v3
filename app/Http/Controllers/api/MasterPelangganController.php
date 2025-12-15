@@ -63,6 +63,10 @@ class MasterPelangganController extends Controller
                 $data->whereIn('sales_id', $bawahan);
             }
 
+            if($this->user_id != 127){
+                $data->where('sales_id', '!=', 127);
+            }
+
 
         }
 
@@ -235,10 +239,9 @@ class MasterPelangganController extends Controller
                                 $noTlp = "0" . substr($noTlp, 2);
                             }
                             // cek noTlp
-                            $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->first();
+                            $sameTelNumber = KontakPelanggan::where('no_tlp_perusahaan', $noTlp)->where('is_active', true)->first();
                             if ($sameTelNumber && $sameTelNumber->pelanggan_id !== $pelanggan->id) {
                                 DB::rollback();
-                                // dd($noTlp, $sameTelNumber, $pelanggan);
                                 return response()->json(['message' => 'Nomor telepon perusahaan sudah ada'], 400);
                             };
 
@@ -348,7 +351,7 @@ class MasterPelangganController extends Controller
                 $existingData = MasterPelanggan::where('nama_pelanggan', $request->nama_pelanggan)
                     ->whereHas('kontak_pelanggan', function ($query) use ($no_tlp_perusahaan) {
                         $query->where('no_tlp_perusahaan', $no_tlp_perusahaan);
-                    })->first();
+                    })->where('is_active', true)->first();
 
                 if ($existingData) {
                     return response()->json([
@@ -402,6 +405,7 @@ class MasterPelangganController extends Controller
                     ->whereHas('alamat_pelanggan', function ($query) use ($request) {
                         $query->whereIn('alamat', $request->alamat_pelanggan['alamat']);
                     })
+                    ->where('is_active', true)
                     ->first();
 
                 if ($existingPelanggan) {
