@@ -816,7 +816,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			// Ambil hasil_c sampai hasil_c16 secara dinamis
 			$hasilC = [];
-			for ($i = 0; $i <= 19; $i++) {
+			for ($i = 0; $i <= 18; $i++) {
 				$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 				$hasilC[$i] = html_entity_decode($request->$key ?? '');
 			}
@@ -940,7 +940,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 		// Ambil hasil_c sampai hasil_c19
 		$hasilC = [];
-		for ($i = 0; $i <= 19; $i++) {
+		for ($i = 0; $i <= 18; $i++) {
 			$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 			$hasilC[$i] = $request->$key ?? null;
 		}
