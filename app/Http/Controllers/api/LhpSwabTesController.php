@@ -2,13 +2,13 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\LhpsSwabTesDetail;
+use App\Models\LhpsSwabTesHeader;
 use App\Models\OrderDetail;
 use App\Services\LhpTemplate;
 use App\Services\PrintLhp;
 use Carbon\Carbon;
 use Exception;
-use App\Models\LhpsSwabTesHeader;
-use App\Models\LhpsSwabTesDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
@@ -65,13 +65,11 @@ class LhpSwabTesController extends Controller
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'rejected_by' => $this->karyawan,
                 ]);
-            }
-            else {
+            } else {
                 return response()->json([
                     'message' => 'Data no lhp ' . $request->cfr . ' tidak ditemukan!',
                 ], 401);
             }
-
 
             DB::commit();
             return response()->json([
@@ -110,8 +108,7 @@ class LhpSwabTesController extends Controller
         try {
             $header              = LhpsSwabTesHeader::where('no_lhp', $request->cfr)->where('is_active', true)->first();
             $header->count_print = $header->count_print + 1;
-            $header->save();
-            $detail = LhpsSwabTesDetail::where('id_header', $header->id)->get();
+            $detail              = LhpsSwabTesDetail::where('id_header', $header->id)->get();
 
             $detail = collect($detail)->sortBy([
                 ['tanggal_sampling', 'asc'],
@@ -128,17 +125,49 @@ class LhpSwabTesController extends Controller
             //     ])->values()->toArray();
             // }
 
-            $fileName = LhpTemplate::setDataDetail($detail)
-                ->setDataHeader($dataHeader)
-                ->useLampiran(true)
-                ->whereView('DraftSwabTes')
-                ->render('downloadLHPFinal');
+            $detailCollection       = LhpsSwabTesDetail::where('id_header', $header->id)->where('page', 1)->get();
+            $detailCollectionCustom = collect(LhpsSwabTesDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
 
-            $header->file_lhp = $fileName;
-            $header->save();
+            $validasi        = LhpsSwabTesDetail::where('id_header', $header->id)->get();
+            $groupedBySampel = $validasi->groupBy('no_sampel');
+            $totalSampel     = $groupedBySampel->count();
+            $parameters      = $validasi->pluck('parameter')->filter()->unique();
+            $totalParam      = $parameters->count();
 
+            $isSingleSampelMultiParam = $totalSampel === 1 && $totalParam > 2;
+            $isMultiSampelOneParam    = $totalSampel >= 1 && $totalParam === 1;
+
+            if ($isSingleSampelMultiParam) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftSwab3Param')
+                    ->render('downloadLHPFinal');
+                $header->file_lhp = $fileName;
+                $header->save();
+            } else if ($isMultiSampelOneParam) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftSwab1Param')
+                    ->render('downloadLHPFinal');
+                $header->file_lhp = $fileName;
+                $header->save();
+            } else {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($header)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftSwab2Param')
+                    ->render('downloadLHPFinal');
+                $header->file_lhp = $fileName;
+                $header->save();
+            }
+            
             $servicePrint = new PrintLhp();
-            $servicePrint->printByFilename($header->file_lhp, $detail,'', $header->no_lhp);
+            $servicePrint->printByFilename($header->file_lhp, $detail, '', $header->no_lhp);
             if (! $servicePrint) {
                 DB::rollBack();
                 return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);

@@ -223,7 +223,7 @@
                 </table>
 
                 {{-- Kondisi Lingkungan --}}
-                @if ($isManyNoSampel)
+                @if (!$isManyNoSampel)
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         <tr>
                             <td class="custom5" width="120">
