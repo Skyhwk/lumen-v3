@@ -77,7 +77,7 @@
             </td>
             <td style="padding-right:5px;">:</td>
             <td>
-                {{ $jam_mulai }} sd {{ $jam_selesai }} WIB
+                {{ $jam_mulai }} s/d {{ $jam_selesai }} WIB
             </td>
         </tr>
     </table>

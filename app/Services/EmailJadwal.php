@@ -319,7 +319,7 @@ class EmailJadwal
 
             $idBcc = $atasan_sales->pluck('id')->toArray();
             $replyTo = ['admsales01@intilab.com'];
-            $subject = "Penjadwalan Pengambilan Sampling (" . $dataEmail['client']->no_document . ")- " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
+            $subject = "Penjadwalan Pengambilan Sampling (" . $dataEmail['client']->no_document . ") - " . htmlspecialchars_decode($dataEmail['client']->nama_perusahaan, ENT_QUOTES);
             $email = SendEmail::where('to', trim($dataEmail['client']->email_pic_order))
                 ->where('subject', $subject)
                 ->where('body', $body_text)
