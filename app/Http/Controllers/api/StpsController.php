@@ -433,6 +433,26 @@ class StpsController extends Controller
 
                 $unik_kategori = $dataOrder->orderDetail()->where('periode', $request->periode)
                     ->where('is_active', true)->get()->pluck('kategori_3')->unique()->toArray();
+
+                //getStatusSampling
+                $getLabelSp =$dataPenawaran->detail()->where('periode_kontrak',$request->periode)->first(['status_sampling']);
+                if ($getLabelSp) {
+                    // Ambil nilai status_sampling dari objek yang ditemukan
+                    $status = $getLabelSp->status_sampling;
+
+                    // 3. Lakukan perbandingan pada nilai string status
+                    if ($status === 'SP') {
+                        $labelStatusSampling = '<span><i>Sample Pickup</i></span>';
+                    } else if ($status === 'S24') {
+                        $labelStatusSampling = '<span>Sampling 24 Jam</span>';
+                    } else if ($status === 'S') {
+                        $labelStatusSampling = '<span>Sampling</span>';
+                    } else if ($status === 'SD') {
+                        $labelStatusSampling = '<span>Sampling Diantar</span>';
+                    } 
+                }
+
+
                 $pra_no_sample = [];
                 $kategori_sample = [];
                 foreach (\explode(',', $request->kategori) as $kat) {
@@ -672,6 +692,20 @@ class StpsController extends Controller
                 // dd($unik_kategori);
                 $pra_no_sample = [];
                 $kategori_sample = [];
+
+                //getSampling
+                if($dataPenawaran){
+                    $status = $dataPenawaran->status_sampling;
+                    if ($status === 'SP') {
+                        $labelStatusSampling = '<span><i>Sample Pickup</i></span>';
+                    } else if ($status === 'S24') {
+                        $labelStatusSampling = '<span>Sampling 24 Jam</span>';
+                    } else if ($status === 'S') {
+                        $labelStatusSampling = '<span>Sampling</span>';
+                    } else if ($status === 'SD') {
+                        $labelStatusSampling = '<span>Sampling Diantar</span>';
+                    }
+                }
 
                 foreach (\explode(',', $request->kategori) as $kat) {
                     $split = explode(' - ', $kat);
@@ -1072,6 +1106,10 @@ class StpsController extends Controller
                                     <td width="50%" style="text-align: center; font-size: 13px;"><b>No Order</b></td>
                                     <td style="text-align: center; font-size: 13px;"><b>' . $dataOrder->no_order . '</b></td>
                                 </tr>
+                                <tr>
+                                    <td style="text-align: center; font-size: 10px;" colspan=2><b>' . $labelStatusSampling . '</b></td>
+                                </tr>
+                                
                             </table>
                         </td>
                     </tr>
