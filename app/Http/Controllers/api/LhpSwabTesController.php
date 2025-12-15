@@ -131,7 +131,7 @@ class LhpSwabTesController extends Controller
                 ->setDataHeader($header)
                 ->useLampiran(true)
                 ->whereView('DraftSwabTes')
-                ->render('downloadLHPFinal');
+                ->render('downloadLHP');
 
             $header->file_lhp = $fileName;
             $header->save();
