@@ -140,7 +140,7 @@ class RequestSamplingPlanRevisiController extends Controller
             ->orderBy('nama_lengkap')
             ->get();
         $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('user_id', [21, 56, 311, 531, 95, 112, 377, 531,171,39,779])
+            ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();

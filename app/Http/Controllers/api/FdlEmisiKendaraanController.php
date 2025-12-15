@@ -895,13 +895,13 @@ class FdlEmisiKendaraanController extends Controller
 							$status_co = 'Parameter Tidak di uji';
 							$status_hc = 'Parameter Tidak di uji';
 							foreach($cek_bakumutu as $keys =>$val){
-								if($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)'){
+								if($val->parameter == 'CO' || $val->parameter == 'CO (Bensin)' || $val->parameter == 'CO (Gas)'){
 									if($cek_fdl->co <= $val->baku_mutu){
 										$status_co = 'Memenuhi Baku Mutu';
 									} else {
 										$status_co = 'Tidak Memenuhi Baku Mutu';
 									}
-								} else if($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)'){
+								} else if($val->parameter == 'HC' || $val->parameter == 'HC (Bensin)' || $val->parameter == 'HC (Gas)'){
 									if($cek_fdl->hc <= $val->baku_mutu){
 										$status_hc = 'Memenuhi Baku Mutu';
 									} else {
