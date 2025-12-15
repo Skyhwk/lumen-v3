@@ -1107,7 +1107,7 @@ class StpsController extends Controller
                                     <td style="text-align: center; font-size: 13px;"><b>' . $dataOrder->no_order . '</b></td>
                                 </tr>
                                 <tr>
-                                    <td style="text-align: center; font-size: 10px;" colspan=2><b>' . $labelStatusSampling . '</b></td>
+                                    <td style="text-align: center; font-size: 12px;" colspan=2><b>' . $labelStatusSampling . '</b></td>
                                 </tr>
                                 
                             </table>
