@@ -92,6 +92,8 @@ class RenderNonKontrak
                 $sampling = strtoupper(__('QT.status_sampling.SD'));
             } else if ($data->status_sampling == 'RS') {
                 $sampling = strtoupper(__('QT.status_sampling.RS'));
+            } else if ($data->status_sampling == 'SP') {
+                $sampling = strtoupper(__('QT.status_sampling.SP'));
             } else {
                 $sampling = strtoupper(__('QT.status_sampling.S'));
             }
