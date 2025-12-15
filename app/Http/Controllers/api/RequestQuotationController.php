@@ -2202,13 +2202,14 @@ class RequestQuotationController extends Controller
                 }
 
                 $invoices = Invoice::where('no_quotation', $dataOld->no_document)
-                    ->whereNull('nilai_pelunasan')
+                    // ->whereNull('nilai_pelunasan')
                     ->where('is_active', true)
                     ->get();
 
                 $invoiceNumbersTobeChecked = [];
                 foreach ($invoices as $invoice) {
-                    if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                    if($invoice->nilai_pelunasan == null) {
                         $invoice->is_generate = false;
                         $invoice->is_emailed = false;
 
@@ -5152,13 +5153,14 @@ class RequestQuotationController extends Controller
 
                     if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                         $invoices = Invoice::where('no_quotation', $dataOld->no_document)
-                            ->whereNull('nilai_pelunasan')
+                            // ->whereNull('nilai_pelunasan')
                             ->where('is_active', true)
                             ->get();
 
                         $invoiceNumbersTobeChecked = [];
                         foreach ($invoices as $invoice) {
-                            if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            // if (($invoice->nilai_pelunasan ?? 0) < $invoice->nilai_tagihan) {
+                            if($invoice->nilai_pelunasan == null) {
                                 $invoice->is_generate = false;
                                 $invoice->is_emailed = false;
 

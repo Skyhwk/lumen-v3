@@ -883,6 +883,12 @@ class WsFinalUdaraSwabTesController extends Controller
                     'lhps' => 1,
                 ]);
         }
+
+        $header2 = SubKontrak::whereIn('no_sampel', $request->no_sampel_list)
+            ->update([
+                'lhps' => 1,
+            ]);
+
         return response()->json([
             'message' => 'Data berhasil diapprove.',
             'success' => true,

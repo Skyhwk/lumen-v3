@@ -656,6 +656,7 @@ class TemplateLhpErgonomi
                 ->first();
     
             // $pengukuran = json_decode($dataRwl->pengukuran);
+            
             $pengukuran = json_decode($dataRwl->pengukuran, true);
             $pengukuran = Helper::normalize_format_key($pengukuran,true);
             
@@ -807,45 +808,39 @@ class TemplateLhpErgonomi
     }
     private function calculateSkorManual($pengukuran)
     {
-        
         if (empty($pengukuran)) {
             return [];
         }
-
-        // 2. Ambil bagian faktor_resiko (sesuaikan dengan struktur object Anda)
-        // Jika $pengukuran itu sendiri sudah isinya faktor_resiko, hapus property aksesnya.
+        
         $sourceData = isset($pengukuran->faktor_resiko) ? $pengukuran->faktor_resiko : $pengukuran;
-
-        // 3. JURUS ANDALAN: Ubah Object nested menjadi Array Murni
-        // Ini mengubah struktur {#...} menjadi [...] agar mudah di-looping
         $dataArray = json_decode(json_encode($sourceData), true);
         
-        // 4. Panggil fungsi pengolah data (Pass by Reference)
-        $this->parseSkorRecursive($dataArray);
         $urutanSesuaiTabel = [
-            'batang_tubuh_memuntir_saat_mengangkat',
-            'mengangkat_dengan_satu_tangan',
-            'mengangkat_dengan_beban_yang_tidak_terduga_tidak_diprediksi', // Sesuaikan jika key codingan beda
-            'mengangkat_1_5_kali_per_menit',
-            'mengangkat_lebih_dari_5_kali_per_menit',
-            'posisi_benda_yang_diangkat_berada_di_atas_bahu',
-            'posisi_benda_yang_diangkat_berada_di_bawah_posisi_siku',
-            'mengangkut_membawa_benda_dengan_jarak_3_9_meter',
-            'mengangkut_membawa_benda_dengan_jarak_lebih_9_meter',
-            'mengangkat_benda_saat_duduk_atau_bertumpu_pada_lutut'
+            'batang_tubuh_memuntir_saat_mengangkat' => 'Batang tubuh memuntir saat mengangkat',
+            'mengangkat_dengan_satu_tangan' => 'Mengangkat dengan satu tangan',
+            'mengangkat_dengan_beban_yang_tidak_terduga_tidak_diprediksi' => 'Mengangkat dengan beban tidak terduga / tidak diprediksi',
+            'mengangkat_1_5_kali_per_menit' => 'Mengangkat 1 - 5 kali per menit',
+            'mengangkat_lebih_dari_5_kali_per_menit' => 'Mengangkat > 5 kali per menit',
+            'posisi_benda_yang_diangkat_berada_di_atas_bahu' => 'Posisi benda yang diangkat berada di atas bahu',
+            'posisi_benda_yang_diangkat_berada_di_bawah_posisi_siku' => 'Posisi benda yang diangkat berada di bawah posisi siku',
+            'mengangkut_membawa_benda_dengan_jarak_3_9_meter' => 'Mengangkut (membawa) benda dengan jarak 3 - 9 meter',
+            'mengangkut_membawa_benda_dengan_jarak_lebih_9_meter' => 'Mengangkut (membawa) benda dengan jarak > 9 meter',
+            'mengangkat_benda_saat_duduk_atau_bertumpu_pada_lutut' => 'Mengangkat benda saat duduk atau bertumpu pada lutut'
         ];
+        
         $dataSudahUrut = [];
-        foreach ($urutanSesuaiTabel as $kunci) {
-            if (isset($dataArray[$kunci])) {
-                $dataSudahUrut[$kunci] = $dataArray[$kunci];
-                // Hapus dari array lama biar ketahuan mana sisa yang belum masuk (opsional)
-                unset($dataArray[$kunci]); 
+        foreach ($urutanSesuaiTabel as $kunciOriginal => $labelTeks) {
+            if (isset($dataArray[$kunciOriginal])) {
+                $itemUntukDiproses = $dataArray[$kunciOriginal];
+                
+                // PENTING: Kirim label teks sebagai parameter ke-2
+                $this->parseSkorRecursive($itemUntukDiproses, $labelTeks);
+                
+                $dataSudahUrut[$kunciOriginal] = $itemUntukDiproses;
+                unset($dataArray[$kunciOriginal]);
             }
         }
-        // if (!empty($dataArray)) {
-        //     $dataSudahUrut = array_merge($dataSudahUrut, $dataArray);
-        // }
-        // 5. Cek Hasilnya
+        
         return $dataSudahUrut;
     }
     private function hitungRecursive(&$items, $namaKey = null)
@@ -1119,34 +1114,21 @@ class TemplateLhpErgonomi
         // 4. KEMBALIKAN KUMPULAN HASIL
         return $hasilKalkulasi;
     }
-    private function parseSkorRecursive(&$items,$parentKey = null)
+    // Ubah parameter dari $parentKey menjadi $parentLabel agar lebih jelas
+    private function parseSkorRecursive(&$items, $parentLabel = null)
     {
         foreach ($items as $key => &$value) {
-            
-            // KASUS 1: Apakah ini String target? (Contoh: "2-Pengangkatan sering...")
-            // Cirinya: Berupa String DAN punya tanda strip "-"
             if (is_string($value) && strpos($value, '-') !== false) {
-                
-                // Pecah berdasarkan strip pertama saja
-                // "2-Pengangkatan" -> Jadi ["2", "Pengangkatan"]
                 $parts = explode('-', $value, 2); 
-                
-                $skor = isset($parts[0]) ? (int) $parts[0] : 0;
-                $ket  = isset($parts[1]) ? $parts[1] : '';
-
-                // UBAH format string tadi menjadi Array yang punya skor
-                $result = ucfirst(Str::replace('_', ' ', $parentKey));
                 $value = [
-                    'raw_text'   => $result, // Simpan teks asli
-                    'skor'       => $skor,  // Ini angka 2 nya
-                    'keterangan' => $ket    // Ini keterangannya
+                    'raw_text'   => $parentLabel,  // ✅ Selalu gunakan label dari parent
+                    'skor'       => (int) $parts[0], 
+                    'keterangan' => trim($parts[1])     
                 ];
             }
-
-            // KASUS 2: Masih berupa Array/Container? (Menyelam lagi)
-            // Ini akan menangani key "0", "1", dst.
             elseif (is_array($value)) {
-                $this->parseSkorRecursive($value,$key);
+                // ✅ Teruskan label yang sama ke level berikutnya
+                $this->parseSkorRecursive($value, $parentLabel);
             }
         }
     }
@@ -1307,13 +1289,13 @@ class TemplateLhpErgonomi
         $skorNumerik = (float) $skor;
         if ($skorNumerik < 1) {
             $tingkatResiko = 'Rendah';
-            $tindakan = 'Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1';
+            $tindakan = 'Tidak ada masalah dengan pekerjaan mengangkat, maka tidak diperlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat dipertahankan < 1.';
         } else if ($skorNumerik >= 1 && $skorNumerik < 3) {
             $tingkatResiko = 'Sedang';
-            $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1';
+            $tindakan = 'Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1.';
         } else if ($skorNumerik >= 3) {
             $tingkatResiko = ' Tinggi';
-            $tindakan = 'Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1';
+            $tindakan = 'Terdapat banyak permasalahan dari parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.';
         } else {
             $tingkatResiko = 'Tidak Dinilai';
             $tindakan = 'Input skor tidak valid atau tidak dapat diukur.';

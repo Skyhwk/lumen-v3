@@ -16,9 +16,9 @@
         <th width="250" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">PARAMETER</th>
 
         @if ($hasTerkoreksi)
-            <th colspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">HASIL UJI</th>
+            <th colspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">{{$header->header_table[0] ?? 'Hasil Uji'}}</th>
         @else
-            <th rowspan="1" class="pd-5-solid-top-center" style="white-space: nowrap;">HASIL UJI</th>
+            <th rowspan="1" class="pd-5-solid-top-center" style="white-space: nowrap;">{{$header->header_table[0] ?? 'Hasil Uji'}}</th>
         @endif
 
         <th width="75" rowspan="{{ $hasTerkoreksi ? 2 : 1 }}" class="pd-5-solid-top-center" style="white-space: nowrap;">BAKU MUTU</th>

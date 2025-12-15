@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Helpers\HelperSatuan;
 use App\Models\DetailLingkunganHidup;
 use App\Models\DetailLingkunganKerja;
+use App\Models\DataLapanganDebuPersonal;
 use App\Models\DirectLainHeader;
 use App\Models\HistoryAppReject;
 
@@ -301,8 +302,11 @@ class TqcUdaraLingkunganKerjaController extends Controller
     {
         try {
             $data = DetailLingkunganKerja::where('no_sampel', $request->no_sampel)->first();
+            $debu = DataLapanganDebuPersonal::where('no_sampel', $request->no_sampel)->first();
             if ($data) {
                 return response()->json(['data' => $data, 'message' => 'Berhasil mendapatkan data', 'success' => true, 'status' => 200]);
+            }else if ($debu) {
+                return response()->json(['data' => $debu, 'message' => 'Berhasil mendapatkan data debu personal', 'success' => true, 'status' => 200]);
             } else {
                 return response()->json(['message' => 'Data lapangan tidak ditemukan', 'success' => false, 'status' => 404]);
             }

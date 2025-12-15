@@ -56,9 +56,29 @@ class LhpULKController extends Controller
             ->where('is_active', true)
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             ->where('status', 3)
+            // ->where(function ($query) use ($parameterAllowed) {
+            //     foreach ($parameterAllowed as $param) {
+            //         $query->where('parameter', 'NOT LIKE', "%;$param%");
+            //     }
+            // })
+            // --- LOGIKA VALIDASI TANPA OR WHERE ---
             ->where(function ($query) use ($parameterAllowed) {
+                // Syntax SQL menghitung jumlah parameter (berdasarkan separator ;)
+                $countSql = "(LENGTH(parameter) - LENGTH(REPLACE(parameter, ';', '')) + 1)";
+
                 foreach ($parameterAllowed as $param) {
-                    $query->where('parameter', 'NOT LIKE', "%;$param%");
+                    // Kita gunakan CASE WHEN di dalam whereRaw
+                    // Logika: 
+                    // 1. Apakah jumlah parameter <= 2?
+                    //    YA -> Cek apakah parameter TIDAK mengandung kata terlarang (NOT LIKE).
+                    //    TIDAK -> Return 1 (True/Lolos) karena validasi blacklist tidak berlaku.
+                    
+                    $query->whereRaw("
+                        CASE 
+                            WHEN $countSql <= 2 THEN parameter NOT LIKE ? 
+                            ELSE 1 
+                        END
+                    ", ["%;$param%"]);
                 }
             })
             ->groupBy('cfr');
@@ -156,7 +176,7 @@ class LhpULKController extends Controller
     public function rePrint(Request $request) 
     {
         DB::beginTransaction();
-        $header = LhpsLingHeader::where('no_sampel', $request->no_sampel)->where('is_active', true)->first();
+        $header = LhpsLingHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
         $header->count_print = $header->count_print + 1; 
 
         $detail = LhpsLingDetail::where('id_header', $header->id)->get();

@@ -144,8 +144,7 @@ class FdlMedanListrikDanMagnetController extends Controller
                     ], 401);
                 }
                 
-                
-                if ($request->selected_parameter == 'Medan Magnit Statis') {
+                if ($request->selected_parameter == 'Medan Magnit Statis' || $request->selected_parameter == 'Medan Magnet') {
                     if ($request->magnet3 != '') {
                         $magnet3 = array();
                         $o = 1;
