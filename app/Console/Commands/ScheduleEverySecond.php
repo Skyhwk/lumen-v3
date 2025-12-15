@@ -9,6 +9,7 @@ use App\Helpers\WorkerSummaryParameter;
 use App\Helpers\WorkerSummaryQSD;
 use App\Helpers\WorkerApproveAnalyst;
 use App\Helpers\WorkerUpdateKpiSales;
+use App\Helpers\WorkerFeeSales;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -32,6 +33,8 @@ class ScheduleEverySecond extends Command
                 WorkerSummaryParameter::run();
 
                 WorkerUpdateKpiSales::run();
+
+                WorkerFeeSales::run();
 
                 // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {
