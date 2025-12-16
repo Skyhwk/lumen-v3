@@ -51,7 +51,23 @@ use App\Models\{
     DataLapanganIsokinetikHasil,
     Gravimetri,
     Titrimetri,
-    WsValueAir
+    WsValueAir,//batas
+    DataLapanganEmisiOrder,
+    DataLapanganIsokinetikBeratMolekul,
+    DataLapanganIsokinetikKadarAir,
+    DataLapanganIsokinetikPenentuanKecepatanLinier,
+    DataLapanganIsokinetikSurveiLapangan,
+    DataLapanganKebisinganBySoundMeter,
+    DataLapanganKecerahan,
+    DataLapanganLapisanMinyak,
+    DataLapanganMicrobiologi,
+    DataLapanganSampah,
+    DataLapanganSenyawaVolatile,
+    DataLapanganUnion,
+    DataLimbah,
+    DataPsikologi,
+    DetailFlowMeter,
+    DetailSoundMeter
 };
 use App\Services\{
     GetAtasan,
@@ -1614,7 +1630,30 @@ class TestingController extends Controller
                             'line' => $e->getLine()
                         ], 500);
                     }
-
+                case 'tracing_datalapangan':
+                    $models =[
+                        DataLapanganCahaya::class,DataLapanganDebuPersonal::class,DataLapanganDirectLain::class,DataLapanganEmisiCerobong::class,DataLapanganEmisiKendaraan::class,DataLapanganEmisiOrder::class,DataLapanganGetaran::class,DataLapanganGetaranPersonal::class,DataLapanganIklimDingin::class,DataLapanganIklimPanas::class,DataLapanganIsokinetikBeratMolekul::class,DataLapanganIsokinetikKadarAir::class,DataLapanganIsokinetikPenentuanKecepatanLinier::class,DataLapanganKebisingan::class,DataLapanganKebisinganBySoundMeter::class,DataLapanganKebisinganPersonal::class,DataLapanganKecerahan::class,DataLapanganLapisanMinyak::class,DataLapanganMedanLM::class,DataLapanganMicrobiologi::class,DataLapanganPartikulatMeter::class,DataLapanganPsikologi::class,DataLapanganSampah::class,DataLapanganSenyawaVolatile::class,DataLapanganSinarUV::class,DataLapanganSwab::class,DataLapanganUnion::class,DataLimbah::class,DetailFlowMeter::class,DetailLingkunganHidup::class,DetailLingkunganKerja::class,DetailMicrobiologi::class,DetailSenyawaVolatile::class,DetailSoundMeter::class
+                    ];
+                    $noSampelCari = $request->input('no_sampel');
+                    $results = [];
+                    foreach ($models as $modelClass) {
+                        $dataFound = $modelClass::where('no_sampel', $noSampelCari)->get();
+                        if ($dataFound->isNotEmpty()) {
+                            foreach ($dataFound as $item) {
+                                $namaModel = class_basename($modelClass);
+                                $parameterValue = $item->parameter ?? '-';
+                                $results[] = [
+                                    'no_sampel' => $item->no_sampel,
+                                    'parameter' => $parameterValue,
+                                    'nama_model' => $namaModel,
+                                ];
+                            }
+                        }
+                    }
+                    return response()->json([
+                        'total_found' => count($results),
+                        'data' => $results
+                    ]);
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
