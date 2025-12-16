@@ -57,9 +57,6 @@ class DailyQsdController extends Controller
             ->orderBy('no_order', 'asc');
 
         return DataTables::of($query)
-            ->addColumn('cfr_list', function ($data) {
-                return explode(',', $data->cfr);
-            })
             ->addColumn('tipe_quotation', function ($data) {
                 return $data->kontrak == 'C' ? 'KONTRAK' : 'NON-KONTRAK';
             })
@@ -70,25 +67,13 @@ class DailyQsdController extends Controller
                 return '-';
             })
             ->addColumn('sales_id', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->sales_id_kontrak;
-                } else {
-                    return $data->sales_id_non_kontrak;
-                }
+                return $data->sales_id ?? '-';
             })
             ->addColumn('sales_nama', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->sales_nama_kontrak ?? '-';
-                } else {
-                    return $data->sales_nama_non_kontrak ?? '-';
-                }
+                return $data->sales_nama ?? '-';
             })
             ->addColumn('total_revenue', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->total_revenue_kontrak ?? 0;
-                } else {
-                    return $data->total_revenue_non_kontrak ?? 0;
-                }
+                return $data->total_revenue ?? 0;
             })
             ->filterColumn('no_order', function ($query, $keyword) {
                 $query->where('no_order', 'like', "%$keyword%");
@@ -114,9 +99,10 @@ class DailyQsdController extends Controller
                 }
             })
             ->filterColumn('sales_nama', function ($query, $keyword) {
+                $keyword = strtolower($keyword);
                 $query->where(function ($q) use ($keyword) {
-                    $q->where('sales_nama_kontrak', 'like', "%$keyword%")
-                        ->orWhere('sales_nama_non_kontrak', 'like', "%$keyword%");
+                    $q->where('sales_nama', 'like', "%$keyword%");
+                        
                 });
             })
             ->orderColumn('tanggal_sampling_min', function ($query, $order) {
@@ -141,8 +127,7 @@ class DailyQsdController extends Controller
         $yearRevenue = DB::table('daily_qsd')
             ->whereRaw("YEAR(tanggal_sampling_min) = ?", [$currentYear])
             ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+                SUM(COALESCE(total_revenue, 0)) as total
             ')
             ->first();
 
@@ -150,8 +135,7 @@ class DailyQsdController extends Controller
         $monthRevenue = DB::table('daily_qsd')
             ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$currentMonth])
             ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+                SUM(COALESCE(total_revenue, 0)) as total
             ')
             ->first();
 
@@ -159,8 +143,7 @@ class DailyQsdController extends Controller
         $dayRevenue = DB::table('daily_qsd')
             ->whereDate('tanggal_sampling_min', $currentDate)
             ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
+                SUM(COALESCE(total_revenue, 0)) as total
             ')
             ->first();
 
