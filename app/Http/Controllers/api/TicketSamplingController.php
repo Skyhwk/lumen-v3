@@ -461,20 +461,20 @@ class TicketSamplingController extends Controller
                 ->pluck('id')
                 ->toArray();
 
-            // Notification::whereIn('id', $user_Sampling)
-            //     ->title('Ticket Sampling !')
-            //     ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
-            //     ->url('/ticket-sampling')
-            //     ->send();
+            Notification::whereIn('id', $user_Sampling)
+                ->title('Ticket Sampling !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->kategori))
+                ->url('/ticket-sampling')
+                ->send();
 
             $getAtasan = GetAtasan::where('nama_lengkap', $this->karyawan)->get()->pluck('id');
 
             $isPerubahanData = $data->kategori == 'PERUBAHAN_DATA';
-            // Notification::whereIn('id', $getAtasan)
-            //     ->title('Ticket Sampling !')
-            //     ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
-            //     ->url('/ticket-sampling')
-            //     ->send();
+            Notification::whereIn('id', $getAtasan)
+                ->title('Ticket Sampling !')
+                ->message($message . ' Oleh ' . $this->karyawan . ' Tingkat Masalah ' . str_replace('_', ' ', $data->category) . ($isPerubahanData ? ' Yang Harus Disetujui Oleh Atasan' : ''))
+                ->url('/ticket-sampling')
+                ->send();
 
             DB::commit();
             return response()->json([
