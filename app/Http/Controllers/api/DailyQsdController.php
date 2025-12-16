@@ -14,8 +14,14 @@ class DailyQsdController extends Controller
 
     public function index(Request $request)
     {
-        $query = DB::table('daily_qsd');
+        $query = DB::table('daily_qsd')
+            ->select('daily_qsd.*', 'kelengkapan_konfirmasi_qs.approval_order', 'kelengkapan_konfirmasi_qs.no_purchaseorder', 'kelengkapan_konfirmasi_qs.no_co_qsd');
 
+        $query->leftJoin('kelengkapan_konfirmasi_qs', function ($join) {
+            $join->on('daily_qsd.no_quotation', '=', 'kelengkapan_konfirmasi_qs.no_quotation')
+                ->on('daily_qsd.periode', '=', 'kelengkapan_konfirmasi_qs.periode')
+                ->where('is_active', 1);
+        });
         // Filter tanggal_sampling jika ada
         if ($request->filled('tanggal_sampling')) {
             $tanggalInput = $request->tanggal_sampling;
@@ -102,8 +108,14 @@ class DailyQsdController extends Controller
                 $keyword = strtolower($keyword);
                 $query->where(function ($q) use ($keyword) {
                     $q->where('sales_nama', 'like', "%$keyword%");
-                        
+
                 });
+            })
+            ->filterColumn('no_co_qsd', function ($query, $keyword) {
+                $query->where('kelengkapan_konfirmasi_qs.no_co_qsd', 'like', "%$keyword%");
+            })
+            ->filterColumn('no_purchaseorder', function ($query, $keyword) {
+                $query->where('kelengkapan_konfirmasi_qs.no_purchaseorder', 'like', "%$keyword%");
             })
             ->orderColumn('tanggal_sampling_min', function ($query, $order) {
                 $query->orderBy('tanggal_sampling_min', $order);
