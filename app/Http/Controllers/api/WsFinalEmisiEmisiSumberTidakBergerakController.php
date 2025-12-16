@@ -42,7 +42,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             ->first()->parameter;
 
         $parameterArray = json_decode($parameter, true);
-
+        
         $parameterNames = array_map(function ($param) {
             $parts = explode(';', $param);
             return trim(end($parts));
@@ -99,7 +99,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 return $item;
             });
 
-        $data3 = Subkontrak::with(['ws_value_cerobong'])
+            $data3 = Subkontrak::with(['ws_value_cerobong'])
             ->where('no_sampel', $request->no_sampel)
             ->where('is_approve', 1)
         // ->whereIn('parameter', $paramOrder)
@@ -115,8 +115,8 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         $data3Arr = $data3->toArray();
 
         $data = array_merge($data1Arr, $data2Arr, $data3Arr);
-        // dd($data, $data1Arr, $data2Arr, $data3Arr);
-
+        // dd($data);
+            
         foreach ($data as &$item) {
             $item['method']            = null;
             $item['baku_mutu']         = null;
@@ -137,7 +137,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             }
         }
         $getSatuan = new HelperSatuan;
-
         // , %, -, m/s, mg/Mm³, mg/m³, mg/Nm3, mg/Nm³, ppm, °C
         return Datatables::of($data)
             ->addColumn('nilai_uji', function ($item) use ($getSatuan) {

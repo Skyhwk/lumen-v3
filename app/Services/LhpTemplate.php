@@ -436,7 +436,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
+            } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31 || $sub_kategori === 116)) {
                 if (collect($dataDecode)->contains(function ($item) {
                     return in_array(
                         $item,

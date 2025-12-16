@@ -66,6 +66,12 @@ class LingkunganHidupNH3
             $C1 = '<0.00333';
         if (floatval($C2) < 0.00478)
             $C2 = '<0.00478';
+        if (floatval($C14) < 0.00478)
+            $C14 = '<0.00478';
+        if (floatval($C15) < 3.33)
+            $C15 = '<3.33';
+        if (floatval($C16) < 0.00333)
+            $C16 = '<0.00333';
 
         $processed = [
             'tanggal_terima' => $data->tanggal_terima,

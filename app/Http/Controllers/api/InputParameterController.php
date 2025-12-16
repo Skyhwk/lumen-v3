@@ -2734,6 +2734,13 @@ class InputParameterController extends Controller
 
 				DB::beginTransaction();
 				try {
+					$inputan_analis = (object)[
+						'w2' => $request->w2,
+						'w1' => $request->w1,
+						'b2' => $request->b2,
+						'b1' => $request->b1
+					];
+
 					$header = new DebuPersonalHeader;
 					$header->no_sampel = $request->no_sample;
 					$header->parameter = $request->parameter;
@@ -2741,6 +2748,7 @@ class InputParameterController extends Controller
 					$header->id_parameter = $data_parameter->id;
 					$header->note = $request->note;
 					$header->tanggal_terima = $order_detail->tanggal_terima;
+					$header->inputan_analis = json_encode($inputan_analis);
 					$header->created_by = $this->karyawan;
 					$header->created_at = Carbon::now()->format('Y-m-d H:i:s');
 					$header->save();
@@ -2774,12 +2782,12 @@ class InputParameterController extends Controller
 						];
 					}
 
-					// $data_kalkulasi['lingkungan_header_id'] = $header->id;
-					// $data_kalkulasi['no_sampel'] = $request->no_sample;
-					// $data_kalkulasi['created_by'] = $this->karyawan;
+					$data_kalkulasi['debu_personal_header_id'] = $header->id;
+					$data_kalkulasi['no_sampel'] = $request->no_sample;
+					$data_kalkulasi['created_by'] = $this->karyawan;
 					$satuan = $data_kalkulasi['satuan'];
-					// unset($data_kalkulasi['satuan']);
-					// WsValueLingkungan::create($data_kalkulasi);
+					unset($data_kalkulasi['satuan']);
+					WsValueLingkungan::create($data_kalkulasi);
 
 					$data_udara = array();
 					$data_udara['id_debu_personal_header'] = $header->id;
@@ -3279,6 +3287,7 @@ class InputParameterController extends Controller
 		$data_ci_toArray = explode(";", $data_ci2_json[0]);
 		$nilaiDgm = null;
 		$tekanan_meteran = null;
+		$durasi = null;
 		foreach ($data_ci_toArray as $item) {
 			if (strpos($item, "Volume") !== false) {
 				// Menghilangkan spasi di sekitar string
@@ -3290,6 +3299,10 @@ class InputParameterController extends Controller
 				$item = str_replace(' ', '', $item);
 				$tekananData = explode(":", $item);
 				$tekanan_meteran = ($tekananData[1] !== "-" && isset($tekananData[1])) ? $tekananData[1] : 0;
+			}else if(strpos($item, "Durasi") !== false){
+				$item = str_replace(' ', '', $item);
+				$durasiData = explode(":", $item);
+				$durasi = ($durasiData[1] !== "-" && isset($durasiData[1])) ? $durasiData[1] : 0;
 			}
 		}
 		// dd($datlapangan);
@@ -3325,6 +3338,7 @@ class InputParameterController extends Controller
 		$data_parsing->nilaiDgm = $nilaiDgm;
 		$data_parsing->tekanan_meteran = $tekanan_meteran;
 		$data_parsing->tekanan_air = $tekananAir;
+		$data_parsing->durasi = $durasi;
 		$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 		$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3964,10 +3978,11 @@ class InputParameterController extends Controller
 				if(count($fdl) > 0){
 					$data_udara['hasil9'] = $data_kalkulasi['hasil'];
 				}else{
-					$data_udara['hasil10'] = $data_kalkulasi['hasil'];
-					$data_udara['hasil11'] = $data_kalkulasi['hasil2'];
-					$data_udara['hasil13'] = $data_kalkulasi['hasil3'];
-					$data_udara['hasil14'] = $data_kalkulasi['hasil4'];
+					$data_udara['hasil10'] = isset($data_kalkulasi['hasil']) ? $data_kalkulasi['hasil'] : null;
+					$data_udara['hasil11'] = isset($data_kalkulasi['hasil2']) ? $data_kalkulasi['hasil2'] : null;
+					$data_udara['hasil13'] = isset($data_kalkulasi['hasil3']) ? $data_kalkulasi['hasil3'] : null;
+					$data_udara['hasil14'] = isset($data_kalkulasi['hasil4']) ? $data_kalkulasi['hasil4'] : null;
+					$data_udara['hasil19'] = isset($data_kalkulasi['hasil5']) ? $data_kalkulasi['hasil5'] : null;
 				}
 				WsValueUdara::create($data_udara);
 
@@ -4305,132 +4320,141 @@ class InputParameterController extends Controller
 	private function HelperOthers($request, $stp, $order_detail, $par) {
 		DB::beginTransaction();
 		try {
-			$cek = Subkontrak::where('no_sampel',$request->no_sample)
-				->where('parameter', $request->parameter)
-				->where('is_active',true)
-				->first();
+			$parame = $request->parameter;
+			$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
+			$check = OrderDetail::where('no_sampel',$request->no_sample)->where('is_active',true)->first();
 
-			if(isset($cek->id)){
+			if(!isset($check->id)){
 				return (object)[
-					'message'=> 'No Sample Sudah ada.!!',
+					'message'=> 'No Sample tidak ada.!!',
 					'status' => 401
 				];
-			}else{
-				$parame = $request->parameter;
-				$data_parameter = Parameter::where('nama_lab', $parame)->where('id_kategori',$stp->category_id)->where('is_active',true)->first();
-				$check = OrderDetail::where('no_sampel',$request->no_sample)->where('is_active',true)->first();
+			}
+			$id_po = $check->id;
+			$tgl_terima = $check->tanggal_terima;
 
-				if(!isset($check->id)){
-					return (object)[
-						'message'=> 'No Sample tidak ada.!!',
-						'status' => 401
-					];
-				}
-				$id_po = $check->id;
-				$tgl_terima = $check->tanggal_terima;
+			$function = 'OthersSubkontrak';
 
-				$function = 'OthersSubkontrak';
+			$data_parsing = $request->all();
+			$data_parsing = (object)$data_parsing;
+			// dd($function);
 
-				$data_parsing = $request->all();
-				$data_parsing = (object)$data_parsing;
-				// dd($function);
-
-				$data_kalkulasi = AnalystFormula::where('function', $function)
-					->where('data', $data_parsing)
-					->where('id_parameter', $data_parameter->id)
-					->process();
+			$data_kalkulasi = AnalystFormula::where('function', $function)
+				->where('data', $data_parsing)
+				->where('id_parameter', $data_parameter->id)
+				->process();
 
 
-				if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
-					return (object)[
-						'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
-						'status' => 404
-					];
-				}
-
-				$data 						= new Subkontrak;
-				$data->no_sampel 			= trim($request->no_sample);
-				$data->category_id 			= $stp->category_id;
-				$data->parameter 			= $request->parameter;
-				$data->jenis_pengujian 		= $request->jenis_pengujian;
-				$data->hp 					= $request->hp;
-				$data->fp 					= $request->fp ?? null; //faktor pengenceran
-				// $data->note 				= $request->note;
-				$data->is_approve 			= true;
-				$data->approved_by 			= $this->karyawan;
-				$data->approved_at 			= Carbon::now()->addMinutes(5)->format('Y-m-d H:i:s');
-				$data->created_by 			= $this->karyawan;
-				$data->created_at 			= Carbon::now()->addMinutes(5)->format('Y-m-d H:i:s');
-				// dd($data);
-				$data->save();
-
-				$data_kalkulasi['id_subkontrak'] = $data->id;
-				$data_kalkulasi['no_sampel'] = trim($request->no_sample);
-
-				if($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan'){
-                    $kalkulasi1 = WsValueAir::create($data_kalkulasi);
-                }else if($stp->sample->nama_kategori == 'Udara'){
-                    $existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))
-                        ->where('parameter', $request->parameter)
-                        ->where('is_active', true)
-                        ->first();
-                    if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
-                        $data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
-                        $data_udara->id_subkontrak  = $data->id;
-                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_' . $i;
-                            if (isset($data_udara->{$key})) {
-                                $data_udara->{$key} = $data_kalkulasi['hasil'];
-                            }
-                        }
-                        $data_udara->save();
-                    }else{
-                        $data_udara = [];
-                        $data_udara['id_subkontrak'] = $data->id;
-                        $data_udara['no_sampel'] = trim($request->no_sample);
-                        for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_' . $i;
-                            $data_udara[$key] = $data_kalkulasi['hasil'];
-                        }
-                        $kalkulasi1 = WsValueUdara::create($data_udara);
-                    }
-                }else if($stp->sample->nama_kategori == 'Emisi'){
-					$existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
-						->where('parameter', $request->parameter)
-						->where('is_active', true)
-						->first();
-					if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
-						$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id)->orderBy('id', 'desc')->first();
-                        $data_emisi->id_subkontrak  = $data->id;
-                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c';
-							$key .= $i == 0 ? '' : $i;
-                            if (isset($data_emisi->{$key})) {
-								$data_emisi->{$key} = $data_kalkulasi['hasil'];
-                            }
-                        }
-						$data_emisi->save();
-                    }else{
-						$data_emisi = [];
-                        $data_emisi['id_subkontrak'] = $data->id;
-                        $data_emisi['no_sampel'] = trim($request->no_sample);
-                        for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
-                            $key = 'f_koreksi_c';
-							$key .= $i == 0 ? '' : $i;
-                            $data_emisi[$key] = $data_kalkulasi['hasil'];
-                        }
-                        $kalkulasi1 = WsValueEmisiCerobong::create($data_emisi);
-                    }
-                }
-
-                dd('masuk');
-				DB::commit();
+			if(!is_array($data_kalkulasi) && $data_kalkulasi == 'Coming Soon') {
 				return (object)[
-					'message'=> 'Value Parameter berhasil disimpan.!',
-					'par' => $request->parameter,
-					'status' => 200
+					'message'=> 'Formula is Coming Soon parameter : '.$request->parameter.'',
+					'status' => 404
 				];
 			}
+
+			$exist = Subkontrak::where('no_sampel', trim($request->no_sample))
+				->where('category_id', $stp->category_id)
+				->where('parameter', $request->parameter)
+				->where('is_active', true)
+				->first();
+
+			if (isset($exist->id)) {
+				$data = Subkontrak::find($exist->id);
+			} else {
+				$data = new Subkontrak;
+			}
+
+			$data->no_sampel 			= trim($request->no_sample);
+			$data->category_id 			= $stp->category_id;
+			$data->parameter 			= $request->parameter;
+			$data->jenis_pengujian 		= $request->jenis_pengujian;
+			$data->hp 					= $request->hp;
+			$data->fp 					= $request->fp ?? null; //faktor pengenceran
+			$data->note 				= $request->note;
+			$data->is_follow 			= $request->is_follow ?? false; // checkbox menyusul atau tidak
+			$data->is_approve 			= true;
+			$data->approved_by 			= $this->karyawan;
+			$data->approved_at 			= Carbon::now()->addMinutes(5)->format('Y-m-d H:i:s');
+			$data->created_by 			= $this->karyawan;
+			$data->created_at 			= Carbon::now()->addMinutes(5)->format('Y-m-d H:i:s');
+			if($check->status > 1 && $stp->sample->nama_kategori == 'Air'){
+				$data->lhps = 1;
+			}
+			// dd($data);
+			$data->save();
+
+			if($stp->sample->nama_kategori == 'Air' || $stp->sample->nama_kategori == 'Padatan'){
+				if($stp->sample->nama_kategori == 'Air'){
+					$kalkulasi1 = WsValueAir::updateOrCreate(
+						['no_sampel' => trim($request->no_sample), 'id_subkontrak' => $data->id], 
+						[
+							'hasil' => $data_kalkulasi['hasil'],
+						]);
+				}else{
+					$data_kalkulasi['id_subkontrak'] = $data->id;
+					$data_kalkulasi['no_sampel'] = trim($request->no_sample);
+					$kalkulasi1 = WsValueAir::create($data_kalkulasi);
+				}
+			}else if($stp->sample->nama_kategori == 'Udara'){
+				$existLingkungan = LingkunganHeader::where('no_sampel', trim($request->no_sample))
+					->where('parameter', $request->parameter)
+					->where('is_active', true)
+					->first();
+				if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
+					$data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
+					$data_udara->id_subkontrak  = $data->id;
+					for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+						$key = 'f_koreksi_' . $i;
+						if (isset($data_udara->{$key})) {
+							$data_udara->{$key} = $data_kalkulasi['hasil'];
+						}
+					}
+					$data_udara->save();
+				}else{
+					$data_udara = [];
+					$data_udara['id_subkontrak'] = $data->id;
+					$data_udara['no_sampel'] = trim($request->no_sample);
+					for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+						$key = 'f_koreksi_' . $i;
+						$data_udara[$key] = $data_kalkulasi['hasil'];
+					}
+					$kalkulasi1 = WsValueUdara::create($data_udara);
+				}
+			}else if($stp->sample->nama_kategori == 'Emisi'){
+				$existEmisiCerobong = EmisiCerobongHeader::where('no_sampel', trim($request->no_sample))
+					->where('parameter', $request->parameter)
+					->where('is_active', true)
+					->first();
+				if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existEmisiCerobong->id)) {
+					$data_emisi = WsValueEmisiCerobong::where('id_emisi_cerobong_header', $existEmisiCerobong->id)->orderBy('id', 'desc')->first();
+					$data_emisi->id_subkontrak  = $data->id;
+					for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+						$key = 'f_koreksi_c';
+						$key .= $i == 0 ? '' : $i;
+						if (isset($data_emisi->{$key})) {
+							$data_emisi->{$key} = $data_kalkulasi['hasil'];
+						}
+					}
+					$data_emisi->save();
+				}else{
+					$data_emisi = [];
+					$data_emisi['id_subkontrak'] = $data->id;
+					$data_emisi['no_sampel'] = trim($request->no_sample);
+					for ($i = 0; $i <= 10; $i++) { // f_koreksi_1 - f_koreksi_17
+						$key = 'f_koreksi_c';
+						$key .= $i == 0 ? '' : $i;
+						$data_emisi[$key] = $data_kalkulasi['hasil'];
+					}
+					$kalkulasi1 = WsValueEmisiCerobong::create($data_emisi);
+				}
+			}
+
+			DB::commit();
+			return (object)[
+				'message'=> 'Value Parameter berhasil disimpan.!',
+				'par' => $request->parameter,
+				'status' => 200
+			];
 		} catch (\Exception $e) {
 			DB::rollBack();
 			return (object)[

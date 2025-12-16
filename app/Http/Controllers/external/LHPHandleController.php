@@ -80,6 +80,8 @@ class LHPHandleController extends BaseController
                 $noOrder = $dataLhp->no_order;
 
                 $fileName = $dataLhp->filename ?? null;
+                
+                $checkHold =HoldHp::where('no_order',$noOrder)->where('periode',$periode)->first();
 
                 $dataOrder = OrderHeader::where('no_order', $noOrder)->where('is_active', true)->first();
 
@@ -94,7 +96,7 @@ class LHPHandleController extends BaseController
 
                 if($dataOrder){
                     $dataGrouped = (new GroupedCfrByLhp($dataOrder, $periode))->get();
-                    return response()->json(['message' => 'Data LHP found', 'data' => $dataGrouped, 'order' => $dataOrder, 'periode' => $periode, 'invoice' => $cekInvoice, 'fileName' => $fileName], 200);
+                    return response()->json(['message' => 'Data LHP found', 'data' => $dataGrouped, 'order' => $dataOrder, 'periode' => $periode, 'invoice' => $cekInvoice, 'fileName' => $fileName, 'hold' => $checkHold], 200);
                 } else {
                     return response()->json(['message' => 'Data Order not found'], 404);
                 }

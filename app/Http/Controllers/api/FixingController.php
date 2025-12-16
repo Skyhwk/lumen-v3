@@ -2,14 +2,16 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Services\RenderNonKontrakCopy;
-use App\Services\RenderKontrakCopy;
 use App\Jobs\RenderPdfPenawaran;
 use App\Models\ExpiredLink;
+use App\Models\GenerateLink;
+use App\Models\Jadwal;
+use App\Services\SalesKpiMonthly;
 use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
-use App\Models\GenerateLink;
+use App\Services\RenderKontrakCopy;
+use App\Services\RenderNonKontrakCopy;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -246,7 +248,7 @@ class FixingController extends Controller
     public function generateToken(Request $request)
     {
         $token = $request['token']['token'];
-        if (!$token) {
+        if (! $token) {
             return response()->json(['message' => 'Token not found.!', 'status' => '404'], 401);
         }
         $expired     = Carbon::now()->addMonths(3)->format('Y-m-d');
@@ -255,9 +257,9 @@ class FixingController extends Controller
             ->first();
 
         if ($get_expired) {
-            $bodyToken = (object) $get_expired; 
-            unset($bodyToken->id);             
-            $bodyToken->expired = $expired;     
+            $bodyToken = (object) $get_expired;
+            unset($bodyToken->id);
+            $bodyToken->expired = $expired;
 
             $id_quotation     = $bodyToken->id_quotation;
             $quotation_status = $bodyToken->quotation_status;
@@ -282,6 +284,167 @@ class FixingController extends Controller
         } else {
             return response()->json(['message' => 'Token not found', 'status' => '404'], 200);
         }
+    }
+
+    // public function FixStatusJadwal(Request $request)
+    // {
+    //     DB::beginTransaction();
+    //     try {
+    //         // 1. Ambil semua no_quotation aktif (distinct)
+    //         $dataJadwal = Jadwal::where('is_active', true)
+    //             ->whereNotNull('no_quotation')
+    //             ->where('status', '0')
+    //             ->distinct()
+    //             ->pluck('no_quotation')
+    //             ->toArray();
+
+    //         // dd($dataJadwal);
+
+    //         if (empty($dataJadwal)) {
+    //             return response()->json([
+    //                 'updated_quotations' => [],
+    //                 'skipped_quotations' => [],
+    //                 'count_updated'      => 0,
+    //                 'count_skipped'      => 0,
+    //             ]);
+    //         }
+    //         // 2. Ambil semua quotation non kontrak sekaligus
+    //         $nonKontrak = QuotationNonKontrak::whereIn('no_document', $dataJadwal)
+    //             ->get(['no_document', 'data_lama']);
+
+    //         // 3. Ambil semua quotation kontrak sekaligus
+    //         $kontrak = QuotationKontrakH::whereIn('no_document', $dataJadwal)
+    //             ->get(['no_document', 'data_lama']);
+
+    //         // 4. Gabung ke dalam 1 map: no_document => data_lama
+    //         $quotationMap = [];
+
+    //         foreach ($nonKontrak as $row) {
+    //             $quotationMap[$row->no_document] = $row->data_lama;
+    //         }
+
+    //         foreach ($kontrak as $row) {
+    //             // jangan overwrite kalau sudah ada dari NonKontrak
+    //             if (! array_key_exists($row->no_document, $quotationMap)) {
+    //                 $quotationMap[$row->no_document] = $row->data_lama;
+    //             }
+    //         }
+
+    //         $updatedQuotations = [];
+    //         $skippedQuotations = [];
+
+    //         // 5. Proses tiap no_quotation
+    //         foreach ($dataJadwal as $noQuotation) {
+    //             // Kalau tidak ada quotation sama sekali ⇒ skip
+    //             if (! array_key_exists($noQuotation, $quotationMap)) {
+    //                 $skippedQuotations[] = $noQuotation;
+    //                 continue;
+    //             }
+
+    //             $dataLamaRaw = $quotationMap[$noQuotation];
+    //             $hasIdOrder  = false;
+
+    //             if (! empty($dataLamaRaw)) {
+    //                 $dataLama = json_decode($dataLamaRaw, true);
+    //                 if (! empty($dataLama['id_order'] ?? null)) {
+    //                     $hasIdOrder = true;
+    //                 }
+    //             }
+
+    //             if (! $hasIdOrder) {
+    //                 $skippedQuotations[] = $noQuotation;
+    //                 continue;
+    //             }
+
+    //             // Masukkan ke list updated, nanti di-update sekaligus
+    //             $updatedQuotations[] = $noQuotation;
+    //         }
+
+    //         // 6. Update Jadwal hanya untuk quotation yang valid, sekaligus
+    //         if (! empty($updatedQuotations)) {
+    //             Jadwal::whereIn('no_quotation', $updatedQuotations)
+    //                 ->where('is_active', true)
+    //                 ->update([
+    //                     'status' => 1,
+    //                 ]);
+    //         }
+
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'updated_quotations' => $updatedQuotations,
+    //             'skipped_quotations' => $skippedQuotations,
+    //             'count_updated'      => count($updatedQuotations),
+    //             'count_skipped'      => count($skippedQuotations),
+    //         ]);
+    //     } catch (\Throwable $th) {
+    //         DB::rollBack();
+    //         throw $th;
+    //     }
+    // }
+
+    public function updateCustomer(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            if (str_contains($request->quotation_number, 'QTC')) {
+                $quotation = QuotationKontrakH::where('no_document', $request->quotation_number)
+                    ->where('is_active', true)
+                    ->latest('id')
+                    ->first();
+            } else if (str_contains($request->quotation_number, 'QT/')) {
+                $quotation = QuotationNonKontrak::where('no_document', $request->quotation_number)
+                    ->where('is_active', true)
+                    ->latest('id')
+                    ->first();
+            }
+
+            if (! $quotation) {
+                return response()->json(['message' => 'Quotation not found'], 404);
+            }
+
+            $quotation->nama_perusahaan = $request->customer_name;
+            $quotation->konsultan       = $request->consultant_name ?: null;
+            $quotation->save();
+
+            $orderHeader = OrderHeader::where('no_document', $quotation->no_document)
+                ->where('is_active', true)
+                ->latest('id')
+                ->first();
+
+            if ($orderHeader) {
+                $orderHeader->nama_perusahaan = $request->customer_name;
+                $orderHeader->konsultan       = $request->consultant_name ?: null;
+                $orderHeader->save();
+
+                OrderDetail::where('id_order_header', $orderHeader->id)
+                    ->update([
+                        'nama_perusahaan' => $request->customer_name,
+                        'konsultan'       => $request->consultant_name ?: null,
+                    ]);
+            }
+
+            Jadwal::where('no_quotation', $request->quotation_number)
+                ->where('is_active', true)
+                ->update(['nama_perusahaan' => $request->customer_name]);
+
+            DB::commit();
+            return response()->json(['message' => 'Customer updated successfully'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to update customer'], 500);
+        }
+    }
+
+
+
+    public function test(Request $request)
+    {
+        Log::info('[FixingController][testLog] Test log at ' . date('Y-m-d H:i:s'));
+        $kpi = SalesKpiMonthly::run();
+
+        dd($kpi);
+        return response()->json(['message' => 'Log test entry created.']);
     }
 
 }

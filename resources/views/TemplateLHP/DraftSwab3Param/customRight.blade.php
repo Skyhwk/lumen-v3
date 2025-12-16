@@ -45,6 +45,8 @@
     $periode1 = $header->tanggal_analisa_awal ?? '';
     $periode2 = $header->tanggal_analisa_akhir ?? '';
 
+    $keterangan = $detailData->pluck('keterangan')->first() ?? '';
+
 @endphp
 
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
@@ -119,7 +121,7 @@
                     <tr>
                         <td class="custom5" width="120">Keterangan</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->deskripsi_titik ?? '-' }}</td>
+                        <td class="custom5">{{ $keterangan ?? '-' }}</td>
                     </tr>
 
                     {{-- area swab (kalau mau dipisah) --}}

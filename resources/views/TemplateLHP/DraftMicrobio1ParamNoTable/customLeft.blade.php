@@ -1,0 +1,115 @@
+@php
+    use App\Models\TabelRegulasi;
+    $data = is_object($custom) && method_exists($custom, 'toArray') ? $custom->toArray() : (array) $custom;
+
+    $data = collect($data)->map(fn($r) => (array) $r);
+
+    $groupedBySampel = $data->groupBy('no_sampel');
+
+    $parameters = $data->pluck('parameter')->filter()->unique(); // parameter unik
+
+    
+    $satuan = $data->pluck('satuan')->filter()->first();
+
+@endphp
+
+<div class="left" style="page-break-before: always;">
+    <table style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+        <thead>
+
+            {{-- =======================
+                     HEADER MULTI SAMPEL (PIVOT)
+                     Param jadi TH di bawah HASIL UJI & BAKU MUTU
+                 ======================= --}}
+            <tr>
+                <th width="25" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">NO</th>
+                <th width="240" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    LOKASI / KETERANGAN SAMPEL</th>
+
+                {{-- HASIL UJI: total kolom = jumlah parameter * (1 atau 2) --}}
+                <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    HASIL UJI
+                </th>
+
+                {{-- BAKU MUTU: 1 kolom per parameter --}}
+                <th width="160" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    BAKU MUTU
+                </th>
+                <th width="160" rowspan="2" class="pd-5-solid-top-center" style="white-space: nowrap;">
+                    TANGGAL SAMPLING </th>
+            </tr>
+
+            <tr>
+                <th colspan="2" class="pd-5-solid-top-center">Satuan = {{ $satuan }}</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+
+            {{-- =======================
+                     BODY MULTI SAMPEL (PIVOT)
+                     1 baris = 1 no_sampel, param jadi kolom
+                 ======================= --}}
+            @php $rowNo = 0; @endphp
+            @foreach ($groupedBySampel as $noSampel => $rows)
+                @php
+                    $rowNo++;
+                    $rowClass = $rowNo == $groupedBySampel->count() ? 'solid' : 'dot';
+
+                    $rows = collect($rows)->map(fn($r) => (array) $r);
+                    $rowsByParam = $rows->keyBy('parameter');
+
+                    $ref = $rows->first();
+                    $noSampel = $ref['no_sampel'] ?? '';
+                    $keterangan = $ref['keterangan'] ?? '';
+                    $satuan = $ref['satuan'] ?? '-';
+                    $methode = $ref['methode'] ?? '-';
+                    $tanggal_sampling = $ref['tanggal_sampling'] ?? '-';
+                @endphp
+
+                <tr>
+                    {{-- NO --}}
+                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                        {{ $rowNo }}
+                    </td>
+
+                    {{-- NO SAMPEL --}}
+                    <td class="pd-5-{{ $rowClass }}-left" style="white-space: nowrap;">
+                        <sup>{{ htmlspecialchars($noSampel) }}</sup>&nbsp;{{ htmlspecialchars($keterangan) }}
+                    </td>
+
+                    {{-- HASIL UJI per parameter --}}
+                    @foreach ($parameters as $param)
+                        @php
+                            $r = $rowsByParam->get($param, []);
+                            $hasil = $r['hasil_uji'] ?? '-';
+                            $terkoreksi = $r['terkoreksi'] ?? '-';
+                        @endphp
+
+
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {!! $hasil !!}
+                        </td>
+                    @endforeach
+
+                    {{-- BAKU MUTU per parameter --}}
+                    @foreach ($parameters as $param)
+                        @php
+                            $r = $rowsByParam->get($param, []);
+                            $baku = $r['baku_mutu'] ?? '-';
+                        @endphp
+                        <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                            {{ htmlspecialchars($baku) }}
+                        </td>
+                    @endforeach
+
+
+                    <td class="pd-5-{{ $rowClass }}-center" style="white-space: nowrap;">
+                        {{ \App\Helpers\Helper::tanggal_indonesia($tanggal_sampling) }}
+                    </td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+</div>

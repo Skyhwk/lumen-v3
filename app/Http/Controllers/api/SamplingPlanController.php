@@ -155,7 +155,7 @@ class SamplingPlanController extends Controller
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler =  MasterKaryawan::with('jabatan')
-                ->whereIn('id', [21, 56, 311, 531, 39, 95, 112, 377, 531, 35,171])
+                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
@@ -897,6 +897,19 @@ class SamplingPlanController extends Controller
                 'message' => $e->getMessage(),
                 'status' => 'failed'
             ], 500);
+        }
+    }
+
+    public function getStatusSampling(Request $request)
+    {
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
         }
     }
 }

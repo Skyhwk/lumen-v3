@@ -12,6 +12,10 @@ class LhpsEmisiCHeader extends Sector
 
     protected $guarded = [];
 
+    protected $casts = [
+        'header_table' => 'array',
+    ];
+
     public function lhpsEmisiCDetail()
     {
         return $this->hasMany(LhpsEmisiCDetail::class, 'id_header', 'id');

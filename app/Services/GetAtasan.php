@@ -33,7 +33,7 @@ class GetAtasan
                 ->where('id', '!=', 1)
                 ->get();
             foreach ($atasan as $item) {
-                if ($item->nama_lengkap == 'Siti Nur Faidhah')
+                if ($item->nama_lengkap == 'Siti Nur Faidhah' || $item->nama_lengkap == 'Reiko Nishio Yana Gita Sinaga')
                     continue;
                 $this->atasan[] = $item;
             }
@@ -51,7 +51,7 @@ class GetAtasan
                     ->get();
 
                 foreach ($upper_atasan as $upper) {
-                    if ($upper->nama_lengkap == 'Siti Nur Faidhah')
+                    if ($upper->nama_lengkap == 'Siti Nur Faidhah' || $upper->nama_lengkap == 'Reiko Nishio Yana Gita Sinaga')
                         continue;
                     $this->atasan[] = $upper;
                 }

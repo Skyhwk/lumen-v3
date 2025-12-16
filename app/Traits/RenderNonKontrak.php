@@ -61,6 +61,8 @@ trait RenderNonKontrak
             $sampling = 'SAMPLE DIANTAR';
         } else if ($data->status_sampling == 'RS') {
             $sampling = 'RE-SAMPLE';
+        } else if ($data->status_sampling == 'SP') {
+            $sampling = 'SAMPLE PICKUP';
         } else {
             $sampling = 'SAMPLING';
         }

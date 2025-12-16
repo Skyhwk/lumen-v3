@@ -15,7 +15,8 @@ return [
         'S24' => 'Sampling 24 Jam',
         'SD' => 'Sample Diantar',
         'S' => 'Sampling',
-        'RS' => 'Re-Sample'
+        'RS' => 'Re-Sample',
+        'SP' => 'Sample Pickup',
     ],
     'table' => [
         'header' => [

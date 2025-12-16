@@ -481,6 +481,8 @@ class DraftAirController extends Controller
                     ->unique()
                     ->values()
                     ->toArray();
+                
+                array_push($defaultMethods, '-');
 
                 return response()->json([
                     'status' => true,
@@ -557,7 +559,8 @@ class DraftAirController extends Controller
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
 
-                $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
+                $resultMethods = array_unique(array_merge($methodsUsed, $defaultMethods));
+                array_push($resultMethods, '-');
 
                 return response()->json([
                     'status' => true,
@@ -608,6 +611,12 @@ class DraftAirController extends Controller
             $entry['methode'] = $bakumutu->method;
             $entry['baku_mutu'] = [$bakumutu->baku_mutu];
             $methodsUsed[] = $bakumutu->method;
+        }
+
+        if($entry['hasil'] == '##'){
+            $entry['satuan'] = '-';
+            $entry['methode'] = '-';
+            $entry['baku_mutu'] = ['-'];
         }
 
         return $entry;

@@ -105,7 +105,7 @@
                         <sup style="font-size: 8px; margin-top: -10px;">{{ $noSampel }}</sup>
                     </td>
                     <td class="pd-3-{{ $rowClass }}" style="border-left: none; text-align: left;">
-                        {{ htmlspecialchars($keterangan) }}
+                        {{ $keterangan }}
                     </td>
 
                     {{-- HASIL UJI per parameter --}}
@@ -129,7 +129,7 @@
                             $baku = $r['baku_mutu'] ?? '-';
                         @endphp
                         <td class="pd-5-{{ $rowClass }}-center">
-                            {{ htmlspecialchars($baku) }}
+                            {{ $baku }}
                         </td>
                     @endforeach
 

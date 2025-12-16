@@ -50,7 +50,8 @@ class RekapOrderController extends Controller
                 order_detail.kontrak,
                 link_lhp.is_completed,
                 link_lhp.jumlah_lhp_rilis,
-                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
+                MIN(order_detail.tanggal_sampling) as tanggal_sampling_min,
+                MAX(order_detail.tanggal_sampling) as tanggal_sampling_max
             ')
             ->where('order_detail.is_active', true);
 
@@ -130,7 +131,7 @@ class RekapOrderController extends Controller
         }
 
         // ORDER BY menggunakan nama alias yang benar
-        $rekapOrder->orderBy('tanggal_sampling_min', 'desc');
+        $rekapOrder->orderBy('tanggal_sampling_min', 'asc');
 
         return DataTables::of($rekapOrder)
             ->addColumn('cfr_list', function ($data) {
@@ -148,6 +149,9 @@ class RekapOrderController extends Controller
             ->filterColumn('nama_perusahaan', function ($query, $keyword) {
                 $query->where('order_detail.nama_perusahaan', 'like', '%' . $keyword . '%')
                     ->orWhere('order_detail.konsultan', 'like', '%' . $keyword . '%');
+            })
+            ->filterColumn('tanggal_sampling_min', function ($query, $keyword) {
+                $query->where('order_detail.tanggal_sampling', 'like', '%' . $keyword . '%');
             })
             ->filterColumn('tipe_quotation', function ($query, $keyword) {
                 if (stripos('kon', strtolower($keyword)) !== false) {

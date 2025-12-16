@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 use App\Helpers\EmailLhpRilisHelpers;
@@ -13,8 +12,6 @@ use App\Models\LhpsMicrobiologiDetail;
 use App\Models\LhpsMicrobiologiDetailHistory;
 use App\Models\LhpsMicrobiologiHeader;
 use App\Models\LhpsMicrobiologiHeaderHistory;
-use App\Models\LhpsPencahayaanDetail;
-use App\Models\LhpsPencahayaanHeader;
 use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
@@ -95,7 +92,7 @@ class DraftUdaraMikrobiologiController extends Controller
                 'orderHeader',
             ])
             ->where('is_active', true)
-            ->whereIn('kategori_3', ["12-Udara Angka Kuman", '33-Mikrobiologi Udara', '27-Udara Lingkungan Kerja','26-Kualitas Udara Dalam Ruang'])
+            ->whereIn('kategori_3', ["12-Udara Angka Kuman", '33-Mikrobiologi Udara', '27-Udara Lingkungan Kerja', '26-Kualitas Udara Dalam Ruang'])
             ->where('status', 2)
             ->where(function ($query) use ($parameterAllowed) {
                 foreach ($parameterAllowed as $param) {
@@ -296,14 +293,14 @@ class DraftUdaraMikrobiologiController extends Controller
                     return [
                         'no_sampel'         => $val->no_sampel,
                         // 'akr'               => str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ',
-                        'akr'               => (!empty($bakumutu) ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ') : 'ẍ'),
+                        'akr'               => (! empty($bakumutu) ? (str_contains($bakumutu->akreditasi, 'AKREDITASI') ? '' : 'ẍ') : 'ẍ'),
                         'suhu'              => $lapangan->suhu ?? '-',
                         'kelembapan'        => $lapangan->kelembapan ?? '-',
                         'keterangan'        => $lapangan->keterangan ?? '-',
                         'parameter'         => $param->nama_lhp ?? $param->nama_regulasi ?? $val->parameter,
                         "parameter_lab"     => $val->parameter,
-                        'jenis_persyaratan' =>  (!empty($bakumutu) ? $bakumutu->nama_header ?? '-' : '-'),
-                        'nilai_persyaratan' =>  (!empty($bakumutu) ? $bakumutu->baku_mutu ?? '-' : '-'),
+                        'jenis_persyaratan' => (! empty($bakumutu) ? $bakumutu->nama_header ?? '-' : '-'),
+                        'nilai_persyaratan' => (! empty($bakumutu) ? $bakumutu->baku_mutu ?? '-' : '-'),
                         'satuan'            => $bakumutu->satuan ?? '-',
                         'hasil_uji'         => $nilai,
                         'tanggal_sampling'  => $tanggal_sampling,
@@ -313,12 +310,12 @@ class DraftUdaraMikrobiologiController extends Controller
 
                 // → Push format final per regulasi
                 $mappedData[] = [
-                    "id_regulasi"   => $id_regulasi,
-                    "nama_regulasi" => $nama_regulasi,
+                    "id_regulasi"       => $id_regulasi,
+                    "nama_regulasi"     => $nama_regulasi,
                     "methode"           => [],
                     "method_suhu"       => Parameter::where('is_active', true)->where('nama_lab', 'suhu')->where('id_kategori', 4)->first()->method ?? '',
                     "method_kelembapan" => Parameter::where('is_active', true)->where('nama_lab', 'kelembaban')->where('id_kategori', 4)->first()->method ?? '',
-                    "detail"        => $detailList,
+                    "detail"            => $detailList,
                 ];
             }
 
@@ -337,23 +334,23 @@ class DraftUdaraMikrobiologiController extends Controller
                     $items = $detail->filter(function ($d) use ($i) {
                         return $d->page == ($i + 1);
                     });
-                    $methode = [];
-                    $method_suhu = '';
+                    $methode           = [];
+                    $method_suhu       = '';
                     $method_kelembapan = '';
                     // Convert item DB ke array detail
                     $convertedDetails = $items->map(function ($d) use ($i, &$methode, &$method_suhu, &$method_kelembapan) {
-                        
+
                         $methode[str_replace(' ', '_', $d->parameter)] = $d->methode ?? '';
-                        $method_suhu = $d->method_suhu ?? '';
-                        $method_kelembapan = $d->method_kelembapan ?? '';
-                    
+                        $method_suhu                                   = $d->method_suhu ?? '';
+                        $method_kelembapan                             = $d->method_kelembapan ?? '';
+
                         if ($method_suhu === '' || $method_suhu == null) {
                             $method_suhu = $d->method_suhu;
                         }
                         if ($method_kelembapan === '' || $method_kelembapan == null) {
                             $method_kelembapan = $d->method_kelembapan;
                         }
-                        
+
                         return [
                             "no_sampel"         => $d->no_sampel,
                             "suhu"              => $d->suhu,
@@ -431,7 +428,7 @@ class DraftUdaraMikrobiologiController extends Controller
                         '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                         'ẍ Parameter belum terakreditasi.',
                     ],
-                    'spekmeth'  => $spekMeth
+                    'spekmeth'   => $spekMeth,
                 ], 201);
             }
 
@@ -457,7 +454,7 @@ class DraftUdaraMikrobiologiController extends Controller
                     '↘ Parameter diuji langsung oleh pihak pelanggan, bukan bagian dari parameter yang dilaporkan oleh laboratorium.',
                     'ẍ Parameter belum terakreditasi.',
                 ],
-                'spekmeth'  => $spekMeth
+                'spekmeth'   => $spekMeth,
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -555,8 +552,8 @@ class DraftUdaraMikrobiologiController extends Controller
 
                 LhpsMicrobiologiDetail::where('id_header', $header->id)->delete();
             }
-            $pivot             = $request->pivot ?? [];
-            $methode           = $request->metode ?? [];
+            $pivot   = $request->pivot ?? [];
+            $methode = $request->metode ?? [];
 
             foreach ($pivot as $key => $page) {
                 foreach ($page as $noSampel => $row) {
@@ -617,15 +614,55 @@ class DraftUdaraMikrobiologiController extends Controller
                     $header->save();
                 }
 
-                $id_regulasii     = explode('-', (json_decode($header->regulasi)[0]))[0];
-                $detailCollection = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
+                $detailCollection       = LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', 1)->get();
                 $detailCollectionCustom = collect(LhpsMicrobiologiDetail::where('id_header', $header->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
-                $fileName = LhpTemplate::setDataDetail($detailCollection)
-                    ->setDataHeader($header)
-                    ->setDataCustom($detailCollectionCustom)
-                    ->useLampiran(true)
-                    ->whereView('DraftMicrobio')
-                    ->render('downloadLHPFinal');
+                $id_regulasi            = [];
+
+                $id_regulasi = [];
+
+                foreach (json_decode($header->regulasi, true) as $reg) {
+                    $id_regulasi[] = explode('-', $reg)[0];
+                }
+
+                $tableRegulasi = TabelRegulasi::where(function ($q) use ($id_regulasi) {
+                    foreach ($id_regulasi as $item) {
+                        $q->orWhereJsonContains('id_regulasi', $item);
+                    }
+                })
+                    ->where('is_active', 1)
+                    ->get();
+
+                $validasi   = LhpsMicrobiologiDetail::where('id_header', $header->id)->get();
+                $parameters = $validasi->pluck('parameter')->filter()->unique();
+                $totalParam = $parameters->count();
+
+                $isUsingTable = ! $tableRegulasi->isEmpty();
+
+                $singleParam = $totalParam == 1;
+                $doubleParam = $totalParam == 2;
+
+                if ($singleParam && $isUsingTable) {
+                    $fileName = LhpTemplate::setDataDetail($detailCollection)
+                        ->setDataHeader($header)
+                        ->setDataCustom($detailCollectionCustom)
+                        ->useLampiran(true)
+                        ->whereView('DraftMicrobio1ParamTable')
+                        ->render('downloadLHPFinal');
+                } else if ($doubleParam) {
+                    $fileName = LhpTemplate::setDataDetail($detailCollection)
+                        ->setDataHeader($header)
+                        ->setDataCustom($detailCollectionCustom)
+                        ->useLampiran(true)
+                        ->whereView('DraftMicrobio2Param')
+                        ->render('downloadLHPFinal');
+                } else {
+                    $fileName = LhpTemplate::setDataDetail($detailCollection)
+                        ->setDataHeader($header)
+                        ->setDataCustom($detailCollectionCustom)
+                        ->useLampiran(true)
+                        ->whereView('DraftMicrobio1ParamNoTable')
+                        ->render('downloadLHPFinal');
+                }
 
                 $header->file_lhp = $fileName;
                 $header->save();
@@ -726,22 +763,65 @@ class DraftUdaraMikrobiologiController extends Controller
                 $qr->save();
             }
 
+            $detailCollection       = LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->where('page', 1)->get();
+            $detailCollectionCustom = collect(LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->where('page', '!=', 1)->get())->groupBy('page')->toArray();
+
             // $dataPage1     = LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->where('page', 1)->get();
             // $groupedByPage = collect(LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->where('page', '!=', 1)->get())
             //     ->groupBy('page')
             //     ->toArray();
 
-            $detail = LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->get();
-            $detail = collect($detail)->sortBy([
-                ['tanggal_sampling', 'asc'],
-                ['no_sampel', 'asc'],
-            ])->values()->toArray();
+            // $detail = LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->get();
+            // $detail = collect($detail)->sortBy([
+            //     ['tanggal_sampling', 'asc'],
+            //     ['no_sampel', 'asc'],
+            // ])->values()->toArray();
 
-            $fileName = LhpTemplate::setDataDetail($detail)
-                ->setDataHeader($dataHeader)
-                ->useLampiran(true)
-                ->whereView('DraftMicrobio')
-                ->render('downloadLHPFinal');
+            $id_regulasi = [];
+
+            foreach (json_decode($dataHeader->regulasi, true) as $reg) {
+                $id_regulasi[] = explode('-', $reg)[0];
+            }
+
+            $tableRegulasi = TabelRegulasi::where(function ($q) use ($id_regulasi) {
+                foreach ($id_regulasi as $item) {
+                    $q->orWhereJsonContains('id_regulasi', $item);
+                }
+            })
+                ->where('is_active', 1)
+                ->get();
+
+            $validasi   = LhpsMicrobiologiDetail::where('id_header', $dataHeader->id)->get();
+            $parameters = $validasi->pluck('parameter')->filter()->unique();
+            $totalParam = $parameters->count();
+
+            $isUsingTable = ! $tableRegulasi->isEmpty();
+
+            $singleParam = $totalParam == 1;
+            $doubleParam = $totalParam == 2;
+
+            if ($singleParam && $isUsingTable) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($dataHeader)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio1ParamTable')
+                    ->render('downloadLHPFinal');
+            } else if ($doubleParam) {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($dataHeader)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio2Param')
+                    ->render('downloadLHPFinal');
+            } else {
+                $fileName = LhpTemplate::setDataDetail($detailCollection)
+                    ->setDataHeader($dataHeader)
+                    ->setDataCustom($detailCollectionCustom)
+                    ->useLampiran(true)
+                    ->whereView('DraftMicrobio1ParamNoTable')
+                    ->render('downloadLHPFinal');
+            }
 
             $dataHeader->file_lhp = $fileName;
             $dataHeader->save();
@@ -844,14 +924,17 @@ class DraftUdaraMikrobiologiController extends Controller
                     ->first();
 
                 $cekLink = LinkLhp::where('no_order', $data->no_order);
-                if ($cekDetail && $cekDetail->periode) $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                if ($cekDetail && $cekDetail->periode) {
+                    $cekLink = $cekLink->where('periode', $cekDetail->periode);
+                }
+
                 $cekLink = $cekLink->first();
 
                 if ($cekLink) {
                     $job = new CombineLHPJob($data->no_lhp, $data->file_lhp, $data->no_order, $this->karyawan, $cekDetail->periode);
                     $this->dispatch($job);
                 }
-                
+
                 $orderHeader = OrderHeader::where('id', $cekDetail->id_order_header)
                     ->first();
 

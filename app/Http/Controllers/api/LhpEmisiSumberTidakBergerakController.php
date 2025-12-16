@@ -156,7 +156,7 @@ class LhpEmisiSumberTidakBergerakController extends Controller
             ->setDataDetail($detail)
             ->setDataCustom($custom)
             ->whereView($view)
-            ->render();
+            ->render('downloadLHP');
 
         $header->file_lhp = $fileName;
         $header->save();

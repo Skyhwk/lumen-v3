@@ -70,7 +70,7 @@ class LingkunganHidupNO2
 
         if(floatval($Vu_alt) != 0.0) {
             // C (ug/Nm3) = (a/Vu)*(10/25)*1000
-            $C15 = \str_replace(",", "", number_format(($ks / floatval($Vu_alt)) * (10 / 25) * 1000, 4));
+            $C15 = \str_replace(",", "", number_format(($ks / floatval($Vu_alt)) * (10 / 25) * 1000, 5));
         }else{
             $C15 = 0;
         }
@@ -80,10 +80,14 @@ class LingkunganHidupNO2
 
         if (floatval($C) < 5.83)
             $C = '<5.83';
-        if (floatval($C1) < 0.00046)
-            $C1 = '<0.00046';
+        if (floatval($C1) < 0.00583)
+            $C1 = '<0.00583';
         if (floatval($C2) < 0.00025)
             $C2 = '<0.00025';
+        if (floatval($C14) < 0.00025)
+            $C14 = '<0.00025';
+        if (floatval($C15) < 5.83)
+            $C15 = '<5.83';
 
         $satuan = 'ug/Nm3';
 

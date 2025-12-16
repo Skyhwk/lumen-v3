@@ -898,18 +898,20 @@ class RenderInvoice
                                 ? $resetData->data_sampling
                                 : $cekArray;
                             // dd($usingData);
-                            for ($i = 0; $i < count(array_chunk($usingData, 13)); $i++) {
-                                foreach (array_chunk($usingData, 13)[$i] as $keys => $dataSampling) {
+                            $chunks = self::chunkByContentHeight($usingData, $tambah);
+                            
+                            for ($i = 0; $i < count($chunks); $i++) {
+                                foreach ($chunks[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
-                                        if ($i == count(array_chunk($usingData, 13)) - 1) {
-                                            $rowspan = count(array_chunk($usingData, 13)[$i]) + 1 + $tambah;
+                                        if ($i == count($chunks) - 1) {
+                                            $rowspan = count($chunks[$i]) + 1 + $tambah;
                                             $pdf->writeHTML(
                                                 '<tr style="border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
                                                 <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $rowspan . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
                                             );
                                         } else {
-                                            $rowspan = count(array_chunk($usingData, 13)[$i]) + 1;
+                                            $rowspan = count($chunks[$i]) + 1;
                                             $pdf->writeHTML(
                                                 '<tr style="page-break-inside: avoid; border: 1px solid; font-size: 9px;">
                                                 <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $rowspan . '">' . $no . '</td>
@@ -1007,7 +1009,7 @@ class RenderInvoice
                                     }
                                 }
 
-                                $isLastElement = $i == count(array_chunk($usingData, 13)) - 1;
+                                $isLastElement = $i == count($chunks) - 1;
 
                                 if ($isLastElement) {
                                     if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {

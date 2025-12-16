@@ -37,7 +37,7 @@
                             $number = $k + 1;
                             $akr = !empty($v['akr']) ? $v['akr'] : '&nbsp;&nbsp;';
                             $satuan = (isset($v['satuan']) && $v['satuan'] != "null") ? $v['satuan'] : '';
-                            $hasilUji = isset($v['hasil_uji']) ? str_replace('.', ',', $v['hasil_uji']) : '';
+                            $hasilUji = isset($v['hasil_uji']) ? $v['hasil_uji'] : '';
                             $attr = isset($v['attr']) ? $v['attr'] : '';
                             $methode = isset($v['methode']) ? $v['methode'] : '';
                             $durasi = isset($v['durasi']) ? $v['durasi'] : '';
@@ -66,7 +66,7 @@
                             $number = $k + 1;
                             $akr = !empty($v['akr']) ? $v['akr'] : '&nbsp;&nbsp;';
                             $satuan = (isset($v['satuan']) && $v['satuan'] != "null") ? $v['satuan'] : '';
-                            $hasilUji = isset($v['hasil_uji']) ? str_replace('.', ',', $v['hasil_uji']) : '';
+                            $hasilUji = isset($v['hasil_uji']) ? $v['hasil_uji'] : '';
                             $attr = isset($v['attr']) ? $v['attr'] : '';
                             $methode = isset($v['methode']) ? $v['methode'] : '';
                             $durasi = isset($v['durasi']) ? $v['durasi'] : '';
@@ -76,7 +76,7 @@
                         @endphp
                         <tr>
                             <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">{{ $number }}</td>
-                            <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-center' : 'pd-5-dot-center' }}">
+                            <td class="{{ $k == ($totdat - 1) ? 'pd-5-solid-left' : 'pd-5-dot-left' }}">
                                 {!! $akr !!}&nbsp;
                                 {!! $isManyNoSampel 
                                     ? '<sup>'.$v['no_sampel'].'</sup> '.$v['deskripsi_titik'] 

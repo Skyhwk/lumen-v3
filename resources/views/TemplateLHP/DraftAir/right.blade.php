@@ -112,7 +112,7 @@
                                 }
                             }
 
-                            if ($header->status_sampling == 'SD') {
+                            if ($header->status_sampling == 'SD' || $header->status_sampling == 'SP') {
                                 $methode_sampling = str_replace('<span><span>******</span></span><br>', '******', $methode_sampling ?? '-');
                             }
                         } else {
@@ -210,8 +210,25 @@
                                 <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
                             </tr>
                         @endif
+                        @php
+                            $isPager = false;
+
+                            foreach ($detail as $v) {
+                                if ($v['hasil_uji'] === '##') {
+                                    $isPager = true;
+                                    break;
+                                }
+                            }
+                        @endphp
+
+                        @if($isPager)
+                            <tr>
+                                <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>
+                            </tr>
+                        @endif
                     </table>
                 @endif
+                
                 @php
                     $parameterUji = json_decode($header->parameter_uji, true);
                 @endphp

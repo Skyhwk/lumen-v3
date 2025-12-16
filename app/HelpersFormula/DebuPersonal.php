@@ -58,19 +58,28 @@ class DebuPersonal
 				if ($id_parameter == 222) { // Debu (P8J)
 					$C16 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3) / $vl; // C (mg/m3)
 				}
+				$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
+	
+				$C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
 			} else {
 				// Jika rerata waktu 0 maka tidak dibagi
 				// Kasus ini terjadi apabila jam mulai dan jam pengambilan sama yang menyebabkan rerata waktu 0
 				$C16 = ((($w2 - $w1) - ($b2 - $b1)) * 1000); // C (mg/m3)
 				if ($id_parameter == 222) { // Debu (P8J)
 					$C16 = (($w2 - $w1) - ($b2 - $b1)) * (10 ** 3); // C (mg/m3)
+					$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
+		
+					$C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
+					if($C16 < 0.0041){
+						$C16 = "<0.0041";
+					}
+				}else{
+					$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
+		
+					$C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
 				}
 			}
 			$vl_formatted = number_format($vl, 1);
-
-			$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
-
-            $C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
 
 			$satuan = 'mg/m3';
 			$processed = [

@@ -547,17 +547,17 @@
                             <tr>
                                 <td>&lt;1</td>
                                 <td>Rendah</td>
-                                <td class="text-left" style="font-size: 9px;">Tindakan ada masalah dengan pekerjaan mengangkat, maka tidak di perlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat di pertahankan < 1</td>
+                                <td class="text-left" style="font-size: 9px;">Tidak ada masalah dengan pekerjaan mengangkat, maka tidak diperlukan perbaikan terhadap pekerjaan, tetapi tetap terus mendapatkan perhatian sehingga nilai LI dapat dipertahankan < 1.</td>
                             </tr>
                             <tr>
                                 <td>1 - &lt; 3</td>
                                 <td>Sedang</td>
-                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu di lakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang, Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Ada beberapa masalah dari beberapa parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan dan redesain segera pada parameter yang menyebabkan nilai LI sedang. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                             <tr>
                                 <td>&ge; 3</td>
                                 <td>Tinggi</td>
-                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permasalahan pada parameter angkat,sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
+                                <td class="text-left" style="font-size: 9px;">Terdapat banyak permasalahan dari parameter angkat, sehingga perlu dilakukan pengecekan dan perbaikan sesegera mungkin secara menyeluruh terhadap parameter-parameter yang menyebabkan nilai LI tinggi. Upayakan perbaikan sehingga nilai LI < 1.</td>
                             </tr>
                         </tbody>
                     </table>

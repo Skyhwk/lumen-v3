@@ -60,7 +60,7 @@
         {{ $pengirim_divisi }}<br>
         {{ $pengirim_perusahaan }}<br>
         <a href="mailto:{{ $pengirim_email }}">{{ $pengirim_email }}</a><br>
-        {{ $pengirim_nohp }}
+        {{-- {{ $pengirim_nohp }} --}}
     </p>
 
 </body>
