@@ -19,7 +19,7 @@ class WorkerDailyQSDSales
         // Jalankan setiap 15 menit dari jam 08:00 sampai 20:00 setiap hari, pada detik ke-0
         if (
             $hour >= 8 && $hour <= 20 &&
-            $minute % 15 === 0 &&
+            $minute % 10 === 0 &&
             $second === 0
         ) {
             try {
