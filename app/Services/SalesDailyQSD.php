@@ -17,14 +17,13 @@ class SalesDailyQSD
             // $maxDate     = '2024-12-31';
 
             $currentYear = Carbon::now()->format('Y');
-            $maxDate     = Carbon::now()->format('Y-m-d');
+            $maxDate     = Carbon::now()->endOfYear()->format('Y-m-d');
 
             // Build query untuk data QSD
             $rekapOrder = DB::table('order_detail')
                 ->selectRaw('
                     order_detail.no_order,
                     order_detail.no_quotation,
-                    GROUP_CONCAT(DISTINCT order_detail.cfr SEPARATOR ",") as cfr,
                     COUNT(DISTINCT order_detail.cfr) AS total_cfr,
                     order_detail.nama_perusahaan,
                     order_detail.konsultan,
@@ -55,7 +54,9 @@ class SalesDailyQSD
             // JOIN UNTUK KONTRAK (C)
             $rekapOrder->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
                 $join->on('order_detail.no_quotation', '=', 'rqkh.no_document')
+                    ->whereNotIn('rqkh.pelanggan_ID', ['SAIR02', 'T2PE01'])
                     ->where('rqkh.is_active', true);
+
             });
 
             $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($currentYear) {
@@ -70,7 +71,9 @@ class SalesDailyQSD
 
             // JOIN UNTUK NON-KONTRAK (!= C)
             $rekapOrder->leftJoin('request_quotation as rq', function ($join) {
-                $join->on('order_detail.no_quotation', '=', 'rq.no_document');
+                $join->on('order_detail.no_quotation', '=', 'rq.no_document')
+                    ->whereNotIn('rq.pelanggan_ID', ['SAIR02', 'T2PE01'])
+                    ->where('rq.is_active', true);
             });
 
             // JOIN master_karyawan untuk sales non-kontrak
@@ -137,33 +140,23 @@ class SalesDailyQSD
 
                         foreach ($chunk as $row) {
                             $insertData[] = [
-                                'no_order'                   => $row->no_order,
-                                'no_quotation'               => $row->no_quotation,
-                                'cfr'                        => $row->cfr,
-                                'total_cfr'                  => $row->total_cfr,
-                                'nama_perusahaan'            => $row->nama_perusahaan,
-                                'konsultan'                  => $row->konsultan,
-                                'periode'                    => $row->periode,
-                                'kontrak'                    => $row->kontrak,
-                                'sales_id_kontrak'           => $row->sales_id_kontrak,
-                                'sales_nama_kontrak'         => $row->sales_nama_kontrak,
-                                'sales_id_non_kontrak'       => $row->sales_id_non_kontrak,
-                                'sales_nama_non_kontrak'     => $row->sales_nama_non_kontrak,
-                                'total_discount_kontrak'     => $row->total_discount_kontrak,
-                                'total_ppn_kontrak'          => $row->total_ppn_kontrak,
-                                'total_pph_kontrak'          => $row->total_pph_kontrak,
-                                'biaya_akhir_kontrak'        => $row->biaya_akhir_kontrak,
-                                'grand_total_kontrak'        => $row->grand_total_kontrak,
-                                'total_revenue_kontrak'      => $row->total_revenue_kontrak,
-                                'total_discount_non_kontrak' => $row->total_discount_non_kontrak,
-                                'total_ppn_non_kontrak'      => $row->total_ppn_non_kontrak,
-                                'total_pph_non_kontrak'      => $row->total_pph_non_kontrak,
-                                'biaya_akhir_non_kontrak'    => $row->biaya_akhir_non_kontrak,
-                                'grand_total_non_kontrak'    => $row->grand_total_non_kontrak,
-                                'total_revenue_non_kontrak'  => $row->total_revenue_non_kontrak,
-                                'tanggal_sampling_min'       => $row->tanggal_sampling_min,
-                                'created_at'                 => Carbon::now()->format('Y-m-d H:i:s'),
-                                'updated_at'                 => Carbon::now()->format('Y-m-d H:i:s'),
+                                'no_order'             => $row->no_order,
+                                'no_quotation'         => $row->no_quotation,
+                                'total_cfr'            => $row->total_cfr,
+                                'nama_perusahaan'      => $row->nama_perusahaan,
+                                'konsultan'            => $row->konsultan,
+                                'periode'              => $row->periode,
+                                'kontrak'              => $row->kontrak,
+                                'sales_id'             => $row->kontrak === 'C' ? $row->sales_id_kontrak : $row->sales_id_non_kontrak,
+                                'sales_nama'           => $row->kontrak === 'C' ? $row->sales_nama_kontrak : $row->sales_nama_non_kontrak,
+                                'total_discount'       => $row->kontrak === 'C' ? $row->total_discount_kontrak : $row->total_discount_non_kontrak,
+                                'total_ppn'            => $row->kontrak === 'C' ? $row->total_ppn_kontrak : $row->total_ppn_non_kontrak,
+                                'total_pph'            => $row->kontrak === 'C' ? $row->total_pph_kontrak : $row->total_pph_non_kontrak,
+                                'biaya_akhir'          => $row->kontrak === 'C' ? $row->biaya_akhir_kontrak : $row->biaya_akhir_non_kontrak,
+                                'grand_total'          => $row->kontrak === 'C' ? $row->grand_total_kontrak : $row->grand_total_non_kontrak,
+                                'total_revenue'        => $row->kontrak === 'C' ? $row->total_revenue_kontrak : $row->total_revenue_non_kontrak,
+                                'tanggal_sampling_min' => $row->tanggal_sampling_min,
+                                'created_at'           => Carbon::now()->format('Y-m-d H:i:s'),
                             ];
                         }
 

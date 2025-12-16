@@ -32,7 +32,7 @@ class ScheduleEverySecond extends Command
 
                 WorkerSummaryParameter::run();
 
-                // WorkerUpdateKpiSales::run();
+                WorkerUpdateKpiSales::run();
 
                 WorkerFeeSales::run();
 

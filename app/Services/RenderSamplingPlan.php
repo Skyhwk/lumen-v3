@@ -55,7 +55,9 @@ class RenderSamplingPlan
                 $sampling = 'SAMPLING 24 JAM';
             } else if ($data->status_sampling == 'SD') {
                 $sampling = 'SAMPLING DATANG';
-            } else if ($data->status_sampling == 'RS') {
+            } else if ($data->status_sampling == 'SP') {
+                $sampling = 'SAMPLE PICKUP';
+            }else if ($data->status_sampling == 'RS') {
                 $sampling = 'RE-SAMPLING';
             } else {
                 $sampling = 'SAMPLING';
@@ -518,6 +520,8 @@ class RenderSamplingPlan
                 $sampling = 'SAMPLING 24 JAM';
             } else if ($data->status_sampling == 'SD') {
                 $sampling = 'SAMPLING DATANG';
+            } else if ($data->status_sampling == 'SP') {
+                $sampling = 'SAMPLE PICKUP';
             } else if ($data->status_sampling == 'RS') {
                 $sampling = 'RE-SAMPLING';
             } else {
@@ -636,7 +640,6 @@ class RenderSamplingPlan
 
             if (explode("/", $sampling_plan->no_quotation)[1] == 'QTC') {
                 foreach (json_decode($data->data_pendukung_sampling) as $key => $y) {
-// dump($y->periode);
                     if (!in_array($sampling_plan->periode_kontrak, $y->periode)) continue;
 
                     $kategori = explode("-", $y->kategori_1);

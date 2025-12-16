@@ -816,7 +816,7 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 			// Ambil hasil_c sampai hasil_c16 secara dinamis
 			$hasilC = [];
-			for ($i = 0; $i <= 16; $i++) {
+			for ($i = 0; $i <= 18; $i++) {
 				$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 				$hasilC[$i] = html_entity_decode($request->$key ?? '');
 			}
@@ -853,7 +853,6 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			->where('is_active', 1)
 			->where('parameter', 'like', '%' . $parameter . '%')
 			->first();
-
 		try {
 			// Fungsi bantu
 			function removeSpecialChars($value)
@@ -880,17 +879,19 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					$result = ($num * ($factor / 100)) + $num;
 				}
 
-				// kalau hasil 0.0, ubah jadi null
-				return ($result == 0.0 ? null : $result);
+				return ($result);
 			}
-
 
 			// Hitung hasil untuk semua C
 			$hasil = [];
 			foreach ($hasilC as $i => $val) {
 				// kalau index 0 -> hasilc, sisanya hasilc1, hasilc2, dst.
 				$key = ($i === 0) ? 'hasilc' : "hasilc{$i}";
-				$hasil[$key] = (empty($val)) ? null : applyFormula($val, $faktor_koreksi);
+				if ($val === null || $val === '' || $val === '-') {
+                    $hasil[$key] = null;
+                } else {
+                    $hasil[$key] = applyFormula($val, $faktor_koreksi);
+                }
 			}
 
 			// Contoh kondisi O3
@@ -898,6 +899,24 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				if ($hasil['hasilc'] < 0.1419) $hasil['hasilc'] = '<0.1419';
 				if ($hasil['hasilc1'] < 0.00014) $hasil['hasilc1'] = '<0.00014';
 				if ($hasil['hasilc2'] < 0.00007) $hasil['hasilc2'] = '<0.00007';
+			}
+			
+			if ($parameter == 'C O' || $parameter == 'CO' || $parameter == 'CO (8 Jam)' || $parameter == 'CO (24 Jam)' || $parameter == 'CO (6 Jam)') {
+				if ($hasil['hasilc2'] < 0.01) $hasil['hasilc2'] = '<0.01';
+				if ($hasil['hasilc15'] < 11.45) $hasil['hasilc15'] = '<11.45';
+				if ($hasil['hasilc16'] < 0.01145) $hasil['hasilc16'] = '<0.01145';
+			}
+            
+            if ($parameter == 'SO2' || $parameter == 'SO2 (6 Jam)' || $parameter == 'SO2 (8 Jam)' || $parameter == 'SO2 (24 Jam)') {
+				if ($hasil['hasilc'] < 25.91) $hasil['hasilc'] = '<25.91';
+				if ($hasil['hasilc2'] < 0.00082) $hasil['hasilc2'] = '<0.00082';
+				if ($hasil['hasilc16'] < 0.0259) $hasil['hasilc16'] = '<0.0259';
+			}
+            
+            if ($parameter == 'NO2' || $parameter == 'NO2 (6 Jam)' || $parameter == 'NO2 (8 Jam)' || $parameter == 'NO2 (24 Jam)') {
+				if ($hasil['hasilc'] < 5.83) $hasil['hasilc'] = '<5.83';
+				if ($hasil['hasilc2'] < 0.00025) $hasil['hasilc2'] = '<0.00025';
+				if ($hasil['hasilc16'] < 0.00583) $hasil['hasilc16'] = '<0.00583';
 			}
 
 			return $hasil;
@@ -919,9 +938,9 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 		$parameter = $request->parameter;
 		$faktor_koreksi = (float)$request->faktor_koreksi;
 
-		// Ambil hasil_c sampai hasil_c16
+		// Ambil hasil_c sampai hasil_c19
 		$hasilC = [];
-		for ($i = 0; $i <= 16; $i++) {
+		for ($i = 0; $i <= 18; $i++) {
 			$key = $i === 0 ? 'hasil_c' : 'hasil_c' . $i;
 			$hasilC[$i] = $request->$key ?? null;
 		}

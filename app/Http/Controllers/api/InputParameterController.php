@@ -3287,6 +3287,7 @@ class InputParameterController extends Controller
 		$data_ci_toArray = explode(";", $data_ci2_json[0]);
 		$nilaiDgm = null;
 		$tekanan_meteran = null;
+		$durasi = null;
 		foreach ($data_ci_toArray as $item) {
 			if (strpos($item, "Volume") !== false) {
 				// Menghilangkan spasi di sekitar string
@@ -3298,6 +3299,10 @@ class InputParameterController extends Controller
 				$item = str_replace(' ', '', $item);
 				$tekananData = explode(":", $item);
 				$tekanan_meteran = ($tekananData[1] !== "-" && isset($tekananData[1])) ? $tekananData[1] : 0;
+			}else if(strpos($item, "Durasi") !== false){
+				$item = str_replace(' ', '', $item);
+				$durasiData = explode(":", $item);
+				$durasi = ($durasiData[1] !== "-" && isset($durasiData[1])) ? $durasiData[1] : 0;
 			}
 		}
 		// dd($datlapangan);
@@ -3333,6 +3338,7 @@ class InputParameterController extends Controller
 		$data_parsing->nilaiDgm = $nilaiDgm;
 		$data_parsing->tekanan_meteran = $tekanan_meteran;
 		$data_parsing->tekanan_air = $tekananAir;
+		$data_parsing->durasi = $durasi;
 		$data_parsing->tanggal_terima = $order_detail->tanggal_terima;
 
 		$data_kalkulasi = AnalystFormula::where('function', $function)
@@ -3367,6 +3373,7 @@ class InputParameterController extends Controller
 			$data_kalkulasi['created_by'] = $this->karyawan;
 			WsValueEmisiCerobong::create($data_kalkulasi);
 
+            // dd($data_kalkulasi);
 			DB::commit();
 			return (object)[
 				'message' => 'Value Parameter berhasil disimpan.!',

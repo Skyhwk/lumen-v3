@@ -347,9 +347,6 @@ class FdlLingkunganKerjaController extends Controller
                                 ],
                                 $udaraUpdate
                             );
-
-
-
                         }
                     }
 
