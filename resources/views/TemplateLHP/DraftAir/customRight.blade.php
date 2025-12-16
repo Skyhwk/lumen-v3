@@ -177,7 +177,7 @@
                                 @endif
                             @endforeach
                         @endforeach
-                        @if ($header->status_sampling == 'SD' && $methode_sampling == '******')
+                        @if (($header->status_sampling == 'SD' || $header->status_sampling == 'SP') && $methode_sampling == '******')
                             <tr>
                                 <td class="custom5" colspan="3">(******) Adalah sampling tidak dilakukan Laboratorium</td>
                             </tr>

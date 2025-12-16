@@ -112,7 +112,7 @@
                                 }
                             }
 
-                            if ($header->status_sampling == 'SD') {
+                            if ($header->status_sampling == 'SD' || $header->status_sampling == 'SP') {
                                 $methode_sampling = str_replace('<span><span>******</span></span><br>', '******', $methode_sampling ?? '-');
                             }
                         } else {
