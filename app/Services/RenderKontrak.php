@@ -298,11 +298,13 @@ class RenderKontrak
                 case "SD":
                     $sampling = strtoupper(__('QTC.status_sampling.SD'));
                     break;
+                case "SP":
+                    $sampling = strtoupper(__('QTC.status_sampling.SP'));
+                    break;
                 default:
                     $sampling = strtoupper(__('QTC.status_sampling.S'));
                     break;
             }
-
             $konsultant = "";
             $jab_pic_or = "";
             $jab_pic_samp = "";
@@ -985,6 +987,9 @@ class RenderKontrak
                             break;
                         case "SD":
                             $sampling = strtoupper(__('QTC.status_sampling.SD'));
+                            break;
+                        case "SP":
+                            $sampling = strtoupper(__('QTC.status_sampling.SP'));
                             break;
                         default:
                             $sampling = strtoupper(__('QTC.status_sampling.S'));

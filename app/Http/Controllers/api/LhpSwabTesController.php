@@ -143,31 +143,28 @@ class LhpSwabTesController extends Controller
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftSwab3Param')
-                    ->render('downloadLHPFinal');
-                $header->file_lhp = $fileName;
-                $header->save();
+                    ->render('downloadLHP');
             } else if ($isMultiSampelOneParam) {
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftSwab1Param')
-                    ->render('downloadLHPFinal');
-                $header->file_lhp = $fileName;
-                $header->save();
+                    ->render('downloadLHP');
             } else {
                 $fileName = LhpTemplate::setDataDetail($detailCollection)
                     ->setDataHeader($header)
                     ->setDataCustom($detailCollectionCustom)
                     ->useLampiran(true)
                     ->whereView('DraftSwab2Param')
-                    ->render('downloadLHPFinal');
-                $header->file_lhp = $fileName;
-                $header->save();
+                    ->render('downloadLHP');
             }
             
+            $header->file_lhp = $fileName;
+            $header->save();
+            
             $servicePrint = new PrintLhp();
-            $servicePrint->printByFilename($header->file_lhp, $detail, '', $header->no_lhp);
+            $servicePrint->printByFilename($header->file_lhp, $detailCollection);
             if (! $servicePrint) {
                 DB::rollBack();
                 return response()->json(['message' => 'Gagal Melakukan Reprint Data', 'status' => '401'], 401);

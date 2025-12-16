@@ -194,7 +194,7 @@ class HandleFileInstrument extends BaseController
             if (is_array($params_from_template)) {
                 // If it's an array of parameters, add each as a key
                 foreach ($params_from_template as $param) {
-                    $templateStpMap[$param] = $template;
+                    $templateStpMap["$param;$template->category_id"] = $template;
                 }
             } else if (is_string($params_from_template)) {
                 // If it's a single parameter string
@@ -402,6 +402,9 @@ class HandleFileInstrument extends BaseController
                                 return explode(';', $item)[1];
                             },$order_parameter);
                             $isParamExist = in_array($paramKey, $listParam);
+
+                            $idCategory = explode('-', $order_detail->kategori_2)[0];
+                            $stp = $templateStpMap["$paramKey;$idCategory"] ?? null;
                             
                             $kategori = explode('-', $order_detail->kategori_2);
                             $par = $parameterMap["$paramKey;$kategori[0]"] ?? null; 
@@ -410,10 +413,16 @@ class HandleFileInstrument extends BaseController
                                 $paramKey .= " (NA)";
                                 $isParamExist = in_array($paramKey, $listParam);
                                 $icpData['parameter'] = $paramKey;
+                            }elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb'){
+                                $paramKey .= " (24 Jam)";
+                                $isParamExist = in_array($paramKey, $listParam);
+                                $icpData['parameter'] = $paramKey;
                             }
 
                             if(!$isParamExist && $order_detail->kategori_2 == '1-Air'){
                                 $paramKey = substr($paramKey, 0, -5);
+                            }elseif(!$isParamExist && $order_detail->kategori_2 == '4-Udara' && $paramKey == 'Pb (24 Jam)'){
+                                $paramKey = substr($paramKey, 0, -9);
                             }
                         }
 
@@ -1005,6 +1014,8 @@ class HandleFileInstrument extends BaseController
 			$function = 'LingkunganKerjaLogam';
             if($request->parameter == 'Pb'){
                 $function = 'LingkunganHidupLogamPb';
+            }else if($request->parameter == 'Pb (24 Jam)'){
+                $function = 'LingkunganHidupLogam24_6j';
             }
             // dd($function);
             $ulk_ambient_parameter = [
