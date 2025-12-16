@@ -630,33 +630,43 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         $getSatuan = new HelperSatuan;
         $index     = $getSatuan->emisi($satuan);
         $nilai     = null;
-
         if ($index === null) {
+            $nilai = null;
+            for ($i = 0; $i <= 10; $i++) {
+                $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
+                if (! empty($ws[$key])) {
+                    $nilai = $ws[$key];
+                    break;
+                }
+            }
 
             // Kalau belum ketemu, cari dari C...C10
-            for ($i = 0; $i <= 10; $i++) {
-                $key = $i === 0 ? 'C' : "C$i";
+            if($nilai === null) {
+                for ($i = 0; $i <= 10; $i++) {
+                    $key = $i === 0 ? 'C' : "C$i";
 
-                // Khusus C3, kalau kosong ambil dari C3_persen
-                if ($i === 3) {
-                    $nilai = ! empty($ws[$key]) ? $ws[$key] : ($ws['C3_persen'] ?? null);
-                } elseif (! empty($ws[$key])) {
-                    $nilai = $ws[$key];
-                }
+                    // Khusus C3, kalau kosong ambil dari C3_persen
+                    if ($i === 3) {
+                        $nilai = ! empty($ws[$key]) ? $ws[$key] : ($ws['C3_persen'] ?? null);
+                    } elseif (! empty($ws[$key])) {
+                        $nilai = $ws[$key];
+                    }
 
-                if (! empty($nilai)) {
-                    break;
+                    if (! empty($nilai)) {
+                        break;
+                    }
                 }
             }
 
             $nilai = $nilai ?? '-';
         } else {
             $hasilKey = "C$index";
-
-            $nilai = $ws[$hasilKey] ?? $ws[$hasilKey] ?? '-';
+            $fkoreksiKey = "f_koreksi_c$index";
+            $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
         }
         return $nilai;
     }
+    
     private function getKoreksi($val, $satuan)
     {
 
@@ -685,7 +695,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $nilai = $ws[$fKoreksiKey] ?? $ws[$fKoreksiKey] ?? '-';
         }
 
-        if ($nilai == '-') {
+        if ($ws['nil_koreksi'] !== null && $ws['nil_koreksi'] !== '') {
             $nilai = $ws['nil_koreksi'] ?? '-';
         }
 
