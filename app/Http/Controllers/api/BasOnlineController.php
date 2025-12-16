@@ -1976,7 +1976,9 @@ class BasOnlineController extends Controller
                     }
                     
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
+                    
                     if (!$verified) {
+                        
                         $status = 'belum selesai';
                         break;
                     }
@@ -1984,6 +1986,7 @@ class BasOnlineController extends Controller
             } else {
                 $status = 'belum selesai';
             }
+            
             return $status;
         } catch (\Exception $th) {
             //throw $th;
@@ -1992,6 +1995,7 @@ class BasOnlineController extends Controller
     }
     private function verifyStatus($sample_number, $parameter)
     {
+        
         if (empty($parameter['model'])) {
             return null;
         }
@@ -2001,10 +2005,11 @@ class BasOnlineController extends Controller
         $model3 = isset($parameter['model3']) ? $parameter['model3'] : null;
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
-
+        
         $environmentModels = [
             DetailLingkunganHidup::class,
             DetailLingkunganKerja::class,
+            DetailMicrobiologi::class,
         ];
 
         if (in_array($model, $environmentModels, true)) {
@@ -2031,23 +2036,26 @@ class BasOnlineController extends Controller
 
     private function handleEnvironmentModel($sample_number, $parameter, $model, $model2, $model3)
     {
+        
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
-
-        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)'], true);
+        
+        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)', 'PM 10 (8 Jam)', 'PM 2.5 (8 Jam)','Kelembaban','Suhu'], true);
         if (!$hasPMParameter) {
             $model3 = null;
         }
-
-        if ($model3 === null) {
-            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2);
+       
+        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi' ) {    
+           
+            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3);
         } else {
             return $this->handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         }
     }
 
-    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2)
+    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3)
     {
+        
         // Suhu / Kelembaban: kembalikan model instance (first) atau null
         if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {
             // Mapping nama kolom
@@ -2073,11 +2081,13 @@ class BasOnlineController extends Controller
 
                 // Cek juga di $model2 jika ada dan juga merupakan LingkunganKerja
                 if ($model2 == DetailLingkunganKerja::class) {
-                    return $model2::where('no_sampel', $sample_number)
+                    $found = $model2::where('no_sampel', $sample_number)
                         ->whereNotNull($searchColumn)
                         ->first();
+                    if ($found) {
+                        return $found;
+                    }
                 }
-
                 // Jika tidak ada yang cocok
                 return null;
             }
@@ -2092,9 +2102,22 @@ class BasOnlineController extends Controller
             }
 
             if ($model2) {
-                return $model2::where('no_sampel', $sample_number)
+                $found = $model2::where('no_sampel', $sample_number)
                     ->whereNotNull($searchColumn)
                     ->first();
+                if ($found) {
+                    return $found;
+                }
+            }
+
+            if ($model3) {
+                $found = $model3::where('no_sampel', $sample_number)
+                    ->whereNotNull($searchColumn)
+                    ->first();
+                
+                if ($found) {
+                    return $found;
+                }
             }
 
             return null;
@@ -2120,6 +2143,7 @@ class BasOnlineController extends Controller
         }
         return null;
     }
+    
 
     private function handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
@@ -3084,7 +3108,8 @@ class BasOnlineController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "Laju Ventilasi",
@@ -3331,7 +3356,8 @@ class BasOnlineController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "TSP",
