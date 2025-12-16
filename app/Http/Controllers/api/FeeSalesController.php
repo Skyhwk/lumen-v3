@@ -29,24 +29,29 @@ class FeeSalesController extends Controller
         '12' => 'desember',
     ];
 
-    public function getSalesList()
+    private $idJabatanSales = [
+        15, // Sales Manager
+        21, // Sales Supervisor
+        22, // Sales Admin Supervisor
+        23, // Senior Sales Admin Staff
+        24, // Sales Officer
+        25, // Sales Admin Staff
+        140, // Sales Assistant Manager
+        145, // Sales Intern
+        147, // Sales & Marketing Manager
+        154, // Senior Sales Manager
+        155, // Sales Executive
+        156, // Sales Staff
+        148, // Customer Relation Officer
+        157, // Customer Relationship Officer Manager
+    ];
+
+    public function getSalesList(Request $request)
     {
-        $sales = MasterKaryawan::whereIn('id_jabatan', [
-            15, // Sales Manager
-            21, // Sales Supervisor
-            22, // Sales Admin Supervisor
-            23, // Senior Sales Admin Staff
-            24, // Sales Officer
-            25, // Sales Admin Staff
-            140, // Sales Assistant Manager
-            145, // Sales Intern
-            147, // Sales & Marketing Manager
-            154, // Senior Sales Manager
-            155, // Sales Executive
-            156, // Sales Staff
-            148, // Customer Relation Officer
-            157, // Customer Relationship Officer Manager
-        ])
+        $currentUser = $request->attributes->get('user')->karyawan;
+
+        $sales = MasterKaryawan::whereIn('id_jabatan', $this->idJabatanSales)
+            ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales), fn($q) => $q->where('id', $currentUser->id))
             ->where('is_active', true)
             ->orderBy('nama_lengkap', 'asc')
             ->get();
@@ -72,22 +77,9 @@ class FeeSalesController extends Controller
             'periode' => $request->year . '-' . $request->month,
         ])->latest()->first();
 
-        $achievedTarget = null;
-        if ($masterFeeSales && $masterFeeSales->achieved) {
-            $achieved = json_decode($masterFeeSales->achieved);
-
-            $achievedTarget = [
-                'achievedAmount' => $achieved->amount,
-                'achievedCategory' => $achieved->category,
-                'recap' => $achieved->recap,
-            ];
-        }
-
         return response()->json([
-            'feeSales' => [
-                'targetSales' => $targetSales,
-                'achievedTarget' => $achievedTarget
-            ],
+            'targetSales' => $targetSales,
+            'feeSales' => $masterFeeSales,
             'message' => 'Target Sales retrieved successfully',
         ], 200);
     }

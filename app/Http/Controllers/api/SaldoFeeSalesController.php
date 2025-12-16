@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 use DataTables;
-use Carbon\Carbon;
 
 use App\Models\{
     MasterKaryawan,
@@ -18,24 +17,29 @@ use App\Models\{
 
 class SaldoFeeSalesController extends Controller
 {
-    public function getSalesList()
+    private $idJabatanSales = [
+        15, // Sales Manager
+        21, // Sales Supervisor
+        22, // Sales Admin Supervisor
+        23, // Senior Sales Admin Staff
+        24, // Sales Officer
+        25, // Sales Admin Staff
+        140, // Sales Assistant Manager
+        145, // Sales Intern
+        147, // Sales & Marketing Manager
+        154, // Senior Sales Manager
+        155, // Sales Executive
+        156, // Sales Staff
+        148, // Customer Relation Officer
+        157, // Customer Relationship Officer Manager
+    ];
+
+    public function getSalesList(Request $request)
     {
-        $sales = MasterKaryawan::whereIn('id_jabatan', [
-            15, // Sales Manager
-            21, // Sales Supervisor
-            22, // Sales Admin Supervisor
-            23, // Senior Sales Admin Staff
-            24, // Sales Officer
-            25, // Sales Admin Staff
-            140, // Sales Assistant Manager
-            145, // Sales Intern
-            147, // Sales & Marketing Manager
-            154, // Senior Sales Manager
-            155, // Sales Executive
-            156, // Sales Staff
-            148, // Customer Relation Officer
-            157, // Customer Relationship Officer Manager
-        ])
+        $currentUser = $request->attributes->get('user')->karyawan;
+
+        $sales = MasterKaryawan::whereIn('id_jabatan', $this->idJabatanSales)
+            ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales), fn($q) => $q->where('id', $currentUser->id))
             ->where('is_active', true)
             ->orderBy('nama_lengkap', 'asc')
             ->get();
@@ -52,6 +56,16 @@ class SaldoFeeSalesController extends Controller
         if (!$saldoFeeSales) return response()->json(['message' => 'Saldo Fee Sales not found'], 404);
 
         $pendingWithdrawal = WithdrawalFeeSales::where('sales_id', $request->salesId)->where('status', 'pending');
+
+        $mutasiStats = MutasiFeeSales::where('sales_id', $request->salesId)
+            ->whereMonth('created_at', $request->month)
+            ->whereYear('created_at', $request->year)
+            ->selectRaw("SUM(CASE WHEN mutation_type = 'Debit' THEN amount ELSE 0 END) as total_debit")
+            ->selectRaw("SUM(CASE WHEN mutation_type = 'Kredit' THEN amount ELSE 0 END) as total_credit")
+            ->first();
+
+        $saldoFeeSales->total_debit = $mutasiStats->total_debit;
+        $saldoFeeSales->total_credit = $mutasiStats->total_credit;
 
         return response()->json([
             'saldoFeeSales' => $saldoFeeSales,
@@ -88,7 +102,7 @@ class SaldoFeeSalesController extends Controller
         $withdrawalFeeSales = new WithdrawalFeeSales();
 
         $withdrawalFeeSales->sales_id = $request->sales_id;
-        $withdrawalFeeSales->batch_number = Carbon::now()->format('YmdHis');
+        $withdrawalFeeSales->batch_number = str_replace('.', '/', microtime(true));;
         $withdrawalFeeSales->amount = $request->amount;
         $withdrawalFeeSales->description = $request->description;
         $withdrawalFeeSales->status = 'Pending';

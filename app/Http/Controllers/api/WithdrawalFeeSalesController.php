@@ -11,6 +11,7 @@ use Carbon\Carbon;
 
 use App\Models\{
     SaldoFeeSales,
+    MutasiFeeSales,
     WithdrawalFeeSales
 };
 
@@ -37,8 +38,19 @@ class WithdrawalFeeSalesController extends Controller
         $withdrawalFeeSales->approved_by = $this->karyawan;
         $withdrawalFeeSales->approved_at = Carbon::now();
 
+        $mutasiFeeSales = new MutasiFeeSales();
+        $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
+        $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
+        $mutasiFeeSales->mutation_type = 'Kredit';
+        $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
+        $mutasiFeeSales->description = $withdrawalFeeSales->description;
+        $mutasiFeeSales->status = 'Done';
+        $mutasiFeeSales->created_by = $this->karyawan;
+        $mutasiFeeSales->updated_by = $this->karyawan;
+        $mutasiFeeSales->save();
+
         $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
-        $saldoFeeSales->amount -= $withdrawalFeeSales->amount;
+        $saldoFeeSales->active_balance -= $withdrawalFeeSales->amount;
         $saldoFeeSales->save();
  
         $withdrawalFeeSales->save();

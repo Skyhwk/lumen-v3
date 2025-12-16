@@ -25,7 +25,7 @@ class FeeSalesMonthly
     public function __construct()
     {
         $this->currentYear = Carbon::now()->year;
-        $this->currentMonth = 10;
+        $this->currentMonth = Carbon::now()->format('m');
     }
 
     private $monthStr = [
@@ -148,105 +148,76 @@ class FeeSalesMonthly
                 ->get();
 
             foreach ($salesList as $sales) {
-                $targetSales = MasterTargetSales::where([
-                    'karyawan_id' => $sales->id,
-                    'tahun' => $this->currentYear,
-                    'is_active' => true
-                ])->whereNotNull($month)->latest()->first();
+                $masterTargetSales = MasterTargetSales::where(['karyawan_id' => $sales->id, 'tahun' => $this->currentYear, 'is_active' => true])->whereNotNull($month)->latest()->first();
+                if (!$masterTargetSales) continue;
 
-                if (!$targetSales) continue;
-
-                $masterFeeSalesExists = MasterFeeSales::where([
-                    'sales_id' => $sales->id,
-                    'periode' => $this->currentYear . "-" . $this->currentMonth
-                ])->exists();
-
+                $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'periode' => $this->currentYear . "-" . $this->currentMonth])->exists();
                 if ($masterFeeSalesExists) continue;
 
-                $quotations = collect([]);
-
-                $models = [QuotationKontrakH::class, QuotationNonKontrak::class];
-                foreach ($models as $model) {
-                    $quotations = $quotations->merge(
-                        $model::with([
-                            'orderHeader.orderDetail' => fn($q) => $q->where('status', 3),
-                            'orderHeader.invoices.recordWithdraw'
-                        ])->where([
-                            'sales_id' => $sales->id,
-                            'is_active' => true,
-                        ])
-                            ->whereHas('orderHeader', fn($q) => $q->whereMonth('tanggal_order', $this->currentMonth)->whereYear('tanggal_order', $this->currentYear))
-                            ->whereHas('orderHeader.orderDetail', fn($q) => $q->where('status', 3))
-                            ->whereHas('orderHeader.invoices')
-                            ->get()
-                            ->filter(function ($item) {
-                                $invoices = $item->orderHeader->invoices;
-
-                                $totalTagihan = $invoices->sum('nilai_tagihan');
-                                $totalPelunasan = $invoices->sum('nilai_pelunasan');
-
-                                $totalWithdraw = $invoices->flatMap->recordWithdraw->sum('nilai_pembayaran');
-
-                                $isLunas = $totalTagihan == $totalPelunasan + $totalWithdraw;
-
-                                return $isLunas;
-                            })
-                    );
-                }
+                $quotations = collect([QuotationKontrakH::class, QuotationNonKontrak::class])
+                    ->flatMap(fn($model) => $model::with(['orderHeader.orderDetail' => fn($q) => $q->where('is_approve', true)->whereMonth('tanggal_sampling', $this->currentMonth)->whereYear('tanggal_sampling', $this->currentYear), 'orderHeader.invoices.recordWithdraw'])
+                        ->where(['sales_id'  => $sales->id, 'is_active' => true])
+                        ->whereHas('orderHeader.orderDetail', fn($q) => $q->where('is_approve', true)->whereMonth('tanggal_sampling', $this->currentMonth)->whereYear('tanggal_sampling', $this->currentYear))
+                        ->whereHas('orderHeader.invoices')
+                        ->get()
+                        ->filter(fn($quotation) => ($invoices = $quotation->orderHeader->invoices) && $invoices->sum('nilai_tagihan') === ($invoices->sum('nilai_pelunasan') + $invoices->flatMap->recordWithdraw->sum('nilai_pembayaran'))));
 
                 if ($quotations->isEmpty()) continue;
 
-                // ACHIEVED AMOUNT
-                $totalBiayaAkhir = $quotations->sum('biaya_akhir');
-                $totalPph = $quotations->sum('total_pph');
-                $totalPpn = $quotations->sum('total_ppn');
-                $achievedAmount = $totalBiayaAkhir + $totalPph - $totalPpn;
-
                 // ACHIEVED CATEGORY
-                $achievedCategory = collect($targetSales->$month)
-                    ->map(function ($value, $category) use ($quotations) {
-                        $categoryTarget = collect($this->categoryStr[$category]);
+                $achievedCategory = collect($masterTargetSales->$month)->map(fn($_, $category) => $quotations->flatMap(fn($q) => $q->orderHeader->orderDetail)->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))->count());
 
-                        return $quotations
-                            ->flatMap(fn($q) => $q->orderHeader->orderDetail)
-                            ->filter(fn($orderDetail) => $categoryTarget->contains($orderDetail->kategori_3))
-                            ->count();
-                    })
-                    ->toArray();
+                // ACHIEVED AMOUNT
+                $achievedAmount = $quotations->sum('biaya_akhir') + $quotations->sum('total_pph') - $quotations->sum('total_ppn');
 
                 // RECAP
-                $recap = $quotations->map(fn($row) => [
-                    'no_document' => $row->no_document,
-                    'tanggal_penawaran' => $row->tanggal_penawaran,
+                $recap = $quotations->map(fn($quotation) => [
+                    'no_document' => $quotation->no_document,
+                    'tanggal_penawaran' => $quotation->tanggal_penawaran,
                     'order_header' => [
-                        'no_order' => $row->orderHeader->no_order,
-                        'tanggal_order' => $row->orderHeader->tanggal_order,
-                        'order_detail' => $row->orderHeader->orderDetail->map(fn($d) => [
-                            'kategori_3' => $d->kategori_3,
-                            'cfr' => $d->cfr
-                        ])->values(),
-                        'invoices' => $row->orderHeader->invoices->map(fn($inv) => [
-                            'no_invoice' => $inv->no_invoice,
-                            'nilai_pelunasan' => $inv->nilai_pelunasan,
-                            'record_withdraw' => $inv->recordWithdraw->map(fn($w) => [
-                                'nilai_pembayaran' => $w->nilai_pembayaran
-                            ])->values()
-                        ])->values(),
+                        'no_order' => $quotation->orderHeader->no_order,
+                        'order_detail' => $quotation->orderHeader->orderDetail
+                            ->map(fn($orderDetail) => [
+                                'kategori_3' => $orderDetail->kategori_3,
+                                'cfr' => $orderDetail->cfr,
+                                'tanggal_sampling' => $orderDetail->tanggal_sampling,
+                                'approved_at' => $orderDetail->approved_at
+                            ]),
+                        'invoices' => $quotation->orderHeader->invoices
+                            ->map(fn($invoice) => [
+                                'no_invoice' => $invoice->no_invoice,
+                                'nilai_pelunasan' => $invoice->nilai_pelunasan,
+                                'record_withdraw' => $invoice->recordWithdraw->map(fn($w) => ['nilai_pembayaran' => $w->nilai_pembayaran])
+                            ]),
                     ],
-                    'biaya_akhir' => $row->biaya_akhir,
+                    'biaya_akhir' => $quotation->biaya_akhir,
+                    'total_pph' => $quotation->total_pph,
+                    'total_ppn' => $quotation->total_ppn,
                 ]);
+
+                // FEE CATEGORY & AMOUNT
+                $targetAmount = json_decode($masterTargetSales->target, true)[$this->currentYear . "-" . $this->currentMonth];
+                $percentage = $achievedAmount >= $targetAmount ? 0.05 : 0.01;
+                $countAchievedCategory = $achievedCategory->sum();
+                $countTargetCategory = collect($masterTargetSales->$month)->sum();
+                $feeCategory = $countAchievedCategory >= $countTargetCategory ? $countAchievedCategory / $countTargetCategory * $percentage * $achievedAmount : 0;
+                $feeAmount = $achievedAmount * $percentage;
+
+                $totalFee = $feeCategory + $feeAmount;
 
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
                 $masterFeeSales->sales_id = $sales->id;
                 $masterFeeSales->periode = $this->currentYear . "-" . $this->currentMonth;
-                $masterFeeSales->target = json_encode($targetSales->$month);
-                $masterFeeSales->achieved = json_encode([
-                    'amount' => $achievedAmount,
-                    'category' => $achievedCategory,
-                    'recap' => $recap
-                ]);
+                $masterFeeSales->target_category = json_encode($masterTargetSales->$month);
+                $masterFeeSales->target_amount = $targetAmount;
+                $masterFeeSales->achieved_category = json_encode($achievedCategory);
+                $masterFeeSales->achieved_amount = $achievedAmount;
+                $masterFeeSales->recap = json_encode($recap);
+                $masterFeeSales->fee_category = $feeCategory;
+                $masterFeeSales->fee_amount = $feeAmount;
+                $masterFeeSales->total_fee = $totalFee;
                 $masterFeeSales->created_by = 'System';
                 $masterFeeSales->updated_by = 'System';
 
@@ -258,11 +229,11 @@ class FeeSalesMonthly
                 $mutasiFeeSales = new MutasiFeeSales();
 
                 $mutasiFeeSales->sales_id = $sales->id;
-                $mutasiFeeSales->batch_number = Carbon::now()->format('YmdHis');
+                $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
                 $mutasiFeeSales->mutation_type = 'Debit';
-                $mutasiFeeSales->amount = $achievedAmount;
+                $mutasiFeeSales->amount = $totalFee;
                 $mutasiFeeSales->description = 'Fee Sales ' . Carbon::createFromFormat('Y-m', $this->currentYear . '-' . $this->currentMonth)->translatedFormat('F Y');
-                $mutasiFeeSales->status = 'Processing';
+                $mutasiFeeSales->status = 'Done';
                 $mutasiFeeSales->created_by = 'System';
                 $mutasiFeeSales->updated_by = 'System';
 
@@ -270,7 +241,8 @@ class FeeSalesMonthly
 
                 // SALDO FEE SALES
                 $saldoFeeSales = SaldoFeeSales::firstOrNew(['sales_id' => $sales->id]);
-                $saldoFeeSales->activeBalance = ($saldoFeeSales->activeBalance ?: 0) + $achievedAmount;
+                $saldoFeeSales->active_balance = ($saldoFeeSales->active_balance ?: 0) + $totalFee;
+                $saldoFeeSales->created_by = 'System';
                 $saldoFeeSales->updated_by = 'System';
                 $saldoFeeSales->save();
             }
