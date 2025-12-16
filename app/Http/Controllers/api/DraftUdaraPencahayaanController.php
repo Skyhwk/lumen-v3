@@ -46,6 +46,7 @@ class DraftUdaraPencahayaanController extends Controller
     public function index(Request $request)
     {
         DB::statement("SET SESSION sql_mode = ''");
+        DB::statement("SET SESSION group_concat_max_len = 1000000");
         $data = OrderDetail::with([
             'lhps_pencahayaan',
             'orderHeader'
