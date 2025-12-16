@@ -31,9 +31,9 @@ class ScheduleEverySecond extends Command
 
                 WorkerSummaryParameter::run();
 
-                // WorkerUpdateKpiSales::run();
+                WorkerUpdateKpiSales::run();
 
-                // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
+                Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {
                 Log::error($th);
             }
