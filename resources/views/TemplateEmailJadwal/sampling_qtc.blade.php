@@ -136,7 +136,11 @@
         </table> -->
     @endforeach
 
-
+    <br>
+    <p>
+        Untuk melihat rincian jadwal, silakan mengakses tautan berikut:
+        <a href="{{ env('PORTAL_API') . $file['token'] }}">Klik di sini</a>
+    </p>
 
     <br>
     <p><strong>Perhatian (Konfirmasi dan Pembatalan)</strong></p>
