@@ -15,13 +15,63 @@ class DailyQsdController extends Controller
     public function index(Request $request)
     {
         $query = DB::table('daily_qsd')
-            ->select('daily_qsd.*', 'kelengkapan_konfirmasi_qs.approval_order', 'kelengkapan_konfirmasi_qs.no_purchaseorder', 'kelengkapan_konfirmasi_qs.no_co_qsd');
+            ->select(
+                'daily_qsd.no_order',
+                'daily_qsd.no_quotation',
+                'daily_qsd.periode',
+                'daily_qsd.tanggal_sampling_min',
+                'daily_qsd.nama_perusahaan',
+                'daily_qsd.konsultan',
+                'daily_qsd.kontrak',
+                'daily_qsd.sales_nama',
+                'daily_qsd.total_discount',
+                'daily_qsd.total_ppn',
+                'daily_qsd.total_pph',
+                'daily_qsd.biaya_akhir',
+                'daily_qsd.grand_total',
+                'daily_qsd.total_revenue',
+                DB::raw('MAX(kelengkapan_konfirmasi_qs.approval_order) as approval_order'),
+                DB::raw('MAX(kelengkapan_konfirmasi_qs.no_purchaseorder) as no_purchaseorder'),
+                DB::raw('MAX(kelengkapan_konfirmasi_qs.no_co_qsd) as no_co_qsd'),
+                DB::raw('GROUP_CONCAT(DISTINCT invoice.no_invoice SEPARATOR ", ") as no_invoice'),
 
-        $query->leftJoin('kelengkapan_konfirmasi_qs', function ($join) {
+            )->groupBy(
+            'daily_qsd.no_order',
+            'daily_qsd.no_quotation',
+            'daily_qsd.periode',
+            'daily_qsd.tanggal_sampling_min',
+            'daily_qsd.nama_perusahaan',
+            'daily_qsd.konsultan',
+            'daily_qsd.kontrak',
+            'daily_qsd.sales_nama',
+            'daily_qsd.total_discount',
+            'daily_qsd.total_ppn',
+            'daily_qsd.total_pph',
+            'daily_qsd.biaya_akhir',
+            'daily_qsd.grand_total',
+            'daily_qsd.total_revenue'
+        );
+
+        $query->leftJoin(DB::raw('(
+            SELECT *
+            FROM kelengkapan_konfirmasi_qs
+            WHERE keterangan_approval_order != "menyusul"
+            AND is_active = 1
+        ) as kelengkapan_konfirmasi_qs'), function ($join) {
             $join->on('daily_qsd.no_quotation', '=', 'kelengkapan_konfirmasi_qs.no_quotation')
-                ->on('daily_qsd.periode', '=', 'kelengkapan_konfirmasi_qs.periode')
-                ->where('is_active', 1);
+                ->on('daily_qsd.periode', '=', 'kelengkapan_konfirmasi_qs.periode');
         });
+
+        $query->leftJoin('invoice', function ($join) {
+            $join->on('daily_qsd.no_quotation', '=', 'invoice.no_quotation')
+                ->where(function ($q) {
+                    $q->where('invoice.periode', 'all')
+                        ->orWhereColumn('invoice.periode', 'daily_qsd.periode');
+                    $q->where('invoice.is_active', 1);
+                });
+
+        });
+
         // Filter tanggal_sampling jika ada
         if ($request->filled('tanggal_sampling')) {
             $tanggalInput = $request->tanggal_sampling;
@@ -82,19 +132,19 @@ class DailyQsdController extends Controller
                 return $data->total_revenue ?? 0;
             })
             ->filterColumn('no_order', function ($query, $keyword) {
-                $query->where('no_order', 'like', "%$keyword%");
+                $query->where('daily_qsd.no_order', 'like', "%$keyword%");
             })
             ->filterColumn('no_quotation', function ($query, $keyword) {
-                $query->where('no_quotation', 'like', "%$keyword%");
+                $query->where('daily_qsd.no_quotation', 'like', "%$keyword%");
             })
             ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-                $query->where('nama_perusahaan', 'like', "%$keyword%");
+                $query->where('daily_qsd.nama_perusahaan', 'like', "%$keyword%");
             })
             ->filterColumn('konsultan', function ($query, $keyword) {
-                $query->where('konsultan', 'like', "%$keyword%");
+                $query->where('daily_qsd.konsultan', 'like', "%$keyword%");
             })
             ->filterColumn('tanggal_sampling_min', function ($query, $keyword) {
-                $query->whereDate('tanggal_sampling_min', 'like', "%$keyword%");
+                $query->whereDate('daily_qsd.tanggal_sampling_min', 'like', "%$keyword%");
             })
             ->filterColumn('tipe_quotation', function ($query, $keyword) {
                 $keyword = strtolower($keyword);
@@ -116,6 +166,12 @@ class DailyQsdController extends Controller
             })
             ->filterColumn('no_purchaseorder', function ($query, $keyword) {
                 $query->where('kelengkapan_konfirmasi_qs.no_purchaseorder', 'like', "%$keyword%");
+            })
+            ->filterColumn('approval_order', function ($query, $keyword) {
+                $query->where('kelengkapan_konfirmasi_qs.approval_order', 'like', "%$keyword%");
+            })
+            ->filterColumn('no_invoice', function ($query, $keyword) {
+                $query->where('invoice.no_invoice', 'like', "%$keyword%");
             })
             ->orderColumn('tanggal_sampling_min', function ($query, $order) {
                 $query->orderBy('tanggal_sampling_min', $order);
