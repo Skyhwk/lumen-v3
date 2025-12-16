@@ -56,7 +56,7 @@ class EmisiCl2
 				'id_parameter' => $id_parameter,
 				'tanggal_terima' => $data->tanggal_terima,
 				'suhu' => $data->suhu,
-				'Va' => $data->volume_sampel,
+				'Va' => isset($data->volume_sampel) ? $data->volume_sampel : $data->volume_sample ?? null,
 				'Vs' => $vs,
 				'Vstd' => null,
 				'Pa' => $data->tekanan_udara,
@@ -81,12 +81,8 @@ class EmisiCl2
 			];
 
 			return $data;
-		} catch (\Exception $e) {
-			return response()->json([
-				'message' => 'Error : ' . $e->getMessage(),
-				'line' => $e->getLine(),
-				'file' => $e->getFile()
-			], 401);
+		} catch (\Throwable $e) {
+			throw new \Exception('Terjadi kesalahan: ' . $e->getMessage());
 		}
 	}
 }
