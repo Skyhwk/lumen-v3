@@ -59,7 +59,7 @@ class DraftEmisiSumberBergerakController extends Controller
     public function handleSubmitDraft(Request $request)
     {
         DB::beginTransaction();
-        if ($request->category2 == 32 || $request->category2 == 31) {
+        if ($request->category2 == 32 || $request->category2 == 31 || $request->category2 == 116) {
             try {
                 $header = LhpsEmisiHeader::where('no_lhp', $request->no_lhp)->where('is_active', true)->first();
                 if (!$header) {
@@ -150,9 +150,8 @@ class DraftEmisiSumberBergerakController extends Controller
                     }
 
                     $idDetail = [];
-                    if ($request->category2 == 31) { // Bensin
+                    if ($request->category2 == 31 || $request->category2 == 116) { // Bensin || GAS
                         foreach ($request->no_sampel_detail as $key => $val) {
-                            // dd('masuk');
                             $detail = LhpsEmisiDetail::insertGetId([
                                 'id_header' => $header->id,
                                 'no_sampel' => $request->no_sampel_detail[$key],
@@ -252,7 +251,17 @@ class DraftEmisiSumberBergerakController extends Controller
                             ->groupBy('page')
                             ->toArray();
 
-                        $view = str_contains($header->sub_kategori, 'Bensin') ? 'DraftEmisiBensin' : 'DraftEmisiSolar';
+                        // $view = str_contains($header->sub_kategori, 'Bensin') ? 'DraftEmisiBensin' : 'DraftEmisiSolar';
+
+                        if (
+                            str_contains($header->sub_kategori, 'Bensin') ||
+                            str_contains($header->sub_kategori, 'Emisi Kendaraan (Gas)')
+                        ) {
+                            $view = 'DraftEmisiBensin';
+                        } else {
+                            $view = 'DraftEmisiSolar';
+                        }
+
 
                         $fileName = LhpTemplate::setDataHeader($header)
                             ->setDataDetail($detail)
@@ -458,9 +467,6 @@ class DraftEmisiSumberBergerakController extends Controller
                 $data_custom = [];
                 $cek_regulasi = [];
 
-
-
-
                 foreach ($cek_lhp as $lhp) {
                     foreach ($lhp->lhpsEmisiDetail->toArray() as $key => $val) {
 
@@ -579,9 +585,9 @@ class DraftEmisiSumberBergerakController extends Controller
                         ->get();
                     $hc = $co = $op = '-';
                     foreach ($baku as $xx) {
-                        if (in_array($xx->parameter, ['HC', 'HC (Bensin)']))
+                        if (in_array($xx->parameter, ['HC', 'HC (Bensin)', 'HC (Gas)']))
                             $hc = $xx->baku_mutu;
-                        if (in_array($xx->parameter, ['CO', 'CO (Bensin)']))
+                        if (in_array($xx->parameter, ['CO', 'CO (Bensin)', 'CO (Gas)']))
                             $co = $xx->baku_mutu;
                         if (in_array($xx->parameter, ['Opasitas', 'Opasitas (Solar)']))
                             $op = $xx->baku_mutu;
