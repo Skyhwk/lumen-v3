@@ -674,17 +674,17 @@ class FdlLingkunganHidupController extends Controller
                     if ($request->longitude != '') $fdlvalue->longitude = $request->longitude;
                     if ($request->lok != '') $fdlvalue->lokasi = $request->lok;
                     $fdlvalue->parameter = $a;
+
                     if ($request->cuaca != '') $fdlvalue->cuaca              = $request->cuaca;
                     if ($request->kecepatan != '') $fdlvalue->kecepatan_angin              = $request->kecepatan;
                     if ($request->arah_angin != '') $fdlvalue->arah_angin              = $request->arah_angin;
                     if ($request->jarak != '') $fdlvalue->jarak_sumber_cemaran              = $request->jarak;
-                    if ($request->laju_ventilasi != '') $fdlvalue->laju_ventilasi = $request->laju_ventilasi;
-                    if ($request->intensitas_kebauan != '') $fdlvalue->intensitas = $request->intensitas_kebauan;
-                    if ($request->aktifitas_pekerja != '') $fdlvalue->aktifitas = $request->aktifitas_pekerja;
-                    if ($request->jarak_sumber_cemaran != '') $fdlvalue->jarak_sumber_cemaran = $request->jarak_sumber_cemaran;
                     if ($request->jam_pengambilan != '') $fdlvalue->waktu_pengukuran = $request->jam_pengambilan;
                     if ($request->intensitas != '') $fdlvalue->intensitas                        = $request->intensitas;
-                    if ($request->kecepatan_angin != '') $fdlvalue->kecepatan_angin = $request->kecepatan_angin;
+
+                    if ($request->laju_ventilasi != '') $fdlvalue->laju_ventilasi = $request->laju_ventilasi;
+                    if ($request->aktifitas_pekerja != '') $fdlvalue->aktifitas = $request->aktifitas_pekerja;
+                    if ($request->jarak_sumber_cemaran != '') $fdlvalue->jarak_sumber_cemaran = $request->jarak_sumber_cemaran;
 
                     $fdlvalue->kategori_pengujian = $shift_pengujian != '' ? $shift_pengujian : 'Sesaat';
                     $fdlvalue->shift_pengambilan = $shift_pengujian != '' ? $request->shift_pengambilan : 'Sesaat';
