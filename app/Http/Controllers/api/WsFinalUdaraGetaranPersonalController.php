@@ -172,15 +172,15 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
 					if ($paparan <= 30) {
 						$item->nab = 20;
-					} else if ($paparan > 30 && $paparan <= 60) {
+					} else if ($paparan > 30 && $paparan < 60) {
 						$item->nab = 14;
-					} else if ($paparan > 60 && $paparan <= 120) {
+					} else if ($paparan >= 60 && $paparan < 120) {
 						$item->nab = 10;
-					} else if ($paparan > 120 && $paparan <= 240) {
+					} else if ($paparan >= 120 && $paparan < 240) {
 						$item->nab = 7;
-					} else if ($paparan > 240 && $paparan <= 360) {
+					} else if ($paparan >= 240 && $paparan < 360) {
 						$item->nab = 6;
-					} else if ($paparan > 360 && $paparan <= 480) {
+					} else if ($paparan >= 360 && $paparan <= 480) {
 						$item->nab = 5;
 					}
 					$ws->nab = $item->nab;
