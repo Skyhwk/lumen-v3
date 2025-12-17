@@ -10,6 +10,7 @@ use App\Models\DetailSoundMeter;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceIntilab;
+use App\Models\DeviceIntilabRunning;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -234,5 +235,11 @@ class SoundMeterController extends Controller
                 'success' => false
             ], 401);
         }
+    }
+
+    public function getDeviceRunning(Request $request){
+        $devices = DeviceIntilabRunning::where('is_active', true)->where('type', 'Sound Meter')->where('start_by', $this->karyawan)->get();
+        
+        return response()->json(['data' => $devices], 200);
     }
 }
