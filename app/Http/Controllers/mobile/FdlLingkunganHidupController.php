@@ -665,7 +665,7 @@ class FdlLingkunganHidupController extends Controller
                         continue; // skip parameter ini
                     }
 
-                    $fdlvalue = new DetailLingkunganKerja();
+                    $fdlvalue = new DetailLingkunganHidup();
                     $fdlvalue->no_sampel = strtoupper(trim($request->no_sample));
                     if ($request->penamaan_titik != '') $fdlvalue->keterangan = $request->penamaan_titik;
                     if ($request->keterangan_2 != '') $fdlvalue->keterangan_2 = $request->keterangan_2;

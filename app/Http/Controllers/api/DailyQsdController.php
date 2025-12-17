@@ -30,9 +30,9 @@ class DailyQsdController extends Controller
                 'daily_qsd.biaya_akhir',
                 'daily_qsd.grand_total',
                 'daily_qsd.total_revenue',
-                DB::raw('MAX(kelengkapan_konfirmasi_qs.approval_order) as approval_order'),
-                DB::raw('MAX(kelengkapan_konfirmasi_qs.no_purchaseorder) as no_purchaseorder'),
-                DB::raw('MAX(kelengkapan_konfirmasi_qs.no_co_qsd) as no_co_qsd'),
+                // DB::raw('MAX(kelengkapan_konfirmasi_qs.approval_order) as approval_order'),
+                // DB::raw('MAX(kelengkapan_konfirmasi_qs.no_purchaseorder) as no_purchaseorder'),
+                // DB::raw('MAX(kelengkapan_konfirmasi_qs.no_co_qsd) as no_co_qsd'),
                 DB::raw('GROUP_CONCAT(DISTINCT invoice.no_invoice SEPARATOR ", ") as no_invoice'),
 
             )->groupBy(
@@ -52,15 +52,15 @@ class DailyQsdController extends Controller
             'daily_qsd.total_revenue'
         );
 
-        $query->leftJoin(DB::raw('(
-            SELECT *
-            FROM kelengkapan_konfirmasi_qs
-            WHERE keterangan_approval_order != "menyusul"
-            AND is_active = 1
-        ) as kelengkapan_konfirmasi_qs'), function ($join) {
-            $join->on('daily_qsd.no_quotation', '=', 'kelengkapan_konfirmasi_qs.no_quotation')
-                ->on('daily_qsd.periode', '=', 'kelengkapan_konfirmasi_qs.periode');
-        });
+        // $query->leftJoin(DB::raw('(
+        //     SELECT *
+        //     FROM kelengkapan_konfirmasi_qs
+        //     WHERE keterangan_approval_order != "menyusul"
+        //     AND is_active = 1
+        // ) as kelengkapan_konfirmasi_qs'), function ($join) {
+        //     $join->on('daily_qsd.no_quotation', '=', 'kelengkapan_konfirmasi_qs.no_quotation')
+        //         ->on('daily_qsd.periode', '=', 'kelengkapan_konfirmasi_qs.periode');
+        // });
 
         $query->leftJoin('invoice', function ($join) {
             $join->on('daily_qsd.no_quotation', '=', 'invoice.no_quotation')
@@ -161,15 +161,15 @@ class DailyQsdController extends Controller
 
                 });
             })
-            ->filterColumn('no_co_qsd', function ($query, $keyword) {
-                $query->where('kelengkapan_konfirmasi_qs.no_co_qsd', 'like', "%$keyword%");
-            })
-            ->filterColumn('no_purchaseorder', function ($query, $keyword) {
-                $query->where('kelengkapan_konfirmasi_qs.no_purchaseorder', 'like', "%$keyword%");
-            })
-            ->filterColumn('approval_order', function ($query, $keyword) {
-                $query->where('kelengkapan_konfirmasi_qs.approval_order', 'like', "%$keyword%");
-            })
+            // ->filterColumn('no_co_qsd', function ($query, $keyword) {
+            //     $query->where('kelengkapan_konfirmasi_qs.no_co_qsd', 'like', "%$keyword%");
+            // })
+            // ->filterColumn('no_purchaseorder', function ($query, $keyword) {
+            //     $query->where('kelengkapan_konfirmasi_qs.no_purchaseorder', 'like', "%$keyword%");
+            // })
+            // ->filterColumn('approval_order', function ($query, $keyword) {
+            //     $query->where('kelengkapan_konfirmasi_qs.approval_order', 'like', "%$keyword%");
+            // })
             ->filterColumn('no_invoice', function ($query, $keyword) {
                 $query->where('invoice.no_invoice', 'like', "%$keyword%");
             })

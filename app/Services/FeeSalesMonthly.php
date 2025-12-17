@@ -154,10 +154,15 @@ class FeeSalesMonthly
                 $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'periode' => $this->currentYear . "-" . $this->currentMonth])->exists();
                 if ($masterFeeSalesExists) continue;
 
+                $orderDetailFilter = fn($q) => $q->where('is_approve', true)
+                    ->whereYear('tanggal_sampling', $this->currentYear)
+                    ->whereMonth('tanggal_sampling', $this->currentMonth)
+                    ->where('tanggal_sampling', '>=', '2025-12-17');
+
                 $quotations = collect([QuotationKontrakH::class, QuotationNonKontrak::class])
-                    ->flatMap(fn($model) => $model::with(['orderHeader.orderDetail' => fn($q) => $q->where('is_approve', true)->whereMonth('tanggal_sampling', $this->currentMonth)->whereYear('tanggal_sampling', $this->currentYear), 'orderHeader.invoices.recordWithdraw'])
+                    ->flatMap(fn($model) => $model::with(['orderHeader.orderDetail' => $orderDetailFilter, 'orderHeader.invoices.recordWithdraw'])
                         ->where(['sales_id'  => $sales->id, 'is_active' => true])
-                        ->whereHas('orderHeader.orderDetail', fn($q) => $q->where('is_approve', true)->whereMonth('tanggal_sampling', $this->currentMonth)->whereYear('tanggal_sampling', $this->currentYear))
+                        ->whereHas('orderHeader.orderDetail', $orderDetailFilter)
                         ->whereHas('orderHeader.invoices')
                         ->get()
                         ->filter(fn($quotation) => ($invoices = $quotation->orderHeader->invoices) && $invoices->sum('nilai_tagihan') === ($invoices->sum('nilai_pelunasan') + $invoices->flatMap->recordWithdraw->sum('nilai_pembayaran'))));
