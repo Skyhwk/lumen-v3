@@ -23,6 +23,11 @@ class DailyQsdController extends Controller
         $data = $data->orderBy('tanggal_sampling_min', 'desc')
         ->orderBy('no_order', 'asc');
 
+        $page = "awal";
+        if($request->start > 29){
+            $page = "lanjut";
+        }
+
         return Datatables::of($data)
         ->addColumn('no_invoice', function ($data) {
             if(isset($data->invoice) && $data->invoice->count() > 0){
@@ -233,8 +238,12 @@ class DailyQsdController extends Controller
             },
             'sumQt' => function ($query) {
                 return $query->sum('biaya_akhir');
-            }
+            },
+            'page' => function () use ($page) {
+                return $page;
+            },
         ])
+        
         ->make(true);
     }
 
