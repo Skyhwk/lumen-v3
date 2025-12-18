@@ -184,7 +184,7 @@ class SalesDailyQSD
                 'grand_total'          => $row->kontrak === 'C' ? $row->grand_total_kontrak : $row->grand_total_non_kontrak,
                 'total_revenue'        => $row->kontrak === 'C' ? $row->total_revenue_kontrak : $row->total_revenue_non_kontrak,
                 'tanggal_sampling_min' => $row->tanggal_sampling_min,
-                'created_at'           => Carbon::now(),
+                'created_at'           => Carbon::now()->subHours(7),
             ];
 
             if (count($buffer) >= $bufferSize) {
