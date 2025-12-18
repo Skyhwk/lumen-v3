@@ -168,13 +168,6 @@ class FlowMeterController extends BaseController
                     }
 
                     DB::commit();
-                    // Log::info("DeviceIntilab berhasil diperbarui", [
-                    //     'kode' => $kode,
-                    //     'old_status' => $oldStatus,
-                    //     'new_status' => $status,
-                    //     'old_ip' => $oldIp,
-                    //     'new_ip' => $ip
-                    // ]);
                     
                     return response()->json([
                         'success' => true,
@@ -192,9 +185,7 @@ class FlowMeterController extends BaseController
                 }
             }
 
-            // Jika tidak ditemukan di semua tabel
             DB::rollBack();
-            Log::warning("Device tidak ditemukan", ['kode' => $kode]);
             
             return response()->json([
                 'success' => false,
