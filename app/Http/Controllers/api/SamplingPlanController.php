@@ -3,28 +3,13 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-use App\Models\SamplingPlan;
-use App\Models\MasterKaryawan;
-use App\Models\Jadwal;
-use App\Models\JadwalLibur;
-use App\Models\MasterDriver;
-use App\Models\PraNoSample;
-use App\Models\QuotationKontrakH;
-use App\Models\MasterCabang;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Jobs\RenderSamplingPlan;
-use App\Services\JadwalServices;
-use App\Services\GetAtasan;
-use App\Services\Notification;
 use App\Http\Controllers\Controller;
+use App\Models\{SamplingPlan,MasterKaryawan,Jadwal,JadwalLibur,MasterDriver,PraNoSample,QuotationKontrakH,MasterCabang,QuotationKontrakD,QuotationNonKontrak,JobTask,PersiapanSampelHeader,OrderHeader};
+use App\Jobs\{RenderSamplingPlan,RenderAndEmailJadwal};
+use App\Services\{JadwalServices,GetAtasan,Notification,RenderSamplingPlan as RenderSamplingPlanService};
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Jobs\RenderAndEmailJadwal;
-use App\Models\JobTask;
-
 
 class SamplingPlanController extends Controller
 {
@@ -910,6 +895,49 @@ class SamplingPlanController extends Controller
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
+
+    public function checkDocumentStatus(Request $request)
+    {
+        try {
+            // 1. Ambil data order
+            $geOrder = OrderHeader::where('no_document', $request->no_quotation)->first(['no_order']);
+            
+            // 2. Siapkan variabel
+            $array_no_samples = [];
+            // Pastikan periode null jika string kosong
+            $periode = ($request->periode == "") ? $request->periode : $request->periode; 
+            
+            $jsonDecodeKategori = json_decode($request->kategori);
+            if ($geOrder && $jsonDecodeKategori) {
+                foreach ($jsonDecodeKategori as $kategori) {
+                    // Pastikan format kategori benar ada " - "
+                    $parts = explode(" - ", $kategori);
+                    if(isset($parts[1])) {
+                        $pra_no_sample = $parts[1];
+                        $array_no_samples[] = $geOrder->no_order . '/' . $pra_no_sample;
+                    }
+                }
+            }
+
+            // 3. Query Database
+            // Perhatikan: $request->tanggal (sesuai kiriman frontend)
+            $checkPreparationSample = PersiapanSampelHeader::where('no_quotation', $request->no_quotation)
+                ->where('periode', $periode)
+                ->where('tanggal_sampling', $request->tanggal) // <--- UBAH INI (sesuai key frontend)
+                
+                ->whereNotNull('detail_bas_documents') // <--- PERBAIKI TYPO (detai -> detail)
+                ->first();
+                
+            // 4. Return
+            $statusDoc = $checkPreparationSample ? true : false;
+            
+            return response()->json(['status_document' => $statusDoc], 200);
+
+        } catch (\Throwable $th) {
+            // Jangan dd() di API production, return error message
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 }
