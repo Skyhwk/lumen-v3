@@ -879,8 +879,6 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            
-
             // update
             if ($dataUpdate->kategori != null) {
                 $tipe_qt = explode("/", $dataUpdate->no_quotation)[1];
@@ -1081,7 +1079,7 @@ class JadwalServices
                     $updateQuery->update(['is_active' => false]);
                 }
             }
-            
+
             $wilayah = null;
             if (explode('/', $dataAdd->no_quotation)[1] == 'QTC') {
                 $cek = QuotationKontrakH::where('no_document', $dataAdd->no_quotation)->select('wilayah')->first();
@@ -1219,7 +1217,6 @@ class JadwalServices
             throw new Exception($ex->getMessage() . ' Line: ' . $ex->getLine() . ' File: ' . $ex->getFile(), 401);
         }
     }
-    
 
     public function insertParsialKontrak()
     {
@@ -1423,90 +1420,6 @@ class JadwalServices
             $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('id', '!=', $dataParsial->id)->where('is_active', true)->get();
             $jadw4 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
             $jadw5 = Jadwal::where('id', $dataParsial->id)->whereNotNull('parsial')->where('is_active', true)->first();
-
-            // if ($jadw) {
-            //     if (!$jadw4->isEmpty()) {
-            //         $kategori_terinput = [];
-
-            //         foreach ($jadw4 as $item) {
-            //             $kategori_jadwal = json_decode($item->kategori, true);
-
-            //             if (!is_array($kategori_jadwal)) {
-            //                 $kategori_jadwal = [$kategori_jadwal];
-            //             }
-
-            //             $kategori_terinput = array_merge($kategori_terinput, $kategori_jadwal);
-            //         }
-
-            //         $kategori_terinput = array_unique($kategori_terinput);
-
-            //         if (in_array($dataParsial->kategori, $kategori_terinput)) {
-            //             DB::rollBack();
-            //             throw new Exception("Kategori {$dataParsial->kategori} sudah pernah diinput sebelumnya!", 401);
-            //         }
-            //     }
-            // } else if ($jadw5) {
-            //     dd('masuk 2');
-            //     $jadw6 = Jadwal::where('parsial', $jadw5->parsial)->where('is_active', true)->get();
-            //     $datcek = count($jadw6) + 1;
-            //     if ((int) $dataParsial->totkateg == $datcek) {
-            //         DB::rollBack();
-            //         throw new Exception("Kategori sudah terinput semua.!", 401);
-            //     }
-            // }
-            // if (!$jadw2->isEmpty()) {
-            //     if (!empty($jadw)) {
-            //         foreach ($jadw2 as $key => $val) {
-            //             dd($jadw2);
-            //             foreach (json_decode($val->kategori) as $x => $y) {
-            //                 if (in_array($y, $dataParsial->kategori)) {
-            //                     DB::rollBack();
-            //                     throw new Exception('Ada input kategori yang sama.! 1', 401);
-            //                 }
-            //             }
-            //         }
-            //     } else {
-            //         foreach ($jadw2 as $key => $val) {
-            //             dd('masuk 4');
-            //             $jadw3 = Jadwal::where('id', $val->id)->whereNull('parsial')->where('is_active', true)->first();
-            //             if ($jadw3) {
-            //                 foreach (json_decode($jadw3->kategori) as $x => $y) {
-            //                     if (in_array($y, $dataParsial->kategori)) {
-            //                         DB::rollBack();
-            //                         throw new Exception('Ada input kategori yang sama.! 2', 401);
-            //                     }
-            //                 }
-            //             }
-            //             foreach (json_decode($val->kategori) as $x => $y) {
-            //                 if (in_array($y, $dataParsial->kategori)) {
-            //                     DB::rollBack();
-            //                     throw new Exception('Ada input kategori yang sama.! 3', 401);
-            //                 }
-            //             }
-            //         }
-            //     }
-            // } else {
-            //     if (!empty($jadw)) {
-            //         dd('masuk 5');
-            //         foreach (json_decode($jadw->kategori) as $x => $y) {
-            //             if (in_array($y, $dataParsial->kategori)) {
-            //                 DB::rollBack();
-            //                 throw new Exception('Ada input kategori yang sama.! 4', 401);
-            //             }
-            //         }
-            //     } else {
-            //         dd('masuk 6');
-            //         $jadw2 = Jadwal::where('parsial', $dataParsial->id)->where('is_active', true)->get();
-            //         foreach ($jadw2 as $key => $val) {
-            //             foreach (json_decode($val->kategori) as $x => $y) {
-            //                 if (in_array($y, $dataParsial->kategori)) {
-            //                     DB::rollBack();
-            //                     throw new Exception('Ada input kategori yang sama.! 5', 401);
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
 
             $kategori_terinput = [];
 

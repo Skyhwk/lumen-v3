@@ -16,10 +16,10 @@ class WorkerDailyQSDSales
         $second = (int) $now->format('s');
         $year = (int) $now->format('Y');
 
-        // Jalankan setiap 15 menit dari jam 08:00 sampai 20:00 setiap hari, pada detik ke-0
+        // Jalankan setiap 5 menit dari jam 08:00 sampai 20:00 setiap hari, pada detik ke-0
         if (
             $hour >= 8 && $hour <= 20 &&
-            $minute % 10 === 0 &&
+            $minute % 5 === 0 &&
             $second === 0
         ) {
             try {

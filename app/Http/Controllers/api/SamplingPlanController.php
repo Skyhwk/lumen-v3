@@ -3,13 +3,40 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
+<<<<<<< HEAD
+=======
+use App\Models\SamplingPlan;
+use App\Models\MasterKaryawan;
+use App\Models\Jadwal;
+use App\Models\JadwalLibur;
+use App\Models\MasterDriver;
+use App\Models\PraNoSample;
+use App\Models\QuotationKontrakH;
+use App\Models\MasterCabang;
+use App\Models\QuotationKontrakD;
+use App\Models\QuotationNonKontrak;
+use App\Models\OrderHeader;
+use App\Models\OrderDetail;
+use App\Jobs\RenderSamplingPlan;
+use App\Services\JadwalServices;
+use App\Services\GetAtasan;
+use App\Services\Notification;
+>>>>>>> a9d54afe520f4fbd45dba444b43991054a46a2bf
 use App\Http\Controllers\Controller;
 use App\Models\{SamplingPlan,MasterKaryawan,Jadwal,JadwalLibur,MasterDriver,PraNoSample,QuotationKontrakH,MasterCabang,QuotationKontrakD,QuotationNonKontrak,JobTask,PersiapanSampelHeader,OrderHeader};
 use App\Jobs\{RenderSamplingPlan,RenderAndEmailJadwal};
 use App\Services\{JadwalServices,GetAtasan,Notification,RenderSamplingPlan as RenderSamplingPlanService};
 use Yajra\Datatables\Datatables;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+<<<<<<< HEAD
+=======
+use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use App\Jobs\RenderAndEmailJadwal;
+use App\Models\JobTask;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+>>>>>>> a9d54afe520f4fbd45dba444b43991054a46a2bf
 
 class SamplingPlanController extends Controller
 {
@@ -528,7 +555,6 @@ class SamplingPlanController extends Controller
                 'id_cabang' => $request->id_cabang[0],
             ];
 
-            
             $type = explode('/', $request->no_quotation)[1];
             if ($request->durasi_lama == $request->durasi) {
                 if ($type == 'QTC') {
@@ -542,6 +568,9 @@ class SamplingPlanController extends Controller
                 }
                 $jadwal = JadwalServices::on('updateJadwalKategori', $dataObject)->updateJadwalSPKategori();
             }
+
+            // TAMBAHAN UNTUK UPDATE ORDER DETAIL
+            $this->updateOrderDetail($dataObject, $request->tanggal);
 
             if ($jadwal) {
                 return response()->json([
@@ -601,6 +630,8 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('insertParsial', $dataObject)->insertParsial();
             }
 
+            $this->updateOrderDetail($dataObject, $request->tanggal);
+
             if ($jadwal) {
                 return response()->json([
                     'message' => 'Berhasil melakukan insert Jadwal Parsial.!',
@@ -617,6 +648,27 @@ class SamplingPlanController extends Controller
                 'message' => $e->getMessage(),
                 'status' => '401'
             ], 401);
+        }
+    }
+
+    private function updateOrderDetail($data, $tanggal)
+    {
+        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
+        if ($cekOrder) {
+            $array_no_samples = [];
+            foreach ($data->kategori as $x => $y) {
+                $pra_no_sample = explode(" - ", $y)[1];
+                $no_samples = $cekOrder->no_order . '/' . $pra_no_sample;
+                $array_no_samples[] = $no_samples;
+            }
+
+            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
+            foreach ($orderDetail as $od) {
+                $od->tanggal_sampling = $tanggal;
+                $od->save();
+
+                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
+            }
         }
     }
 
