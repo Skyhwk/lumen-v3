@@ -45,8 +45,8 @@ class DailyQsdController extends Controller
                             if($cek->recordWithdraw->count() > 0){
                                 $nominal += $cek->recordWithdraw->sum('nilai_pembayaran');
                             }
-                            $status = $nominal >= $nilai_tagihan ? "(Lunas)" : "";
-                            $no_invoice[] = $cek->no_invoice . " ". $status;
+                            $status = $nominal >= $nilai_tagihan ? " (Lunas)" : "";
+                            $no_invoice[] = $cek->no_invoice . $status;
                         }
                         return implode(', ', $no_invoice);
                     } else {
