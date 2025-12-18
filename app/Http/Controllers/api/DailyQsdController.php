@@ -16,7 +16,7 @@ class DailyQsdController extends Controller
 {
     public function index(Request $request)
     {
-        $data = DailyQsd::with('invoice')->where('tanggal_sampling_min', 'like', '%' . $request->tanggal_sampling . '%');
+        $data = DailyQsd::where('tanggal_sampling_min', 'like', '%' . $request->tanggal_sampling . '%');
         if($request->cut_off == "today"){
             $data = $data->where('tanggal_sampling_min', '<=',Carbon::now()->format('Y-m-d'));
         }
@@ -29,71 +29,11 @@ class DailyQsdController extends Controller
         }
 
         return Datatables::of($data)
-        ->addColumn('no_invoice', function ($data) {
-            if(isset($data->invoice) && $data->invoice->count() > 0){
-                if($data->kontrak == "C"){
-                    if($data->invoice->where('periode', $data->periode)->count() == 0){
-                        $dataInvoice = $data->invoice->where('periode', 'all');
-                        $no_invoice = [];
-                        foreach($dataInvoice as $cek){
-                            $nilai_tagihan = $cek->nilai_tagihan;
-                            $nominal = 0;
-                            if($cek->recordPembayaran->count() > 0){
-                                $nominal += $cek->recordPembayaran->sum('nilai_pembayaran');
-                            }
-
-                            if($cek->recordWithdraw->count() > 0){
-                                $nominal += $cek->recordWithdraw->sum('nilai_pembayaran');
-                            }
-                            $status = $nominal >= $nilai_tagihan ? " (Lunas)" : "";
-                            $no_invoice[] = $cek->no_invoice . $status;
-                        }
-                        return implode(', ', $no_invoice);
-                    } else {
-                        $dataInvoice = $data->invoice->where('periode', $data->periode);
-                        $no_invoice = [];
-                        foreach($dataInvoice as $cek){
-                            $nilai_tagihan = $cek->nilai_tagihan;
-                            $nominal = 0;
-                            if($cek->recordPembayaran->count() > 0){
-                                $nominal += $cek->recordPembayaran->sum('nilai_pembayaran');
-                            }
-
-                            if($cek->recordWithdraw->count() > 0){
-                                $nominal += $cek->recordWithdraw->sum('nilai_pembayaran');
-                            }
-                            $status = $nominal >= $nilai_tagihan ? "(Lunas)" : "";
-                            $no_invoice[] = $cek->no_invoice . " ". $status;
-                        }
-                        return implode(', ', $no_invoice);
-                    }
-                } else {
-                    $dataInvoice = $data->invoice;
-                    $no_invoice = [];
-                    foreach($dataInvoice as $cek){
-                        $nilai_tagihan = $cek->nilai_tagihan;
-                        $nominal = 0;
-                        if($cek->recordPembayaran->count() > 0){
-                            $nominal += $cek->recordPembayaran->sum('nilai_pembayaran');
-                        }
-
-                        if($cek->recordWithdraw->count() > 0){
-                            $nominal += $cek->recordWithdraw->sum('nilai_pembayaran');
-                        }
-                        $status = $nominal >= $nilai_tagihan ? "(Lunas)" : "";
-                        $no_invoice[] = $cek->no_invoice . " ". $status;
-                    }
-                    return implode(', ', $no_invoice);
-                }
-            }
-        })
         ->filterColumn('no_invoice', function ($query, $keyword) {
             if($keyword == '-'){
-                $query->whereDoesntHave('invoice');
+                $query->whereNull('no_invoice');
             } else {
-                $query->whereHas('invoice', function ($q) use ($keyword) {
-                    $q->where('no_invoice', 'like', "%$keyword%");
-                });
+                $query->where('no_invoice', 'like', "%$keyword%");
             }
         })
         ->filterColumn('tipe_quotation', function ($query, $keyword) {
@@ -245,45 +185,5 @@ class DailyQsdController extends Controller
         ])
         
         ->make(true);
-    }
-
-    public function getTotalRevenue(Request $request)
-    {
-        $currentYear  = Carbon::now()->format('Y');
-        $currentMonth = Carbon::now()->format('Y-m');
-        $currentDate  = Carbon::now()->format('Y-m-d');
-
-        // $currentYear  = $request->year;
-        // $currentMonth = $currentYear . '-' . Carbon::now()->format('m');
-
-        // Total Revenue Per Tahun
-        $yearRevenue = DB::table('daily_qsd')
-            ->whereRaw("YEAR(tanggal_sampling_min) = ?", [$currentYear])
-            ->selectRaw('
-                SUM(COALESCE(total_revenue, 0)) as total
-            ')
-            ->first();
-
-        // Total Revenue Per Bulan
-        $monthRevenue = DB::table('daily_qsd')
-            ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$currentMonth])
-            ->selectRaw('
-                SUM(COALESCE(total_revenue, 0)) as total
-            ')
-            ->first();
-
-        // Total Revenue Per Hari (Today)
-        $dayRevenue = DB::table('daily_qsd')
-            ->whereDate('tanggal_sampling_min', $currentDate)
-            ->selectRaw('
-                SUM(COALESCE(total_revenue, 0)) as total
-            ')
-            ->first();
-
-        return response()->json([
-            'year_revenue'  => $yearRevenue->total ?? 0,
-            'month_revenue' => $monthRevenue->total ?? 0,
-            'day_revenue'   => $dayRevenue->total ?? 0,
-        ]);
     }
 }
