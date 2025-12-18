@@ -15,8 +15,10 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
+use App\Models\OrderDetail;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 
 
@@ -214,6 +216,9 @@ class RequestSamplingPlanRevisiController extends Controller
                 "pendampingan_k3" => $request->pendampingan_k3
             ];
             $addJadwal = JadwalServices::on('addJadwal', $ObjectData)->addJadwalSP();
+
+            $this->updateOrderDetail($ObjectData, $request->tanggal);
+            
             if ($addJadwal) {
                 $type = explode("/", $request->no_quotation)[1];
                 if ($type == 'QTC') {
@@ -264,6 +269,27 @@ class RequestSamplingPlanRevisiController extends Controller
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
+
+    private function updateOrderDetail($data, $tanggal)
+    {
+        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
+        if ($cekOrder) {
+            $array_no_samples = [];
+            foreach ($data->kategori as $x => $y) {
+                $pra_no_sample = explode(" - ", $y)[1];
+                $no_samples = $cekOrder->no_order . '/' . $pra_no_sample;
+                $array_no_samples[] = $no_samples;
+            }
+
+            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
+            foreach ($orderDetail as $od) {
+                $od->tanggal_sampling = $tanggal;
+                $od->save();
+
+                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
+            }
         }
     }
 }
