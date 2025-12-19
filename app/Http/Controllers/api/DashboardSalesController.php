@@ -4,8 +4,6 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
-
-
 use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
@@ -13,7 +11,6 @@ use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
 
 Carbon::setLocale('id');
 
@@ -37,16 +34,15 @@ class DashboardSalesController extends Controller
         $query = collect([QuotationKontrakH::class, QuotationNonKontrak::class])
             ->flatMap(function ($model) use ($request, $startDate, $endDate) {
                 $subQuery = $model::where('is_active', true)->whereBetween('tanggal_penawaran', [$startDate, $endDate]);
+                $jabatan  = $request->attributes->get('user')->karyawan->id_jabatan;
+                if ($jabatan == 24) {
+                    $subQuery->where('sales_id', $this->user_id);
+                } else if ($jabatan == 21) {
+                    $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
 
-                // $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-                // if ($jabatan == 24) {
-                //     $subQuery->where('sales_id', $this->user_id);
-                // } else if ($jabatan == 21) {
-                //     $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
-                //     array_push($bawahan, $this->user_id);
-
-                //     $subQuery->whereIn('sales_id', $bawahan);
-                // }
+                    $subQuery->whereIn('sales_id', $bawahan);
+                }
 
                 return $subQuery->get();
             });
@@ -99,36 +95,174 @@ class DashboardSalesController extends Controller
         return response()->json($result);
     }
 
+    // public function getSales(Request $request)
+    // {
+    //     $karyawan_id = $request->attributes->get('user')->karyawan->id;
+
+    //     $bawahanIds = GetBawahan::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
+
+    //     $data = MasterKaryawan::where('is_active', true)
+
+    //         ->where(function ($query) {
+    //             $query->where('id', '14')
+    //                 ->orWhere('jabatan', 'like', '%Manager%');
+    //         })
+    //     // ->where('jabatan', 'like', '%Manager%')
+    //         ->where('id', '!=', $karyawan_id)
+    //         ->whereIn('id', $bawahanIds)
+    //         ->orderBy('jabatan', 'asc')
+    //         ->select('id', 'nama_lengkap', 'jabatan')
+    //         ->get();
+
+    //     // dd($managers);
+
+    //     foreach ($data as $mgr) {
+    //         $mgr->bawahan = MasterKaryawan::where('is_active', true)
+    //             ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
+    //             ->where('id', '!=', $mgr->id)
+    //             ->whereIn('id_jabatan', [21, 24, 148])
+    //             ->select('id', 'nama_lengkap', 'jabatan')
+    //             ->orderBy('jabatan', 'asc')
+    //             ->get()
+    //             ->values();
+    //     }
+
+    //     return response()->json([
+    //         'sales'   => $data,
+    //         'message' => 'Sales data retrieved successfully',
+    //     ], 200);
+    // }
+
     public function getSales(Request $request)
     {
-        $user_id    = 890;
-        $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
-        $managers   = MasterKaryawan::where('is_active', true)
+        $user         = $request->attributes->get('user');
+        $user_id      = $user->karyawan->id;
+        $jabatan_id   = $user->karyawan->id_jabatan;
+        $jabatan_nama = $user->karyawan->jabatan;
 
-            ->where(function ($query) {
-                $query->where('id', '14')
-                    ->orWhere('jabatan', 'like', '%Manager%');
-            })
-        // ->where('jabatan', 'like', '%Manager%')
-            ->where('id', '!=', $user_id)
-            ->whereIn('id', $bawahanIds)
-            ->orderBy('jabatan', 'asc')
-            ->select('id', 'nama_lengkap', 'jabatan')
-            ->get();
+        // Ambil semua bawahan dari user ini
+        $bawahanIds = GetBawahan::where('id', $user_id)
+            ->get()
+            ->pluck('id')
+            ->unique()
+            ->values()
+            ->toArray();
 
-        foreach ($managers as $mgr) {
-            $mgr->bawahan = MasterKaryawan::where('is_active', true)
-                ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
-                ->where('id', '!=', $mgr->id)
-                ->whereIn('id_jabatan', [21, 24, 148])
+
+        $sales = [];
+
+        // JIKA SENIOR SALES MANAGER
+        if ($jabatan_id == 154) {
+
+            $managers = MasterKaryawan::where('is_active', true)
+                ->where(function ($query) {
+                    $query->where('id', '14')
+                        ->orWhere('jabatan', 'like', '%Manager%');
+                })
+                ->where('id', '!=', $user_id)
+                ->whereIn('id', $bawahanIds)
+                ->orderBy('jabatan', 'asc')
+                ->select('id', 'nama_lengkap', 'jabatan')
+                ->get();
+
+            foreach ($managers as $mgr) {
+                $mgrBawahanIds = GetBawahan::where('id', $mgr->id)
+                    ->get()
+                    ->pluck('id')
+                    ->toArray();
+
+                $supervisors = MasterKaryawan::where('is_active', true)
+                    ->whereIn('id', $mgrBawahanIds)
+                    ->where('id_jabatan', 21) 
+                    ->select('id', 'nama_lengkap', 'jabatan')
+                    ->orderBy('jabatan', 'asc')
+                    ->get();
+
+                $supervisorList = [];
+                foreach ($supervisors as $spv) {
+                    $spvBawahan = MasterKaryawan::where('is_active', true)
+                        ->whereJsonContains('atasan_langsung', (string) $spv->id)
+                        ->whereIn('id_jabatan', [24, 148]) 
+                        ->select('id', 'nama_lengkap', 'jabatan')
+                        ->orderBy('jabatan', 'asc')
+                        ->get()
+                        ->toArray();
+
+                    $supervisorList[] = [
+                        'id'           => $spv->id,
+                        'nama_lengkap' => $spv->nama_lengkap,
+                        'jabatan'      => $spv->jabatan,
+                        'bawahan'      => $spvBawahan,
+                    ];
+                }
+
+                $sales[] = [
+                    'id'           => $mgr->id,
+                    'nama_lengkap' => $mgr->nama_lengkap,
+                    'jabatan'      => $mgr->jabatan,
+                    'bawahan'      => $supervisorList,
+                ];
+            }
+
+        }
+        // Jika MANAGER + BU ICA
+        else if (stripos($jabatan_nama, 'Manager') !== false && $jabatan_id != 154 || $user_id == 14) {
+            $supervisors = MasterKaryawan::where('is_active', true)
+                ->whereIn('id', $bawahanIds)
+                ->orderBy('jabatan', 'asc')
+                ->where('id_jabatan', 21)
+                ->select('id', 'nama_lengkap', 'jabatan');
+
+            if (! $user_id == 14) {
+                $supervisors = $supervisors->where('id', '!=', $user_id);
+            }
+
+            $supervisors = $supervisors->get();
+
+            foreach ($supervisors as $spv) {
+                $spvBawahan = MasterKaryawan::where('is_active', true)
+                    ->whereJsonContains('atasan_langsung', (string) $spv->id)
+                    ->whereIn('id_jabatan', [24, 148]) // Sales dan Staff
+                    ->select('id', 'nama_lengkap', 'jabatan')
+                    ->orderBy('jabatan', 'asc')
+                    ->get()
+                    ->toArray();
+
+                $sales[] = [
+                    'id'           => $spv->id,
+                    'nama_lengkap' => $spv->nama_lengkap,
+                    'jabatan'      => $spv->jabatan,
+                    'bawahan'      => $spvBawahan,
+                ];
+
+            }
+
+        }
+
+        // SPV
+        else if ($jabatan_id == 21 && $user_id != 14) {
+            $bawahan = MasterKaryawan::where('is_active', true)
+                ->whereJsonContains('atasan_langsung', (string) $user_id)
+                ->whereIn('id_jabatan', [24, 148]) // Hanya Sales dan Staff
                 ->select('id', 'nama_lengkap', 'jabatan')
                 ->orderBy('jabatan', 'asc')
-                ->get()
-                ->values();
+                ->get();
+
+           $sales = array_merge($sales, $bawahan->toArray());
+        }
+        // SALES
+        else if ($jabatan_id == 24 || $jabatan_id == 148) {
+            $sales = [
+                [
+                    'id'           => $user_id,
+                    'nama_lengkap' => $user->karyawan->nama_lengkap,
+                    'jabatan'      => $user->karyawan->jabatan,
+                ],
+            ];
         }
 
         return response()->json([
-            'sales'   => $managers,
+            'sales'   => $sales,
             'message' => 'Sales data retrieved successfully',
         ], 200);
     }
@@ -533,7 +667,13 @@ class DashboardSalesController extends Controller
                 ], 200);
             }
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'line'    => $th->getLine(),
+                'getFile' => $th->getFile(),
+                'error'   => $th->getMessage(),
+            ], 500);
         }
     }
 }
