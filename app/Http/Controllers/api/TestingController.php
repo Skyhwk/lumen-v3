@@ -89,6 +89,7 @@ use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\SalesDailyQSD;
 
 use Mpdf\Mpdf;
 
@@ -105,6 +106,11 @@ class TestingController extends Controller
             //code...
 
             switch ($request->menu) {
+                case 'daily-qsd':
+                    $header = new SalesDailyQSD();
+                    $cek = $header->run();
+                    dd($cek);
+                    break;
                 case 'this':
                     $cek = DB::table('pic_pelanggan')
                         ->where('email_pic', 'not like', '%@%')
