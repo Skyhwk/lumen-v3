@@ -53,17 +53,42 @@ class DirectLain {
                 }
                 
                 else if (in_array($row->parameter, $paramVoc)) {
+                    // $vocRata2 = $totalNilai / $jumlahElemen;
+
+                    // $c2 = number_format($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
+                    // $c1 = number_format($c2 * 1000, 3);
+                    // $c17 = number_format($vocRata2, 3);
+                    // $c16 = number_format($c17 * 1000, 3);
+                    // $c3 = number_format(($c17 * 24.45) / 78.9516, 3);
+                    // $c15 = $c3;
+                    // $satuan = "mg/m3";
+
+                    // if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = number_format($c2, 3);
                     $vocRata2 = $totalNilai / $jumlahElemen;
 
-                    $c2 = number_format($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
-                    $c1 = number_format($c2 * 1000, 3);
-                    $c17 = number_format($vocRata2, 3);
-                    $c16 = number_format($c17 * 1000, 3);
-                    $c3 = number_format(($c17 * 24.45) / 78.9516, 3);
-                    $c15 = $c3;
+                    // HITUNG MURNI
+                    $c2_raw  = $vocRata2 * ($suhu / $tekanan_udara) * (298 / 760);
+                    $c1_raw  = $c2_raw * 1000;
+                    $c17_raw = $vocRata2;
+                    $c16_raw = $c17_raw * 1000;
+                    $c3_raw  = ($c17_raw * 24.45) / 78.9516;
+
                     $satuan = "mg/m3";
 
-                    if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = number_format($c2, 3);
+                    // FUNCTION POTONG DESIMAL (TANPA ROUND)
+                    $cut = function ($value, $decimal = 3) {
+                        $factor = pow(10, $decimal);
+                        return floor($value * $factor) / $factor;
+                    };
+
+                    // FORMAT AKHIR
+                    $c2  = ($c2_raw < 0.001) ? '<0.001' : number_format($cut($c2_raw), 3);
+                    $c1  = number_format($cut($c1_raw), 3);
+                    $c17 = number_format($cut($c17_raw), 3);
+                    $c16 = number_format($cut($c16_raw), 3);
+                    $c3  = number_format($cut($c3_raw), 3);
+                    $c15 = $c3;
+
                 }
 
                 else if (in_array($row->parameter, $paramO2)) {
