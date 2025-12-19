@@ -1264,6 +1264,7 @@ class ReadyOrderController extends Controller
                             ->first();
 
                         // $existing_detail->periode = $detail_baru[$changes]["periode_kontrak"];
+                        $existing_detail->kategori_1 = $detail_baru[$changes]["status_sampling"];
                         $existing_detail->kategori_2 = $detail_baru[$changes]["kategori_1"];
                         $existing_detail->kategori_3 = $detail_baru[$changes]["kategori_2"];
                         $existing_detail->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
@@ -2132,6 +2133,7 @@ class ReadyOrderController extends Controller
                         ->where('no_sampel', $changes)
                         ->where('is_active', 1)
                         ->first();
+
                     if ($existing_detail) {
                         //  ============ insert detail history ===============
                         $search_kategori = '%' . \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3) . '%';
@@ -2143,6 +2145,7 @@ class ReadyOrderController extends Controller
                             ->first();
 
                         $existing_detail->periode = $detail_baru[$changes]["periode_kontrak"];
+                        $existing_detail->kategori_1 = $detail_baru[$changes]["status_sampling"];
                         $existing_detail->kategori_2 = $detail_baru[$changes]["kategori_1"];
                         $existing_detail->kategori_3 = $detail_baru[$changes]["kategori_2"];
                         $existing_detail->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];

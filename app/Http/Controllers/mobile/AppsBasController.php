@@ -2413,7 +2413,7 @@ class AppsBasController extends Controller
         }
     }
 
-    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2)
+    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
         // Suhu / Kelembaban: kembalikan model instance (first) atau null
         if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {

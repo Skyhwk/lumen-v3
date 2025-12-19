@@ -3373,7 +3373,7 @@ class InputParameterController extends Controller
 			$data_kalkulasi['created_by'] = $this->karyawan;
 			WsValueEmisiCerobong::create($data_kalkulasi);
 
-            dd($data_kalkulasi);
+            // dd($data_kalkulasi);
 			DB::commit();
 			return (object)[
 				'message' => 'Value Parameter berhasil disimpan.!',

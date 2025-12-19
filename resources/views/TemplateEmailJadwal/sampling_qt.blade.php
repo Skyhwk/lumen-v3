@@ -82,6 +82,11 @@
         </tr>
     </table>
 
+    <br>
+    <p>
+        Untuk melihat rincian jadwal, silakan mengakses tautan berikut:
+        <a href="{{ env('PORTAL_API') . $file['token'] }}">Klik di sini</a>
+    </p>
 
     <br>
     <p><strong>Perhatian (Konfirmasi dan Pembatalan)</strong></p>
@@ -96,11 +101,6 @@
         atau melalui telepon 021-5089-8988/89.
     </p>
     <br>
-
-    <!-- <p>
-        Mohon agar dapat diperiksa lebih lanjut dokumen melalui link berikut:
-        <a href="{{ env('PORTAL_API') . $file['token'] }}">Click Here</a>
-    </p> -->
     <p>
         Kami sangat menghargai kerjasama Anda dalam proses pengambilan sampling ini dan berharap semuanya berjalan lancar. Terima kasih atas perhatian Anda dan segera konfirmasi jadwal ini agar kami dapat mempersiapkan segala yang diperlukan.
     </p>
@@ -117,7 +117,7 @@
         {{ $user['department'] }}<br>
         INTI SURYA LABORATARIUM<br>
         {{ $user['email'] }}<br>
-        {{ $user['no_telpon'] }}
+        {{-- {{ $user['no_telpon'] }} --}}
     </p>
 
 </body>

@@ -6,6 +6,7 @@ use App\Helpers\WorkerReassign;
 use App\Helpers\WorkerSummaryParameter;
 use App\Helpers\WorkerSummaryQSD;
 use App\Helpers\WorkerUpdateKpiSales;
+use App\Helpers\WorkerFeeSales;
 use App\Services\EmailBlast;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -32,6 +33,8 @@ class ScheduleEverySecond extends Command
                 WorkerSummaryParameter::run();
 
                 WorkerUpdateKpiSales::run();
+
+                WorkerFeeSales::run();
 
                 // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {

@@ -60,6 +60,7 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
             ->whereJsonDoesntContain('parameter', ["318;Psikologi"])
+            ->whereJsonDoesntContain('parameter', ['230;Ergonomi'])
             ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
             ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
             ->groupBy('cfr')

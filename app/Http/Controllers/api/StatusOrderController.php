@@ -230,11 +230,25 @@ class StatusOrderController extends Controller
                 $hasInvoice = true;
                 $allInvoicesPaid = true;
                 
+                // foreach ($item->orderHeader->getInvoice as $invoice) {
+                //     // Jika pelunasan NULL atau kurang dari tagihan = belum lunas
+                //     if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                //         $allInvoicesPaid = false;
+                //         break;
+                //     }
+                // }
                 foreach ($item->orderHeader->getInvoice as $invoice) {
-                    // Jika pelunasan NULL atau kurang dari tagihan = belum lunas
-                    if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                    // Hitung total withdraw dari relasi recordWithdraw
+                    // Pastikan nama kolom jumlah uangnya sesuai (misal: 'nominal', 'amount', dll)
+                    $totalWithdraw = $invoice->recordWithdraw->sum('nilai_pembayaran'); 
+                    
+                    // Hitung total yang sudah dibayar (Pelunasan + Withdraw)
+                    $totalPaid = ($invoice->nilai_pelunasan ?? 0) + $totalWithdraw;
+
+                    // Cek apakah total bayar kurang dari tagihan (toleransi floating point jika perlu)
+                    if ($totalPaid < $invoice->nilai_tagihan) {
                         $allInvoicesPaid = false;
-                        break;
+                        break; // Ada satu saja belum lunas, status failed
                     }
                 }
             }
@@ -266,8 +280,22 @@ class StatusOrderController extends Controller
                     $hasInvoice = true;
                     $allInvoicesPaid = true;
                     
+                    // foreach ($invoices as $invoice) {
+                    //     if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                    //         $allInvoicesPaid = false;
+                    //         break;
+                    //     }
+                    // }
+
                     foreach ($invoices as $invoice) {
-                        if (!$invoice->nilai_pelunasan || $invoice->nilai_pelunasan < $invoice->nilai_tagihan) {
+                        // Hitung total withdraw
+                        $totalWithdraw = $invoice->recordWithdraw->sum('nilai_pembayaran');
+
+                        // Hitung total yang sudah dibayar
+                        $totalPaid = ($invoice->nilai_pelunasan ?? 0) + $totalWithdraw;
+
+                        // Validasi pelunasan
+                        if ($totalPaid < $invoice->nilai_tagihan) {
                             $allInvoicesPaid = false;
                             break;
                         }

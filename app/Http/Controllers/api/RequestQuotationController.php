@@ -2195,9 +2195,6 @@ class RequestQuotationController extends Controller
                     // encode kembali ke JSON
                     $psikologi->data = json_encode($json);
 
-                    // update id_quotation jika diperlukan
-                    $psikologi->id_quotation = $data->id;
-
                     $psikologi->save();
                 }
 
@@ -4906,9 +4903,6 @@ class RequestQuotationController extends Controller
 
                             // encode kembali ke JSON
                             $psikologi->data = json_encode($json);
-
-                            // update id_quotation jika diperlukan
-                            $psikologi->id_quotation = $dataH->id;
 
                             $psikologi->save();
                         }
