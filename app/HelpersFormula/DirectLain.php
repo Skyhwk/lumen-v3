@@ -36,34 +36,92 @@ class DirectLain {
         if ($jumlahElemen > 0) {
             foreach ($data as $row) {
                 if (in_array($row->parameter, $paramCO)) {
-                    $c3 = number_format($totalNilai / $jumlahElemen, 6);
-                    $c2 = (($c3 * 28.01) / 24.45) * ($suhu / $tekanan_udara) * (298 / 760);
-                    $c1 = $c2 * 1000;
-                    $c4 = number_format($c3 * 1000, 6, '.', '');
-                    $c5 = number_format($c3 * 10000, 6, '.', '');
-                    $c15 = number_format($c3,6, '.', '');
-                    $c16 = number_format($c15 * 1000, 6, '.', '');
-                    $c17 = number_format($c15 * 28.01 / 24.45, 6, '.', '');
+                    // FUNCTION POTONG DESIMAL (TANPA PEMBULATAN)
+                    function truncate($value, $decimal = 6)
+                    {
+                        $factor = pow(10, $decimal);
+                        return floor($value * $factor) / $factor;
+                    }
+
+                    // ==========================
+                    // HITUNG NILAI MENTAH
+                    // ==========================
+
+                    $c3_raw = $totalNilai / $jumlahElemen; // ppm
+
+                    $c2_raw = (($c3_raw * 28.01) / 24.45)
+                                * ($suhu / $tekanan_udara)
+                                * (298 / 760);
+
+                    $c1_raw  = $c2_raw * 1000;
+                    $c4_raw  = $c3_raw * 1000;
+                    $c5_raw  = $c3_raw * 10000;
+                    $c15_raw = $c3_raw;
+                    $c16_raw = $c15_raw * 1000;
+                    $c17_raw = ($c15_raw * 28.01) / 24.45;
+
+                    // ==========================
+                    // POTONG DESIMAL (BUKAN ROUND)
+                    // ==========================
+
+                    $c3  = truncate($c3_raw, 4);
+                    $c2  = truncate($c2_raw, 4);
+                    $c1  = truncate($c1_raw, 4);
+                    $c4  = truncate($c4_raw, 4);
+                    $c5  = truncate($c5_raw, 4);
+                    $c15 = truncate($c15_raw, 4);
+                    $c16 = truncate($c16_raw, 4);
+                    $c17 = truncate($c17_raw, 4);
+
                     $satuan = "ppm";
 
-                    // setelah semua hitung selesai, baru cek batas bawah
-                    // if ($c1 < 11.45) $c1 = '<11.45'; else $c1 = number_format($c1, 2);
-                    // if ($c3 < 0.01) $c3 = '<0.01'; else $c3 = number_format($c3, 2);
-                    // if ($c2 < 0.01145) $c2 = '<0.01145'; else $c2 = number_format($c2, 5);
+                    // ==========================
+                    // CEK BATAS BAWAH (SETELAH HITUNG SELESAI)
+                    // ==========================
+
+                    $c1 = ($c1 < 11.45)     ? '<11.45'   : number_format($c1, 2, '.', '');
+                    $c3 = ($c3 < 0.01)      ? '<0.01'    : number_format($c3, 2, '.', '');
+                    $c2 = ($c2 < 0.01145)   ? '<0.01145' : number_format($c2, 5, '.', '');
+
                 }
                 
                 else if (in_array($row->parameter, $paramVoc)) {
+                    // $vocRata2 = $totalNilai / $jumlahElemen;
+
+                    // $c2 = number_format($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
+                    // $c1 = number_format($c2 * 1000, 3);
+                    // $c17 = number_format($vocRata2, 3);
+                    // $c16 = number_format($c17 * 1000, 3);
+                    // $c3 = number_format(($c17 * 24.45) / 78.9516, 3);
+                    // $c15 = $c3;
+                    // $satuan = "mg/m3";
+
+                    // if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = number_format($c2, 3);
                     $vocRata2 = $totalNilai / $jumlahElemen;
 
-                    $c2 = number_format($vocRata2 * ($suhu / $tekanan_udara) * (298 / 760), 3);
-                    $c1 = number_format($c2 * 1000, 3);
-                    $c17 = number_format($vocRata2, 3);
-                    $c16 = number_format($c17 * 1000, 3);
-                    $c3 = number_format(($c17 * 24.45) / 78.9516, 3);
-                    $c15 = $c3;
+                    // HITUNG MURNI
+                    $c2_raw  = $vocRata2 * ($suhu / $tekanan_udara) * (298 / 760);
+                    $c1_raw  = $c2_raw * 1000;
+                    $c17_raw = $vocRata2;
+                    $c16_raw = $c17_raw * 1000;
+                    $c3_raw  = ($c17_raw * 24.45) / 78.9516;
+
                     $satuan = "mg/m3";
 
-                    if ($c2 < 0.001) $c2 = '<0.001'; else $c2 = number_format($c2, 3);
+                    // FUNCTION POTONG DESIMAL (TANPA ROUND)
+                    $cut = function ($value, $decimal = 3) {
+                        $factor = pow(10, $decimal);
+                        return floor($value * $factor) / $factor;
+                    };
+
+                    // FORMAT AKHIR
+                    $c2  = ($c2_raw < 0.001) ? '<0.001' : number_format($cut($c2_raw), 3);
+                    $c1  = number_format($cut($c1_raw), 3);
+                    $c17 = number_format($cut($c17_raw), 3);
+                    $c16 = number_format($cut($c16_raw), 3);
+                    $c3  = number_format($cut($c3_raw), 3);
+                    $c15 = $c3;
+
                 }
 
                 else if (in_array($row->parameter, $paramO2)) {
@@ -89,14 +147,14 @@ class DirectLain {
                     $c16 = $c17 * 1000;
 
                     // baru format untuk output
-                    $c1  = number_format($c1, 6, '.', '');
-                    $c2  = number_format($c2, 6, '.', '');
-                    $c3  = number_format($c3, 6, '.', '');
-                    $c4  = number_format($c4, 6, '.', '');
-                    $c5  = number_format($c5, 6, '.', '');
-                    $c15 = number_format($c15, 6, '.', '');
-                    $c16 = number_format($c16, 6, '.', '');
-                    $c17 = number_format($c17, 6, '.', '');
+                    $c1  = number_format($c1, 4, '.', '');
+                    $c2  = number_format($c2, 4, '.', '');
+                    $c3  = number_format($c3, 4, '.', '');
+                    $c4  = number_format($c4, 4, '.', '');
+                    $c5  = number_format($c5, 4, '.', '');
+                    $c15 = number_format($c15, 4, '.', '');
+                    $c16 = number_format($c16, 4, '.', '');
+                    $c17 = number_format($c17, 4, '.', '');
 
                     $satuan = "ppm";
                 }

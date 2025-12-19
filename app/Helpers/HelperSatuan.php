@@ -12,6 +12,7 @@ class HelperSatuan
             'kali/jam' => 18,
             "µg/m³" => 16,
             "µg/m3" => 16,
+            "μg/m3" => 16,
             "mg/m³" => 17,
             "mg/m³" => 17,
             "mg/m3" => 17,

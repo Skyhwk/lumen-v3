@@ -1772,7 +1772,7 @@ class RenderInvoice
                 $pr = "";
             }
 
-            $konsultant = $customInvoice->data[0]->konsultan || '';
+            $konsultant = $dataHead->nama_perusahaan;
             $jab_pic = '';
 
             $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $dataHead->no_invoice) . '.pdf';
@@ -1845,7 +1845,7 @@ class RenderInvoice
                 </table>
                 <table class="head2" width="100%">
                 <tr>
-                <td colspan="3"><h6 style="font-size:10px; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $konsultant . $customInvoice->data[0]->nama_perusahaan . '</h6></td>
+                <td colspan="3"><h6 style="font-size:10px; font-weight: bold; white-space: pre-wrap; white-space: -moz-pre-wrap; white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;">' . $dataHead->nama_perusahaan . '</h6></td>
                 </tr>
                 ' . $trAlamat . '
                 </table>
