@@ -3,40 +3,14 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-<<<<<<< HEAD
-=======
-use App\Models\SamplingPlan;
-use App\Models\MasterKaryawan;
-use App\Models\Jadwal;
-use App\Models\JadwalLibur;
-use App\Models\MasterDriver;
-use App\Models\PraNoSample;
-use App\Models\QuotationKontrakH;
-use App\Models\MasterCabang;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Models\OrderHeader;
-use App\Models\OrderDetail;
-use App\Jobs\RenderSamplingPlan;
-use App\Services\JadwalServices;
-use App\Services\GetAtasan;
-use App\Services\Notification;
->>>>>>> a9d54afe520f4fbd45dba444b43991054a46a2bf
 use App\Http\Controllers\Controller;
-use App\Models\{SamplingPlan,MasterKaryawan,Jadwal,JadwalLibur,MasterDriver,PraNoSample,QuotationKontrakH,MasterCabang,QuotationKontrakD,QuotationNonKontrak,JobTask,PersiapanSampelHeader,OrderHeader};
+use App\Models\{SamplingPlan,MasterKaryawan,Jadwal,JadwalLibur,MasterDriver,PraNoSample,QuotationKontrakH,MasterCabang,QuotationKontrakD,QuotationNonKontrak,JobTask,PersiapanSampelHeader,OrderHeader,OrderDetail};
 use App\Jobs\{RenderSamplingPlan,RenderAndEmailJadwal};
 use App\Services\{JadwalServices,GetAtasan,Notification,RenderSamplingPlan as RenderSamplingPlanService};
 use Yajra\Datatables\Datatables;
-use Carbon\Carbon;
-<<<<<<< HEAD
-=======
-use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Jobs\RenderAndEmailJadwal;
-use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-
->>>>>>> a9d54afe520f4fbd45dba444b43991054a46a2bf
+use Log;
+use Carbon\Carbon;
 
 class SamplingPlanController extends Controller
 {
@@ -978,8 +952,13 @@ class SamplingPlanController extends Controller
             $checkPreparationSample = PersiapanSampelHeader::where('no_quotation', $request->no_quotation)
                 ->where('periode', $periode)
                 ->where('tanggal_sampling', $request->tanggal) // <--- UBAH INI (sesuai key frontend)
-                
+                ->where(function ($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
+                            }
+                        })
                 ->whereNotNull('detail_bas_documents') // <--- PERBAIKI TYPO (detai -> detail)
+                ->where('is_active', true)
                 ->first();
                 
             // 4. Return
