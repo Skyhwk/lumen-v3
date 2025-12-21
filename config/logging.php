@@ -136,6 +136,13 @@ return [
             'days' => 30,
         ],
 
+        'perubahan_jadwal' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/perubahan_jadwal/log.log'),
+            'level' => 'info',
+            'days' => 30,
+        ],
+
         'send_mqtt' => [
             'driver' => 'daily',
             'path' => storage_path('logs/send_mqtt/logs.log'),
