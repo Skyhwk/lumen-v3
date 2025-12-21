@@ -83,7 +83,6 @@ class BankDataCustomerController extends Controller
 
     public function shareSales(Request $request)
     {
-        dd($request->all());
         DB::beginTransaction();
         try {
            // Validasi manual
