@@ -36,10 +36,12 @@ use App\Services\GetAtasan;
 use App\Services\GetBawahan;
 use App\Services\RenderInvoice;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Yajra\Datatables\Datatables;
 use Carbon\Carbon;
 use App\Jobs\CreateNonKontrakJob;
 use App\Jobs\CreateKontrakJob;
+use App\Jobs\ChangeJadwalJob;
 
 class RequestQuotationController extends Controller
 {
@@ -97,6 +99,31 @@ class RequestQuotationController extends Controller
                 return $emailCC;
             })
             ->make(true);
+    }
+
+    public function getStatusQt(Request $request)
+    {
+        $isKontrak = strpos($request->no_qt, '/QTC') !== false;
+        $data = $isKontrak
+            ? QuotationKontrakH::where('no_document', $request->no_qt)->first()
+            : QuotationNonKontrak::where('no_document', $request->no_qt)->first();
+
+        $status = false;
+        if ($data) {
+            if ($data->flag_status == 'ordered') {
+                $status = true;
+            } else {
+                $data_lama = json_decode($data->data_lama);
+                if ($data_lama && !empty($data_lama->id_order)) {
+                    $status = true;
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => $status,
+            'message' => 'Data found'
+        ], 200);
     }
 
     public function approve(Request $request)
@@ -1211,33 +1238,33 @@ class RequestQuotationController extends Controller
             $data_lama = ($data->data_lama != null) ? json_decode($data->data_lama) : null;
 
             if ($data_lama != null) {
-
                 if (isset($data_lama->id_order) && $data_lama->id_order != null) {
                     $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', 1)->first();
                     $no_qt_lama = $cek_order->no_document;
                     $no_qt_baru = $data->no_document;
                     $id_order = $data_lama->id_order;
-
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_lama', $no_qt_lama);
-                    $parse->where('no_qt_baru', $no_qt_baru);
-                    $parse->where('id_order', $id_order);
-                    $parse->save();
-                } else {
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_baru', $data->no_document);
-                    $parse->where('generate', 'new');
-                    $parse->save();
                 }
-            } else {
-                $parse = new GeneratePraSampling;
-                $parse->type('QT');
-                $parse->where('no_qt_baru', $data->no_document);
-                $parse->where('generate', 'new');
-                // dd($parse);
-                $parse->save();
+
+                if($data_lama->status_sp == 'false') {
+                    if ($payload->data_wilayah->status_sampling == 'SD') {
+                        SamplingPlan::where('no_quotation', $data->no_document)
+                            ->update([
+                                'quotation_id' => $data->id,
+                                'status_jadwal' => 'SD',
+                                'is_active' => false
+                            ]);
+
+                        Jadwal::where('no_quotation', $data->no_document)
+                            ->update([
+                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                'is_active' => false,
+                                'canceled_by' => 'system'
+                            ]);
+                    } else {
+                        $jobChangeJadwal = new ChangeJadwalJob([], 'update', $data->no_document, 'non_kontrak');
+                        $this->dispatch($jobChangeJadwal);
+                    }
+                }
             }
 
             JobTask::insert([
@@ -2116,30 +2143,14 @@ class RequestQuotationController extends Controller
                                 'canceled_by' => 'system'
                             ]);
 
-                        /*Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
-                                'is_active' => false
-                            ]);*/
                     } else {
-                        SamplingPlan::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'quotation_id' => $data->id
-                            ]);
+                        $no_qt = [
+                            'new' => $data->no_document,
+                            'old' => $dataOld->no_document,
+                        ];
 
-                        Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan)))
-                            ]);
-
-                        /*Jadwal::where('no_quotation', $dataOld->no_document)
-                            ->update([
-                                'no_quotation' => $data->no_document,
-                                'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan)))
-                            ]);*/
+                        $jobChangeJadwal = new ChangeJadwalJob([], 'revisi', $no_qt, 'non_kontrak');
+                        $this->dispatch($jobChangeJadwal);
                     }
 
                     $message = "Terjadi perubahan quotation $dataOld->no_document menjadi $data->no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $data->no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
@@ -2150,26 +2161,7 @@ class RequestQuotationController extends Controller
                     $no_qt_lama = $cek_order->no_document;
                     $no_qt_baru = $data->no_document;
                     $id_order = $data_lama->id_order;
-
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_lama', $no_qt_lama);
-                    $parse->where('no_qt_baru', $no_qt_baru);
-                    $parse->where('id_order', $id_order);
-                    $parse->save();
-                } else {
-                    $parse = new GeneratePraSampling;
-                    $parse->type('QT');
-                    $parse->where('no_qt_baru', $data->no_document);
-                    $parse->where('generate', 'new');
-                    $parse->save();
                 }
-            } else {
-                $parse = new GeneratePraSampling;
-                $parse->type('QT');
-                $parse->where('no_qt_baru', $data->no_document);
-                $parse->where('generate', 'new');
-                $parse->save();
             }
 
             if (isset($data_lama->id_order) && $data_lama->id_order != null) {
@@ -2214,9 +2206,6 @@ class RequestQuotationController extends Controller
                     }
                     $invoice->no_quotation = $data->no_document;
                     $invoice->save();
-
-                    // $render = new RenderInvoice();
-                    // $render->renderInvoice($invoice->no_invoice);
                 }
 
                 $invoiceNumbersStr = implode(', ', $invoiceNumbersTobeChecked);
@@ -3664,6 +3653,38 @@ class RequestQuotationController extends Controller
                         $no_qt_baru = $dataH->no_document;
                         $id_order = $data_lama->id_order;
                     }
+
+                    if ($data_lama->status_sp == 'false') {
+                        if ($payload->data_wilayah->status_sampling == 'SD') {
+                            SamplingPlan::where('no_quotation', $dataOld->no_document)
+                                ->update([
+                                    'no_quotation' => $data->no_document,
+                                    'quotation_id' => $data->id,
+                                    'status_jadwal' => 'SD',
+                                    'is_active' => false
+                                ]);
+    
+                            Jadwal::where('no_quotation', $dataOld->no_document)
+                                ->update([
+                                    'no_quotation' => $data->no_document,
+                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                    'is_active' => false,
+                                    'canceled_by' => 'system'
+                                ]);
+    
+                        } else {
+                            $perubahan_periode = [];
+                            foreach ($payload->data_pendukung as $item) {
+                                if (isset($item->perubahan_periode)) {
+                                    $perubahan_periode[] = $item->perubahan_periode;
+                                }
+                            }
+    
+                            $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'update', $dataH->no_document, 'kontrak');
+                            $this->dispatch($jobChangeJadwal);
+                        }
+                    }
+
                 }
 
                 // dd('==========================');
@@ -5066,82 +5087,41 @@ class RequestQuotationController extends Controller
                         // Helpers::sendTelegramAtasan($message, $cek->add_by);
                         // Helpers::sendTelegramAtasan($message, '187');
                     } else if ($data_lama->status_sp == 'false') {
-                        //tidak merubah jadwal dalam arti update no doc dalam sp
-                        DB::beginTransaction();
-                        try {
-                            // ========== START Perbaikan SP dan Jadwal By: 565 ==========
-                            // step 1. Menghitung periode kontrak pada dokumen baru
-                            $Arrperiod = [];
-                            foreach ($payload->data_wilayah->wilayah_data as $key => $wilayah_data) {
-                                if ($wilayah_data->status_sampling !== 'SD') {
-                                    foreach ($wilayah_data->periode as $key => $valuePeriode) {
-                                        array_push($Arrperiod, $valuePeriode);
-                                    }
-                                }
-                            }
-                            $Arrperiod = array_values(array_unique($Arrperiod));
-
-                            $detailLama = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataOld->id)->get()->pluck('periode_kontrak')->unique()->toArray();
-
-                            // dd($Arrperiod, $detailLama);
-                            $perubahan_periode = $this->different($dataOld->id, $dataH->id, $detailLama, $Arrperiod, $dataH->no_document);
-
-                            if ($perubahan_periode) {
-                                foreach ($perubahan_periode as $key => $value) {
-                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
-                                        ->where('periode_kontrak', $value['before'])
-                                        ->where('is_active', true)
-                                        ->update(['periode_kontrak' => $value['after']]);
-
-                                    Jadwal::where('no_quotation', $dataOld->no_document)
-                                        ->where('periode', $value['before'])
-                                        ->update(['periode' => $value['after']]);
-                                }
-                            }
-                            // step 2. Menyesuaikan sampling plan dan jadwal dengan dokumen baru
+                        if ($payload->data_wilayah->status_sampling == 'SD') {
                             SamplingPlan::where('no_quotation', $dataOld->no_document)
                                 ->update([
-                                    'no_quotation' => $dataH->no_document,
-                                    'quotation_id' => $dataH->id
+                                    'no_quotation' => $data->no_document,
+                                    'quotation_id' => $data->id,
+                                    'status_jadwal' => 'SD',
+                                    'is_active' => false
                                 ]);
+    
                             Jadwal::where('no_quotation', $dataOld->no_document)
                                 ->update([
-                                    'no_quotation' => $dataH->no_document,
-                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan)))
+                                    'no_quotation' => $data->no_document,
+                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                    'is_active' => false,
+                                    'canceled_by' => 'system'
                                 ]);
-
-                            // step 3. Menonaktifkan sampling plan yang tidak ada di dokumen baru
-                            SamplingPlan::where('no_quotation', $dataH->no_document)
-                                ->whereNotIn('periode_kontrak', $Arrperiod)
-                                ->where('is_active', true)
-                                ->update(['is_active' => false, 'status' => false, 'status_jadwal' => 'cancel']);
-
-                            // step 4. Mengambil id sampling plan yang non-aktif
-                            $resultJadwalNonAktif = SamplingPlan::select('id', 'periode_kontrak')
-                                ->where('no_quotation', $no_document)
-                                ->whereNotIn('periode_kontrak', $Arrperiod)
-                                ->where('is_active', false)
-                                ->get();
-
-                            $periodJadwalId = [];
-                            foreach ($resultJadwalNonAktif as $key => $value) {
-                                array_push($periodJadwalId, $value->id);
+    
+                        } else {
+                            $perubahan_periode = [];
+                            foreach ($payload->data_pendukung as $item) {
+                                if (isset($item->perubahan_periode)) {
+                                    $perubahan_periode[] = $item->perubahan_periode;
+                                }
                             }
 
-                            // step 5. Menonaktifkan jadwal yang tidak relevan dengan dokumen baru
-                            Jadwal::where('no_quotation', $no_document)
-                                ->whereIn('id_sampling', $periodJadwalId)
-                                ->where('is_active', true)
-                                ->update(['is_active' => false, 'canceled_by' => 'system']);
-                            // ========== END Perbaikan SP dan Jadwal By: 565 ==========
+                            $qtArray = [
+                                'new' => $dataH->no_document,
+                                'old' => $dataOld->no_document,
+                            ];
 
-                            DB::commit();
-                        } catch (\Exception $ex) {
-                            DB::rollback();
-                            $templateMessage = "Error : " . $ex->getMessage() . "\nLine : " . $ex->getLine() . "\nFile : " . $ex->getFile() . "\n pada method writequotKontrakApi";
-                            // Helpers::sendTo(843302196, $templateMessage);
+                            $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
+                            $this->dispatch($jobChangeJadwal);
                         }
-
+                        
+                        // ========== END Perbaikan SP dan Jadwal By: Dedi ==========
                         $message = "Terjadi perubahan quotation $data_lama->no_qt menjadi $no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
                     }
 
@@ -5157,9 +5137,9 @@ class RequestQuotationController extends Controller
                             if($invoice->nilai_pelunasan == null) {
                                 $invoice->is_generate = false;
                                 $invoice->is_emailed = false;
-
                                 $invoiceNumbersTobeChecked[] = $invoice->no_invoice;
                             }
+
                             $invoice->no_quotation = $no_document;
                             $invoice->save();
                         }
@@ -5432,73 +5412,6 @@ class RequestQuotationController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()], 500);
-        }
-    }
-
-    public function different($id_lama, $id_baru, $array_periode_lama, $array_periode_baru, $no_document)
-    {
-        try {
-            $pengurangan_periode_kontrak = array_values(array_diff($array_periode_lama, $array_periode_baru));
-            $penambahan_periode_kontrak = array_values(array_diff($array_periode_baru, $array_periode_lama));
-            // dd($pengurangan_periode_kontrak, $penambahan_periode_kontrak);
-            $qt_lama = QuotationKontrakD::where('id_request_quotation_kontrak_h', $id_lama)
-                ->get();
-            $qt_baru = QuotationKontrakD::where('id_request_quotation_kontrak_h', $id_baru)
-                ->get();
-
-            $perubahan_periode = [];
-            // dd($pengurangan_periode_kontrak, $penambahan_periode_kontrak);
-            if ($pengurangan_periode_kontrak != null) {
-                foreach ($qt_lama as $z => $xx) {
-                    if (in_array($xx->periode_kontrak, $pengurangan_periode_kontrak)) { // cari periode
-
-                        /**
-                         * Apabila periode pengurangan isinya sama dengan periode penambahan
-                         * maka data yang ada di periode pengurangan akan dimasukan ke perubahan periode yang baru
-                         */
-                        $key_pengurangan = array_search($xx->periode_kontrak, $pengurangan_periode_kontrak);
-
-                        $periode_pengganti = $penambahan_periode_kontrak[$key_pengurangan] ?? null;
-
-                        $data_pendukung_sampling_periode_lama = array_values(array_map(function ($item) {
-                            return (array) $item['data_sampling'];
-                        }, json_decode($qt_lama->where('periode_kontrak', $xx->periode_kontrak)->first()->data_pendukung_sampling, true)))[0];
-                        if ($periode_pengganti != null) {
-                            $data_pendukung_sampling_periode_baru = array_values(array_map(function ($item) {
-                                return (array) $item['data_sampling'];
-                            }, json_decode($qt_baru->where('periode_kontrak', $periode_pengganti)->first()->data_pendukung_sampling, true)))[0];
-                        } else {
-                            $data_pendukung_sampling_periode_baru = [];
-                        }
-
-                        // dd($data_pendukung_sampling_periode_lama, $data_pendukung_sampling_periode_baru);
-                        if ($data_pendukung_sampling_periode_lama == $data_pendukung_sampling_periode_baru) {
-                            /**
-                             * Apabila data pendukung samplingnya sama
-                             * maka data yang ada di periode pengurangan akan dimasukan ke perubahan periode yang baru
-                             */
-                            $perubahan_periode[] = [
-                                'before' => $xx->periode_kontrak,
-                                'after' => $periode_pengganti
-                            ];
-
-                            $insert = DB::table('perubahan_periode_quotation')->updateOrInsert(
-                                ['no_quotation' => $no_document], // kondisi pencarian
-                                [
-                                    'periode_awal' => $xx->periode_kontrak,
-                                    'periode_revisi' => $periode_pengganti
-                                ]
-                            );
-                            // unset($penambahan_periode_kontrak[$key_pengurangan]);
-                        }
-                    }
-                }
-            }
-
-            return $perubahan_periode;
-        } catch (\Exception $e) {
-            dd($e);
-            return [];
         }
     }
 
