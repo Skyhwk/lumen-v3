@@ -36,13 +36,6 @@ class DirectLain {
         if ($jumlahElemen > 0) {
             foreach ($data as $row) {
                 if (in_array($row->parameter, $paramCO)) {
-                    // FUNCTION POTONG DESIMAL (TANPA PEMBULATAN)
-                    function truncate($value, $decimal = 6)
-                    {
-                        $factor = pow(10, $decimal);
-                        return floor($value * $factor) / $factor;
-                    }
-
                     // ==========================
                     // HITUNG NILAI MENTAH
                     // ==========================
@@ -64,14 +57,14 @@ class DirectLain {
                     // POTONG DESIMAL (BUKAN ROUND)
                     // ==========================
 
-                    $c3  = truncate($c3_raw, 4);
-                    $c2  = truncate($c2_raw, 4);
-                    $c1  = truncate($c1_raw, 4);
-                    $c4  = truncate($c4_raw, 4);
-                    $c5  = truncate($c5_raw, 4);
-                    $c15 = truncate($c15_raw, 4);
-                    $c16 = truncate($c16_raw, 4);
-                    $c17 = truncate($c17_raw, 4);
+                    $c3  = $this->cutDecimal($c3_raw, 4);
+                    $c2  = $this->cutDecimal($c2_raw, 4);
+                    $c1  = $this->cutDecimal($c1_raw, 4);
+                    $c4  = $this->cutDecimal($c4_raw, 4);
+                    $c5  = $this->cutDecimal($c5_raw, 4);
+                    $c15 = $this->cutDecimal($c15_raw, 4);
+                    $c16 = $this->cutDecimal($c16_raw, 4);
+                    $c17 = $this->cutDecimal($c17_raw, 4);
 
                     $satuan = "ppm";
 
@@ -172,5 +165,11 @@ class DirectLain {
             'c17' => $c17,
             'satuan' => $satuan,
         ];
+    }
+
+    private function cutDecimal($value, $decimal)
+    {
+        $factor = pow(10, $decimal);
+        return floor($value * $factor) / $factor;
     }
 }
