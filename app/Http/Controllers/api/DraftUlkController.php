@@ -194,13 +194,14 @@ class DraftUlkController extends Controller
             $lapanganSenyawa = DetailSenyawaVolatile::whereIn('no_sampel', $noSampelList)->get();
             $partikulat = DataLapanganPartikulatMeter::whereIn('no_sampel', $noSampelList)->get();
             $lapangan = $lapanganLing->merge($lapanganDirect)->merge($debuPersonal)->merge($lapanganSenyawa)->merge($partikulat);
+
             
             // 3. Hitung min/max created_at
             $minDate = null;
             $maxDate = null;
 
             if ($lapangan->isNotEmpty()) {
-                $minDate = $lapangan->min('created_at');
+                $minDate = $item->tanggal_tugas;
                 $maxDate = $lapangan->max('created_at');
             }
 
