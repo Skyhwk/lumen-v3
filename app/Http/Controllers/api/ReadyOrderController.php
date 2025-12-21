@@ -1244,7 +1244,7 @@ class ReadyOrderController extends Controller
                         ->first();
 
                     if ($existing_detail) {
-                        $tanggal_sampling = Carbon::now()->format('Y-m-d');
+                        $tanggal_sampling = $existing_detail->tanggal_sampling;
                         if($detail_baru[$changes]["status_sampling"] != 'SD'){
                             $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
                             $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
