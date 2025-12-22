@@ -11,9 +11,12 @@ Carbon::setLocale('id');
 
 use App\Models\{
     DFUS,
+    DFUSBackup,
     MasterPelanggan,
     MasterKaryawan,
     HistoryPerubahanSales,
+    LogWebphone,
+    LogWebphoneBackup,
     QuotationKontrakH,
     QuotationNonKontrak,
 };
@@ -30,19 +33,19 @@ class RandomSalesAssign
             Log::channel('reassign_customer')->info("\n\n\n== RANDOM SALES ASSIGNER STARTED ==\n\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
-
+            $customerMasDedi = 127;
             self::$salesIdInactive = MasterKaryawan::select('id', 'nama_lengkap')
                 ->where('is_active', false)
                 ->whereIn('id_jabatan', [24]) // sales staff
                 ->get()
                 ->shuffle()
                 ->toArray();
-            
+
             Log::channel('reassign_customer')->info("Finish Collect Inactive Sales ID with total data " . count(self::$salesIdInactive) . "\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
 
-            self::$salesIdNew = MasterKaryawan::select('id', 'nama_lengkap')
+            self::$salesIdNew = MasterKaryawan::select('id', 'nama_lengkap', 'tgl_mulai_kerja', 'id_jabatan', 'jabatan')
                 ->where('is_active', true)
                 ->whereIn('id_jabatan', [24]) // sales staff
                 ->whereDate('tgl_mulai_kerja', '>=', Carbon::now()->subYear()) // hanya 1 tahun terakhir
@@ -54,24 +57,24 @@ class RandomSalesAssign
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
 
-            // dump('Sales Inactive', self::$salesIdInactive, 'Sales New', self::$salesIdNew);
-
             $excludedSalesIds = MasterKaryawan::whereIn('id_jabatan', [15, 21]) // manajer, spv
                 ->pluck('id')
                 ->toArray();
             $excludedSalesIds[] = 41; // Novva Novita Ayu Putri Rukmana
 
             $customerWithDeactiveSales = MasterPelanggan::with([
+                'kontak_pelanggan',
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
                 'currentSales:id,nama_lengkap',
                 'historySales',
             ])
                 ->select('id', 'id_pelanggan', 'nama_pelanggan', 'sales_id', 'sales_penanggung_jawab', 'is_active')
                 ->where('is_active', true)
+                ->where('sales_id', '<>', $customerMasDedi)
                 ->whereNotIn('sales_id', $excludedSalesIds)
                 ->whereIn('sales_id', array_column(self::$salesIdInactive, 'id'))
                 ->get();
-            // dump(count($customerWithDeactiveSales));
+
 
             Log::channel('reassign_customer')->info("Finish Collect data Pelanggan with Deactive Sales | total data " . count(self::$salesIdNew) . "\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
@@ -105,6 +108,7 @@ class RandomSalesAssign
             // dump('customerWithDeactiveSales', count($customerWithDeactiveSales));
 
             $customerSpecial = MasterPelanggan::with([
+                'kontak_pelanggan',
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
                 'currentSales:id,nama_lengkap',
                 'historySales',
@@ -112,6 +116,7 @@ class RandomSalesAssign
                 ->select('id', 'id_pelanggan', 'nama_pelanggan', 'sales_id', 'sales_penanggung_jawab', 'is_active')
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
+                ->where('sales_id', '<>', $customerMasDedi)
                 ->whereIn('sales_id', $excludedSalesIds)
                 ->get();
 
@@ -119,6 +124,7 @@ class RandomSalesAssign
             $chunkIndex = 1;
 
             $customerMustBeReassigned = MasterPelanggan::with([
+                'kontak_pelanggan',
                 'latestOrder:id,no_order,tanggal_order,id_pelanggan',
                 'currentSales:id,nama_lengkap',
                 'historySales',
@@ -136,6 +142,7 @@ class RandomSalesAssign
                 )
                 ->where('is_active', true)
                 ->whereNotIn('id', $allID)
+                ->where('sales_id', '<>', $customerMasDedi)
                 ->whereNotIn('sales_id', $excludedSalesIds)
                 ->chunk(2000, function ($customers) use (&$NotReAssign, &$AssignToSalesNewByCheckingAll, &$chunkIndex) {
                     Log::channel('reassign_customer')->info("== Processing Chunk #{$chunkIndex} ==", [
@@ -147,7 +154,8 @@ class RandomSalesAssign
                         // 1. Cek history rotasi 3 bulan
                         if (
                             $customer->historySales
-                            && Carbon::parse($customer->historySales->tanggal_rotasi)->lt(Carbon::now()->subMonths(3))
+                            && Carbon::parse($customer->historySales->tanggal_rotasi)
+                            ->gt(Carbon::now()->subMonths(3))
                         ) {
                             $NotReAssign[] = $customer;
                             continue;
@@ -183,8 +191,9 @@ class RandomSalesAssign
                                     $customer->reAssignReason = 'Order lebih dari 8 bulan dan follow up sales terakhir lebih dari 1 minggu';
                                     $AssignToSalesNewByCheckingAll[] = $customer;
                                 } else {
-                                    $customer->reAssignReason = 'Order lebih dari 8 bulan';
-                                    $AssignToSalesNewByCheckingAll[] = $customer;
+                                    $NotReAssign[] = $customer;
+                                    // $customer->reAssignReason = 'Order lebih dari 8 bulan';
+                                    // $AssignToSalesNewByCheckingAll[] = $customer;
                                 }
                             } else {
                                 $NotReAssign[] = $customer;
@@ -206,15 +215,72 @@ class RandomSalesAssign
                     }
                     $chunkIndex++;
                 });
-            $selectedData = collect($AssignToSalesNewByCheckingAll);
-            $firstMatch = $selectedData->first(function ($customer) {
-                return $customer->latestOrder
-                    && ($customer->latestNonKontrakQuotation
-                        || $customer->latestKontrakQuotation);
-            });
-            // dump('customerMustBeReassigned', count($AssignToSalesNewByCheckingAll));
-            // dump('customerNotReassigned', count($NotReAssign));
-            // dump('Data pertama yang punya ketiganya:', $firstMatch ? $firstMatch->toArray() : 'Ga ada');
+
+            // example Data
+            // $selectedData = collect($AssignToSalesNewByCheckingAll);
+            // $firstMatch = $selectedData->first(function ($customer) {
+            //     return $customer->latestOrder
+            //         && ($customer->latestNonKontrakQuotation
+            //             || $customer->latestKontrakQuotation);
+            // });
+            // $lastMatch = $selectedData->last(function ($customer) {
+            //     return $customer->latestOrder
+            //         && ($customer->latestNonKontrakQuotation
+            //             || $customer->latestKontrakQuotation);
+            // });
+
+            // $reasons = collect($AssignToSalesNewByCheckingAll)
+            //     ->pluck('reAssignReason')
+            //     ->filter()
+            //     ->unique()
+            //     ->values()
+            //     ->toArray();
+
+            // $grouped = collect($AssignToSalesNewByCheckingAll)
+            //     ->filter(fn($item) => !empty($item['reAssignReason']))
+            //     ->groupBy('reAssignReason')
+            //     ->map(function ($items, $reason) {
+            //         return $items->take(3)->values();
+            //     });
+            // dump($reasons);
+            // dd('masuk');
+
+            // Log::channel('reassign_customer')->info(
+            //     ">>> All reason for reassign customer <<<",
+            //     ['data' => $reasons]
+            // );
+
+            // Log::channel('reassign_customer')->info(
+            //     ">>> All reason for reassign customer <<<",
+            //     ['data' => $grouped]
+            // );
+
+            $allDataNeedAssign = collect($AssignToSalesNew)->merge(collect($AssignToSalesNewByCheckingAll));
+            $AssignToSalesExecutive = collect($AssignToSalesExecutive);
+            $bankDataToAssign = collect([]);
+            // Check Bank Data
+            $bankData = MasterPelanggan::where('is_active', true)
+                ->whereNull('sales_id')
+                ->whereNull('sales_penanggung_jawab')
+                ->count();
+
+            if ($bankData < 5000) {
+                $remainingSlotBankData = 5000 - $bankData;
+                $tirtipercen = floor($allDataNeedAssign->count() * 0.3);
+                $assignToBankData = 0;
+                if ($tirtipercen > $remainingSlotBankData) {
+                    $assignToBankData = $remainingSlotBankData;
+                } else {
+                    $assignToBankData = $tirtipercen;
+                }
+                // dump(count($allDataNeedAssign));
+
+                $bankDataToAssign = $allDataNeedAssign->take($assignToBankData);
+                $allDataNeedAssign = $allDataNeedAssign->slice($assignToBankData)->values();
+
+                // dd(count($bankDataToAssign), count($allDataNeedAssign));
+            }
+
             Log::channel('reassign_customer')->info("Finish Progress sorting All data Pelanggan \n | Assign To New Sales " . count($AssignToSalesNewByCheckingAll) . "\n | Not Re-Assign To Sales New " . count($NotReAssign) . "\n", [
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
@@ -225,25 +291,407 @@ class RandomSalesAssign
 
             // dd('----------------------------------------------');
 
-            if($type == 'check'){
-                return response()->json([
+            if ($type == 'check') {
+                return [
                     'status' => 'success',
                     'message' => 'Success get data to reassign.',
-                    'total new sales' => count(self::$salesIdNew),
-                    'data from old sales to new sales' => count($AssignToSalesNew),
-                    'data from old sales to sales executive' => count($AssignToSalesExecutive),
+                    'new_sales' => self::$salesIdNew,
+                    'data from resign sales to new sales' => count($AssignToSalesNew),
+                    'data from resign sales to sales executive' => count($AssignToSalesExecutive),
                     'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
                     'data not reassign' => count($NotReAssign),
+                    'data assign to bank data' => count($bankDataToAssign),
+                    // 'reasons' => $reasons,
+                    // 'data' => $grouped
+                ];
+            } else if ($type == 'reassign') {
+                Log::channel('reassign_customer')->info("=== Processing Reassign Data ===", [
+                    'timestamp' => Carbon::now()->toDateTimeString(),
                 ]);
-            } else if($type == 'reassign'){
-                // Process re assign
-            }
 
+                try {
+                    DB::statement('SET SESSION innodb_lock_wait_timeout = 120');
+                    DB::statement('SET SESSION lock_wait_timeout = 120');
+                } catch (\Exception $e) {
+                    Log::channel('reassign_customer')->warning("=== Could not set timeout: " . $e->getMessage());
+                }
+                // Delete webphone and log
+                // dump(count($allDataNeedAssign), count($bankDataToAssign), count($AssignToSalesExecutive));
+                $allForDelete = collect($allDataNeedAssign)
+                    ->merge(collect($bankDataToAssign))
+                    ->merge(collect($AssignToSalesExecutive));
+
+                self::deteleAllReAssignDataWebphoneAndLog($allForDelete);
+
+                // Assign
+                DB::transaction(function () use (
+                    $bankDataToAssign,
+                    $AssignToSalesExecutive,
+                    $allDataNeedAssign,
+                ) {
+                    self::assignToBankData(collect($bankDataToAssign) ?? []);
+                    self::assignToSalesExecutive($AssignToSalesExecutive);
+                    self::aassignToNewSales($allDataNeedAssign);
+                });
+                Log::channel('reassign_customer')->info("=== FINISH REASSIGN === ");
+
+                return [
+                    'status' => 'success',
+                    'message' => 'Success get data to reassign.',
+                    'new_sales' => self::$salesIdNew,
+                    'data from resign sales to new sales' => count($AssignToSalesNew),
+                    'data from resign sales to sales executive' => count($AssignToSalesExecutive),
+                    'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
+                    'data not reassign' => count($NotReAssign),
+                    'data assign to bank data' => count($bankDataToAssign),
+                ];
+            }
         } catch (\Throwable $th) {
             dd($th);
             Log::channel('reassign_customer')->error('error', [$th->getMessage(), $th->getLine(), $th->getFile()]);
             throw $th;
         }
+    }
+
+    private static function aassignToNewSales($data)
+    {
+        Log::channel('reassign_customer')->info("=== Processing Assign To New Sales === " . "| Total Data " . count($data));
+
+        self::$salesPoolIndex = 0;
+        
+        if (empty(self::$salesIdNew) || $data->isEmpty()) {
+            return;
+        }
+
+        $totalNewSales = count(self::$salesIdNew);
+        $totalChunks = ceil(count($data) / 2000);  // Menghitung jumlah chunk
+        $currentChunk = 0;
+
+        // Proses data dalam chunk 2000
+        $data->chunk(2000)->each(function ($chunkData) use ($totalNewSales, &$currentChunk, $totalChunks) {
+            Log::channel('reassign_customer')->info("Processing chunk " . ($currentChunk + 1) . " of " . $totalChunks . " | Total data in chunk: " . count($chunkData));
+
+            $updates = [];
+            $histories = [];
+
+            foreach ($chunkData as $pelanggan) {
+                $salesIndex = self::$salesPoolIndex % $totalNewSales;
+                $sales = self::$salesIdNew[$salesIndex];
+
+                self::$salesPoolIndex++;
+
+                $updates[$sales['id']][] = $pelanggan->id;
+
+                $histories[] = [
+                    'id_pelanggan' => $pelanggan->id_pelanggan,
+                    'id_sales_lama' => $pelanggan->sales_id,
+                    'id_sales_baru' => $sales['id'],
+                    'tanggal_rotasi' => Carbon::now(),
+                ];
+            }
+
+
+            // BULK UPDATE
+            foreach ($updates as $salesId => $pelangganIds) {
+                MasterPelanggan::whereIn('id', $pelangganIds)->update([
+                    'sales_id' => $salesId,
+                    'sales_penanggung_jawab' => collect(self::$salesIdNew)->firstWhere('id', $salesId)['nama_lengkap']
+                ]);
+            }
+
+            // BULK INSERT HISTORY
+            HistoryPerubahanSales::insert($histories);
+
+            Log::channel('reassign_customer')->info("Chunk " . ($currentChunk + 1) . " of " . $totalChunks . " processed.");
+            $currentChunk++;
+        });
+
+        Log::channel('reassign_customer')->info("=== Finished Assign To New Sales === " . "| Total Data " . count($data));
+    }
+
+
+
+    private static function assignToSalesExecutive($data)
+    {
+        Log::channel('reassign_customer')->info("=== Processing Assign To Sales Executive === "  . "| Total Data " . count($data),);
+
+        if ($data->isEmpty()) {
+            return;
+        }
+
+        $salesExec = MasterKaryawan::where('id_jabatan', 148)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get(['id', 'nama_lengkap']);
+
+        if ($salesExec->isEmpty()) {
+            return;
+        }
+
+        $totalSales = $salesExec->count();
+        $updates = [];
+        $histories = [];
+
+        foreach ($data as $i => $pelanggan) {
+            $sales = $salesExec[$i % $totalSales];
+
+            $updates[$sales->id][] = $pelanggan->id;
+
+            $histories[] = [
+                'id_pelanggan' => $pelanggan->id_pelanggan,
+                'id_sales_lama' => $pelanggan->sales_id,
+                'id_sales_baru' => $sales->id,
+                'tanggal_rotasi' => Carbon::now(),
+            ];
+        }
+
+        // BULK UPDATE
+        foreach ($updates as $salesId => $pelangganIds) {
+            MasterPelanggan::whereIn('id', $pelangganIds)->update([
+                'sales_id' => $salesId,
+                'sales_penanggung_jawab' =>
+                $salesExec->firstWhere('id', $salesId)->nama_lengkap
+            ]);
+        }
+
+        // BULK INSERT HISTORY
+        HistoryPerubahanSales::insert($histories);
+        Log::channel('reassign_customer')->info("=== Finished Assign To Executive Sales === "  . "| Total Data " . count($data),);
+    }
+
+
+
+    private static function assignToBankData($data)
+    {
+        if (!$data instanceof \Illuminate\Support\Collection || $data->isEmpty()) {
+            Log::channel('reassign_customer')
+                ->info("=== Assign To Bank Data SKIPPED | Data kosong / bukan collection ===");
+            return;
+        }
+
+        Log::channel('reassign_customer')->info(
+            "=== Processing Assign To Bank Data === | Total Data: " . $data->count()
+        );
+
+        $chunkNumber = 1;
+
+        $data->chunk(500)->each(function ($chunk) use (&$chunkNumber) {
+
+            Log::channel('reassign_customer')->info(
+                ">>> Start Chunk #{$chunkNumber} | Total Chunk Data: " . $chunk->count()
+            );
+
+            MasterPelanggan::whereIn('id', $chunk->pluck('id')->toArray())
+                ->update([
+                    'sales_id' => null,
+                    'sales_penanggung_jawab' => null,
+                ]);
+            Log::channel('reassign_customer')->info(
+                ">>> Complete Update Chunk #{$chunkNumber}"
+            );
+
+            Log::channel('reassign_customer')->info(
+                ">>> Preparing chunk history data"
+            );
+
+            $histories = $chunk->map(function ($pelanggan) {
+                return [
+                    'id_pelanggan'   => $pelanggan->id_pelanggan,
+                    'id_sales_lama'  => $pelanggan->sales_id,
+                    'id_sales_baru'  => null,
+                    'tanggal_rotasi' => Carbon::now(),
+                ];
+            })->toArray();
+
+            Log::channel('reassign_customer')->info(
+                ">>> History data prepared, inserting..."
+            );
+
+            HistoryPerubahanSales::insert($histories);
+
+            Log::channel('reassign_customer')->info(
+                "<<< Finished Chunk #{$chunkNumber}"
+            );
+
+            $chunkNumber++;
+        });
+
+        Log::channel('reassign_customer')->info(
+            "=== Finished Assign To Bank Data === | Total Data: " . $data->count()
+        );
+    }
+
+
+    private static function deteleAllReAssignDataWebphoneAndLog($data)
+    {
+        if ($data->isEmpty()) {
+            return;
+        }
+
+        $groupedBySales = $data->groupBy('sales_id');
+        // dd(count($groupedBySales));
+        foreach ($groupedBySales as $salesId => $items) {
+            $numbers = $items
+                ->flatMap(
+                    fn($item) =>
+                    $item->kontak_pelanggan->pluck('no_tlp_perusahaan')
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $salesName = $items->first()->sales_penanggung_jawab;
+
+            $pelangganIds = $items->pluck('id_pelanggan')->filter()->unique()->toArray();
+
+            if (!empty($numbers)) {
+                self::deleteWebphoneLogsBulk($salesId, $numbers);
+            }
+
+            if (!empty($pelangganIds)) {
+                self::deleteDfusHistoryBulk($salesName, $pelangganIds);
+            }
+        }
+
+        /**
+         * ===============================
+         * DELETE DFUS HISTORY
+         * ===============================
+         */
+        // $groupedDfus = $data->groupBy('sales_penanggung_jawab');
+
+        // foreach ($groupedDfus as $salesName => $items) {
+        //     $pelangganIds = $items
+        //         ->flatMap(
+        //             fn($item) =>
+        //             $item->pluck('id_pelanggan')
+        //         )
+        //         ->filter()
+        //         ->unique()
+        //         ->values()
+        //         ->toArray();
+
+        //     if (!empty($pelangganIds)) {
+        //         self::deleteDfusHistoryBulk($salesName, $pelangganIds);
+        //     }
+
+        //     // foreach ($items as $pelangganId => $items) {
+        //     //     Log::channel('reassign_customer')->info("=== Processing Delete DFUS for Sales Name " . $salesName . " | Pelanggan ID " . $pelangganId, [
+        //     //         'timestamp' => Carbon::now()->toDateTimeString(),
+        //     //     ]);
+        //     //     self::deleteDfusHistoryBulk($salesName, $pelangganId);
+        //     // }
+        // }
+    }
+
+    private static function deleteWebphoneLogsBulk(int $karyawanId, array $numbers): void
+    {
+
+        // Ambil semua ID dulu
+        $logIds = LogWebphone::where('karyawan_id', $karyawanId)
+            ->whereIn('number', $numbers)
+            ->pluck('id')
+            ->toArray();
+
+        Log::channel('reassign_customer')->info("=== Processing Delete Webphone Log for Sales ID " . $karyawanId . " | Total Number " . count($numbers) . " | Total Data " . count($logIds),);
+
+        if (empty($logIds)) {
+            return;
+        }
+
+        // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
+        collect($logIds)->chunk(1000)->each(function ($chunk) use ($karyawanId) {
+            DB::transaction(function () use ($chunk, $karyawanId) {
+                $logs = LogWebphone::whereIn('id', $chunk->toArray())->get();
+
+                if ($logs->isNotEmpty()) {
+                    LogWebphoneBackup::insert(
+                        $logs->map(fn($log) => self::prepareBackupData($log, ['created_at']))->toArray()
+                    );
+                    Log::channel('reassign_customer')->info("Success Backup Webphone Log",);
+                }
+            });
+        });
+        // Log::channel('reassign_customer')->info("=== Start Delete Log Webphone Log",);
+        // LogWebphone::whereIn('id', $logIds)->delete();
+        // Log::channel('reassign_customer')->info("=== Success Delete Log Webphone Log",);
+    }
+
+    private static function deleteDfusHistoryBulk(string $karyawanName, array $idPelanggan): void
+    {
+        // Ambil semua ID dulu
+        $ids = collect($idPelanggan);
+        $result = collect();
+
+        $ids->chunk(500)->each(function ($chunk) use (&$result, $karyawanName) {
+            $data = DFUS::where('sales_penanggung_jawab', $karyawanName)
+                ->whereIn('id_pelanggan', $chunk)
+                ->pluck('id');
+
+            $result = $result->merge($data);
+        });
+
+        // $dfusIds = DFUS::where('sales_penanggung_jawab', $karyawanName)
+        //     ->whereIn('id_pelanggan', $idPelanggan)
+        //     ->pluck('id')
+        //     ->toArray();
+
+        Log::channel('reassign_customer')->info("=== Processing Delete DFUS for Sales ID " . $karyawanName . " | Total Pelanggan ID " . count($idPelanggan) . " | Total Data " . count($result),);
+
+        if (empty($result)) {
+            return;
+        }
+
+        // Backup dan delete per chunk - TAPI DENGAN TRANSACTION SENDIRI
+        collect($result)->chunk(1000)->each(function ($chunk) {
+            DB::transaction(function () use ($chunk) {
+                $dfus = DFUS::whereIn('id', $chunk->toArray())->get();
+                if ($dfus->isNotEmpty()) {
+                    DFUSBackup::insert(
+                        $dfus->map(fn($log) => self::prepareBackupData($log, ['created_at', 'updated_at']))->toArray()
+                    );
+                    Log::channel('reassign_customer')->info("Success Backup DFUS Log",);
+                }
+            });
+        });
+        // Log::channel('reassign_customer')->info("=== Start Delete DFUS Log",);
+        // DFUS::whereIn('id', $dfusIds)->delete();
+        // Log::channel('reassign_customer')->info("=== Success Delete DFUS Log",);
+    }
+
+    // private static function deleteDfusHistoryBulk(string $karyawanName, string $idPelanggan): void
+    // {
+    //     Log::channel('reassign_customer')->info("=== Processing Delete Webphone Log for Sales ID " . $karyawanName);
+
+    //     DFUS::where('sales_penanggung_jawab', $karyawanName)
+    //         ->where('id_pelanggan', $idPelanggan)
+    //         ->chunkById(1000, function ($dfus) {
+
+    //             DFUSBackup::insert(
+    //                 $dfus->map(
+    //                     fn($log) =>
+    //                     self::prepareBackupData($log, ['created_at', 'updated_at'])
+    //                 )->toArray()
+    //             );
+
+    //             DFUS::whereIn('id', $dfus->pluck('id'))->delete();
+    //         });
+    // }
+
+    private static function prepareBackupData($model, array $dateFields): array
+    {
+        $data = $model->toArray();
+        unset($data['id']);
+
+        foreach ($dateFields as $field) {
+            if (!empty($data[$field])) {
+                $data[$field] = Carbon::parse($data[$field])
+                    ->format('Y-m-d H:i:s');
+            }
+        }
+
+        return $data;
     }
 
     private static function latestQuot($kontrak, $nonKontrak, $id)
@@ -278,112 +726,5 @@ class RandomSalesAssign
         return Carbon::parse($latestNonKontrak)->gt(Carbon::parse($latestKontrak))
             ? $latestNonKontrak
             : $latestKontrak;
-    }
-
-    private static function checkCustomer($customer, $orderThreshold, $quotationThreshold, $info)
-    {
-        $orderThreshold = Carbon::now()->subMonths($orderThreshold);
-        $quotationThreshold = Carbon::now()->subMonths($quotationThreshold);
-
-        [$shouldReassign, $description] = self::checkOrderAndQuotation($customer, $orderThreshold, $quotationThreshold);
-
-        if ($shouldReassign) self::assignNewSales($customer, $info . $description);
-    }
-
-    private static function checkOrderAndQuotation($customer, $orderThreshold, $quotationThreshold)
-    {
-        $info = null;
-        $latestOrder = $customer->latestOrder;
-
-        $latestQuotation = collect([
-            QuotationKontrakH::select('id', 'no_document', 'pelanggan_ID', 'tanggal_penawaran')->where('pelanggan_ID', $customer->id_pelanggan)->orderByDesc('tanggal_penawaran')->first(),
-            QuotationNonKontrak::select('id', 'no_document', 'pelanggan_ID', 'tanggal_penawaran')->where('pelanggan_ID', $customer->id_pelanggan)->orderByDesc('tanggal_penawaran')->first()
-        ])->sortByDesc('tanggal_penawaran')->first();
-
-        if (!$latestOrder) {
-            $info = 'Customer belum pernah order';
-
-            if ($latestQuotation && Carbon::parse($latestQuotation->tanggal_penawaran)->lte($quotationThreshold)) {
-                $info .= ' dan penawaran terakhir lebih dari ' . $quotationThreshold->diffInMonths(Carbon::now()) . ' bulan lalu (' . $latestQuotation->no_document . ', ' . $latestQuotation->tanggal_penawaran . ')';
-                return [true, $info];
-            }
-        } else {
-            if (Carbon::parse($latestOrder->tanggal_order)->lte($orderThreshold)) {
-                $info = 'Order terakhir lebih dari ' . $orderThreshold->diffInMonths(Carbon::now()) . ' bulan lalu (' . $latestOrder->no_order . ', ' . $latestOrder->tanggal_order . ')';
-
-                if ($latestQuotation && Carbon::parse($latestQuotation->tanggal_penawaran)->lte($quotationThreshold)) {
-                    $info .= ' dan penawaran terakhir lebih dari ' . $quotationThreshold->diffInMonths(Carbon::now()) . ' bulan lalu (' . $latestQuotation->no_document . ', ' . $latestQuotation->tanggal_penawaran . ')';
-                    return [true, $info];
-                }
-            }
-        }
-
-        return [false, $info];
-    }
-
-    private static function assignNewSales($customer, $info)
-    {
-        $currentSales = $customer->currentSales;
-
-        $excludedSalesIds = collect([$currentSales ? $currentSales->id : null])
-            ->merge(
-                HistoryPerubahanSales::where('id_pelanggan', $customer->id_pelanggan)->get()
-                    ->flatMap(fn($history) => [$history->id_sales_lama, $history->id_sales_baru])
-            )
-            ->unique()
-            ->values()
-            ->all();
-
-        $newSales = null;
-        $poolSize = count(self::$salesPool);
-        $initialIndex = self::$salesPoolIndex;
-
-        do {
-            $potentialSales = self::$salesPool[self::$salesPoolIndex];
-
-            self::$salesPoolIndex = (self::$salesPoolIndex + 1) % $poolSize;
-
-            if (!in_array($potentialSales['id'], $excludedSalesIds)) {
-                $newSales = (object) $potentialSales;
-                break;
-            }
-        } while (self::$salesPoolIndex !== $initialIndex);
-
-        if ($newSales) {
-            DB::beginTransaction();
-            try {
-                $historySales = new HistoryPerubahanSales();
-                $historySales->id_pelanggan = $customer->id_pelanggan;
-                $historySales->id_sales_lama = $currentSales ? $currentSales->id : null;
-                $historySales->id_sales_baru = $newSales->id;
-                $historySales->tanggal_rotasi = Carbon::now();
-                $historySales->save();
-
-                MasterPelanggan::where('id_pelanggan', $customer->id_pelanggan)->update([
-                    'sales_id' => $newSales->id,
-                    'sales_penanggung_jawab' => $newSales->nama_lengkap,
-                ]);
-
-                Log::channel('reassign_customer')->info("\n\n== Informasi Perubahan Sales ==\n\n", [
-                    'timestamp' => Carbon::now()->toDateTimeString(),
-                    'id_pelanggan' => $customer->id_pelanggan,
-                    'nama_pelanggan' => $customer->nama_pelanggan,
-                    'sales_lama' => $currentSales ? [
-                        'id' => $currentSales->id,
-                        'nama' => $currentSales->nama_lengkap,
-                    ] : null,
-                    'sales_baru' => [
-                        'id' => $newSales->id,
-                        'nama' => $newSales->nama_lengkap,
-                    ],
-                    'keterangan' => $info,
-                ]);
-
-                DB::commit();
-            } catch (\Exception $th) {
-                DB::rollBack();
-                Log::channel('reassign_customer')->error('error', [$th->getMessage(), $th->getLine(), $th->getFile()]);
-            }
-        }
     }
 }
