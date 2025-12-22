@@ -970,8 +970,7 @@ class ReadyOrderController extends Controller
                     }
                     
 
-                    $number_imaginer = sprintf("%03d", $n);
-
+                    $number_imaginer = sprintf("%03d", $noSampel);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
                     $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
 
@@ -1827,7 +1826,7 @@ class ReadyOrderController extends Controller
                                     }
                                 }
 
-                                $number_imaginer = sprintf("%03d", $n);
+                                $number_imaginer = sprintf("%03d", $noSampel);
                                 $periodeNew = $periode_kontrak;
                                 $statusSamplingNew = $dataQuotation->status_sampling;
                                 $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
