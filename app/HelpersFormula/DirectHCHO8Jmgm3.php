@@ -39,13 +39,6 @@ class DirectHCHO8Jmgm3 {
         // $c16 = round($c17 * 1000, 4); // ug/m³ 
         // $satuan = 'mg/Nm3';
 
-        // FUNCTION POTONG DESIMAL (TANPA PEMBULATAN)
-        function truncate($value, $decimal = 4)
-        {
-            $factor = pow(10, $decimal);
-            return floor($value * $factor) / $factor;
-        }
-
         // HITUNG NILAI MENTAH
         $c2_raw  = $average * ($suhu / $tekanan_udara) * (298 / 760); // mg/Nm³
         $c1_raw  = $c2_raw * 1000;                                  // ug/Nm³
@@ -54,12 +47,12 @@ class DirectHCHO8Jmgm3 {
         $c16_raw = $c17_raw * 1000;                                 // ug/m³
 
         // POTONG (BUKAN ROUND)
-        $c2  = truncate($c2_raw, 4);
-        $c1  = truncate($c1_raw, 4);
-        $c3  = truncate($c3_raw, 4);
+        $c2  = $this->cutDecimal($c2_raw, 4);
+        $c1  = $this->cutDecimal($c1_raw, 4);
+        $c3  = $this->cutDecimal($c3_raw, 4);
         $c15 = $c3;
-        $c17 = truncate($c17_raw, 4);
-        $c16 = truncate($c16_raw, 4);
+        $c17 = $this->cutDecimal($c17_raw, 4);
+        $c16 = $this->cutDecimal($c16_raw, 4);
 
         $satuan = 'mg/Nm3';
 
@@ -76,4 +69,10 @@ class DirectHCHO8Jmgm3 {
             'satuan' => $satuan
         ];
     }
+
+    private function cutDecimal($value, $decimal)
+        {
+            $factor = pow(10, $decimal);
+            return floor($value * $factor) / $factor;
+        }
 }
