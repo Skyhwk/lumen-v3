@@ -3647,12 +3647,12 @@ class RequestQuotationController extends Controller
                     $data_lama = json_decode($dataH->data_lama);
 
                 if ($data_lama != null) {
-                    if (isset($data_lama->id_order) && $data_lama->id_order != null) {
-                        $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', true)->first();
-                        $no_qt_lama = $cek_order->no_document;
-                        $no_qt_baru = $dataH->no_document;
-                        $id_order = $data_lama->id_order;
-                    }
+                    // if (isset($data_lama->id_order) && $data_lama->id_order != null) {
+                    //     $cek_order = OrderHeader::where('id', $data_lama->id_order)->where('is_active', true)->first();
+                    //     $no_qt_lama = $cek_order->no_document;
+                    //     $no_qt_baru = $dataH->no_document;
+                    //     $id_order = $data_lama->id_order;
+                    // }
 
                     if ($data_lama->status_sp == 'false') {
                         $result = [];
@@ -3667,11 +3667,11 @@ class RequestQuotationController extends Controller
                         if(!empty($result)){
                             foreach ($result as $status => $periode) {
                                 if ($status == 'SD') {
-                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
+                                    SamplingPlan::where('no_quotation', $dataH->no_document)
                                         ->whereIn('periode_kontrak', $periode)
                                         ->update([
-                                            'no_quotation' => $data->no_document,
-                                            'quotation_id' => $data->id,
+                                            'no_quotation' => $dataH->no_document,
+                                            'quotation_id' => $dataH->id,
                                             'status_jadwal' => 'SD',
                                             'is_active' => false
                                         ]);
@@ -3679,8 +3679,8 @@ class RequestQuotationController extends Controller
                                     Jadwal::where('no_quotation', $dataOld->no_document)
                                         ->whereIn('periode', $periode)
                                         ->update([
-                                            'no_quotation' => $data->no_document,
-                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                            'no_quotation' => $dataH->no_document,
+                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan))),
                                             'is_active' => false,
                                             'canceled_by' => 'system'
                                         ]);
