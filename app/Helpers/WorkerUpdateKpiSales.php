@@ -19,7 +19,7 @@ class WorkerUpdateKpiSales
         // Jalankan setiap 10 menit dari jam 06:00 sampai 21:00 setiap hari, pada detik ke-0
         if (
             $hour >= 6 && $hour <= 21 &&
-            $minute % 1 === 0 &&
+            $minute % 5 === 0 &&
             $second === 0
         ) {
             try {
