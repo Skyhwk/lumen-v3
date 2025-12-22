@@ -158,7 +158,7 @@ class SamplingPlanController extends Controller
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler =  MasterKaryawan::with('jabatan')
-                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346])
+                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
