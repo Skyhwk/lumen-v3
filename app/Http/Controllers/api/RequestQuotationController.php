@@ -3655,34 +3655,48 @@ class RequestQuotationController extends Controller
                     }
 
                     if ($data_lama->status_sp == 'false') {
-                        if ($payload->data_wilayah->status_sampling == 'SD') {
-                            SamplingPlan::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $data->no_document,
-                                    'quotation_id' => $data->id,
-                                    'status_jadwal' => 'SD',
-                                    'is_active' => false
-                                ]);
-    
-                            Jadwal::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $data->no_document,
-                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
-                                    'is_active' => false,
-                                    'canceled_by' => 'system'
-                                ]);
-    
-                        } else {
-                            $perubahan_periode = [];
-                            foreach ($payload->data_pendukung as $item) {
-                                if (isset($item->perubahan_periode)) {
-                                    $perubahan_periode[] = $item->perubahan_periode;
+                        $result = [];
+
+                        foreach ($payload->data_wilayah->wilayah_data as $item) {
+                            $status = $item->status_sampling;
+                            $periode = $item->periode;
+
+                            $result[$status] = $periode;
+                        }
+
+                        if(!empty($result)){
+                            foreach ($result as $status => $periode) {
+                                if ($status == 'SD') {
+                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode_kontrak', $periode)
+                                        ->update([
+                                            'no_quotation' => $data->no_document,
+                                            'quotation_id' => $data->id,
+                                            'status_jadwal' => 'SD',
+                                            'is_active' => false
+                                        ]);
+
+                                    Jadwal::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode', $periode)
+                                        ->update([
+                                            'no_quotation' => $data->no_document,
+                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
+                                            'is_active' => false,
+                                            'canceled_by' => 'system'
+                                        ]);
                                 }
                             }
-    
-                            $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'update', $dataH->no_document, 'kontrak');
-                            $this->dispatch($jobChangeJadwal);
                         }
+
+                        $perubahan_periode = [];
+                        foreach ($payload->data_pendukung as $item) {
+                            if (isset($item->perubahan_periode)) {
+                                $perubahan_periode[] = $item->perubahan_periode;
+                            }
+                        }
+
+                        $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'update', $dataH->no_document, 'kontrak');
+                        $this->dispatch($jobChangeJadwal);
                     }
 
                 }
@@ -3751,7 +3765,7 @@ class RequestQuotationController extends Controller
             $data_wilayah = $payload->data_wilayah;
             $syarat_ketentuan = $payload->syarat_ketentuan;
             $data_diskon = $payload->data_diskon;
-
+            
             foreach ($data_pendukung as $item) {
                 foreach ($item->data_sampling as $pengujian) {
                     $jumlahTitik = (int) ($pengujian->jumlah_titik ?? 0);
@@ -5087,39 +5101,53 @@ class RequestQuotationController extends Controller
                         // Helpers::sendTelegramAtasan($message, $cek->add_by);
                         // Helpers::sendTelegramAtasan($message, '187');
                     } else if ($data_lama->status_sp == 'false') {
-                        if ($payload->data_wilayah->status_sampling == 'SD') {
-                            SamplingPlan::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $data->no_document,
-                                    'quotation_id' => $data->id,
-                                    'status_jadwal' => 'SD',
-                                    'is_active' => false
-                                ]);
-    
-                            Jadwal::where('no_quotation', $dataOld->no_document)
-                                ->update([
-                                    'no_quotation' => $data->no_document,
-                                    'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($data->nama_perusahaan))),
-                                    'is_active' => false,
-                                    'canceled_by' => 'system'
-                                ]);
-    
-                        } else {
-                            $perubahan_periode = [];
-                            foreach ($payload->data_pendukung as $item) {
-                                if (isset($item->perubahan_periode)) {
-                                    $perubahan_periode[] = $item->perubahan_periode;
+                        $result = [];
+
+                        foreach ($payload->data_wilayah->wilayah_data as $item) {
+                            $status = $item->status_sampling;
+                            $periode = $item->periode;
+
+                            $result[$status] = $periode;
+                        }
+
+                        if(!empty($result)){
+                            foreach ($result as $status => $periode) {
+                                if ($status == 'SD') {
+                                    SamplingPlan::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode_kontrak', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'quotation_id' => $dataH->id,
+                                            'status_jadwal' => 'SD',
+                                            'is_active' => false
+                                        ]);
+
+                                    Jadwal::where('no_quotation', $dataOld->no_document)
+                                        ->whereIn('periode', $periode)
+                                        ->update([
+                                            'no_quotation' => $dataH->no_document,
+                                            'nama_perusahaan' => strtoupper(trim(htmlspecialchars_decode($dataH->nama_perusahaan))),
+                                            'is_active' => false,
+                                            'canceled_by' => 'system'
+                                        ]);
                                 }
                             }
+                        } 
 
-                            $qtArray = [
-                                'new' => $dataH->no_document,
-                                'old' => $dataOld->no_document,
-                            ];
-
-                            $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
-                            $this->dispatch($jobChangeJadwal);
+                        $perubahan_periode = [];
+                        foreach ($payload->data_pendukung as $item) {
+                            if (isset($item->perubahan_periode)) {
+                                $perubahan_periode[] = $item->perubahan_periode;
+                            }
                         }
+
+                        $qtArray = [
+                            'new' => $dataH->no_document,
+                            'old' => $dataOld->no_document,
+                        ];
+
+                        $jobChangeJadwal = new ChangeJadwalJob($perubahan_periode, 'revisi', $qtArray, 'kontrak');
+                        $this->dispatch($jobChangeJadwal);
                         
                         // ========== END Perbaikan SP dan Jadwal By: Dedi ==========
                         $message = "Terjadi perubahan quotation $data_lama->no_qt menjadi $no_document dan silahkan di cek di bagian menu sampling plan dengan No QT $no_document apakah sudah sesuai atau belum untuk jumlah kategorinya demi ke-efisiensi penjadwalan sampler";
