@@ -4,8 +4,6 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\MasterKaryawan;
 use App\Models\QuotationKontrakH;
-
-
 use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
@@ -13,7 +11,6 @@ use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
 
 Carbon::setLocale('id');
 
@@ -37,16 +34,15 @@ class DashboardSalesController extends Controller
         $query = collect([QuotationKontrakH::class, QuotationNonKontrak::class])
             ->flatMap(function ($model) use ($request, $startDate, $endDate) {
                 $subQuery = $model::where('is_active', true)->whereBetween('tanggal_penawaran', [$startDate, $endDate]);
+                $jabatan  = $request->attributes->get('user')->karyawan->id_jabatan;
+                if ($jabatan == 24) {
+                    $subQuery->where('sales_id', $this->user_id);
+                } else if ($jabatan == 21) {
+                    $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                    array_push($bawahan, $this->user_id);
 
-                // $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
-                // if ($jabatan == 24) {
-                //     $subQuery->where('sales_id', $this->user_id);
-                // } else if ($jabatan == 21) {
-                //     $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
-                //     array_push($bawahan, $this->user_id);
-
-                //     $subQuery->whereIn('sales_id', $bawahan);
-                // }
+                    $subQuery->whereIn('sales_id', $bawahan);
+                }
 
                 return $subQuery->get();
             });
@@ -101,22 +97,24 @@ class DashboardSalesController extends Controller
 
     public function getSales(Request $request)
     {
-        $user_id    = 890;
-        $bawahanIds = GetBawahan::where('id', $user_id)->get()->pluck('id')->unique()->values()->toArray();
-        $managers   = MasterKaryawan::where('is_active', true)
+        $karyawan_id = 890;
+        $bawahanIds = GetBawahan::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
 
+        $data = MasterKaryawan::where('is_active', true)
             ->where(function ($query) {
                 $query->where('id', '14')
                     ->orWhere('jabatan', 'like', '%Manager%');
             })
         // ->where('jabatan', 'like', '%Manager%')
-            ->where('id', '!=', $user_id)
+            ->where('id', '!=', $karyawan_id)
             ->whereIn('id', $bawahanIds)
             ->orderBy('jabatan', 'asc')
             ->select('id', 'nama_lengkap', 'jabatan')
             ->get();
 
-        foreach ($managers as $mgr) {
+        // dd($managers);
+
+        foreach ($data as $mgr) {
             $mgr->bawahan = MasterKaryawan::where('is_active', true)
                 ->whereIn('id', GetBawahan::where('id', $mgr->id)->get()->pluck('id')->toArray())
                 ->where('id', '!=', $mgr->id)
@@ -128,7 +126,7 @@ class DashboardSalesController extends Controller
         }
 
         return response()->json([
-            'sales'   => $managers,
+            'sales'   => $data,
             'message' => 'Sales data retrieved successfully',
         ], 200);
     }
@@ -533,7 +531,13 @@ class DashboardSalesController extends Controller
                 ], 200);
             }
         } catch (\Throwable $th) {
-            dd($th);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'line'    => $th->getLine(),
+                'getFile' => $th->getFile(),
+                'error'   => $th->getMessage(),
+            ], 500);
         }
     }
 }
