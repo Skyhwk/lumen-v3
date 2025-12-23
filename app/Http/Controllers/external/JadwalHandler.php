@@ -97,6 +97,7 @@ class JadwalHandler extends BaseController
                 } else {
                     $karyawan->nama_display = $karyawan->nama_lengkap . ' (perbantuan)';
                 }
+                $karyawan->is_perbantuan = 1;
                 // $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
                 if ($karyawan->users) {
                     // 2. Tarik kolom fisik dari relasi users ke root item
