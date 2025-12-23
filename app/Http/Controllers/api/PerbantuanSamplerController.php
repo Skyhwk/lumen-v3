@@ -10,6 +10,7 @@ use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 class PerbantuanSamplerController extends Controller
 {
@@ -47,9 +48,19 @@ class PerbantuanSamplerController extends Controller
     {
         DB::beginTransaction();
         try {
+            $userId = $request->user_id;
+            $namaLengkap = $request->nama_lengkap;
+
+            // jika user_id bukan angka → berarti new tags
+            if (!is_numeric($userId)) {
+                $userId = null;
+
+                // rapikan nama manual
+                $namaLengkap = Str::title(Str::lower($namaLengkap ?? $userId));
+            } 
 
             // CEK DUPLIKASI USER
-            $exists = PerbantuanSampler::where('user_id', $request->user_id)
+            $exists = PerbantuanSampler::where('nama_lengkap', $namaLengkap)
                 ->where('is_active', true)
                 ->exists();
 
@@ -62,7 +73,8 @@ class PerbantuanSamplerController extends Controller
 
             // SIMPAN DATA
             $data = new PerbantuanSampler();
-            $data->user_id = $request->user_id;
+            $data->user_id = $userId;
+            $data->nama_lengkap = $namaLengkap;
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
             $data->save();
@@ -71,7 +83,7 @@ class PerbantuanSamplerController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "{$request->nama_lengkap} berhasil ditambahkan",
+                'message' => "{$namaLengkap} berhasil ditambahkan",
             ]);
 
         } catch (\Throwable $th) {
