@@ -190,6 +190,17 @@ class MonitorAnalisaController extends Controller
             'debit air (l/dtk)',
             'debit air (l/jam)',
             'debit air (l/hari)',
+            'kelembaban',
+            'o2',
+            'co2',
+            'co2 (24 jam)',
+            'co2 (8 jam)',
+            'c o',
+            'voc',
+            'voc (8 jam)',
+            'h2co',
+            'hcho (8 jam)',
+            'h2co'
         ];
     }
 
