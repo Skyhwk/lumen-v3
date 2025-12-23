@@ -4402,7 +4402,7 @@ class InputParameterController extends Controller
 				if (Carbon::parse($order_detail->tanggal_terima) < Carbon::parse('2025-11-01') && isset($existLingkungan->id)) {
 					$data_udara = WsValueUdara::where('id_lingkungan_header', $existLingkungan->id)->orderBy('id', 'desc')->first();
 					$data_udara->id_subkontrak  = $data->id;
-					for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = 1; $i <= 19; $i++) { // f_koreksi_1 - f_koreksi_17
 						$key = 'f_koreksi_' . $i;
 						if (isset($data_udara->{$key})) {
 							$data_udara->{$key} = $data_kalkulasi['hasil'];
@@ -4413,7 +4413,7 @@ class InputParameterController extends Controller
 					$data_udara = [];
 					$data_udara['id_subkontrak'] = $data->id;
 					$data_udara['no_sampel'] = trim($request->no_sample);
-					for ($i = 1; $i <= 17; $i++) { // f_koreksi_1 - f_koreksi_17
+					for ($i = 1; $i <= 19; $i++) { // f_koreksi_1 - f_koreksi_17
 						$key = 'f_koreksi_' . $i;
 						$data_udara[$key] = $data_kalkulasi['hasil'];
 					}
