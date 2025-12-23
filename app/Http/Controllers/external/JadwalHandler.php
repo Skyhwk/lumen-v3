@@ -83,7 +83,8 @@ class JadwalHandler extends BaseController
                 ->where('is_active', 1)
                 ->get();
             $userMerge->transform(function ($karyawan) {
-                $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
+                $karyawan->nama_lengkap = $karyawan->nama_lengkap;
+                $karyawan->is_perbantuan = 1;
                 return $karyawan;
             });
             // Only merge if $userMerge contains data
