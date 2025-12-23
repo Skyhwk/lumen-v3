@@ -68,7 +68,6 @@ class MonitorAnalisaController extends Controller
                 Subkontrak::class,
             ];
 
-            $hilangkanParameter = $this->parameterExcluded();
             $subQuery = collect($models)
                 ->flatMap(fn ($model) =>
                     $model::where('is_active', true)
@@ -141,7 +140,7 @@ class MonitorAnalisaController extends Controller
 
                 // Jika belum ada yang diuji
                 if (!$subQuery->has($item->no_sampel)) {
-                    $item->parameter_belum_diuji = $paramAll->reject(fn ($p) => in_array(strtolower($p), $hilangkanParameter))->values();
+                    $item->parameter_belum_diuji = $paramAll->reject(fn ($p) => in_array(strtolower($p), $parameterExcluded))->values();
                     return $item;
                 }
 
