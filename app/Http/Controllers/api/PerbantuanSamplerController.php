@@ -30,11 +30,11 @@ class PerbantuanSamplerController extends Controller
 
     public function getKaryawan()
     {
-        $existingKaryawan = PerbantuanSampler::where('is_active', true)->pluck('user_id')->toArray();
+        $existingKaryawan = PerbantuanSampler::where('is_active', true)->pluck('id')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('user_id', $existingKaryawan)
-            ->select('user_id', 'nama_lengkap')
+            ->whereNotIn('id', $existingKaryawan)
+            ->select('id', 'nama_lengkap')
             ->get();
         
             return response()->json([
