@@ -26,15 +26,17 @@
             border-collapse: collapse;
             border: none;
             table-layout: fixed;
+            border: none !important;
         }
-        .col-kiri { width: 155mm; padding-right: 4mm; vertical-align: top; }
-        .col-kanan { width: 110mm; vertical-align: top; }
+        .col-kiri { width: 155mm; padding-right: 4mm; vertical-align: top; border: none !important; }
+        .col-kanan { width: 110mm; vertical-align: top; border: none !important; }
 
         /* BOX STYLE */
         .section {
             margin-bottom: 5px;
             /* border: 1px solid #000; */
             padding: 3px;
+            border: none !important;
         }
         .section-title {
             font-weight: bold;
@@ -44,11 +46,12 @@
             /* text-transform: uppercase; */
             /* background-color: #f2f2f2; */
             padding: 2px;
+            text-align: left !important;
         }
 
         /* TABEL UMUM (Compact) */
-        .data-table { width: 100%; border-collapse: collapse; }
-        .data-table td { padding: 1px 2px; vertical-align: top; }
+        .data-table { width: 100%; border-collapse: collapse; border: none !important; text-align: left !important; }
+        .data-table td { padding: 1px 2px; vertical-align: top; border: none !important; text-align: left !important;}
         .label-col { width: 40%; }
         .separator-col { width: 3%; text-align: center; }
         .value-col { width: 58%; }
@@ -180,51 +183,51 @@
                                             }
                                         @endphp
                                         <tr>
-                                            <td>1. Leher</td>
+                                            <td style="text-align: left;" >1. Leher</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_leher->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_leher !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_leher->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>2. Bahu</td>
+                                            <td style="text-align: left;" >2. Bahu</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_bahu->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_bahu !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_bahu->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>3. Punggung Atas</td>
+                                            <td style="text-align: left;" >3. Punggung Atas</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_atas->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>4. Lengan</td>
+                                            <td style="text-align: left;" >4. Lengan</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_lengan->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lengan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lengan->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>5. Siku</td>
+                                            <td style="text-align: left;" >5. Siku</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_siku->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_siku !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_siku->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>6. Punggung Bawah</td>
+                                            <td style="text-align: left;" >6. Punggung Bawah</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_punggung_bawah->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>7. Tangan</td>
+                                            <td style="text-align: left;" >7. Tangan</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_tangan->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_tangan !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_tangan->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>8. Pinggul</td>
+                                            <td style="text-align: left;" >8. Pinggul</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_pinggul->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_pinggul !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_pinggul->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>9. Paha</td>
+                                            <td style="text-align: left;" >9. Paha</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_paha->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_paha !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_paha->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>10. Lutut</td>
+                                            <td style="text-align: left;" >10. Lutut</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_lutut->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_lutut !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_lutut->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>11. Betis</td>
+                                            <td style="text-align: left;" >11. Betis</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_betis->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_betis !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_betis->poin : 1 }}</td></tr>
                                         <tr>
-                                            <td>12. Kaki</td>
+                                            <td style="text-align: left;" >12. Kaki</td>
                                             <td class="text-center">{{ formatBagianTubuh($pengukuran->keluhan_bagian_tubuh->sakit_kaki->bagian_tubuh ?? null) }}</td>
                                             <td class="text-center">{{ ($pengukuran->keluhan_bagian_tubuh->sakit_kaki !== 'Tidak') ? $pengukuran->keluhan_bagian_tubuh->sakit_kaki->poin : 1 }}</td></tr>
                                     </tbody>
@@ -248,8 +251,6 @@
                         ["Kaki", $pengukuran->keluhan_bagian_tubuh->sakit_kaki],
                     ];
 
-                    
-
                     $higherNumber = 0;
                     $returnKeluhan = [];
 
@@ -265,7 +266,8 @@
                         }
 
                         if (is_array($value) || is_object($value)) {
-                            $poin = isset($value->poin) ? intval($value->poin) : 0;
+                            $poin = isset($value->Poin) ? intval($value->Poin) : 0;
+
                             if ($poin === $higherNumber) {
                                 $returnKeluhan[] = $label;
                             } elseif ($poin > $higherNumber) {
@@ -277,12 +279,19 @@
 
                     @endphp
                     <div style="margin-top: 15px;">
-                        <span class="bold">KESIMPULAN SURVEI KELUHAN GANGGUAN OTOT DAN RANGKA</span>
-                        <div class="box-conclusion p-1">
-                            Pengukuran ergonomi pada pekerja tersebut memiliki skor keluhan tertinggi pada bagian: 
-                            @foreach($returnKeluhan as $index => $item)
-                                {{ $index === 0 ? $item : ( $index > 0 ? ', ' . $item : '' )}}
-                            @endforeach
+                        <table class="info-table">
+                                <tr>
+                                    <td style="text-align: left !important;"><span class="bold">KESIMPULAN SURVEI KELUHAN GANGGUAN OTOT DAN RANGKA</span></td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align: justify !important;">
+                                        Berdasarkan hasil survei keluhan gangguan otot dan rangka yang telah dilakukan, 
+                                        didapatkan bahwa bagian tubuh dengan tingkat keluhan tertinggi adalah: 
+                                        <span class="bold">{{ !empty($returnKeluhan) ? implode(', ', $returnKeluhan) : 'Tidak Ada Keluhan' }}</span> 
+                                        dengan skor keluhan sebesar <span class="bold">{{ $higherNumber }}</span>.
+                                    </td>
+                                </tr>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -297,15 +306,20 @@
                 </table>
 
                 <div class="section">
-                    <div class="section-title">Informasi Pelanggan</div>
+                    
                     <table class="info-table">
                         <tr>
-                            <td style="width: 40%;">Nama Pelanggan</td>
-                            <td style="width: 3%;">:</td>
-                            <td style="text-align:start;">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                            <td style="width: 40%; text-align: left !important;"><div class="section-title">Informasi Pelanggan</div></td>
+                            <td></td>
+                            <td></td>
                         </tr>
                         <tr>
-                            <td style="width: 40%;">Alamat / Lokasi Sampling</td>
+                            <td style="width: 40%; text-align: left !important;">Nama Pelanggan</td>
+                            <td style="width: 3%;">:</td>
+                            <td style="text-align:start; ">{{ strtoupper($personal->nama_pelanggan) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="width: 40%; text-align: left !important;">Alamat / Lokasi Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->alamat_pelanggan }}</td>
                         </tr>
@@ -313,15 +327,20 @@
                 </div>
 
                 <div class="section">
-                    <div class="section-title">Informasi Sampling</div>
+                    
                     <table class="info-table" width="100%">
                         <tr>
-                            <td style="width: 40%;">Tanggal Sampling</td>
+                            <td style="width: 40%; text-align: left !important; vertical-align: top !important;" ><div class="section-title">Informasi Sampling</div></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td style="width: 40%; text-align: left !important; vertical-align: top !important;">Tanggal Sampling</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->tanggal_sampling }}</td>
                         </tr>
                         <tr>
-                            <td style="width: 40%;">Metode Sampling*</td>
+                            <td style="width: 40%; text-align: left !important; vertical-align: top !important;">Metode Sampling*</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">SNI 9011:2021</td>
                         </tr>
@@ -329,15 +348,20 @@
                 </div>
 
                 <div class="section">
-                    <div class="section-title">Data Individu / Pekerja yang diukur</div>
+                    
                     <table class="info-table" width="100%">
                         <tr>
-                            <td style="width: 40%;">Nama</td>
+                            <td style="width: 40%; text-align: left !important;"><div class="section-title">Data Individu / Pekerja yang diukur</div></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td style="width: 40%; text-align: left !important; vertical-align: top !important;">Nama</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->nama_pekerja }}</td>
                         </tr>
                         <tr>
-                            <td style="width: 40%;">Posisi / Jabatan</td>
+                            <td style="width: 40%; text-align: left !important; vertical-align: top !important;">Posisi / Jabatan</td>
                             <td style="width: 3%;">:</td>
                             <td style="text-align:start;">{{ $personal->jabatan }}</td>
                         </tr>
@@ -359,10 +383,10 @@
                         @forelse($personal->aktifitas_k3->uraian as $item)
                             <tr>
                                 <td style="text-align: center;">{{ $loop->iteration }}</td>
-                                <td>
+                                <td style="text-align: left;">
                                     {{ $item->Uraian }}
                                 </td>
-                                <td>
+                                <td style="text-align: left;">
                                         {{ $item->jam }} Jam : {{ $item->menit }} Menit
                                 </td>
                             </tr>
