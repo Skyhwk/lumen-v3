@@ -30,11 +30,11 @@ class PerbantuanSamplerController extends Controller
 
     public function getKaryawan()
     {
-        $existingKaryawan = PerbantuanSampler::where('is_active', true)->pluck('user_id')->toArray();
+        $existingKaryawan = PerbantuanSampler::where('is_active', true)->pluck('id')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
-            ->whereNotIn('user_id', $existingKaryawan)
-            ->select('user_id', 'nama_lengkap')
+            ->whereNotIn('id', $existingKaryawan)
+            ->select('id', 'nama_lengkap')
             ->get();
         
             return response()->json([
@@ -53,7 +53,7 @@ class PerbantuanSamplerController extends Controller
 
             // jika user_id bukan angka → berarti new tags
             if (!is_numeric($userId)) {
-                $userId = null;
+                $userId = str_replace(".", "", microtime(true));
 
                 // rapikan nama manual
                 $namaLengkap = Str::title(Str::lower($namaLengkap ?? $userId));
