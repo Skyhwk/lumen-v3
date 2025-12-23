@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use App\Models\ClaimFeeExternal;
 use App\Models\OrderHeader;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\GetBawahan;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -13,14 +14,21 @@ class ClaimFeeExternalController extends Controller
     public function outstandingIndex(Request $request)
     {
         $status = $request->status;
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->whereIn('status_pembayaran', ['WAITING PROCESS', 'PROCESSED']);
 
-        if (is_array($status)) {
-            $query->whereIn('status_pembayaran', $status);
-        } else {
-            $query->where('status_pembayaran', $status);
+        if (in_array($jabatan, [24, 86, 148])) {
+            $query->where('sales_id', $this->user_id);
+        }else if (in_array($jabatan, [21, 15, 154, 157])) {
+            $bawahan = GetBawahan::where('id', $this->user_id)
+                ->pluck('id')
+                ->toArray();
+            $bawahan[] = $this->user_id;
+
+            $query->whereIn('sales_id', $bawahan);
         }
 
         return DataTables::of($query)->make(true);
@@ -33,12 +41,17 @@ class ClaimFeeExternalController extends Controller
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true);
+            ->where('is_active', true)->where('status_pembayaran', 'TRANSFER');
 
-        if (is_array($status)) {
-            $query->whereIn('status_pembayaran', $status);
-        } else {
-            $query->where('status_pembayaran', $status);
+        if (in_array($jabatan, [24, 86, 148])) {
+            $query->where('sales_id', $this->user_id);
+        }else if (in_array($jabatan, [21, 15, 154, 157])) {
+            $bawahan = GetBawahan::where('id', $this->user_id)
+                ->pluck('id')
+                ->toArray();
+            $bawahan[] = $this->user_id;
+
+            $query->whereIn('sales_id', $bawahan);
         }
 
         return DataTables::of($query)->make(true);
@@ -48,6 +61,8 @@ class ClaimFeeExternalController extends Controller
     public function getOrders(Request $request)
     {
         $term = trim($request->term);
+
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
 
         // Guard: term minimal 3 karakter
         if (!$term || strlen($term) < 3) {
@@ -60,11 +75,25 @@ class ClaimFeeExternalController extends Controller
             ->where('is_active', true)
             ->where(function ($q) use ($term) {
                 $q->where('no_order', 'like', "%{$term}%");
-            })
-            ->get();
+            });
+
+        // filter berdasarkan jabatan tertentu
+        if (in_array($jabatan, [24, 86, 148])) {
+            $query->where('sales_id', $this->user_id);
+        }else if (in_array($jabatan, [21, 15, 154, 157])) {
+            $bawahan = GetBawahan::where('id', $this->user_id)
+                ->pluck('id')
+                ->toArray();
+            $bawahan[] = $this->user_id;
+
+            $query->whereIn('sales_id', $bawahan);
+        }
+
+        $data = $query->get();
+
 
         return response()->json([
-            'data' => $query
+            'data' => $data
         ]);
     }
 
@@ -98,6 +127,7 @@ class ClaimFeeExternalController extends Controller
             $claim->due_date = $request->tanggal_claim;
             $claim->status_pembayaran = $request->status;
             $claim->no_quotation = $request->no_quotation;
+            $claim->sales_id = $this->user_id;
             $claim->no_invoice = $request->no_invoice;
             $claim->biaya_akhir = $request->biaya_akhir;
             $claim->save();
