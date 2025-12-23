@@ -119,7 +119,7 @@ class MonitorAnalisaController extends Controller
         // =============================
         // Ambil order detail utama
         // =============================
-        $parameterExcluded = $this->parameterExcluded();
+        $parameterExcluded = $this->parameterExcluded($kategori);
         
         $data = OrderDetail::select('no_sampel', 'parameter', 'tanggal_terima', 'kategori_3', 't_ftc.ftc_verifier', 't_ftc.ftc_laboratory')
             ->where([
@@ -171,37 +171,73 @@ class MonitorAnalisaController extends Controller
         ]);
     }
     
-    private function parameterExcluded()
+    private function parameterExcluded($kategori)
     {
-        return [
-            'ph',
-            'suhu',
-            'suhu (na)',
-            'dhl',
-            'debit air',
-            'debit air (m3/ton)',
-            'debit air (m3/hari)',
-            'debit air (l/orang/hari)',
-            'debit air (l/kg)',
-            'debit air (l/l)',
-            'debit air (m3/l)',
-            'debit air (l/hari)',
-            'debit air (m3/dtk)',
-            'debit air (l/dtk)',
-            'debit air (l/jam)',
-            'debit air (l/hari)',
-            'kelembaban',
-            'o2',
-            'co2',
-            'co2 (24 jam)',
-            'co2 (8 jam)',
-            'c o',
-            'voc',
-            'voc (8 jam)',
-            'h2co',
-            'hcho (8 jam)',
-            'h2co'
-        ];
+        if($kategori == '1-Air'){
+            return [
+                'ph',
+                'suhu',
+                'suhu (na)',
+                'dhl',
+                'debit air',
+                'debit air (m3/ton)',
+                'debit air (m3/hari)',
+                'debit air (l/orang/hari)',
+                'debit air (l/kg)',
+                'debit air (l/l)',
+                'debit air (m3/l)',
+                'debit air (l/hari)',
+                'debit air (m3/dtk)',
+                'debit air (l/dtk)',
+                'debit air (l/jam)',
+                'debit air (l/hari)',
+            ];
+        } else if ($kategori == '4-Udara') {
+            return [
+                'suhu',
+                'kelembaban',
+                'o2',
+                'co2',
+                'co2 (24 jam)',
+                'co2 (8 jam)',
+                'c o',
+                'voc',
+                'voc (8 jam)',
+                'hcho',
+                'hcho (8 jam)',
+                'h2co',
+                'tekanan udara',
+                'pertukaran udara',
+                'laju ventilasi',
+                'laju ventilasi (8 jam)'
+            ];
+        } else if ($kategori == '5-Emisi') {
+            return [
+                'suhu',
+                'co2 (estb)',
+                'o2 (estb)',
+                'opasitas (estb)',
+                'velocity',
+                'co2',
+                'o2',
+                'opasitas',
+                'no2',
+                'no-no2',
+                'nox',
+                'nox-no2',
+                'no',
+                'so2',
+                'co',
+                'c o',
+                'tekanan udara',
+                'so2 (p)',
+                'co (p)',
+                'o2 (p)',
+                'no2-nox (p)',
+                'effisiensi pembakaran',
+                'eff. pembakaran'
+            ];
+        }
     }
 
     public function getKategori(Request $request)
