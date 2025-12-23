@@ -82,7 +82,10 @@ class JadwalHandler extends BaseController
                 ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
                 ->where('is_active', 1)
                 ->get();
-
+            $userMerge->transform(function ($karyawan) {
+                $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
+                return $karyawan;
+            });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
                 $users = $users->merge($userMerge)->unique('id')->values();
