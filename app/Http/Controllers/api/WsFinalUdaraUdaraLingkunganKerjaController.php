@@ -69,6 +69,21 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
         return Datatables::of($data)->make(true);
     }
 
+    public function handleDataDetail(Request $request) {
+        $data = OrderDetail::where('is_active', 1)
+            ->where('kategori_2', '4-Udara')
+            ->whereIn('kategori_3', ["27-Udara Lingkungan Kerja"])
+            ->where('status', 0)
+            ->whereNotNull('tanggal_terima')
+            ->where('id', $request->id)
+            ->first();
+
+        return response()->json([
+            'data' => $data,
+            'message' => 'Data retrieved successfully',
+        ], 200);
+    }
+
     public function getDetailCfr(Request $request)
     {
         $data = OrderDetail::where('cfr', $request->cfr)
