@@ -117,10 +117,10 @@ class JadwalHandler extends BaseController
                 $karyawan->unsetRelation('users');
                 return $karyawan;
             });
-            // $users->transform(function ($karyawan) {
-            //     $karyawan->nama_display = $karyawan->nama_lengkap;
-            //     return $karyawan;
-            // });
+            $users->transform(function ($karyawan) {
+                $karyawan->nama_display = $karyawan->nama_lengkap;
+                return $karyawan;
+            });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
                 $users = $users->merge($userMerge)->unique('id')->values();
