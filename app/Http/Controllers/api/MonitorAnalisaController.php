@@ -198,7 +198,7 @@ class MonitorAnalisaController extends Controller
             'c o',
             'voc',
             'voc (8 jam)',
-            'h2co',
+            'hcho',
             'hcho (8 jam)',
             'h2co'
         ];
