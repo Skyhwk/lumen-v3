@@ -899,7 +899,7 @@ class RenderInvoice
                                 : $cekArray;
                             // dd($usingData);
                             $chunks = self::chunkByContentHeight($usingData, $tambah);
-                            
+                            // dd($usingData, $tambah, $chunks);
                             for ($i = 0; $i < count($chunks); $i++) {
                                 foreach ($chunks[$i] as $keys => $dataSampling) {
                                     if ($keys == 0) {
@@ -1107,6 +1107,113 @@ class RenderInvoice
                                                     <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
                                                 ');
                                             }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (empty($chunks)) {
+                                $tambah++;
+                                $pdf->writeHTML(
+                                    '<tr style="border: 1px solid; font-size: 9px;">
+                                                <td style="font-size:9px;border:1px solid;border-color:#000;text-align:center;" rowspan="' . $tambah . '">' . $no . '</td>
+                                                <td style="font-size:9px;border:1px solid;border-color:#000; padding:5px;" rowspan="' . $tambah . '"><span><b>' . $values->no_order . '</b></span><br/><span><b>' . $values->no_document . '<br/>' . ($periode ? $periode : '') . '</b></span></td>'
+                                );
+
+                                if ($values->transportasi > 0 && $values->harga_transportasi_total != null) {
+
+                                    if (isset($values->keterangan_transportasi)) {
+                                        $ket_transportasi = $values->keterangan_transportasi;
+                                    } else {
+                                        $ket_transportasi = "Transportasi - Wilayah Sampling : " . explode("-", $values->wilayah)[1];
+                                    }
+
+                                    $pdf->writeHTML('
+                                            <tr>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3"><span>' . $ket_transportasi . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $values->transportasi . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total / $values->transportasi) . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->harga_transportasi_total) . '</td>
+                                            </tr>
+                                        ');
+                                }
+
+                                $perdiem_24 = '';
+                                $total_perdiem = 0;
+                                if ($values->jam_jumlah_orang_24 > 0 && $values->jam_jumlah_orang_24 != null && $values->harga_24jam_personil_total > 0) {
+                                    $perdiem_24 = 'Termasuk Perdiem (24 Jam)';
+                                    $total_perdiem = $total_perdiem + $values->harga_24jam_personil_total;
+                                }
+
+                                if ($values->perdiem_jumlah_orang > 0 && $values->harga_perdiem_personil_total != null) {
+                                    // dd($values->satuan_perdiem, $values->harga_perdiem_personil_total);
+                                    if (isset($values->keterangan_perdiem)) {
+                                        $ket_perdiem = $values->keterangan_perdiem;
+                                        $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total);
+                                        $jml_perdiem = $values->perdiem_jumlah_orang;
+                                        if (isset($values->satuan_perdiem)) {
+                                            $satuan_perdiem = self::rupiah($values->satuan_perdiem);
+                                        } else {
+                                            $sdiem = $harga_perdiem_personil_total / $jml_perdiem;
+                                            $satuan_perdiem = self::rupiah($sdiem);
+                                        }
+                                    } else {
+                                        $ket_perdiem = "Perdiem " . $perdiem_24;
+                                        $haga_perdiem_non = self::rupiah($values->harga_perdiem_personil_total + $total_perdiem);
+                                        $jml_perdiem = '';
+                                        $satuan_perdiem = $haga_perdiem_non;
+                                    }
+                                    $pdf->writeHTML('
+                                            <tr>
+                                                <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket_perdiem . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $jml_perdiem . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $satuan_perdiem . '</td>
+                                                <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . $haga_perdiem_non . '</td>
+                                            </tr>
+                                        ');
+                                }
+
+                                if (isset($values->keterangan_lainnya)) {
+                                    foreach (json_decode($values->keterangan_lainnya) as $k => $ket) {
+                                        $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . $ket->deskripsi . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center">' . $ket->titik . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_satuan) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($ket->harga_total) . '</td>
+                                                </tr>
+                                            ');
+                                    }
+                                }
+
+                                if ($values->biaya_lain != null) {
+                                    if (isset($values->keterangan_biaya_lain)) {
+                                        $pdf->writeHTML('
+                                                <tr>
+                                                    <td style="border: 1px solid; font-size: 9px; padding:5px;" class="wrap" colspan="3">' . self::rupiah($values->keterangan_biaya_lain) . '</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td>
+                                                </tr>
+                                            ');
+                                    } else {
+                                        $biayaLainArray = json_decode($values->biaya_lain, true);
+                                        if (is_array($biayaLainArray)) {
+                                            foreach ($biayaLainArray as $biayaLain) {
+                                                $pdf->writeHTML('
+                                                        <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">' . $biayaLain['deskripsi'] . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td>
+                                                        <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($biayaLain['harga']) . '</td></tr>
+                                                    ');
+                                            }
+                                        } else {
+                                            $pdf->writeHTML('
+                                                    <tr><td style="border: 1px solid; font-size: 9px; padding:5px;" colspan="3">Biaya Lain-Lain</td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right"></td>
+                                                    <td style="border: 1px solid; font-size: 9px; text-align:center" class="text-right">' . self::rupiah($values->biaya_lain) . '</td></tr>
+                                                ');
                                         }
                                     }
                                 }
@@ -1934,7 +2041,7 @@ class RenderInvoice
             } else {
                 $spk = '';
             }
-            
+
             $space = '<p style="font-size:4px;">&nbsp;</p>';
             $spaceSection = '<p style="font-size:8px;">&nbsp;</p>';
 
@@ -1947,13 +2054,13 @@ class RenderInvoice
                     <div>   
                     </div>
                         <p style="line-height:normal; font-size:9px;">Terbilang: </p>
-                        '. $space .'
+                        ' . $space . '
                         <p>
                             <b style="font-size:9px; text-align:center; white-space:normal; line-height:normal;">' . self::terbilang($customInvoice->harga->nilai_tagihan != null ? $customInvoice->harga->nilai_tagihan : $customInvoice->harga->total_harga) . ' Rupiah</b>
                         </p>
-                        '. $spaceSection .'
+                        ' . $spaceSection . '
                         <p style="font-size:10px; border-bottom:1px solid #000; width: 120px; padding-bottom:5px;">Keterangan Pembayaran:</p>
-                        '.$space .'
+                        ' . $space . '
                         <p style="font-size:10px;">- Pembayaran dilakukan secara <b style="font-style: italic;">"Full Amount"</b> (tanpa pemotongan biaya apapun)</p>
                         <p style="font-size:10px;">- <b>Cash / Transfer : ' . $dataHead->rekening . ' atas nama PT Inti Surya Laboratorium Bank Central Asia (BCA) - Kota Tangerang - Cabang BSD Serpong</b></p>
                         <p style="font-size:10px">- Pembayaran baru dianggap sah apabila cek / giro telah dapat dicairkan</p>

@@ -14,6 +14,7 @@ use App\Models\QuotationNonKontrak;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
+use Log;
 
 
 class JadwalServices
@@ -555,72 +556,6 @@ class JadwalServices
                 $noqt = $dataUpdate->no_quotation;
             }
 
-            /* untuk notif */
-            // if ($tanggal == $tglNow || $tanggal <= $tglBesok) {
-            //     foreach ($samplers as $num => $noc) {
-            //         $jadwals = Jadwal::where('no_quotation', $noqt)
-            //             ->where('tanggal', $tanggal)
-            //             ->where('userid', $noc)
-            //             ->where('is_active', true)
-            //             ->where('notif', 0)
-            //             ->get();
-
-            //         if (!$jadwals->isEmpty()) {
-            //             $txt = "Jadwal anda tanggal <b>$tanggal</b> berubah menjadi : \n \n";
-            //             foreach ($jadwals as $key => $val) {
-            //                 $val->notif = 1;
-            //                 $val->save();
-
-            //                 $tes = $val->no_quotation;
-            //                 $users = Jadwal::where('no_quotation', $tes)
-            //                     ->where('kategori', $val->kategori)
-            //                     ->where('durasi', $val->durasi)
-            //                     ->where('tanggal', $val->tanggal)
-            //                     ->where('is_active', true)
-            //                     ->get();
-
-            //                 foreach ($users as $keys => $var) {
-            //                     $user[$keys] = $var->sampler;
-            //                 }
-
-            //                 $status = 'Sesaat';
-            //                 if ($val->durasi == 1)
-            //                     $status = '8 Jam';
-            //                 if ($val->durasi == 2)
-            //                     $status = '1 x 24 Jam';
-            //                 if ($val->durasi == 3)
-            //                     $status = '2 x 24 Jam';
-            //                 if ($val->durasi == 4)
-            //                     $status = '3 x 24 Jam';
-
-            //                 $no_qt = $val->no_quotation;
-            //                 $pt = $val->nama_perusahaan;
-            //                 $alamat = $val->alamat;
-            //                 $kat = str_replace("[", "", $val->kategori);
-            //                 $kat = str_replace("]", "", $kat);
-            //                 $kat = str_replace('"', "", $kat);
-            //                 $usr = str_replace('[', "", json_encode($user));
-            //                 $usr = str_replace(']', "", $usr);
-            //                 $usr = str_replace('"', "", $usr);
-
-
-            //                 $txt .= "\n Nomor QT : <b>$no_qt</b>";
-            //                 $txt .= "\n Nama Client : <b>$pt</b>";
-            //                 $txt .= "\n Alamat : <b>$alamat</b>";
-            //                 $txt .= "\n Kategori : <b>$kat</b>";
-            //                 $txt .= "\n Sampler : <b>$usr</b>";
-            //                 $txt .= "\n Durasi : <b>$status</b>";
-
-            //             }
-            //             $u = MasterKaryawan::where('id', $noc)->first();
-            //             /* debug on
-            //             if($u->pin_user!=null){
-            //                 $telegram = new Telegram();
-            //                 $telegram->send($u->pin_user, $txt);
-            //             } */
-            //         }
-            //     }
-            // }
             //update order
             
             if ($dataUpdate->kategori != null) {
@@ -689,50 +624,76 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
                         
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        $newSamplerString = implode(',', $newSamplers);
+
+                        // B. Set Data yang SELALU diupdate (Apapun kondisinya)
+                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        
+                        // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
+
+                        // D. Eksekusi Simpan
+                        // Laravel otomatis mengecek "isDirty()", jadi tidak perlu cek array_diff manual
+                        // Query update hanya akan jalan jika ada value yang benar-benar berubah.
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
-                DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                // Tangkap error dengan detail yang cukup
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
             DB::commit();
@@ -1018,50 +979,76 @@ class JadwalServices
 
             // LOGIC UPDATE PSHEADER
             try {
-                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)->where('is_active', true)->first();
-                
-                if ($orderh && !empty($dataUpdate->kategori)) {
-                    // 1. Bentuk ulang array no_sampel dari kategori yang diupdate
+                // 1. Validasi awal (Fail fast)
+                if (empty($dataUpdate->kategori)) return; // Atau throw error jika wajib
+
+                $orderh = OrderHeader::where('no_document', $dataUpdate->no_quotation)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($orderh) {
+                    // 2. Bentuk array no_sampel (Data Preparation)
                     $array_no_samples = [];
                     foreach ($dataUpdate->kategori as $kategori) {
-                        $pra_no_sample = explode(" - ", $kategori)[1];
-                        $array_no_samples[] = $orderh->no_order . '/' . $pra_no_sample;
+                        $parts = explode(" - ", $kategori);
+                        if (isset($parts[1])) {
+                            $array_no_samples[] = $orderh->no_order . '/' . $parts[1];
+                        }
                     }
 
-                    // 2. Cari PersiapanSampelHeader yang mengandung salah satu dari no_sampel tersebut
+                    // 3. Query PersiapanSampelHeader (Clean Query)
                     $psh = PersiapanSampelHeader::where('is_active', 1)
-                        ->where(function($query) use ($array_no_samples) {
+                        ->where(function ($query) use ($array_no_samples) {
                             foreach ($array_no_samples as $sampel) {
-                                $query->orWhere('no_sampel', 'like', '%"'.$sampel.'"%');
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
                             }
                         })
+                        ->where('tanggal_sampling', $dataUpdate->tanggal_lama)
+                        ->whereNotNull('no_sampel')
                         ->first();
 
+                    // 4. Proses Update jika PSH ditemukan
                     if ($psh) {
-                        // 3. Siapin data sampler yang baru
-                        $newSamplers = [];
-                        foreach ($dataUpdate->sampler as $s) {
-                            // Ambil namanya aja, sesuai format 'id,nama'
-                            $newSamplers[] = explode(',', $s)[1]; 
-                        }
+                        // A. Proses Sampler Baru (Dilakukan sekali saja)
+                        $newSamplers = array_map(function ($s) {
+                            return explode(',', $s)[1] ?? $s; // Ambil nama, handle jika format salah
+                        }, $dataUpdate->sampler);
+                        
+                        $newSamplerString = implode(',', $newSamplers);
 
-                        // Cek apakah ada perubahan antara oldSamplers dan newSamplers
-                        $oldSamplers = explode(',', $psh->sampler_jadwal);
-                        $diff = array_diff($newSamplers, $oldSamplers);
-                        // 4. Update field sampler_jadwal dan save
-                        if (count($diff) > 0) {
-                            $psh->no_sampel = json_encode($array_no_samples);
+                        // B. Set Data yang SELALU diupdate (Apapun kondisinya)
+                        $psh->no_sampel = json_encode($array_no_samples,JSON_UNESCAPED_SLASHES);
+                        $psh->sampler_jadwal = $newSamplerString;
+                        
+                        // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
+                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
+                        if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
-                            $psh->sampler_jadwal = implode(',', $newSamplers);
-                            $psh->updated_by = $dataUpdate->karyawan;
-                            $psh->updated_at = $this->timestamp; // atau Carbon::now()
+                        } 
+                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
+
+                        // D. Eksekusi Simpan
+                        // Laravel otomatis mengecek "isDirty()", jadi tidak perlu cek array_diff manual
+                        // Query update hanya akan jalan jika ada value yang benar-benar berubah.
+                        Log::info('Debug Dirty Check', [
+                            'no_quotation' => $dataUpdate->no_quotation,
+                            'no_sampel_old' => $psh->getOriginal('no_sampel'),
+                            'no_sampel_new' => $psh->no_sampel,
+                            'sampler_old' => $psh->getOriginal('sampler_jadwal'),
+                            'sampler_new' => $psh->sampler_jadwal,
+                            'tanggal_old' => $psh->getOriginal('tanggal_sampling'),
+                            'tanggal_new' => $psh->tanggal_sampling,
+                            'dirty_fields' => $psh->getDirty(), // ← Ini yang penting!
+                        ]);
+                        if ($psh->isDirty(['no_sampel', 'sampler_jadwal', 'tanggal_sampling'])) {
+                            $psh->updated_by = $dataUpdate->karyawan . "(sampling)";
                             $psh->save();
                         }
                     }
                 }
             } catch (\Throwable $th) {
-                DB::rollBack();
-                throw new Exception('Gagal mengupdate data sampler di Persiapan Sampel Header: ' . $th->getMessage(), 500);
+                // Tangkap error dengan detail yang cukup
+                throw new Exception('Gagal update Persiapan Sampel: ' . $th->getMessage(), 500);
             }
 
             DB::commit();
@@ -1112,12 +1099,7 @@ class JadwalServices
         if ($dataAdd->alamat == null) {
             throw new Exception("Alamat is required when add jadwal", 401);
         }
-        // if ($dataAdd->isokinetic == null) {
-        //     throw new Exception("Isokinetic is required when add jadwal", 401);
-        // }
-        // if ($dataAdd->pendampingan_k3 == null) {
-        //     throw new Exception("Pendampingan K3 is required when add jadwal", 401);
-        // }
+        
 
         DB::beginTransaction();
         try {

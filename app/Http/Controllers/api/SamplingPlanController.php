@@ -3,31 +3,14 @@
 namespace App\Http\Controllers\api;
 
 use Illuminate\Http\Request;
-use App\Models\SamplingPlan;
-use App\Models\MasterKaryawan;
-use App\Models\Jadwal;
-use App\Models\JadwalLibur;
-use App\Models\MasterDriver;
-use App\Models\PraNoSample;
-use App\Models\QuotationKontrakH;
-use App\Models\MasterCabang;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Models\OrderHeader;
-use App\Models\OrderDetail;
-use App\Jobs\RenderSamplingPlan;
-use App\Services\JadwalServices;
-use App\Services\GetAtasan;
-use App\Services\Notification;
 use App\Http\Controllers\Controller;
+use App\Models\{SamplingPlan,MasterKaryawan,Jadwal,JadwalLibur,MasterDriver,PraNoSample,QuotationKontrakH,MasterCabang,QuotationKontrakD,QuotationNonKontrak,JobTask,PersiapanSampelHeader,OrderHeader,OrderDetail};
+use App\Jobs\{RenderSamplingPlan,RenderAndEmailJadwal};
+use App\Services\{JadwalServices,GetAtasan,Notification,RenderSamplingPlan as RenderSamplingPlanService};
 use Yajra\Datatables\Datatables;
-use Carbon\Carbon;
-use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Jobs\RenderAndEmailJadwal;
-use App\Models\JobTask;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-
+use Log;
+use Carbon\Carbon;
 
 class SamplingPlanController extends Controller
 {
@@ -162,8 +145,16 @@ class SamplingPlanController extends Controller
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
+            $privateSampler->transform(function ($item) {
+                $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+                return $item;
+            });
+            $samplers->transform(function ($item) {
+                $item->nama_display = $item->nama_lengkap;
+                return $item;
+            });
             $allSamplers = $samplers->merge($privateSampler);
-            $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
+            $allSamplers = $allSamplers->sortBy('nama_display')->values();
 
             return Datatables::of($allSamplers)->make(true);
         } catch (\Exception $e) {
@@ -938,6 +929,54 @@ class SamplingPlanController extends Controller
         } catch (\Throwable $th) {
             //throw $th;
             return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
+    }
+
+    public function checkDocumentStatus(Request $request)
+    {
+        try {
+            // 1. Ambil data order
+            $geOrder = OrderHeader::where('no_document', $request->no_quotation)->first(['no_order']);
+            
+            // 2. Siapkan variabel
+            $array_no_samples = [];
+            // Pastikan periode null jika string kosong
+            $periode = ($request->periode == "") ? $request->periode : $request->periode; 
+            
+            $jsonDecodeKategori = json_decode($request->kategori);
+            if ($geOrder && $jsonDecodeKategori) {
+                foreach ($jsonDecodeKategori as $kategori) {
+                    // Pastikan format kategori benar ada " - "
+                    $parts = explode(" - ", $kategori);
+                    if(isset($parts[1])) {
+                        $pra_no_sample = $parts[1];
+                        $array_no_samples[] = $geOrder->no_order . '/' . $pra_no_sample;
+                    }
+                }
+            }
+
+            // 3. Query Database
+            // Perhatikan: $request->tanggal (sesuai kiriman frontend)
+            $checkPreparationSample = PersiapanSampelHeader::where('no_quotation', $request->no_quotation)
+                ->where('periode', $periode)
+                ->where('tanggal_sampling', $request->tanggal) // <--- UBAH INI (sesuai key frontend)
+                ->where(function ($query) use ($array_no_samples) {
+                            foreach ($array_no_samples as $sampel) {
+                                $query->orWhere('no_sampel', 'like', '%"' . $sampel . '"%');
+                            }
+                        })
+                ->whereNotNull('detail_bas_documents') // <--- PERBAIKI TYPO (detai -> detail)
+                ->where('is_active', true)
+                ->first();
+                
+            // 4. Return
+            $statusDoc = $checkPreparationSample ? true : false;
+            
+            return response()->json(['status_document' => $statusDoc], 200);
+
+        } catch (\Throwable $th) {
+            // Jangan dd() di API production, return error message
+            return response()->json(['message' => $th->getMessage()], 500);
         }
     }
 }
