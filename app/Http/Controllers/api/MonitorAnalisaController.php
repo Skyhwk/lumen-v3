@@ -121,8 +121,7 @@ class MonitorAnalisaController extends Controller
         // =============================
         $parameterExcluded = $this->parameterExcluded();
         
-        $data = OrderDetail::with('TrackingSatu')
-            ->select('no_sampel', 'parameter', 'tanggal_terima', 'kategori_3')
+        $data = OrderDetail::select('no_sampel', 'parameter', 'tanggal_terima', 'kategori_3', 't_ftc.ftc_verifier', 't_ftc.ftc_laboratory')
             ->where([
                 'kategori_2' => $kategori,
                 'order_detail.is_active'  => true,
@@ -132,6 +131,7 @@ class MonitorAnalisaController extends Controller
             }
             $data = $data->join('t_ftc', 't_ftc.no_sample', '=', 'order_detail.no_sampel')
             ->where('t_ftc.ftc_laboratory', 'like', "%{$date}%")
+            ->orderBy('t_ftc.ftc_laboratory', 'ASC')
             ->get()
             ->map(function ($item) use ($subQuery, $parameterExcluded) {
                 // Semua parameter order
