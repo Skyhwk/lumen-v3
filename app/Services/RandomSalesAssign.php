@@ -331,7 +331,7 @@ class RandomSalesAssign
                 ) {
                     self::assignToBankData(collect($bankDataToAssign) ?? []);
                     self::assignToSalesExecutive($AssignToSalesExecutive);
-                    self::aassignToNewSales($allDataNeedAssign);
+                    self::assignToNewSales($allDataNeedAssign);
                 });
                 Log::channel('reassign_customer')->info("=== FINISH REASSIGN === ");
 
@@ -353,32 +353,32 @@ class RandomSalesAssign
         }
     }
 
-    private static function aassignToNewSales($data)
+    private static function assignToNewSales($data)
     {
         Log::channel('reassign_customer')->info("=== Processing Assign To New Sales === " . "| Total Data " . count($data));
 
-        self::$salesPoolIndex = 0;
-        
         if (empty(self::$salesIdNew) || $data->isEmpty()) {
             return;
         }
 
         $totalNewSales = count(self::$salesIdNew);
-        $totalChunks = ceil(count($data) / 2000);  // Menghitung jumlah chunk
+        $totalData = count($data);
+        $globalIndex = 0; // Track global position across all chunks
+
+        $totalChunks = ceil($totalData / 2000);
         $currentChunk = 0;
 
-        // Proses data dalam chunk 2000
-        $data->chunk(2000)->each(function ($chunkData) use ($totalNewSales, &$currentChunk, $totalChunks) {
+        $data->chunk(2000)->each(function ($chunkData) use ($totalNewSales, &$globalIndex, &$currentChunk, $totalChunks) {
             Log::channel('reassign_customer')->info("Processing chunk " . ($currentChunk + 1) . " of " . $totalChunks . " | Total data in chunk: " . count($chunkData));
 
             $updates = [];
             $histories = [];
 
             foreach ($chunkData as $pelanggan) {
-                $salesIndex = self::$salesPoolIndex % $totalNewSales;
+                $salesIndex = $globalIndex % $totalNewSales;
                 $sales = self::$salesIdNew[$salesIndex];
 
-                self::$salesPoolIndex++;
+                $globalIndex++; // Increment global counter
 
                 $updates[$sales['id']][] = $pelanggan->id;
 
@@ -389,7 +389,6 @@ class RandomSalesAssign
                     'tanggal_rotasi' => Carbon::now(),
                 ];
             }
-
 
             // BULK UPDATE
             foreach ($updates as $salesId => $pelangganIds) {
@@ -402,11 +401,11 @@ class RandomSalesAssign
             // BULK INSERT HISTORY
             HistoryPerubahanSales::insert($histories);
 
-            Log::channel('reassign_customer')->info("Chunk " . ($currentChunk + 1) . " of " . $totalChunks . " processed.");
+            Log::channel('reassign_customer')->info("Chunk " . ($currentChunk + 1) . " of " . $totalChunks . " processed | Global Index: " . $globalIndex);
             $currentChunk++;
         });
 
-        Log::channel('reassign_customer')->info("=== Finished Assign To New Sales === " . "| Total Data " . count($data));
+        Log::channel('reassign_customer')->info("=== Finished Assign To New Sales === " . "| Total Data " . $totalData);
     }
 
 
@@ -611,11 +610,11 @@ class RandomSalesAssign
                     );
                     Log::channel('reassign_customer')->info("Success Backup Webphone Log",);
                 }
+                Log::channel('reassign_customer')->info("=== Start Delete Log Webphone Log",);
+                LogWebphone::whereIn('id', $logs->pluck('id')->toArray())->delete();
+                Log::channel('reassign_customer')->info("=== Success Delete Log Webphone Log",);
             });
         });
-        // Log::channel('reassign_customer')->info("=== Start Delete Log Webphone Log",);
-        // LogWebphone::whereIn('id', $logIds)->delete();
-        // Log::channel('reassign_customer')->info("=== Success Delete Log Webphone Log",);
     }
 
     private static function deleteDfusHistoryBulk(string $karyawanName, array $idPelanggan): void
@@ -653,11 +652,11 @@ class RandomSalesAssign
                     );
                     Log::channel('reassign_customer')->info("Success Backup DFUS Log",);
                 }
+                Log::channel('reassign_customer')->info("=== Start Delete DFUS Log",);
+                DFUS::whereIn('id', $dfus->pluck('id')->toArray())->delete();
+                Log::channel('reassign_customer')->info("=== Success Delete DFUS Log",);
             });
         });
-        // Log::channel('reassign_customer')->info("=== Start Delete DFUS Log",);
-        // DFUS::whereIn('id', $dfusIds)->delete();
-        // Log::channel('reassign_customer')->info("=== Success Delete DFUS Log",);
     }
 
     // private static function deleteDfusHistoryBulk(string $karyawanName, string $idPelanggan): void
