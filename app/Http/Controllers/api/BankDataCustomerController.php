@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\AlamatPelangganBlacklist;
 use App\Models\KontakPelangganBlacklist;
+use App\Models\LogWebphone;
+use App\Models\LogWebphoneBackup;
 use App\Models\MasterPelangganBlacklist;
 use App\Models\PelangganBlacklist;
 use App\Models\PicPelangganBlacklist;
@@ -23,6 +25,7 @@ use Yajra\Datatables\Datatables;
 
 use App\Services\GetBawahan;
 use Carbon\Carbon;
+
 Carbon::setLocale('id');
 
 class BankDataCustomerController extends Controller
@@ -35,9 +38,9 @@ class BankDataCustomerController extends Controller
             'pic_pelanggan',
             'order_customer'
         ])
-        ->where('is_active', true)
-        ->whereNull('sales_id')
-        ->whereNull('sales_penanggung_jawab');
+            ->where('is_active', true)
+            ->whereNull('sales_id')
+            ->whereNull('sales_penanggung_jawab');
 
         return Datatables::of($data)
             ->filterColumn('order_customer', function ($query, $keyword) {
@@ -53,7 +56,7 @@ class BankDataCustomerController extends Controller
                 });
             })
             ->orderColumn('telpon', function ($query, $orderDirection) {
-                $query->with(['kontak_pelanggan' => function($q) use ($orderDirection) {
+                $query->with(['kontak_pelanggan' => function ($q) use ($orderDirection) {
                     $q->orderBy('no_tlp_perusahaan', $orderDirection);
                 }]);
             })
@@ -64,7 +67,7 @@ class BankDataCustomerController extends Controller
     {
         $keyword = $request->get('term'); // dari select2
 
-        $data = MasterKaryawan::where('is_active', true)->whereIn('id_jabatan', [24,148])
+        $data = MasterKaryawan::where('is_active', true)->whereIn('id_jabatan', [24, 148])
             ->when($keyword, function ($q) use ($keyword) {
                 $q->where('nama_lengkap', 'like', "%{$keyword}%");
             })
@@ -85,7 +88,7 @@ class BankDataCustomerController extends Controller
     {
         DB::beginTransaction();
         try {
-           // Validasi manual
+            // Validasi manual
             $salesId = $request->input('sales_id');
             $salesName = $request->input('sales_name');
             $customerIds = $request->input('customer_ids');
@@ -97,22 +100,59 @@ class BankDataCustomerController extends Controller
                 ], 422);
             }
 
-            $successCount = 0;
-            $failedCount = 0;
+            $successCount = count($customerIds);
 
-            foreach ($customerIds as $customerId) {
-                $pelanggan = MasterPelanggan::find($customerId);
-                
-                if ($pelanggan && $pelanggan->is_active) {
-                    $pelanggan->sales_id = $salesId;
-                    $pelanggan->sales_penanggung_jawab = $salesName;
-                    $pelanggan->save();
-                    
-                    $successCount++;
-                } else {
-                    $failedCount++;
-                }
-            }
+            MasterPelanggan::whereIn('id', $customerIds)->update([
+                'sales_id' => $salesId,
+                'sales_penanggung_jawab' => $salesName
+            ]);
+
+            $data = MasterPelanggan::with('kontak_pelanggan')
+                ->where('id', $customerIds)
+                ->where('is_active', true)
+                ->get(); // ⬅️ WAJIB
+
+            $numbers = $data
+                ->flatMap(function ($pelanggan) {
+                    return $pelanggan->kontak_pelanggan
+                        ?->pluck('no_tlp_perusahaan') ?? [];
+                })
+                ->filter()
+                ->values()
+                ->toArray();
+
+            $logIds = LogWebphone::whereIn('number', $numbers)
+                ->where('created_at', '>=', Carbon::now()->subMonths(2))
+                ->pluck('id')
+                ->toArray();
+
+            collect($logIds)->chunk(1000)->each(function ($chunk) {
+                DB::transaction(function () use ($chunk) {
+                    $logs = LogWebphone::whereIn('id', $chunk->toArray())->get();
+
+                    if ($logs->isNotEmpty()) {
+                        LogWebphoneBackup::insert(
+                            $logs->map(fn($log) => self::prepareBackupData($log, ['created_at']))->toArray()
+                        );
+
+                        LogWebphone::whereIn('id', $chunk->toArray())->delete();
+                    }
+                });
+            });
+
+            // foreach ($customerIds as $customerId) {
+            //     $pelanggan = MasterPelanggan::find($customerId);
+
+            //     if ($pelanggan && $pelanggan->is_active) {
+            //         $pelanggan->sales_id = $salesId;
+            //         $pelanggan->sales_penanggung_jawab = $salesName;
+            //         $pelanggan->save();
+
+            //         $successCount++;
+            //     } else {
+            //         $failedCount++;
+            //     }
+            // }
 
             DB::commit();
             return response()->json([
@@ -120,7 +160,6 @@ class BankDataCustomerController extends Controller
                 'success' => true,
                 'data' => [
                     'total_success' => $successCount,
-                    'total_failed' => $failedCount,
                     'sales_id' => $salesId,
                     'sales_name' => $salesName
                 ]
@@ -133,5 +172,20 @@ class BankDataCustomerController extends Controller
                 'file' => $e->getFile()
             ], 500);
         }
+    }
+
+    private static function prepareBackupData($model, array $dateFields): array
+    {
+        $data = $model->toArray();
+        unset($data['id']);
+
+        foreach ($dateFields as $field) {
+            if (!empty($data[$field])) {
+                $data[$field] = Carbon::parse($data[$field])
+                    ->format('Y-m-d H:i:s');
+            }
+        }
+
+        return $data;
     }
 }

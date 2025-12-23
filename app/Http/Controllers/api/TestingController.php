@@ -50,6 +50,7 @@ use App\Models\{
     DataLapanganEmisiCerobong,
     DataLapanganIsokinetikHasil,
     Gravimetri,
+    MasterPelanggan,
     Titrimetri,
     WsValueAir,//batas
     DataLapanganEmisiOrder,
@@ -78,7 +79,8 @@ use App\Services\{
     RenderInvoiceTitik,
     GeneratePraSampling,
     GenerateQrDocumentLhp,
-    LhpTemplate
+    LhpTemplate,
+    RandomSalesAssign
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -4724,5 +4726,16 @@ class TestingController extends Controller
             'total' => $total,
             'data'  => $data
         ];
+    }
+
+    public function testReassign(){
+        $randomSales = new RandomSalesAssign;
+        $result = $randomSales->run();
+
+        foreach($result['new_sales'] as $key => $sales){
+            $result['new_sales'][$key]['total_customer'] = MasterPelanggan::where('sales_id', $sales['id'])->where('is_active', true)->count();
+        }
+
+        return response()->json([$result], 200);
     }
 }
