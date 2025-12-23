@@ -120,6 +120,7 @@ class MonitorAnalisaController extends Controller
         // Ambil order detail utama
         // =============================
         $parameterExcluded = $this->parameterExcluded();
+        
         $data = OrderDetail::with('TrackingSatu')
             ->select('no_sampel', 'parameter', 'tanggal_terima', 'kategori_3')
             ->where([
@@ -172,7 +173,24 @@ class MonitorAnalisaController extends Controller
     
     private function parameterExcluded()
     {
-        return ['ph', 'suhu', 'Suhu (NA)', 'dhl', 'debit air', 'Debit Air (m3/ton)', 'Debit Air (m3/Hari)', 'Debit Air (L/Orang/Hari)', 'Debit Air (L/kg)', 'Debit Air (L/L)', 'Debit Air (m3/L)', 'Debit Air (L/hari)', 'Debit Air (m3/dtk)', 'Debit Air (L/dtk)', 'Debit Air (L/jam)', 'Debit Air (L/hari)'];
+        return [
+            'ph',
+            'suhu',
+            'suhu (na)',
+            'dhl',
+            'debit air',
+            'debit air (m3/ton)',
+            'debit air (m3/hari)',
+            'debit air (l/orang/hari)',
+            'debit air (l/kg)',
+            'debit air (l/l)',
+            'debit air (m3/l)',
+            'debit air (l/hari)',
+            'debit air (m3/dtk)',
+            'debit air (l/dtk)',
+            'debit air (l/jam)',
+            'debit air (l/hari)',
+        ];
     }
 
     public function getKategori(Request $request)
