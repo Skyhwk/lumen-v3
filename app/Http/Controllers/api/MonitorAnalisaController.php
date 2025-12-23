@@ -200,7 +200,11 @@ class MonitorAnalisaController extends Controller
             'voc (8 jam)',
             'hcho',
             'hcho (8 jam)',
-            'h2co'
+            'h2co',
+            'tekanan udara',
+            'pertukaran udara',
+            'laju ventilasi',
+            'laju ventilasi (8 jam)'
         ];
     }
 
