@@ -73,8 +73,12 @@ class DirectLain {
                     // ==========================
 
                     $c1 = ($c1 < 11.45)     ? '<11.45'   : number_format($c1, 2, '.', '');
-                    $c3 = ($c3 < 0.01)      ? '<0.01'    : number_format($c3, 2, '.', '');
                     $c2 = ($c2 < 0.01145)   ? '<0.01145' : number_format($c2, 5, '.', '');
+                    $c3 = ($c3 < 0.01)      ? '<0.01'    : number_format($c3, 2, '.', '');
+                    $c5 = ($c5 < 100)      ? '<100'    : number_format($c3, 2, '.', '');
+                    $c15 = $c3;
+                    $c16 = $c1;
+                    $c17 = $c2;
 
                 }
                 
@@ -140,16 +144,25 @@ class DirectLain {
                     $c16 = $c17 * 1000;
 
                     // baru format untuk output
-                    $c1  = number_format($c1, 4, '.', '');
-                    $c2  = number_format($c2, 4, '.', '');
-                    $c3  = number_format($c3, 4, '.', '');
-                    $c4  = number_format($c4, 4, '.', '');
-                    $c5  = number_format($c5, 4, '.', '');
-                    $c15 = number_format($c15, 4, '.', '');
-                    $c16 = number_format($c16, 4, '.', '');
-                    $c17 = number_format($c17, 4, '.', '');
+                    // $c1  = number_format($c1, 4, '.', '');
+                    // $c2  = number_format($c2, 4, '.', '');
+                    // $c3  = number_format($c3, 4, '.', '');
+                    // $c4  = number_format($c4, 4, '.', '');
+                    // $c5  = number_format($c5, 4, '.', '');
+                    // $c15 = number_format($c15, 4, '.', '');
+                    // $c16 = number_format($c16, 4, '.', '');
+                    // $c17 = number_format($c17, 4, '.', '');
 
                     $satuan = "ppm";
+
+                    $c1 = ($c1 < 1800)     ? '<1800'   : number_format($c1, 2, '.', '');
+                    $c2 = ($c2 < 1.8)   ? '<1.8' : number_format($c2, 1, '.', '');
+                    $c3 = ($c3 < 1)      ? '<1'    : number_format($c3, 1, '.', '');
+                    $c4 = ($c4 < 1000)      ? '<1000'    : number_format($c3, 2, '.', '');
+                    $c5 = ($c5 < 100)      ? '<100'    : number_format($c3, 2, '.', '');
+                    $c15 = $c3;
+                    $c16 = $c1;
+                    $c17 = $c2;
                 }
             }
         }
