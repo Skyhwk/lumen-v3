@@ -387,6 +387,39 @@ class ReadyOrderController extends Controller
         }
     }
 
+    private function formatEntry($data){
+        $format = array_merge(...array_map(function ($item) {
+            $kategori = trim(explode('-', $item['kategori_2'])[1]);
+            return array_map(function ($xx) use ($kategori) {
+                return $kategori . ' - ' . array_key_first($xx);
+            }, $item['penamaan_titik']);
+        }, $data));
+
+        return $format;
+    }
+
+    private function normalize(array $arr): array
+    {
+        sort($arr);
+        return array_values(array_map('trim', $arr));
+    }
+
+    private function extractSampling($json)
+    {
+        $result = [];
+        
+        $decoded = json_decode($json, true);
+        if (!is_array($decoded)) return [];
+        
+        foreach ($decoded as $detail) {
+            if (!empty($detail['data_sampling'])) {
+                $result = array_merge($result, (array)$detail['data_sampling']);
+            }
+        }
+        
+        return $result;
+    }
+
     public function generateOrderNonKontrak($request)
     {
         try {
@@ -438,17 +471,23 @@ class ReadyOrderController extends Controller
                 $dataJadwal = null;
                 if ($dataQuotation->status_sampling != 'SD') {
                     $jadwalCollection = collect($dataQuotation->sampling->first()->jadwal ?? []);
-                    $dataJadwal = $jadwalCollection->map(function ($item) {
-                        return [
-                            'tanggal' => $item->tanggal,
-                            'kategori' => json_decode($item->kategori, true)
-                        ];
-                    })->groupBy('tanggal')->map(function ($items, $tanggal) {
-                        return [
-                            'tanggal' => $tanggal,
-                            'kategori' => $items->pluck('kategori')->flatten()->unique()->values()->all()
-                        ];
-                    })->values()->all();
+
+                    $dataJadwal = $jadwalCollection
+                    ->flatMap(function ($item) {
+                        $kategori = json_decode($item->kategori, true) ?? [];
+                
+                        return collect($kategori)->map(function ($kat) use ($item) {
+                            return [
+                                'kategori' => $kat,
+                                'tanggal'  => $item->tanggal,
+                            ];
+                        });
+                    })
+                    ->groupBy('kategori')
+                    ->map(function ($items) {
+                        return $items->min('tanggal');
+                    })
+                    ->toArray();
 
                     if ($dataJadwal == null) {
                         return response()->json([
@@ -457,58 +496,27 @@ class ReadyOrderController extends Controller
                         ], 401);
                     }
 
-                    $array_kategori_jadwal = [];
-                    $tanggal_jadwal = [];
-                    // $array_jadwal_kategori = [];
-                    foreach ($dataJadwal as $key => $value) {
-                        $kategori_jadwal = $value['kategori'];
-                        // array_push($array_jadwal_kategori, $kategori_jadwal);
-                        array_push($array_kategori_jadwal, (int) count($kategori_jadwal));
-                        array_push($tanggal_jadwal, $value['tanggal']);
-                    }
-                    // $mergedArray = array_merge(
-                    //     ...$array_jadwal_kategori // Menggunakan spread operator agar lebih fleksibel
-                    // );
+                    $kategoriJadwal = $jadwalCollection->map(fn($l) => json_decode($l->kategori, true) ?? [])->flatten()->unique()->values()->toArray();
 
-                    // // Hapus duplikat jika diperlukan
-                    // $mergedArray = array_unique($mergedArray);
+                    $kategoriQt = $this->formatEntry(json_decode($dataQuotation->data_pendukung_sampling, true));
 
-                    // usort($mergedArray, function ($a, $b) {
-                    //     // Ambil angka dari akhir string
-                    //     preg_match('/\d+$/', $a, $aMatch);
-                    //     preg_match('/\d+$/', $b, $bMatch);
-
-                    //     return (int)$aMatch[0] - (int)$bMatch[0];
-                    // });
-
-                    // // Dump hasil setelah diurutkan
-                    // dd($mergedArray);
-                    $total_kategori = (int) array_sum($array_kategori_jadwal);
-                    $tanggal_jadwal = array_values(array_unique($tanggal_jadwal));
-
-                    $array_jumlah_titik = [];
-                    $jumlah_kategori = 0;
-
-                    foreach (json_decode($dataQuotation->data_pendukung_sampling) as $key => $data_pengujian) {
-                        $jumlah_kategori++;
-                        array_push($array_jumlah_titik, (int) $data_pengujian->jumlah_titik);
-                    }
-                    // dd($array_jumlah_titik, $jumlah_kategori);
-                    $total_titik = (int) array_sum($array_jumlah_titik);
-                    // dd($total_titik, $total_kategori);
-                    if ($total_titik > $total_kategori) {
+                    $notInJadwal = array_values(array_diff($kategoriQt, $kategoriJadwal));
+                    
+                    if(!empty($notInJadwal)) {
                         return response()->json([
-                            'message' => 'Terdapat perbedaan titik antara jadwal dan quotation, silahkan hubungi admin terkait untuk update jadwal.!',
+                            'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>'. implode(', <br>', $notInJadwal) .' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
                             'status' => 401
                         ], 401);
                     }
+
+                    
                 }
 
                 $data_lama = null;
                 if ($dataQuotation->data_lama != null) {
                     $data_lama = json_decode($dataQuotation->data_lama);
                 }
-
+                
                 if ($data_lama != null && $data_lama->no_order != null) {
                     /*
                         Jika data lama ada dan no order ada maka re-generate order
@@ -582,80 +590,89 @@ class ReadyOrderController extends Controller
             $dataJadwal = [];
             if ($dataQuotation->status_sampling != 'SD') {
                 $jadwalCollection = collect();
+
                 foreach ($dataQuotation->sampling as $sampling) {
                     $periode = $sampling->periode_kontrak;
+
                     foreach ($sampling->jadwal as $jadwal) {
-                        $jadwal->periode = $periode;
-                        $jadwalCollection->push($jadwal);
+                        $jadwalCollection->push([
+                            'periode_kontrak' => $periode,
+                            'tanggal'         => $jadwal->tanggal,
+                            'kategori'        => json_decode($jadwal->kategori, true) ?? [],
+                        ]);
                     }
                 }
-                // dd($jadwalCollection);
-                $dataJadwal = $jadwalCollection->map(function ($item) {
-                    $tanggal = $item->tanggal;
-                    $periode = $item->periode;
-                    return [
-                        'periode_kontrak' => $periode,
-                        'tanggal' => $tanggal,
-                        'kategori' => json_decode($item->kategori, true)
-                    ];
-                })->groupBy('periode_kontrak')->map(function ($items, $periode) {
-                    return [
-                        'periode_kontrak' => $periode,
-                        'jadwal' => $items->map(function ($item) {
-                            return [
-                                'tanggal' => $item['tanggal'],
-                                'kategori' => $item['kategori']
-                            ];
-                        })->values()->all()
-                    ];
-                })->values()->all();
 
-                $dataJadwal = collect($dataJadwal)->sortBy('periode_kontrak')->values()->all();
-                // dd($dataJadwal);
-                if ($dataJadwal == null) {
+                $dataJadwal = $jadwalCollection
+                    // pecah kategori jadi baris-baris
+                    ->flatMap(function ($item) {
+                        return collect($item['kategori'])->map(function ($kat) use ($item) {
+                            return [
+                                'periode_kontrak' => $item['periode_kontrak'],
+                                'kategori'        => $kat,
+                                'tanggal'         => $item['tanggal'],
+                            ];
+                        });
+                    })
+                    // group per periode
+                    ->groupBy('periode_kontrak')
+                    ->map(function ($itemsPerPeriode) {
+                        // dalam 1 periode, group per kategori
+                        return $itemsPerPeriode
+                            ->groupBy('kategori')
+                            ->map(function ($itemsPerKategori) {
+                                // ambil tanggal PALING KECIL
+                                return $itemsPerKategori->min('tanggal');
+                            })
+                            ->toArray();
+                    })
+                    ->sortKeys()
+                    ->toArray();
+
+                if (empty($dataJadwal)) {
                     return response()->json([
                         'message' => 'No Quotation Belum terjadwal',
                         'status' => 401
                     ], 401);
                 }
 
-                // dump($dataJadwal);
-                $array_kategori_jadwal = [];
-                $tanggal_jadwal = [];
-                foreach ($dataJadwal as $key => $value) {
-                    foreach ($value['jadwal'] as $jadwal) {
-                        $kategori_jadwal = $jadwal['kategori'];
-                        // var_dump($kategori_jadwal);
-                        array_push($array_kategori_jadwal, (int) count($kategori_jadwal));
-                        array_push($tanggal_jadwal, $jadwal['tanggal']);
-                    }
-                }
-                // dd($array_kategori_jadwal, $tanggal_jadwal);
-                $total_kategori = (int) array_sum($array_kategori_jadwal);
-                $tanggal_jadwal = array_values(array_unique($tanggal_jadwal));
-
-                $array_jumlah_titik = [];
-                $jumlah_kategori = 0;
-
-                // dd($array_kategori_jadwal,$dataJadwal);
+                $kategoriQT = [];
                 foreach ($dataQuotation->detail as $detail) {
                     if ($detail->status_sampling == 'SD')
                         continue;
-                    foreach (json_decode($detail->data_pendukung_sampling) as $data_pengujian) {
-                        // dd($data_pengujian);
-                        foreach ($data_pengujian->data_sampling as $data_sampling) {
-                            // dump($data_sampling);
-                            $jumlah_kategori++;
-                            array_push($array_jumlah_titik, (int) $data_sampling->jumlah_titik);
-                        }
+
+                    $samplingData = $this->extractSampling($detail->data_pendukung_sampling);
+                    $entry = $this->formatEntry($samplingData);
+                    $kategoriQT[$detail->periode_kontrak] = $entry;
+                }
+
+                $notInJadwal = [];
+                foreach ($kategoriQT as $periode => $kategoriWajib) {
+                    $kategoriTerjadwal = array_keys($dataJadwal[$periode] ?? []);
+                    $belumTerjadwal   = array_diff($kategoriWajib, $kategoriTerjadwal);
+                    if (!empty($belumTerjadwal)) {
+                        $formattedPeriode = \Carbon\Carbon::parse($periode)
+                            ->locale('id')
+                            ->translatedFormat('F Y');
+                        $notInJadwal[$formattedPeriode] = array_values($belumTerjadwal);
                     }
                 }
 
-                $total_titik = (int) array_sum($array_jumlah_titik);
-                // dd($total_titik, $total_kategori);
-                if ($total_titik > $total_kategori) {
+                if (!empty($notInJadwal)) {
+                    $messagePerPeriode = [];
+                    foreach ($notInJadwal as $periode => $kategoris) {
+                        $messagePerPeriode[] =
+                            '<strong>Periode ' . $periode . '</strong><br>' .
+                            '↓<br>' .
+                            implode(', <br>', $kategoris);
+                    }
+                
                     return response()->json([
-                        'message' => 'Terdapat perbedaan titik antara jadwal dan quotation, silahkan hubungi admin terkait untuk update jadwal.!',
+                        'message' =>
+                            'Terdapat kategori pada Quotation Kontrak <strong>' . $dataQuotation->no_document . '</strong> ' .
+                            'yang belum dijadwalkan.<br><br>' .
+                            implode('<br><br>', $messagePerPeriode) .
+                            '<br><br>Silahkan hubungi admin terkait untuk update jadwal.',
                         'status' => 401
                     ], 401);
                 }
@@ -665,7 +682,7 @@ class ReadyOrderController extends Controller
             if ($dataQuotation->data_lama != null) {
                 $data_lama = json_decode($dataQuotation->data_lama);
             }
-
+            
             if ($data_lama != null && $data_lama->no_order != null) {
                 /*
                     Jika data lama ada dan no order ada maka re-generate order
@@ -951,26 +968,23 @@ class ReadyOrderController extends Controller
                             break;
                         }
                     }
+                    
 
-                    $number_imaginer = sprintf("%03d", $n);
-
+                    $number_imaginer = sprintf("%03d", $noSampel);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
+                    $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
+
                     if ($dataQuotation->status_sampling != 'SD') {
-                        foreach ($dataJadwal as $jadwal) {
-                            foreach ($jadwal['kategori'] as $index => $kat) {
-                                if (\explode(' - ', $kat)[1] == $number_imaginer) {
-                                    $tanggal_sampling = $jadwal['tanggal'];
-                                    break 2;
-                                }
-                            }
+                        $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
+                        if(!$tanggal_sampling) {
+                            DB::rollback();
+                            return response()->json([
+                                'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                'status' => 401
+                            ], 401);
                         }
                     }
 
-                    // $penamaan_titik = $value->penamaan_titik;
-                    // if (is_array($penamaan_titik)) {
-                    //     $penamaan_titik = isset($value->penamaan_titik[$f]) ? $value->penamaan_titik[$f] : '';
-                    // }
-                    // $props = get_object_vars($penamaan_titik);
                     $penamaan_titik = $props[$noSampel];
 
                     $DataOrderDetail = new OrderDetail;
@@ -1129,17 +1143,6 @@ class ReadyOrderController extends Controller
                         'no_sample' => $no_sample
                     ]);
 
-                    foreach ($value->parameter as $v) {
-                        $insert_analisa[] = [
-                            'no_order' => $no_order,
-                            'no_sampel' => $no_sample,
-                            'tanggal_order' => $dataOrderHeader->tanggal_order,
-                            'parameter' => $v
-                        ];
-                    }
-
-                    ParameterAnalisa::insert($insert_analisa);
-
                     $n++;
                     $kategori = $value->kategori_2;
                     $regulasi = $value->regulasi;
@@ -1187,29 +1190,12 @@ class ReadyOrderController extends Controller
 
             $id_order_header = $data_detail_lama->first()->id_order_header;
 
-            // $qr_psikologi = QrPsikologi::where('id_order_header', $id_order_header)->get();
-
-            // if ($qr_psikologi->count() > 0) {
-            //     foreach ($qr_psikologi as $q) {
-            //         $data_psikologi = json_decode($q->data);
-
-            //         // Pastikan JSON valid
-            //         if (json_last_error() === JSON_ERROR_NONE && is_object($data_psikologi)) {
-            //             $data_psikologi->no_document = $dataQuotation->no_document;
-            //             $data_psikologi->nama_customer = $dataQuotation->nama_perusahaan;
-
-            //             // Simpan perubahan
-            //             $q->data = json_encode($data_psikologi);
-            //             $q->save();
-            //         }
-            //     }
-            // }
-
             $sampel_order_lama = $data_detail_lama->pluck('no_sampel')->toArray();
             $dps_details = json_decode($dataQuotation->data_pendukung_sampling, true);
 
             $sampel_detail_baru = [];
             $detail_baru = [];
+
             foreach ($dps_details as $dps) {
                 // $penamaan_titik = array_merge(...$dps["penamaan_titik"]);
                 $penamaan_titik = [];
@@ -1245,7 +1231,9 @@ class ReadyOrderController extends Controller
             $pengurangan_data = array_values(array_diff($sampel_order_lama, $sampel_detail_baru));
             $penambahan_data = array_values(array_diff($sampel_detail_baru, $sampel_order_lama));
 
-            // dd($perubahan_data, $pengurangan_data, $penambahan_data);
+            // dd($perubahan_data, $penambahan_data, $pengurangan_data);
+
+            //=====================PERUBAHAN DATA==========================================
 
             if (!empty($perubahan_data)) {
                 foreach ($perubahan_data as $changes) {
@@ -1253,24 +1241,27 @@ class ReadyOrderController extends Controller
                         ->where('no_sampel', $changes)
                         ->where('is_active', 1)
                         ->first();
-                    if ($existing_detail) {
-                        //  ============ insert detail history ===============
-                        $search_kategori = '%' . \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3) . '%';
-                        $cek_jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)
-                            ->where('is_active', 1)
-                            ->where('kategori', 'like', $search_kategori)
-                            ->select('tanggal', 'kategori')
-                            ->groupBy('tanggal', 'kategori')
-                            ->first();
 
-                        // $existing_detail->periode = $detail_baru[$changes]["periode_kontrak"];
+                    if ($existing_detail) {
+                        $tanggal_sampling = $existing_detail->tanggal_sampling;
+                        if($detail_baru[$changes]["status_sampling"] != 'SD'){
+                            $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
+                            $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
+                            if(!$tanggal_sampling) {
+                                DB::rollback();
+                                return response()->json([
+                                    'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                    'status' => 401
+                                ], 401);
+                            }
+                        }
+                        $existing_detail->kategori_1 = $detail_baru[$changes]["status_sampling"];
                         $existing_detail->kategori_2 = $detail_baru[$changes]["kategori_1"];
                         $existing_detail->kategori_3 = $detail_baru[$changes]["kategori_2"];
                         $existing_detail->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
                         $existing_detail->parameter = json_encode($detail_baru[$changes]["parameter"]);
                         $existing_detail->regulasi = json_encode($detail_baru[$changes]["regulasi"]);
-                        if (isset($cek_jadwal->tanggal))
-                            $existing_detail->tanggal_sampling = $cek_jadwal->tanggal;
+                        $existing_detail->tanggal_sampling = $tanggal_sampling;
                         $existing_detail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $existing_detail->save();
                     } else {
@@ -1284,6 +1275,8 @@ class ReadyOrderController extends Controller
                 }
             }
 
+            // ====================PENGURANGAN DATA========================================
+
             if (!empty($pengurangan_data)) {
                 $data = OrderDetail::where('no_order', $no_order)
                     ->whereIn('no_sampel', $pengurangan_data)
@@ -1293,9 +1286,12 @@ class ReadyOrderController extends Controller
                 FtcT::whereIn('no_sample', $pengurangan_data)->update(['is_active' => 0]);
             }
 
+            // =====================PENAMBAHAN DATA======================================
+
             $n = 0;
             $no_urut_cfr = 0;
             $mark = [];
+
             if (!empty($penambahan_data) != null) {
                 // Add data
                 $cek_detail = OrderDetail::where('id_order_header', $data_lama->id_order)
@@ -1310,10 +1306,9 @@ class ReadyOrderController extends Controller
                 $kategori = $cek_detail->kategori_3;
                 $regulasi = json_decode($cek_detail->regulasi) ?? [];
                 $parameter = json_decode($cek_detail->parameter) ?? [];
+
                 foreach ($penambahan_data as $key => $changes) {
                     $value = (object) $detail_baru[$changes];
-
-                    // dd($value->parameter);
                     $no_sample = $changes;
                     /*
                      * Disini bagian pembuatan no sample dan no cfr/lhp
@@ -1399,20 +1394,19 @@ class ReadyOrderController extends Controller
                     // $number_imaginer = sprintf("%03d", $n);
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
-                    if ($dataQuotation->status_sampling != 'SD') {
-                        $mark[] = $number_imaginer;
-                        foreach ($dataJadwal as $jadwal) {
-                            foreach ($jadwal['kategori'] as $index => $kat) {
-                                if (\explode(' - ', $kat)[1] == $number_imaginer) {
-                                    $tanggal_sampling = $jadwal['tanggal'];
-                                    $key = array_search($number_imaginer, $mark);
-                                    unset($mark[$key]);
-                                    break 2;
-                                }
-                            }
+
+                    if($value->status_sampling != 'SD'){
+                        $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
+                        $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
+                        if(!$tanggal_sampling) {
+                            DB::rollback();
+                            return response()->json([
+                                'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br> ↓ <br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                'status' => 401
+                            ], 401);
                         }
                     }
-                    // dd($mark);
+                    
                     $penamaan_titik = $value->penamaan_titik;
 
                     // =================================================================
@@ -1567,43 +1561,22 @@ class ReadyOrderController extends Controller
 
                     // =================================================================
                     $dataD->save();
-                    Ftc::create([
+                    
+                    Ftc::firstOrCreate([
                         'no_sample' => $no_sample
                     ]);
 
-                    FtcT::create([
+                    FtcT::firstOrCreate([
                         'no_sample' => $no_sample
                     ]);
-
-                    // ======================================================================================= INSERT TO TABLE PARAMETER ANALISA ===================================================================================
-                    foreach ($value->parameter as $v) {
-                        $insert_analisa[] = [
-                            'no_order' => $no_order,
-                            'no_sampel' => $no_sample,
-                            'tanggal_order' => Carbon::now()->format('Y-m-d'),
-                            'parameter' => $v
-                        ];
-                    }
-
-                    ParameterAnalisa::insert($insert_analisa);
 
                     $n++;
                     $kategori = $value->kategori_2;
                     $regulasi = $value->regulasi;
                     $parameter = $value->parameter;
                 }
-                // dd($mark);
-                if (!empty($mark)) {
-                    DB::rollBack();
-                    Log::channel('reorder')->info("Terdapat kategori yang belum terjadwal pada", [
-                        "no_quotation" => $dataQuotation->no_document,
-                        "kategori" => implode(", ", $mark),
-                    ]);
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => 'Terdapat kategori ' . implode(", ", $mark) . ' yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
-                    ], 401);
-                }
+                
+                
             }
 
             $data = OrderHeader::where('no_order', $no_order)->where('is_active', 1)->first();
@@ -1652,7 +1625,8 @@ class ReadyOrderController extends Controller
                 ->update([
                     'nama_perusahaan' => $dataQuotation->nama_perusahaan,
                     'alamat_perusahaan' => $dataQuotation->alamat_kantor,
-                    'no_quotation' => $dataQuotation->no_document
+                    'no_quotation' => $dataQuotation->no_document,
+                    'kategori_1' => $dataQuotation->status_sampling
                 ]);
 
             $dataQuotation->flag_status = 'ordered';
@@ -1669,7 +1643,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com', 'kharina@intilab.com'];
+            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);
@@ -1691,7 +1665,6 @@ class ReadyOrderController extends Controller
             throw new Exception($e->getMessage() . ' in line ' . $e->getLine(), 401);
         }
     }
-
 
     public function orderKontrak($dataQuotation, $no_order, $dataJadwal)
     {
@@ -1853,27 +1826,21 @@ class ReadyOrderController extends Controller
                                     }
                                 }
 
-                                $number_imaginer = sprintf("%03d", $n);
-                                if ($dataQuotation->status_sampling != 'SD') {
-                                    foreach ($dataJadwal as $sampling_plan) {
-                                        if ($sampling_plan['periode_kontrak'] == $periode_kontrak) {
-                                            foreach ($sampling_plan['jadwal'] as $jadwal) {
-                                                foreach ($jadwal['kategori'] as $kategori) {
-                                                    if (explode(' - ', $kategori)[1] == $number_imaginer) {
-                                                        $tanggal_sampling = $jadwal['tanggal'];
-                                                        break 2;
-                                                    }
-                                                }
-                                            }
-                                            break;
-                                        }
+                                $number_imaginer = sprintf("%03d", $noSampel);
+                                $periodeNew = $periode_kontrak;
+                                $statusSamplingNew = $dataQuotation->status_sampling;
+                                $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
+                                if($statusSamplingNew != 'SD'){
+                                    $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
+                                    if(!$tanggal_sampling) {
+                                        DB::rollback();
+                                        return response()->json([
+                                            'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> pada periode ' . Carbon::parse($periodeNew)->locale('id')->translatedFormat('F Y') . ' yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br><br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                            'status' => 401
+                                        ], 401);
                                     }
                                 }
 
-                                // $penamaan_titik = $value->penamaan_titik;
-                                // if (is_array($value->penamaan_titik)) {
-                                //     $penamaan_titik = isset($value->penamaan_titik[$f]) ? $value->penamaan_titik[$f] : '';
-                                // }
                                 $penamaan_titik = $props[$noSampel];
 
                                 $DataOrderDetail = new OrderDetail;
@@ -2027,17 +1994,6 @@ class ReadyOrderController extends Controller
                                     'no_sample' => $no_sample
                                 ]);
 
-                                foreach ($value->parameter as $v) {
-                                    $insert_analisa[] = [
-                                        'no_order' => $no_order,
-                                        'no_sampel' => $no_sample,
-                                        'tanggal_order' => $dataOrderHeader->tanggal_order,
-                                        'parameter' => $v
-                                    ];
-                                }
-
-                                ParameterAnalisa::insert($insert_analisa);
-
                                 $n++;
                                 $kategori = $value->kategori_2;
                                 $regulasi = $value->regulasi;
@@ -2125,31 +2081,42 @@ class ReadyOrderController extends Controller
             $pengurangan_data = array_values(array_diff($sampel_order_lama, $sampel_detail_baru));
             $penambahan_data = array_values(array_diff($sampel_detail_baru, $sampel_order_lama));
 
-            // dd($penambahan_data);
+            // dd($perubahan_data, $pengurangan_data, $penambahan_data);
+            // ==============================PERUBAHAN DATA===================================
             if (!empty($perubahan_data)) {
                 foreach ($perubahan_data as $changes) {
                     $existing_detail = OrderDetail::where('no_order', $data_lama->no_order)
                         ->where('no_sampel', $changes)
                         ->where('is_active', 1)
                         ->first();
+
                     if ($existing_detail) {
                         //  ============ insert detail history ===============
-                        $search_kategori = '%' . \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3) . '%';
-                        $cek_jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)
-                            ->where('is_active', 1)
-                            ->where('kategori', 'like', $search_kategori)
-                            ->select('tanggal', 'kategori')
-                            ->groupBy('tanggal', 'kategori')
-                            ->first();
+                        $periodeNew = $detail_baru[$changes]["periode_kontrak"];
+                        $statusSamplingNew = $detail_baru[$changes]["status_sampling"];
+                        $search_kategori = \explode('-', $detail_baru[$changes]["kategori_2"])[1] . ' - ' . substr($changes, -3);
+                        
+                        if($statusSamplingNew != 'SD'){
+                            $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
+                            if(!$tanggal_sampling) {
+                                DB::rollback();
+                                return response()->json([
+                                    'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> pada periode ' . Carbon::parse($periodeNew)->locale('id')->translatedFormat('F Y') . ' yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br><br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                    'status' => 401
+                                ], 401);
+                            }
+                        } else {
+                            $tanggal_sampling = $existing_detail->tanggal_sampling;
+                        }
 
                         $existing_detail->periode = $detail_baru[$changes]["periode_kontrak"];
+                        $existing_detail->kategori_1 = $detail_baru[$changes]["status_sampling"];
                         $existing_detail->kategori_2 = $detail_baru[$changes]["kategori_1"];
                         $existing_detail->kategori_3 = $detail_baru[$changes]["kategori_2"];
                         $existing_detail->keterangan_1 = $detail_baru[$changes]["penamaan_titik"];
                         $existing_detail->parameter = json_encode($detail_baru[$changes]["parameter"]);
                         $existing_detail->regulasi = json_encode($detail_baru[$changes]["regulasi"]);
-                        if (isset($cek_jadwal->tanggal))
-                            $existing_detail->tanggal_sampling = $cek_jadwal->tanggal;
+                        $existing_detail->tanggal_sampling = $tanggal_sampling;
                         $existing_detail->updated_at = Carbon::now()->format('Y-m-d H:i:s');
                         $existing_detail->save();
                     } else {
@@ -2163,6 +2130,7 @@ class ReadyOrderController extends Controller
                 }
             }
 
+            // ==============================PENAMBAHAN DATA===================================
             $no = 0;
             $no_urut_cfr = 0;
             if (!empty($penambahan_data)) {
@@ -2276,24 +2244,18 @@ class ReadyOrderController extends Controller
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
 
                     $tanggal_sampling = $value->periode_kontrak . '-01';
-                    //dedi 2025-02-14
-                    if ($value->status_sampling != 'SD') {
-                        $mark[] = $number_imaginer;
-                        foreach ($dataJadwal as $sampling_plan) {
-                            if ($sampling_plan['periode_kontrak'] == $value->periode_kontrak) {
-                                foreach ($sampling_plan['jadwal'] as $jadwal) {
-                                    foreach ($jadwal['kategori'] as $kategori) {
-                                        // dd($kategori, $number_imaginer);
-                                        if (explode(' - ', $kategori)[1] == $number_imaginer) {
-                                            $tanggal_sampling = $jadwal['tanggal'];
-                                            $key = array_search($number_imaginer, $mark);
-                                            unset($mark[$key]);
-                                            break 2;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
+
+                    $periodeNew = $value->periode_kontrak;
+                    $statusSamplingNew = $value->status_sampling;
+                    $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
+                    if($statusSamplingNew != 'SD'){
+                        $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
+                        if(!$tanggal_sampling) {
+                            DB::rollback();
+                            return response()->json([
+                                'message' => 'Terdapat kategori di no qt <strong>' . $dataQuotation->no_document . '</strong> pada periode ' . Carbon::parse($periodeNew)->locale('id')->translatedFormat('F Y') . ' yang belum dijadwalkan. <br> ↓ <br> <strong>'. $search_kategori .' </strong> <br><br> silahkan hubungi admin terkait untuk update jadwal.!',
+                                'status' => 401
+                            ], 401);
                         }
                     }
 
@@ -2455,36 +2417,14 @@ class ReadyOrderController extends Controller
                         'no_sample' => $no_sample
                     ]);
 
-                    foreach ($value->parameter as $v) {
-                        $insert_analisa[] = [
-                            'no_order' => $no_order,
-                            'no_sampel' => $no_sample,
-                            'tanggal_order' => Carbon::now()->format('Y-m-d'),
-                            'parameter' => $v
-                        ];
-                    }
-
-                    ParameterAnalisa::insert($insert_analisa);
-
                     $kategori = $value->kategori_2;
                     $regulasi = $value->regulasi;
                     $parameter = $value->parameter;
                     $oldPeriode = $value->periode_kontrak;
                 }
-
-                if (!empty($mark)) {
-                    DB::rollBack();
-                    Log::channel('reorder')->info("Terdapat kategori yang belum terjadwal pada", [
-                        "no_quotation" => $dataQuotation->no_document,
-                        "kategori" => implode(", ", $mark),
-                    ]);
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => 'Terdapat kategori ' . implode(", ", $mark) . ' yang belum di-update. Harap koordinasi dengan admin sampling untuk melakukan pembaruan data jadwal tersebut.',
-                    ], 401);
-                }
             }
 
+            // ==============================PENGURANGAN DATA===================================
             if (!empty($pengurangan_data)) {
                 $data = OrderDetail::where('no_order', $no_order)
                     ->whereIn('no_sampel', $pengurangan_data)
@@ -2548,7 +2488,7 @@ class ReadyOrderController extends Controller
                 'data_baru' => $data_detail_baru->toArray()
             ];
 
-            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com', 'kharina@intilab.com'];
+            $excludes_bcc = ['sucita@intilab.com', 'abidah@intilab.com'];
             $bcc = GetAtasan::where('user_id', 54)->get()->pluck('email')->toArray();
             $bcc = array_filter($bcc, function ($item) use ($excludes_bcc) {
                 return !in_array($item, $excludes_bcc);

@@ -52,7 +52,23 @@ use App\Models\{
     Gravimetri,
     MasterPelanggan,
     Titrimetri,
-    WsValueAir
+    WsValueAir,//batas
+    DataLapanganEmisiOrder,
+    DataLapanganIsokinetikBeratMolekul,
+    DataLapanganIsokinetikKadarAir,
+    DataLapanganIsokinetikPenentuanKecepatanLinier,
+    DataLapanganIsokinetikSurveiLapangan,
+    DataLapanganKebisinganBySoundMeter,
+    DataLapanganKecerahan,
+    DataLapanganLapisanMinyak,
+    DataLapanganMicrobiologi,
+    DataLapanganSampah,
+    DataLapanganSenyawaVolatile,
+    DataLapanganUnion,
+    DataLimbah,
+    DataPsikologi,
+    DetailFlowMeter,
+    DetailSoundMeter
 };
 use App\Services\{
     GetAtasan,
@@ -75,6 +91,7 @@ use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\SalesDailyQSD;
 
 use Mpdf\Mpdf;
 
@@ -91,8 +108,62 @@ class TestingController extends Controller
             //code...
 
             switch ($request->menu) {
+                case 'daily-qsd':
+                    $header = new SalesDailyQSD();
+                    $cek = $header->run();
+                    dd($cek);
+                    break;
                 case 'this':
-                    dd($this);
+                    $cek = DB::table('pic_pelanggan')
+                        ->where('email_pic', 'not like', '%@%')
+                        ->pluck('pelanggan_id')
+                        ->toArray();
+
+                    $data = DB::table('master_pelanggan')
+                        ->whereIn('id', $cek)
+                        ->get();
+
+                    foreach ($data as $item) {
+
+                        $namaPic = null;
+                        $emailPic = null;
+
+                        // 1. Cek quotation biasa
+                        $quotation = DB::table('request_quotation')
+                            ->where('pelanggan_ID', $item->id_pelanggan)
+                            ->orderBy('id', 'desc')
+                            ->first();
+                        
+                        if ($quotation) {
+                            $namaPic  = $quotation->nama_pic_order;
+                            $emailPic = $quotation->email_pic_order;
+                        } else {
+                            // 2. Cek kontrak
+                            $kontrak = DB::table('request_quotation_kontrak_H')
+                                ->where('pelanggan_ID', $item->id_pelanggan)
+                                ->orderBy('id', 'desc')
+                                ->first();
+
+                            if ($kontrak) {
+                                $namaPic  = $kontrak->nama_pic_order;
+                                $emailPic = $kontrak->email_pic_order;
+                            }
+                        }
+
+                        // 3. Kalau tetap tidak ketemu → skip
+                        if (!$namaPic || !$emailPic) {
+                            continue;
+                        }
+                        // 4. Update PIC jika nama cocok
+                        DB::table('pic_pelanggan')
+                            ->where('pelanggan_id', $item->id)
+                            ->where('nama_pic', $namaPic)
+                            ->update([
+                                'email_pic' => $emailPic
+                            ]);
+                    }
+                    
+                    return response()->json($data, 200);
                     break;
                 case 'attributes':
                     dd($request->attributes->get('user')->karyawan);
@@ -1101,6 +1172,7 @@ class TestingController extends Controller
                         return response()->json(["data" => $chekRegen], 200);
                     }
                 case 'cs_render':
+                    
                     $orderDetail =OrderDetail::where('tanggal_sampling',$request->tanggal_sampling)
                         ->where('no_order',$request->no_order)
                         ->where('is_active',1)
@@ -1115,7 +1187,6 @@ class TestingController extends Controller
                     foreach ($orderDetail as $item) {
                         $jumlahBotol = 0;
                         $jumlahLabel = 0;
-
                         // Cek apakah 'no_sampel' ada di map kita (lookup O(1) - sangat cepat)
                         if (isset($pSDetailMap[$item->no_sampel])) {
                             
@@ -1616,7 +1687,30 @@ class TestingController extends Controller
                             'line' => $e->getLine()
                         ], 500);
                     }
-
+                case 'tracing_datalapangan':
+                    $models =[
+                        DataLapanganCahaya::class,DataLapanganDebuPersonal::class,DataLapanganDirectLain::class,DataLapanganEmisiCerobong::class,DataLapanganEmisiKendaraan::class,DataLapanganEmisiOrder::class,DataLapanganGetaran::class,DataLapanganGetaranPersonal::class,DataLapanganIklimDingin::class,DataLapanganIklimPanas::class,DataLapanganIsokinetikBeratMolekul::class,DataLapanganIsokinetikKadarAir::class,DataLapanganIsokinetikPenentuanKecepatanLinier::class,DataLapanganKebisingan::class,DataLapanganKebisinganBySoundMeter::class,DataLapanganKebisinganPersonal::class,DataLapanganKecerahan::class,DataLapanganLapisanMinyak::class,DataLapanganMedanLM::class,DataLapanganMicrobiologi::class,DataLapanganPartikulatMeter::class,DataLapanganPsikologi::class,DataLapanganSampah::class,DataLapanganSenyawaVolatile::class,DataLapanganSinarUV::class,DataLapanganSwab::class,DataLapanganUnion::class,DataLimbah::class,DetailFlowMeter::class,DetailLingkunganHidup::class,DetailLingkunganKerja::class,DetailMicrobiologi::class,DetailSenyawaVolatile::class,DetailSoundMeter::class
+                    ];
+                    $noSampelCari = $request->input('no_sampel');
+                    $results = [];
+                    foreach ($models as $modelClass) {
+                        $dataFound = $modelClass::where('no_sampel', $noSampelCari)->get();
+                        if ($dataFound->isNotEmpty()) {
+                            foreach ($dataFound as $item) {
+                                $namaModel = class_basename($modelClass);
+                                $parameterValue = $item->parameter ?? '-';
+                                $results[] = [
+                                    'no_sampel' => $item->no_sampel,
+                                    'parameter' => $parameterValue,
+                                    'nama_model' => $namaModel,
+                                ];
+                            }
+                        }
+                    }
+                    return response()->json([
+                        'total_found' => count($results),
+                        'data' => $results
+                    ]);
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }

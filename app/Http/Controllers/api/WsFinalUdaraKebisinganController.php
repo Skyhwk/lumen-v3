@@ -70,6 +70,7 @@ class WsFinalUdaraKebisinganController extends Controller
     {
         $data = OrderDetail::where('cfr', $request->cfr)
             ->where('status', 0)
+            ->where('is_active', 1)
             ->orderByDesc('id')
             ->get()
             ->map(function ($item) {

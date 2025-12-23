@@ -418,7 +418,7 @@ class LhpTemplate
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis', '316;power density', '277;medan listrik','236;gelombang elektro']
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
@@ -436,7 +436,7 @@ class LhpTemplate
                         $parameterNonAkreditasi++;
                     }
                 }
-            } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31)) {
+            } else if ($kategori === 5 && !($sub_kategori === 32 || $sub_kategori === 31 || $sub_kategori === 116)) {
                 if (collect($dataDecode)->contains(function ($item) {
                     return in_array(
                         $item,

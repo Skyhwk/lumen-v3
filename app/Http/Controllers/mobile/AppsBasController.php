@@ -2401,19 +2401,19 @@ class AppsBasController extends Controller
         $paramName = isset($parameter['parameter']) ? $parameter['parameter'] : null;
         $requiredCount = isset($parameter['requiredCount']) ? (int) $parameter['requiredCount'] : 1;
 
-        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)'], true);
+        $hasPMParameter = in_array($paramName, ['PM 10 (24 Jam)', 'PM 2.5 (24 Jam)','Kelembaban','Suhu'], true);
         if (!$hasPMParameter) {
             $model3 = null;
         }
 
-        if ($model3 === null) {
-            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2);
+        if ($model3 === null || $model3 === 'App\Models\DetailMicrobiologi' ) {  
+            return $this->handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2,$model3);
         } else {
             return $this->handlePMParameters($sample_number, $paramName, $requiredCount, $model, $model2, $model3);
         }
     }
 
-    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2)
+    private function handleTemperatureHumidity($sample_number, $paramName, $requiredCount, $model, $model2, $model3)
     {
         // Suhu / Kelembaban: kembalikan model instance (first) atau null
         if (in_array($paramName, ['Suhu', 'Kelembaban', 'Laju Ventilasi', 'Laju Ventilasi (8 Jam)'], true)) {
@@ -2459,9 +2459,22 @@ class AppsBasController extends Controller
             }
 
             if ($model2) {
-                return $model2::where('no_sampel', $sample_number)
+                $found = $model2::where('no_sampel', $sample_number)
                     ->whereNotNull($searchColumn)
                     ->first();
+                if ($found) {
+                    return $found;
+                }
+            }
+
+            if ($model3) {
+                $found = $model3::where('no_sampel', $sample_number)
+                    ->whereNotNull($searchColumn)
+                    ->first();
+                
+                if ($found) {
+                    return $found;
+                }
             }
 
             return null;
@@ -3417,7 +3430,8 @@ class AppsBasController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "Laju Ventilasi",
@@ -3664,7 +3678,8 @@ class AppsBasController extends Controller
                 "requiredCount" => 1,
                 "category" => "4-Udara",
                 "model" => DetailLingkunganHidup::class,
-                "model2" => DetailLingkunganKerja::class
+                "model2" => DetailLingkunganKerja::class,
+                "model3" => DetailMicrobiologi::class
             ],
             [
                 "parameter" => "TSP",

@@ -9,165 +9,181 @@ use DB;
 use Illuminate\Http\Request;
 use Yajra\Datatables\Datatables;
 
+use App\Models\DailyQsd;
+use App\Models\Invoice;
+
 class DailyQsdController extends Controller
 {
-
     public function index(Request $request)
     {
-        $query = DB::table('daily_qsd');
+        $data = DailyQsd::where('tanggal_sampling_min', 'like', '%' . $request->tanggal_sampling . '%');
+        if($request->cut_off == "today"){
+            $data = $data->where('tanggal_sampling_min', '<=',Carbon::now()->format('Y-m-d'));
+        }
+        $data = $data->orderBy('tanggal_sampling_min', 'desc')
+        ->orderBy('no_order', 'asc');
 
-        // Filter tanggal_sampling jika ada
-        if ($request->filled('tanggal_sampling')) {
-            $tanggalInput = $request->tanggal_sampling;
+        $page = "awal";
+        if($request->start > 29){
+            $page = "lanjut";
+        }
 
-            // Deteksi format input
-            if (strlen($tanggalInput) == 4 && is_numeric($tanggalInput)) {
-                // Format: Y (tahun saja) - 2024
-                $query->whereRaw("YEAR(tanggal_sampling_min) = ?", [$tanggalInput]);
-            } elseif (strlen($tanggalInput) == 7 && strpos($tanggalInput, '-') !== false) {
-                // Format: Y-m (bulan) - 2024-01
-                $query->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$tanggalInput]);
+        return Datatables::of($data)
+        ->filterColumn('no_invoice', function ($query, $keyword) {
+            if($keyword == '-'){
+                $query->whereNull('no_invoice');
             } else {
-                // Format: Y-m-d (tanggal lengkap) - 2024-01-15
-                $query->whereDate('tanggal_sampling_min', $tanggalInput);
+                $query->where('no_invoice', 'like', "%$keyword%");
             }
-        }
-
-        // Filter periode untuk data kontrak
-        if ($request->filled('periode')) {
-            $periodeInput = $request->periode;
-
-            if (strlen($periodeInput) == 4 && is_numeric($periodeInput)) {
-                // Filter tahun periode
-                $query->where(function ($q) use ($periodeInput) {
-                    $q->where('kontrak', 'C')
-                        ->whereRaw("LEFT(periode, 4) = ?", [$periodeInput]);
-                });
-            } elseif (strlen($periodeInput) == 7 && strpos($periodeInput, '-') !== false) {
-                // Filter bulan periode
-                $query->where(function ($q) use ($periodeInput) {
-                    $q->where('kontrak', 'C')
-                        ->where('periode', $periodeInput);
-                });
+        })
+        ->filterColumn('tipe_quotation', function ($query, $keyword) {
+            if($keyword == ""){
+                $query->whereIn('kontrak', ["C", "N"]);
+            } else {
+                $query->where('kontrak', $keyword);
             }
-        }
+        })
+        ->filterColumn('periode', function ($query, $keyword) use ($request) {
+            $bulanMap = [
+                "januari" => "01", "februari" => "02", "maret" => "03", "april" => "04",
+                "mei" => "05", "juni" => "06", "juli" => "07", "agustus" => "08",
+                "september" => "09", "oktober" => "10", "november" => "11", "desember" => "12"
+            ];
+            $keyword = strtolower(trim($keyword));
+            $bulan = $tahun = null;
 
-        // Default ordering
-        $query->orderBy('tanggal_sampling_min', 'desc')
-            ->orderBy('no_order', 'asc');
-
-        return DataTables::of($query)
-            ->addColumn('cfr_list', function ($data) {
-                return explode(',', $data->cfr);
-            })
-            ->addColumn('tipe_quotation', function ($data) {
-                return $data->kontrak == 'C' ? 'KONTRAK' : 'NON-KONTRAK';
-            })
-            ->addColumn('periode_aktif', function ($data) {
-                if ($data->kontrak == 'C' && isset($data->periode)) {
-                    return $data->periode;
+            if (preg_match('/^(\D+)\s*(\d{2,4})?$/', $keyword, $m)) {
+                // text (bulan nama/singkatan/angka) dan opsional tahun
+                $bk = trim($m[1]);
+                $tk = isset($m[2]) ? $m[2] : null;
+                foreach ($bulanMap as $nama => $angka) {
+                    if ($bk === $angka || strpos($nama, $bk) === 0 || substr($nama,0,3) === substr($bk,0,3)) {
+                        $bulan = $angka;
+                        break;
+                    }
                 }
-                return '-';
-            })
-            ->addColumn('sales_id', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->sales_id_kontrak;
+                if (is_numeric($bk) && intval($bk) >= 1 && intval($bk) <= 12) $bulan = str_pad($bk,2,'0',STR_PAD_LEFT);
+                // Tahun, 2 digit -> 20xx
+                if ($tk) $tahun = strlen($tk)==2 ? ('20'.$tk) : $tk;
+            }
+            // Jika gabungan misal 'jan23' tanpa spasi
+            if ((!$bulan || !$tahun) && preg_match('/([a-z]+)(\d{2,4})/i', $keyword, $m)) {
+                foreach ($bulanMap as $nama => $angka) {
+                    if (strpos($nama, $m[1]) === 0 || substr($nama,0,3) === substr($m[1],0,3)) {
+                        $bulan = $angka;
+                        break;
+                    }
+                }
+                $tahun = strlen($m[2])==2 ? ('20'.$m[2]) : $m[2];
+            }
+            if ($bulan) {
+                $tahun = $tahun ?: $request->tanggal_sampling;
+                $query->where('periode', $tahun . '-' . $bulan);
+            }
+        })
+        ->filterColumn('tanggal_sampling_min', function ($query, $keyword) use ($request) {
+            $bulanMap = [
+                "januari" => "01", "februari" => "02", "maret" => "03", "april" => "04",
+                "mei" => "05", "juni" => "06", "juli" => "07", "agustus" => "08",
+                "september" => "09", "oktober" => "10", "november" => "11", "desember" => "12"
+            ];
+
+            $keyword = strtolower(trim($keyword));
+            $bulan = null;
+            $tahun = null;
+            $tanggal = null;
+
+            // Strip all unwanted chars for splitting/regex
+            $keyword = preg_replace('/[\s\-,.]+/', ' ', $keyword);
+            $parts = explode(' ', $keyword);
+
+            // Coba tangkap berbagai pola tanggal-bulan-tahun dll
+            // Contoh: "16 des 2025", "1des", "02feb", "des 2023", "16des", "feb23", "16 desember"
+            // 1. Gabungan angka-bulan (ddMMMyyyy atau dMMMyyyy atau ddMMMyy)
+            if (preg_match('/^(\d{1,2})?([a-z]+)(\d{2,4})?$/i', str_replace(' ', '', $keyword), $m)) {
+                // Jika ada angka di depan -> tanggal
+                if (!empty($m[1])) {
+                    $tanggal = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                }
+                // Ambil bulan dari nama/singkatan
+                $bk = $m[2];
+                foreach ($bulanMap as $nama => $angka) {
+                    if ($bk === $angka || strpos($nama, $bk) === 0 || substr($nama, 0, 3) === substr($bk, 0, 3)) {
+                        $bulan = $angka;
+                        break;
+                    }
+                }
+                // Cek tahun jika ada
+                if (!empty($m[3])) {
+                    $tahun = strlen($m[3]) == 2 ? ('20' . $m[3]) : $m[3];
+                }
+            }
+
+            // 2. Format: [dd] [bulan(nama/angka)] [yyyy|yy] (contoh: "16 desember 2025", "02 des")
+            if (!$bulan && count($parts) > 0) {
+                foreach ($parts as $ix => $val) {
+                    // Cek bulan
+                    foreach ($bulanMap as $nama => $angka) {
+                        if ($val === $angka || strpos($nama, $val) === 0 || substr($nama, 0, 3) === substr($val, 0, 3)) {
+                            $bulan = $angka;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            // Tangkap tanggal (jika di depan atau di mana saja)
+            foreach ($parts as $val) {
+                if (is_numeric($val) && intval($val) >= 1 && intval($val) <= 31) {
+                    if (strlen($val) <= 2) {
+                        $tanggal = str_pad($val, 2, '0', STR_PAD_LEFT);
+                        break;
+                    } else {
+                        // Tahun, bukan tanggal
+                        if (strlen($val) == 4) $tahun = $val;
+                        if (strlen($val) == 2 && intval($val) > 31) $tahun = '20' . $val;
+                    }
+                }
+            }
+            // Tangkap tahun (4 digit paling akhir, atau 2 digit jika > 31)
+            foreach ($parts as $val) {
+                if (preg_match('/^\d{4}$/', $val)) $tahun = $val;
+                if (preg_match('/^\d{2}$/', $val) && intval($val) > 31) $tahun = '20' . $val;
+            }
+            if ($bulan) {
+                $tahun = $tahun ?: $request->tanggal_sampling; // fallback tahun current jika tidak ada
+                if ($tanggal) {
+                    // Filter persis tanggal_sampling_min
+                    $query->where('tanggal_sampling_min', "$tahun-$bulan-$tanggal");
                 } else {
-                    return $data->sales_id_non_kontrak;
+                    // Filter bulan+tahun
+                    $query->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", ["$tahun-$bulan"]);
                 }
-            })
-            ->addColumn('sales_nama', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->sales_nama_kontrak ?? '-';
-                } else {
-                    return $data->sales_nama_non_kontrak ?? '-';
-                }
-            })
-            ->addColumn('total_revenue', function ($data) {
-                if ($data->kontrak == 'C') {
-                    return $data->total_revenue_kontrak ?? 0;
-                } else {
-                    return $data->total_revenue_non_kontrak ?? 0;
-                }
-            })
-            ->filterColumn('no_order', function ($query, $keyword) {
-                $query->where('no_order', 'like', "%$keyword%");
-            })
-            ->filterColumn('no_quotation', function ($query, $keyword) {
-                $query->where('no_quotation', 'like', "%$keyword%");
-            })
-            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-                $query->where('nama_perusahaan', 'like', "%$keyword%");
-            })
-            ->filterColumn('konsultan', function ($query, $keyword) {
-                $query->where('konsultan', 'like', "%$keyword%");
-            })
-            ->filterColumn('tanggal_sampling_min', function ($query, $keyword) {
-                $query->whereDate('tanggal_sampling_min', 'like', "%$keyword%");
-            })
-            ->filterColumn('tipe_quotation', function ($query, $keyword) {
-                $keyword = strtolower($keyword);
-                if (strpos($keyword, 'kon') !== false) {
-                    $query->where('kontrak', 'C');
-                } elseif (strpos($keyword, 'non') !== false) {
-                    $query->where('kontrak', '!=', 'C');
-                }
-            })
-            ->filterColumn('sales_nama', function ($query, $keyword) {
-                $query->where(function ($q) use ($keyword) {
-                    $q->where('sales_nama_kontrak', 'like', "%$keyword%")
-                        ->orWhere('sales_nama_non_kontrak', 'like', "%$keyword%");
-                });
-            })
-            ->orderColumn('tanggal_sampling_min', function ($query, $order) {
-                $query->orderBy('tanggal_sampling_min', $order);
-            })
-            ->orderColumn('periode', function ($query, $order) {
-                $query->orderBy('periode', $order);
-            })
-            ->make(true);
-    }
-
-    public function getTotalRevenue(Request $request)
-    {
-        $currentYear  = Carbon::now()->format('Y');
-        $currentMonth = Carbon::now()->format('Y-m');
-        $currentDate  = Carbon::now()->format('Y-m-d');
-
-        // $currentYear  = $request->year;
-        // $currentMonth = $currentYear . '-' . Carbon::now()->format('m');
-
-        // Total Revenue Per Tahun
-        $yearRevenue = DB::table('daily_qsd')
-            ->whereRaw("YEAR(tanggal_sampling_min) = ?", [$currentYear])
-            ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
-            ')
-            ->first();
-
-        // Total Revenue Per Bulan
-        $monthRevenue = DB::table('daily_qsd')
-            ->whereRaw("DATE_FORMAT(tanggal_sampling_min, '%Y-%m') = ?", [$currentMonth])
-            ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
-            ')
-            ->first();
-
-        // Total Revenue Per Hari (Today)
-        $dayRevenue = DB::table('daily_qsd')
-            ->whereDate('tanggal_sampling_min', $currentDate)
-            ->selectRaw('
-                SUM(COALESCE(total_revenue_kontrak, 0)) +
-                SUM(COALESCE(total_revenue_non_kontrak, 0)) as total
-            ')
-            ->first();
-
-        return response()->json([
-            'year_revenue'  => $yearRevenue->total ?? 0,
-            'month_revenue' => $monthRevenue->total ?? 0,
-            'day_revenue'   => $dayRevenue->total ?? 0,
-        ]);
+            }
+        })
+        ->filterColumn('no_order', function ($query, $keyword) {
+            $query->where('no_order', 'like', "%$keyword%")->orderBy('no_order', 'asc');
+        })
+        ->with([
+            'sumRevenue' => function ($query) {
+                return $query->sum('total_revenue');
+            },
+            'sumPpn' => function ($query) {
+                return $query->sum('total_ppn');
+            },
+            'sumPph' => function ($query) {
+                return $query->sum('total_pph');
+            },
+            'sumDiscount' => function ($query) {
+                return $query->sum('total_discount');
+            },
+            'sumQt' => function ($query) {
+                return $query->sum('biaya_akhir');
+            },
+            'page' => function () use ($page) {
+                return $page;
+            },
+        ])
+        
+        ->make(true);
     }
 }

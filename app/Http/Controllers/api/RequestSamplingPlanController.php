@@ -147,7 +147,7 @@ class RequestSamplingPlanController extends Controller
             ->orderBy('nama_lengkap')
             ->get();
         $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
+            ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
@@ -250,5 +250,19 @@ class RequestSamplingPlanController extends Controller
     {
         $data = MasterDriver::where('is_active', true);
         return Datatables::of($data)->make(true);
+    }
+
+    public function getStatusSampling(Request $request)
+    {
+        
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+        }
     }
 }

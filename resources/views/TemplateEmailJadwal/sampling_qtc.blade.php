@@ -176,7 +176,7 @@
         {{ $user['department'] }}<br>
         INTI SURYA LABORATARIUM<br>
         {{ $user['email'] }}<br>
-        {{ $user['no_telpon'] }}
+        {{-- {{ $user['no_telpon'] }} --}}
     </p>
 
 </body>

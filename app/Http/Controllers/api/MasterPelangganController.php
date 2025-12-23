@@ -83,6 +83,11 @@ class MasterPelangganController extends Controller
                     $q->where('no_tlp_perusahaan', 'like', "%{$keyword}%");
                 });
             })
+            ->orderColumn('telpon', function ($query, $orderDirection) {
+                $query->with(['kontak_pelanggan' => function($q) use ($orderDirection) {
+                    $q->orderBy('no_tlp_perusahaan', $orderDirection);
+                }]);
+            })
             ->make(true);
     }
 

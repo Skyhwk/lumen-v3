@@ -13,17 +13,20 @@ use App\Models\QuotationKontrakH;
 use App\Models\MasterCabang;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
+use App\Models\OrderHeader;
+use App\Models\OrderDetail;
 use App\Jobs\RenderSamplingPlan;
 use App\Services\JadwalServices;
 use App\Services\GetAtasan;
 use App\Services\Notification;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
 use App\Jobs\RenderAndEmailJadwal;
 use App\Models\JobTask;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 
 class SamplingPlanController extends Controller
@@ -155,7 +158,7 @@ class SamplingPlanController extends Controller
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler =  MasterKaryawan::with('jabatan')
-                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779])
+                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
@@ -543,7 +546,6 @@ class SamplingPlanController extends Controller
                 'id_cabang' => $request->id_cabang[0],
             ];
 
-            
             $type = explode('/', $request->no_quotation)[1];
             if ($request->durasi_lama == $request->durasi) {
                 if ($type == 'QTC') {
@@ -557,6 +559,9 @@ class SamplingPlanController extends Controller
                 }
                 $jadwal = JadwalServices::on('updateJadwalKategori', $dataObject)->updateJadwalSPKategori();
             }
+
+            // TAMBAHAN UNTUK UPDATE ORDER DETAIL
+            $this->updateOrderDetail($dataObject, $request->tanggal);
 
             if ($jadwal) {
                 return response()->json([
@@ -616,6 +621,8 @@ class SamplingPlanController extends Controller
                 $jadwal = JadwalServices::on('insertParsial', $dataObject)->insertParsial();
             }
 
+            $this->updateOrderDetail($dataObject, $request->tanggal);
+
             if ($jadwal) {
                 return response()->json([
                     'message' => 'Berhasil melakukan insert Jadwal Parsial.!',
@@ -632,6 +639,27 @@ class SamplingPlanController extends Controller
                 'message' => $e->getMessage(),
                 'status' => '401'
             ], 401);
+        }
+    }
+
+    private function updateOrderDetail($data, $tanggal)
+    {
+        $cekOrder = OrderHeader::where('no_document', $data->no_quotation)->where('is_active', true)->first();
+        if ($cekOrder) {
+            $array_no_samples = [];
+            foreach ($data->kategori as $x => $y) {
+                $pra_no_sample = explode(" - ", $y)[1];
+                $no_samples = $cekOrder->no_order . '/' . $pra_no_sample;
+                $array_no_samples[] = $no_samples;
+            }
+
+            $orderDetail = OrderDetail::where('id_order_header', $cekOrder->id)->whereIn('no_sampel', $array_no_samples)->get();
+            foreach ($orderDetail as $od) {
+                $od->tanggal_sampling = $tanggal;
+                $od->save();
+
+                Log::channel('perubahan_tanggal')->info('Order Detail updated: ' . $od->no_sampel . ' -> ' . $tanggal);
+            }
         }
     }
 
@@ -897,6 +925,19 @@ class SamplingPlanController extends Controller
                 'message' => $e->getMessage(),
                 'status' => 'failed'
             ], 500);
+        }
+    }
+
+    public function getStatusSampling(Request $request)
+    {
+        try {
+            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
+            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
+            
+            return response()->json(['data'=>$getLabelStatusSampling],200);
+        } catch (\Throwable $th) {
+            //throw $th;
+            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
         }
     }
 }
