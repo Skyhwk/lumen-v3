@@ -77,7 +77,10 @@ class JadwalHandler extends BaseController
                 ->flatten();
 
             $warna = array("merah", "biru_tua", "biru_muda", "orange", "peach", "hijau_tua", "hijau_muda", "NULL", "");
-            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get();
+            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get()->map(function ($user) {
+                $user->is_perbantuan = 0;
+                return $user;
+            });
             // Query untuk user spesial
             $userMerge = PerbantuanSampler::with(['users' => function($query) {
                     // Sebaiknya select kolom yang dibutuhkan saja di relasi untuk efisiensi

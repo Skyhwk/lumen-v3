@@ -639,9 +639,9 @@ class GenerateInvoiceController extends Controller
                         'kode_qr' => $unique,
                         'file' => $filename,
                         'data' => json_encode([
+                            'type_document' => 'invoice',
                             'no_document' => $request->no_invoice,
                             'nama_customer' => $getDetail->nama_perusahaan,
-                            'type_document' => 'invoice'
                         ]),
                         'created_at' => Carbon::now(),
                         'created_by' => $this->karyawan,
