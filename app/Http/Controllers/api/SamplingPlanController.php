@@ -163,7 +163,15 @@ class SamplingPlanController extends Controller
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler->transform(function ($item) {
-                $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+                $digitCount = strlen((string)$item->user_id);
+    
+                // 2. Tentukan suffix (akhiran nama)
+                if ($digitCount > 4) {
+                    $item->nama_display = $item->nama_lengkap . ' (freelance)';
+                } else {
+                    $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+                }
+                // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
                 unset($item->jabatan);
                 if ($item->users && $item->users->jabatan) {
                     // Kita "copy" objek jabatan dari dalam users ke root item
@@ -172,7 +180,10 @@ class SamplingPlanController extends Controller
                     $item->setRelation('jabatan', $jabatanObj);
                 } else {
                     // Fallback jika data kosong (opsional, biar frontend gak error undefined)
-                    $item->setRelation('jabatan', null);
+                    $jabatanObj = (object)[
+                        "nama_jabatan" => "Freelance Sampler"
+                    ];
+                    $item->jabatan = $jabatanObj;
                 }
                 unset($item->users);
                 return $item;

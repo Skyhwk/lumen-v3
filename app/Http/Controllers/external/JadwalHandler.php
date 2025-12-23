@@ -88,7 +88,13 @@ class JadwalHandler extends BaseController
                 //select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')
             $userMerge->transform(function ($karyawan) {
                 //$karyawan->nama_display = $karyawan->nama_lengkap . ' (perbantuan)';
-                $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
+                $digitCount = strlen((string)$karyawan->user_id);
+                if ($digitCount > 4) {
+                    $karyawan->nama_display = $karyawan->nama_lengkap . ' (freelance)';
+                } else {
+                    $karyawan->nama_display = $karyawan->nama_lengkap . ' (perbantuan)';
+                }
+                // $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
                 if ($karyawan->users) {
                     // 2. Tarik kolom fisik dari relasi users ke root item
                     $karyawan->id_cabang = $karyawan->users->id_cabang;
@@ -99,6 +105,10 @@ class JadwalHandler extends BaseController
                     // Gunakan getRelation agar pasti mengambil Objek, bukan string kolom
                     // $jabatanObj = $karyawan->users->getRelation('jabatan');
                     // $karyawan->setRelation('jabatan', $jabatanObj);
+                }else{
+                    $karyawan->id_cabang = null;
+                    $karyawan->pin_user  = null;
+                    $karyawan->warna     = null;
                 }
                 $karyawan->unsetRelation('users');
                 return $karyawan;
