@@ -666,15 +666,12 @@ class JadwalServices
                         $psh->sampler_jadwal = $newSamplerString;
                         
                         // C. Logika Kondisional (Hanya update tanggal jika dokumen BELUM ada)
-                        // Jika detail_bas_documents KOSONG (null), berarti belum dikunci/tanda tangan -> Update Tanggal
                         if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
                         } 
                         // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
 
                         // D. Eksekusi Simpan
-                        // Laravel otomatis mengecek "isDirty()", jadi tidak perlu cek array_diff manual
-                        // Query update hanya akan jalan jika ada value yang benar-benar berubah.
                         Log::info('Debug Dirty Check', [
                             'no_quotation' => $dataUpdate->no_quotation,
                             'no_sampel_old' => $psh->getOriginal('no_sampel'),
@@ -1025,11 +1022,7 @@ class JadwalServices
                         if (is_null($psh->detail_bas_documents)) {
                             $psh->tanggal_sampling = $dataUpdate->tanggal;
                         } 
-                        // Else: Jika sudah ada dokumen, tanggal dibiarkan (tetap tanggal lama)
-
                         // D. Eksekusi Simpan
-                        // Laravel otomatis mengecek "isDirty()", jadi tidak perlu cek array_diff manual
-                        // Query update hanya akan jalan jika ada value yang benar-benar berubah.
                         Log::info('Debug Dirty Check', [
                             'no_quotation' => $dataUpdate->no_quotation,
                             'no_sampel_old' => $psh->getOriginal('no_sampel'),
