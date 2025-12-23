@@ -67,8 +67,8 @@ class PerbantuanSamplerController extends Controller
             if ($exists) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Karyawan sudah terdaftar sebagai sampler',
-                ], 422);
+                    'message' => 'Karyawan sudah terdaftar sebagai perbantuan',
+                ], 401);
             }
 
             // SIMPAN DATA
