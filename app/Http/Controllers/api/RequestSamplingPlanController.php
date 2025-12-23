@@ -15,6 +15,7 @@ use App\Models\QuotationNonKontrak;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
+use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
@@ -148,13 +149,24 @@ class RequestSamplingPlanController extends Controller
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
-        $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('user_id', $privateUserIds)
+        $privateSampler =  PerbantuanSampler::with('users.jabatan')
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
+        
         $privateSampler->transform(function ($item) {
             $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            unset($item->jabatan);
+            if ($item->users && $item->users->jabatan) {
+                // Kita "copy" objek jabatan dari dalam users ke root item
+                // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
+                $jabatanObj = $item->users->getRelation('jabatan');
+                $item->setRelation('jabatan', $jabatanObj);
+            } else {
+                // Fallback jika data kosong (opsional, biar frontend gak error undefined)
+                $item->setRelation('jabatan', null);
+            }
+            unset($item->users);
             return $item;
         });
         $samplers->transform(function ($item) {

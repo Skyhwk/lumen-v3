@@ -15,6 +15,7 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
+use App\Models\PerbantuanSampler;
 use App\Jobs\RenderSamplingPlan;
 use App\Services\JadwalServices;
 use App\Services\GetAtasan;
@@ -157,13 +158,23 @@ class SamplingPlanController extends Controller
             $samplers = $samplers->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
-            $privateSampler =  MasterKaryawan::with('jabatan')
-                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
+            $privateSampler =  PerbantuanSampler::with('users.jabatan')
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler->transform(function ($item) {
                 $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+                unset($item->jabatan);
+                if ($item->users && $item->users->jabatan) {
+                    // Kita "copy" objek jabatan dari dalam users ke root item
+                    // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
+                    $jabatanObj = $item->users->getRelation('jabatan');
+                    $item->setRelation('jabatan', $jabatanObj);
+                } else {
+                    // Fallback jika data kosong (opsional, biar frontend gak error undefined)
+                    $item->setRelation('jabatan', null);
+                }
+                unset($item->users);
                 return $item;
             });
             $samplers->transform(function ($item) {
