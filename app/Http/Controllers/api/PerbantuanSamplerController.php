@@ -54,6 +54,7 @@ class PerbantuanSamplerController extends Controller
             // jika user_id bukan angka → berarti new tags
             if (!is_numeric($userId)) {
                 $userId = str_replace(".", "", microtime(true));
+                
 
                 // rapikan nama manual
                 $namaLengkap = Str::title(Str::lower($namaLengkap ?? $userId));
