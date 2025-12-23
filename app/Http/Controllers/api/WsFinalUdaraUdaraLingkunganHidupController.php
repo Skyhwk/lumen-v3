@@ -54,6 +54,22 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 		return Datatables::of($data)->make(true);
 	}
 
+    public function handleDataDetail(Request $request) {
+        $data = OrderDetail::where('is_active', 1)
+            ->where('kategori_2', '4-Udara')
+            ->whereIn('kategori_3', ["11-Udara Ambient"])
+            ->where('status', 0)
+            ->whereNotNull('tanggal_terima')
+            ->where('id', $request->id)
+            ->whereJsonDoesntContain('parameter', ["318;Psikologi"])
+            ->first();
+
+        return response()->json([
+            'data' => $data,
+            'message' => 'Data retrieved successfully',
+        ], 200);
+    }
+
 	public function convertHourToMinute($hour)
 	{
 		$minutes = $hour * 60;
