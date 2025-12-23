@@ -79,10 +79,13 @@ class JadwalHandler extends BaseController
             $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get();
             // Query untuk user spesial
             $userMerge = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')
-                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346])
+                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
                 ->where('is_active', 1)
                 ->get();
-
+            $userMerge->transform(function ($karyawan) {
+                $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
+                return $karyawan;
+            });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
                 $users = $users->merge($userMerge)->unique('id')->values();

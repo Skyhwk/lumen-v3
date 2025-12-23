@@ -3676,7 +3676,7 @@ class RequestQuotationController extends Controller
                                             'is_active' => false
                                         ]);
 
-                                    Jadwal::where('no_quotation', $dataOld->no_document)
+                                    Jadwal::where('no_quotation', $dataH->no_document)
                                         ->whereIn('periode', $periode)
                                         ->update([
                                             'no_quotation' => $dataH->no_document,
