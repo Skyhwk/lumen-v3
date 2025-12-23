@@ -381,7 +381,7 @@ class CreateKontrakJob extends Job
             Log::channel('quotation')->info('CreateKontrakJob: ' . $no_document . ' success created');
         } catch (\Exception $e) {
             DB::rollback();
-            Log::channel('quotation')->error('CreateKontrakJob: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine());
+            Log::channel('quotation')->error('CreateKontrakJob: ' . $e->getMessage() . ' - ' . $e->getFile() . ' - ' . $e->getLine() . ' on Data' . json_encode($this->data));
         }
     }
 
