@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\Jadwal;
 use App\Models\MasterKaryawan;
+use App\Models\PerbantuanSampler;
 
 
 class JadwalHandler extends BaseController
@@ -81,15 +82,44 @@ class JadwalHandler extends BaseController
                 return $user;
             });
             // Query untuk user spesial
-            $userMerge = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')
-                ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
+            $userMerge = PerbantuanSampler::with(['users' => function($query) {
+                    // Sebaiknya select kolom yang dibutuhkan saja di relasi untuk efisiensi
+                    $query->select('user_id', 'id_jabatan', 'id_cabang', 'pin_user', 'warna');
+                }, 'users.jabatan'])
                 ->where('is_active', 1)
                 ->get();
+                //select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')
             $userMerge->transform(function ($karyawan) {
-                $karyawan->nama_lengkap = $karyawan->nama_lengkap;
-                $karyawan->is_perbantuan = 1;
+                //$karyawan->nama_display = $karyawan->nama_lengkap . ' (perbantuan)';
+                $digitCount = strlen((string)$karyawan->user_id);
+                if ($digitCount > 4) {
+                    $karyawan->nama_display = $karyawan->nama_lengkap . ' (freelance)';
+                } else {
+                    $karyawan->nama_display = $karyawan->nama_lengkap . ' (perbantuan)';
+                }
+                // $karyawan->nama_lengkap = $karyawan->nama_lengkap . ' (perbantuan)';
+                if ($karyawan->users) {
+                    // 2. Tarik kolom fisik dari relasi users ke root item
+                    $karyawan->id_cabang = $karyawan->users->id_cabang;
+                    $karyawan->pin_user  = $karyawan->users->pin_user;
+                    $karyawan->warna     = $karyawan->users->warna;
+
+                    // 3. Tarik Objek Jabatan (Mengatasi bentrok nama kolom/relasi)
+                    // Gunakan getRelation agar pasti mengambil Objek, bukan string kolom
+                    // $jabatanObj = $karyawan->users->getRelation('jabatan');
+                    // $karyawan->setRelation('jabatan', $jabatanObj);
+                }else{
+                    $karyawan->id_cabang = null;
+                    $karyawan->pin_user  = null;
+                    $karyawan->warna     = null;
+                }
+                $karyawan->unsetRelation('users');
                 return $karyawan;
             });
+            // $users->transform(function ($karyawan) {
+            //     $karyawan->nama_display = $karyawan->nama_lengkap;
+            //     return $karyawan;
+            // });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
                 $users = $users->merge($userMerge)->unique('id')->values();
