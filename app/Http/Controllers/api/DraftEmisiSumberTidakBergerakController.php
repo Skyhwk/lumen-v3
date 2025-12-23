@@ -619,6 +619,12 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $methodsUsed[]      = $bakumutu->method;
         }
 
+        if($entry['C'] == '##'){
+            $entry['terkoreksi'] = '-';
+            $entry['methode'] = '-';
+            $entry['baku_mutu'] = ['-'];
+        }
+
         return $entry;
     }
 

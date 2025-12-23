@@ -943,6 +943,13 @@ class DraftUdaraAmbientController extends Controller
             $methodsUsed[]         = $bakumutu->method;
         }
 
+        if($entry['hasil_uji'] == '##'){
+            $entry['satuan'] = '-';
+            $entry['durasi'] = '-';
+            $entry['methode'] = '-';
+            $entry['baku_mutu'] = ['-'];
+        }
+
         return $entry;
     }
 
