@@ -154,12 +154,15 @@ class RequestSamplingPlanController extends Controller
             ->orderBy('nama_lengkap')
             ->get();
         $privateSampler->transform(function ($item) {
-            // Concatenate string
-            $item->nama_lengkap = $item->nama_lengkap . ' (perbantuan)';
+            $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            return $item;
+        });
+        $samplers->transform(function ($item) {
+            $item->nama_display = $item->nama_lengkap;
             return $item;
         });
         $allSamplers = $samplers->merge($privateSampler);
-        $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
+        $allSamplers = $allSamplers->sortBy('nama_display')->values();
         return response()->json($allSamplers, 200);
     }
 
