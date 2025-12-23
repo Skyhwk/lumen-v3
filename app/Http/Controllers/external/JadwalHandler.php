@@ -77,9 +77,9 @@ class JadwalHandler extends BaseController
 
             $warna = array("merah", "biru_tua", "biru_muda", "orange", "peach", "hijau_tua", "hijau_muda", "NULL", "");
             $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get()->map(function ($user) {
-        $user->is_perbantuan = 0;
-        return $user;
-    });
+                $user->is_perbantuan = 0;
+                return $user;
+            });
             // Query untuk user spesial
             $userMerge = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')
                 ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
