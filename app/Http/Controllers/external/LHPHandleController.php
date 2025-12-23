@@ -95,8 +95,10 @@ class LHPHandleController extends BaseController
                 $cekInvoice = $cekInvoice->where('is_active', true)->get() ?? null;
 
                 if($dataOrder){
-                    $dataGrouped = (new GroupedCfrByLhp($dataOrder, $periode))->get();
-                    return response()->json(['message' => 'Data LHP found', 'data' => $dataGrouped, 'order' => $dataOrder, 'periode' => $periode, 'invoice' => $cekInvoice, 'fileName' => $fileName, 'hold' => $checkHold], 200);
+                    $dataGrouped = (new GroupedCfrByLhp($dataOrder, $periode))->get()->toArray();
+                    unset($dataGrouped[0]['order_details']);
+                    
+                    return response()->json(['message' => 'Data LHP found', 'data' => $dataGrouped, 'order' => $dataOrder, 'periode' => $periode, 'invoice' => collect($cekInvoice)->toArray(), 'fileName' => $fileName, 'hold' => $checkHold], 200);
                 } else {
                     return response()->json(['message' => 'Data Order not found'], 404);
                 }
