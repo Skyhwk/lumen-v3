@@ -662,6 +662,8 @@ class DraftUlkController extends Controller
                     ['parameter', 'asc']
                 ])->values()->toArray();
 
+                array_push($defaultMethods, '-');
+
                 return response()->json([
                     'status'             => true,
                     'data'               => $data_entry,
@@ -761,6 +763,8 @@ class DraftUlkController extends Controller
                     ->whereNotNull('method')->groupBy('method')
                     ->pluck('method')->toArray();
                 $resultMethods = array_values(array_unique(array_merge($methodsUsed, $defaultMethods)));
+                
+                array_push($resultMethods, '-');
 
                 return response()->json([
                     'status'             => true,
@@ -859,6 +863,15 @@ class DraftUlkController extends Controller
             $entry['methode']      = $bakumutu->method;
             $entry['baku_mutu'][0] = $bakumutu->baku_mutu;
             $methodsUsed[]         = $bakumutu->method;
+        }
+
+        if($entry['hasil_uji'] == '##'){
+            $entry['nilai_persyaratan'] = '-';
+            $entry['jenis_persyaratan'] = '-';
+            $entry['satuan'] = '-';
+            $entry['durasi'] = '-';
+            $entry['methode'] = '-';
+            $entry['baku_mutu'] = ['-'];
         }
 
         return $entry;
