@@ -161,6 +161,7 @@ class WsFinalPadatanController extends Controller
 
 	public function approveWSApi(Request $request)
 	{
+		// dd($request->all());
 		DB::beginTransaction();
 		try {
 			if ($request->template_stp == 4) {
@@ -269,7 +270,8 @@ class WsFinalPadatanController extends Controller
 
 				// 1️⃣ cek LHPS aktif
 				foreach ($models as $model) {
-					$active = $model::where('parameter', $request->parameter)
+					$active = $model::where('id', $request->id)
+						->where('parameter', $request->parameter)
 						->where('no_sampel', $request->no_sampel)
 						->where('lhps', 1)
 						->where('is_active', 1)
@@ -292,6 +294,8 @@ class WsFinalPadatanController extends Controller
 
 				foreach ($models as $model) {
 					$approved = $model::where('id', $request->id)
+						->where('parameter', $request->parameter)
+						->where('no_sampel', $request->no_sampel)
 						->where('is_active', 1)
 						->first();
 
