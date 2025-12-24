@@ -253,35 +253,69 @@ class WsFinalPadatanController extends Controller
 					], 401);
 				}
 			} else {
-				if ($request->id) {
-					$data = Subkontrak::where('parameter', $request->parameter)->where('lhps', 1)->where('is_active', 1)->where('no_sampel', $request->no_sampel)->first();
-					if ($data != null) {
-						$cek = Subkontrak::where('id', $data->id)->first();
-						$cek->lhps = 0;
-						$cek->save();
-						DB::commit();
-						return response()->json([
-							'message' => 'Data has ben Rejected',
-							'status' => 201,
-							'success' => true
-						], 201);
-					} else {
-						$dat = Subkontrak::where('id', $request->id)->where('is_active', 1)->first();
-						$dat->lhps = 1;
-						$dat->save();
-						DB::commit();
-						return response()->json([
-							'message' => 'Data has ben Approved',
-							'status' => 200,
-							'success' => true
-						], 200);
-					}
-				} else {
+				if (! $request->id) {
 					return response()->json([
 						'message' => 'Gagal Approve',
 						'success' => false
 					], 401);
 				}
+
+				$models = [
+					Subkontrak::class,
+					Colorimetri::class,
+					Gravimetri::class,
+					Titrimetri::class,
+				];
+
+				// 1️⃣ cek LHPS aktif
+				foreach ($models as $model) {
+					$active = $model::where('parameter', $request->parameter)
+						->where('no_sampel', $request->no_sampel)
+						->where('lhps', 1)
+						->where('is_active', 1)
+						->first();
+
+					if ($active) {
+						$active->update(['lhps' => 0]);
+
+						DB::commit();
+						return response()->json([
+							'message' => 'Data has been Rejected',
+							'success' => true,
+							'status' => 201
+						], 201);
+					}
+				}
+
+				// 2️⃣ approve target
+				$approved = null;
+
+				foreach ($models as $model) {
+					$approved = $model::where('id', $request->id)
+						->where('is_active', 1)
+						->first();
+
+					if ($approved) {
+						$approved->update(['lhps' => 1]);
+						break;
+					}
+				}
+
+				if (! $approved) {
+					DB::rollBack();
+					return response()->json([
+						'message' => 'Data tidak ditemukan',
+						'success' => false
+					], 404);
+				}
+
+				DB::commit();
+				return response()->json([
+					'message' => 'Data has been Approved',
+					'success' => true,
+					'status' => 200
+				], 200);
+
 			}
 		} catch (\Throwable $th) {
 			DB::rollBack();
