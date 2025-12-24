@@ -123,9 +123,7 @@ class JadwalHandler extends BaseController
             });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
-                $users = $users->merge($userMerge)->unique(function ($item) {
-                    return $item->id . '-' . $item->is_perbantuan;
-                })->values();
+                $users = $users->merge($userMerge)->keyBy('user_id')->values();
             }
 
             if ($db1 != $db2) {
@@ -166,9 +164,7 @@ class JadwalHandler extends BaseController
                 });
 
                 // Gabungkan hasil dan hilangkan duplikat berdasarkan 'id'
-                $users = $usersCabang4->merge($userTambahan)->unique(function ($item) {
-                    return $item->id . '-' . $item->is_perbantuan;
-                })->values();
+                $users = $usersCabang4->merge($userTambahan)->keyBy('user_id')->values();
                 }elseif($request->id_cabang == 5){
                     $users = $users->where('id_cabang', 5)->values();
                 }elseif($request->id_cabang == 1){
