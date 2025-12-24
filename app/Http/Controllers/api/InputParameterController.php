@@ -3218,10 +3218,10 @@ class InputParameterController extends Controller
                             ];
                         }, $request->ks, $request->kb);
                     }else{
-						$data_shift = (object)[
+						$data_shift = [(object)[
 							'sample' => $request->ks,
 							'blanko' => $request->kb,
-						];
+						]];
 					}
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
