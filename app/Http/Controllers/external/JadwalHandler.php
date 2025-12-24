@@ -77,7 +77,7 @@ class JadwalHandler extends BaseController
                 ->flatten();
 
             $warna = array("merah", "biru_tua", "biru_muda", "orange", "peach", "hijau_tua", "hijau_muda", "NULL", "");
-            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna', 'user_id')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get()->map(function ($user) {
+            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna', 'user_id')->whereIn('id_jabatan', [94])->where('is_active', 1)->get()->map(function ($user) {
                 $user->is_perbantuan = 0;
                 return $user;
             });
