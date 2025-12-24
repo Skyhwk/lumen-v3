@@ -3210,14 +3210,19 @@ class InputParameterController extends Controller
                                 "blanko" => number_format(array_sum($blanko) / count($blanko),4)
                             ];
                         }, $ks, $kb);
-                    }else{
+                    }else if(is_array($request->ks) && is_array($request->kb)){
                         $data_shift = array_map(function ($sample, $blanko) {
                             return (object) [
                                 "sample" => number_format($sample,4),
                                 "blanko" => number_format($blanko,4)
                             ];
                         }, $request->ks, $request->kb);
-                    }
+                    }else{
+						$data_shift = (object)[
+							'sample' => $request->ks,
+							'blanko' => $request->kb,
+						];
+					}
 					$data->data_shift = count($data_shift) > 0 ? json_encode($data_shift) : null;
 				}
                 // dd(isset($data_kalkulasi['data_pershift']));
