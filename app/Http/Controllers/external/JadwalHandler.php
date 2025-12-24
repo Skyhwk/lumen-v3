@@ -123,7 +123,7 @@ class JadwalHandler extends BaseController
             });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
-                $users = $users->merge($userMerge)->unique('id')->values();
+                $users = $users->merge($userMerge)->unique('user_id')->values();
             }
 
             if ($db1 != $db2) {
@@ -158,7 +158,7 @@ class JadwalHandler extends BaseController
                 $userTambahan = $users->whereIn('id', $userTambahanIds);
 
                 // Gabungkan hasil dan hilangkan duplikat berdasarkan 'id'
-                $users = $usersCabang4->merge($userTambahan)->unique('id')->values();
+                $users = $usersCabang4->merge($userTambahan)->unique('user_id')->values();
                 }elseif($request->id_cabang == 5){
                     $users = $users->where('id_cabang', 5)->values();
                 }elseif($request->id_cabang == 1){
