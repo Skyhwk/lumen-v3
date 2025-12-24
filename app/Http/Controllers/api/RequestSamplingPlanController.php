@@ -142,10 +142,9 @@ class RequestSamplingPlanController extends Controller
 
     public function getSampler()
     {
-        $privateUserIds =[21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96];
+        
         $samplers = MasterKaryawan::with('jabatan')
             ->whereIn('id_jabatan', [94]) // 'Sampler', 'K3 Staff'
-            ->whereNotIn('user_id', $privateUserIds)
             ->where('is_active', true)
             ->orderBy('nama_lengkap')
             ->get();
@@ -182,7 +181,8 @@ class RequestSamplingPlanController extends Controller
             $item->nama_display = $item->nama_lengkap;
             return $item;
         });
-        $allSamplers = $samplers->merge($privateSampler);
+        $allSamplers = $samplers->concat($privateSampler);
+        $allSamplers = $allSamplers->unique('user_id');
         $allSamplers = $allSamplers->sortBy('nama_display')->values();
         return response()->json($allSamplers, 200);
     }
