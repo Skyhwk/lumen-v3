@@ -4730,7 +4730,7 @@ class TestingController extends Controller
 
     public function testReassign(){
         $randomSales = new RandomSalesAssign;
-        $result = $randomSales->run();
+        $result = $randomSales->run('reassign');
 
         foreach($result['new_sales'] as $key => $sales){
             $result['new_sales'][$key]['total_customer'] = MasterPelanggan::where('sales_id', $sales['id'])->where('is_active', true)->count();

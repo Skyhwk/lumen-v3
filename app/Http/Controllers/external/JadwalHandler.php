@@ -77,7 +77,7 @@ class JadwalHandler extends BaseController
                 ->flatten();
 
             $warna = array("merah", "biru_tua", "biru_muda", "orange", "peach", "hijau_tua", "hijau_muda", "NULL", "");
-            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get()->map(function ($user) {
+            $users = MasterKaryawan::select('id','id_cabang', 'pin_user', 'nama_lengkap', 'warna', 'user_id')->whereIn('id_jabatan', [94,146])->where('is_active', 1)->get()->map(function ($user) {
                 $user->is_perbantuan = 0;
                 return $user;
             });
@@ -151,15 +151,21 @@ class JadwalHandler extends BaseController
                 // costume:
                 if($request->id_cabang == 4){
                     // $users = $users->where('id_cabang', 4)->values();
-                    $usersCabang4 = $users->where('id_cabang', 4);
+                    $usersCabang4 = $users->where('id_cabang', 4)->get()->map(function ($user) {
+                        $user->is_perbantuan = 0;
+                        return $user;
+                    });
 
                 // Daftar user tambahan berdasarkan ID meskipun bukan dari cabang 4
                 $userTambahanIds = [77]; // ID yang harus ikut meskipun bukan cabang 4
 
-                $userTambahan = $users->whereIn('id', $userTambahanIds);
+                $userTambahan = $users->whereIn('id', $userTambahanIds)->get()->map(function ($user) {
+                    $user->is_perbantuan = 0;
+                    return $user;
+                });
 
                 // Gabungkan hasil dan hilangkan duplikat berdasarkan 'id'
-                $users = $usersCabang4->merge($userTambahan)->unique('id')->values();
+                $users = $usersCabang4->merge($userTambahan)->keyBy('user_id')->values();
                 }elseif($request->id_cabang == 5){
                     $users = $users->where('id_cabang', 5)->values();
                 }elseif($request->id_cabang == 1){

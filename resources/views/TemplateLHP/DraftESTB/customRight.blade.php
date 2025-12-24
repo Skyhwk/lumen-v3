@@ -278,6 +278,24 @@
                         @endforeach
                     </table>
                 @endif
+                @php
+                    $isPager = false;
+
+                    foreach ($detail as $v) {
+                        if ($v['hasil_uji'] === '##') {
+                            $isPager = true;
+                            break;
+                        }
+                    }
+                @endphp
+
+                @if($isPager)
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        <tr>
+                            <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>
+                        </tr>
+                    </table>
+                @endif
             </td>
         </tr>
     </table>
