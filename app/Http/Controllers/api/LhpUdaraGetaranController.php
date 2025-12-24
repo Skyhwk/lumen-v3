@@ -139,7 +139,7 @@ class LhpUdaraGetaranController extends Controller
         $detail = LhpsGetaranDetail::where('id_header', $lhpsGetaranHeader->id)->get();
 
         $servicePrint = new PrintLhp();
-        $servicePrint->printByFilename($request->file_lhp, $detail);
+        $servicePrint->printByFilename($lhpsGetaranHeader->file_lhp, $detail, 'KPGI', $lhpsGetaranHeader->no_lhp);
 
         if (!$servicePrint) return response()->json(['message' => 'Gagal Reprint LHP'], 401);
 
