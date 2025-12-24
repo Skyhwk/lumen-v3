@@ -123,7 +123,9 @@ class JadwalHandler extends BaseController
             });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
-                $users = $users->merge($userMerge)->unique('id')->values();
+                $users = $users->merge($userMerge)->unique(function ($item) {
+                    return $item->id . '-' . $item->is_perbantuan;
+                })->values();
             }
 
             if ($db1 != $db2) {
@@ -150,15 +152,23 @@ class JadwalHandler extends BaseController
                 // costume:
                 if($request->id_cabang == 4){
                     // $users = $users->where('id_cabang', 4)->values();
-                    $usersCabang4 = $users->where('id_cabang', 4);
+                    $usersCabang4 = $users->where('id_cabang', 4)->get()->map(function ($user) {
+                        $user->is_perbantuan = 0;
+                        return $user;
+                    });
 
                 // Daftar user tambahan berdasarkan ID meskipun bukan dari cabang 4
                 $userTambahanIds = [77]; // ID yang harus ikut meskipun bukan cabang 4
 
-                $userTambahan = $users->whereIn('id', $userTambahanIds);
+                $userTambahan = $users->whereIn('id', $userTambahanIds)->get()->map(function ($user) {
+                    $user->is_perbantuan = 0;
+                    return $user;
+                });
 
                 // Gabungkan hasil dan hilangkan duplikat berdasarkan 'id'
-                $users = $usersCabang4->merge($userTambahan)->unique('id')->values();
+                $users = $usersCabang4->merge($userTambahan)->unique(function ($item) {
+                    return $item->id . '-' . $item->is_perbantuan;
+                })->values();
                 }elseif($request->id_cabang == 5){
                     $users = $users->where('id_cabang', 5)->values();
                 }elseif($request->id_cabang == 1){
