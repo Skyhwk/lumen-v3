@@ -7,7 +7,7 @@ use Carbon\Carbon;
 class LingkunganHidupCl2
 {
     public function index($data, $id_parameter, $mdl) {
-        if($data->use_absorbansi) {
+        if($data->use_absorbansi && is_array($data->ks)) {
             $ks = array_sum($data->ks[0]) / count($data->ks[0]);
             $kb = array_sum($data->kb[0]) / count($data->kb[0]);
         }else{
