@@ -123,7 +123,8 @@ class JadwalHandler extends BaseController
             });
             // Only merge if $userMerge contains data
             if (!$userMerge->isEmpty()) {
-                $users = $users->merge($userMerge)->keyBy('user_id')->values();
+                $users = $users->concat($userMerge);
+                $users = $users->unique('user_id')->values();
             }
 
             if ($db1 != $db2) {

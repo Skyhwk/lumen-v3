@@ -18,7 +18,7 @@
         /* UTILITY */
         .bold { font-weight: bold; }
         .text-center { text-align: center; }
-        .valign-top { vertical-align: top; }
+        .valign-top { vertical-align: top; border: none !important; }
 
         /* LAYOUT UTAMA */
         .main-layout-table {
@@ -69,7 +69,7 @@
         }
 
         /* --- PERBAIKAN KHUSUS BODY MAP (DIBESARKAN) --- */
-        .body-map-container { width: 100%; border-collapse: collapse; }
+        .body-map-container { width: 100%; border-collapse: collapse; border: none !important; }
         
         /* 1. Area Gambar Diperlebar */
         .body-map-img-cell {
@@ -77,6 +77,7 @@
             vertical-align: middle; /* Posisi vertikal tengah agar rapi */
             text-align: center;
             padding-right: 10px;
+            border: none !important;
         }
 
         /* 2. Tabel Bagian Tubuh Dibuat Lebih Renggang (Spacious) */
@@ -284,11 +285,10 @@
                                     <td style="text-align: left !important;"><span class="bold">KESIMPULAN SURVEI KELUHAN GANGGUAN OTOT DAN RANGKA</span></td>
                                 </tr>
                                 <tr>
-                                    <td style="text-align: justify !important;">
+                                    <td style="text-align: justify !important; border: solid 1px #000; padding: 5px; margin-top: 5px;">
                                         Berdasarkan hasil survei keluhan gangguan otot dan rangka yang telah dilakukan, 
                                         didapatkan bahwa bagian tubuh dengan tingkat keluhan tertinggi adalah: 
-                                        <span class="bold">{{ !empty($returnKeluhan) ? implode(', ', $returnKeluhan) : 'Tidak Ada Keluhan' }}</span> 
-                                        dengan skor keluhan sebesar <span class="bold">{{ $higherNumber }}</span>.
+                                        <span>{{ !empty($returnKeluhan) ? implode(', ', $returnKeluhan) : 'Tidak Ada Keluhan' }}</span>.
                                     </td>
                                 </tr>
                             </table>
