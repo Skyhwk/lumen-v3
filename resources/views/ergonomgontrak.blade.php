@@ -286,9 +286,10 @@
                                 </tr>
                                 <tr>
                                     <td style="text-align: justify !important; border: solid 1px #000; padding: 5px; margin-top: 5px;">
-                                        Berdasarkan hasil survei keluhan gangguan otot dan rangka yang telah dilakukan, 
-                                        didapatkan bahwa bagian tubuh dengan tingkat keluhan tertinggi adalah: 
-                                        <span>{{ !empty($returnKeluhan) ? implode(', ', $returnKeluhan) : 'Tidak Ada Keluhan' }}</span>.
+                                        Pengukuran ergonomi pada pekerja tersebut memiliki skor keluhan tertinggi pada bagian: 
+                                        @foreach($returnKeluhan as $index => $item)
+                                            {{ $index === 0 ? $item : ( $index > 0 ? ', ' . $item : '' )}}
+                                        @endforeach
                                     </td>
                                 </tr>
                             </table>
