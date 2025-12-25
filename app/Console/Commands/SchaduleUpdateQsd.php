@@ -27,7 +27,7 @@ class SchaduleUpdateQsd extends Command
     public function handle()
     {
         try {
-            printf("[SchaduleUpdateQsd] [%s] Start Running...", date('Y-m-d H:i:s'));
+            printf("\n[SchaduleUpdateQsd] [%s] Start Running...", date('Y-m-d H:i:s'));
             SalesDailyQSD::run();
             printf("\n[SchaduleUpdateQsd] [%s] Running done, delay 3 detik sebelum hitung kpi", date('Y-m-d H:i:s'));
             sleep(3);
