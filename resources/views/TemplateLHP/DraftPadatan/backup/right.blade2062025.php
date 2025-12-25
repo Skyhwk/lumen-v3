@@ -77,7 +77,7 @@
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                        <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
                     </tr>
                     <tr>
                         <td class="custom5">Titik Koordinat</td>
