@@ -24,7 +24,7 @@ class ScheduleEverySecond extends Command
 
                 // WorkerReassign::run();
 
-                WorkerSummaryQSD::run();
+                // WorkerSummaryQSD::run();
 
                 // WorkerDailyQSDSales::run();
 
