@@ -22,19 +22,19 @@ class ScheduleEverySecond extends Command
             try {
                 EmailBlast::sendEmailBlast();
 
-                WorkerReassign::run();
+                // WorkerReassign::run();
 
                 WorkerSummaryQSD::run();
 
-                WorkerDailyQSDSales::run();
+                // WorkerDailyQSDSales::run();
 
                 // WorkerApproveAnalyst::run();
 
                 WorkerSummaryParameter::run();
 
-                WorkerUpdateKpiSales::run();
+                // WorkerUpdateKpiSales::run();
 
-                WorkerFeeSales::run();
+                // WorkerFeeSales::run();
 
                 // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
             } catch (\Throwable $th) {
