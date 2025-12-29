@@ -39,7 +39,8 @@ class ClaimFeeExternalController extends Controller
     public function settlementIndex(Request $request)
     {
         $status = $request->status;
-
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+        
         $query = ClaimFeeExternal::query()
             ->where('is_active', true)->where('status_pembayaran', 'TRANSFER');
 
