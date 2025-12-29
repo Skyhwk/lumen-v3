@@ -10,12 +10,29 @@ class SalesDailyQSD
 {
     public static function run()
     {
+        $now = Carbon::now();
+        $currentYear = $now->format('Y');
+        $nextYear = $now->copy()->addYear()->format('Y');
+        $currentMonth = (int)$now->format('m');
+
+        // Jika sudah memasuki bulan Desember (1 bulan terakhir dalam tahun berjalan), 
+        // kalkulasikan juga untuk tahun depan
+        if ($currentMonth === 12) {
+            self::handle($currentYear);
+            self::handle($nextYear);
+        } else {
+            self::handle($currentYear);
+        }
+    }
+
+    private static function handle($currentYear)
+    {
         Log::info('[SalesDailyQSD] Starting QSD data update...');
 
         // $currentYear = '2024';
         // $maxDate     = '2024-12-31';
-        $currentYear = Carbon::now()->format('Y');
-        $maxDate     = Carbon::now()->endOfYear()->format('Y-m-d');
+        // Mendapatkan tanggal terakhir di bulan 12 (Desember) untuk tahun yang diparsing
+        $maxDate = Carbon::create($currentYear, 12, 1)->endOfMonth()->format('Y-m-d');
         /**
          * =====================================================
          * BUILD QUERY QSD
@@ -196,17 +213,68 @@ class SalesDailyQSD
                 'tanggal_sampling_min' => $row->tanggal_sampling_min,
                 'created_at'           => Carbon::now()->subHours(7),
             ];
-
-            if (count($buffer) >= $bufferSize) {
-                DB::table('daily_qsd')->insert($buffer);
-                $totalInserted += count($buffer);
-                $buffer = [];
-            }
         }
 
-        if ($buffer) {
-            DB::table('daily_qsd')->insert($buffer);
-            $totalInserted += count($buffer);
+        /**
+         * =====================================================
+         * GROUPING DATA BY INVOICE AND SUM TOTAL
+         * =====================================================
+         */
+        $collection = collect($buffer);
+
+        $withInvoice = $collection->filter(fn ($row) => !empty($row['no_invoice']));
+        $withoutInvoice = $collection->filter(fn ($row) => empty($row['no_invoice']));
+
+        $grouped = $withInvoice
+        ->groupBy('no_invoice')
+        ->map(function ($items) {
+            return [
+                // ====== KEY UTAMA ======
+                'no_invoice' => $items->first()['no_invoice'], //ok
+
+                // ====== AMBIL DATA MIN / FIRST ======
+                'no_order'        => $items->min('no_order'), //ok
+                'no_quotation'    => $items->first()['no_quotation'],
+                'pelanggan_ID'    => $items->first()['pelanggan_ID'],
+                'nama_perusahaan' => $items->first()['nama_perusahaan'],
+                'konsultan'       => $items->first()['konsultan'],
+                'periode'         => $items->min('periode'),
+                'kontrak'         => $items->first()['kontrak'],
+                'sales_id'        => $items->first()['sales_id'],
+                'sales_nama'      => $items->first()['sales_nama'],
+                'status_sampling'      => $items->first()['status_sampling'],
+
+                // ====== SUM FIELD ======
+                'total_discount' => $items->sum('total_discount'),
+                'total_ppn'      => $items->sum('total_ppn'),
+                'total_pph'      => $items->sum('total_pph'),
+                'biaya_akhir'    => $items->sum('biaya_akhir'),
+                'grand_total'    => $items->sum('grand_total'),
+                'total_revenue'  => $items->sum('total_revenue'),
+                'total_cfr'      => $items->sum('total_cfr'),
+
+                // ====== TANGGAL ======
+                'tanggal_sampling_min' => $items->min('tanggal_sampling_min'),
+
+                // ====== FLAG ======
+                'is_lunas'        => $items->contains('is_lunas', false) ? false : true,
+                'created_at'      => $items->first()['created_at'],
+            ];
+        });
+
+        $result = $grouped
+        ->values()
+        ->merge($withoutInvoice)
+        ->values();// reset index
+
+        if ($result->isNotEmpty()) {
+            DB::disableQueryLog();
+            DB::transaction(function () use ($result, &$totalInserted) {
+                $result->chunk(500)->each(function ($chunk) use (&$totalInserted) {
+                    DB::table('daily_qsd')->insert($chunk->toArray());
+                    $totalInserted += $chunk->count();
+                });
+            });
         }
 
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
