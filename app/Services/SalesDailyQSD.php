@@ -134,9 +134,60 @@ class SalesDailyQSD
 
         /**
          * =====================================================
+         * AMBIL DATA NON PENGUJIAN
+         * =====================================================
+         */
+
+        $rekapOrderNonPengujian = DB::table('order_header as oh')
+            ->join('master_karyawan as mk', 'oh.sales_id', '=', 'mk.id')
+            ->leftJoin('request_quotation as rq', function ($join) {
+                $join->on('oh.no_document', '=', 'rq.no_document')
+                    ->where('rq.is_active', 1)
+                    ->whereNotIn('rq.pelanggan_ID', ['SAIR02', 'T2PE01']);
+            })
+            ->where('oh.is_active', 1)
+            ->whereIn(DB::raw('LEFT(oh.tanggal_order, 4)'), $arrayYears)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('order_detail as od')
+                    ->whereRaw('od.id_order_header = oh.id');
+            })
+            ->selectRaw('
+                oh.no_order,
+                oh.no_document,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Sampling" AS status_sampling,
+                NULL AS periode,
+                "N" AS kontrak,
+                NULL AS sales_id_kontrak,
+                NULL AS sales_nama_kontrak,
+                NULL AS total_discount_kontrak,
+                NULL AS total_ppn_kontrak,
+                NULL AS total_pph_kontrak,
+                NULL AS biaya_akhir_kontrak,
+                NULL AS grand_total_kontrak,
+                NULL AS total_revenue_kontrak,
+                oh.sales_id AS sales_id_non_kontrak,
+                mk.nama_lengkap AS sales_nama_non_kontrak,
+                rq.total_discount AS total_discount_non_kontrak,
+                rq.total_ppn AS total_ppn_non_kontrak,
+                rq.total_pph AS total_pph_non_kontrak,
+                rq.biaya_akhir AS biaya_akhir_non_kontrak,
+                rq.grand_total AS grand_total_non_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+                (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) as total_revenue_non_kontrak,
+                oh.tanggal_order AS tanggal_sampling_min
+            ');
+
+        /**
+         * =====================================================
          * STREAM DATA
          * =====================================================
          */
+        $rekapOrder = $rekapOrder->unionAll($rekapOrderNonPengujian);
         $rows = $rekapOrder->cursor();
 
         /**
