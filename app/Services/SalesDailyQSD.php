@@ -158,7 +158,7 @@ class SalesDailyQSD
                 0 AS total_cfr,
                 oh.nama_perusahaan,
                 oh.konsultan,
-                "Non Sampling" AS status_sampling,
+                "Non Pengujian" AS status_sampling,
                 NULL AS periode,
                 "N" AS kontrak,
                 NULL AS sales_id_kontrak,
