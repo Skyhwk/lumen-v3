@@ -264,13 +264,11 @@ class GenerateHasilPengujianController extends Controller
                 continue;
             }
 
-            if (in_array($item, $filterEmails)) {
-                $emails[] = 'admsales03@intilab.com';
-                $emails[] = 'admsales04@intilab.com';
-            }
-
             $emails[] = $item;
         }
+        
+        $emails = array_merge($emails, ['admsales03@intilab.com', 'admsales04@intilab.com']);
+
         $emailCC = null;
         $emailTo = null;
 

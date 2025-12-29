@@ -47,8 +47,8 @@ class TemplateSatuanController extends Controller
         try {
             $data = TemplateSatuan::find($request->id);
             if($request->column == 'kategori') {
-                $data->id_kategori = \explode('-', $request->kategori)[0];
-                $data->kategori = \explode('-', $request->kategori)[1];
+                $data->id_kategori = \explode('-', $request->value)[0];
+                $data->kategori = \explode('-', $request->value)[1];
             } else {
                 $column = $request->column;
                 $value = $request->value;
