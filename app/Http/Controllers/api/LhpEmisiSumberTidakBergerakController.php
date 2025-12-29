@@ -107,6 +107,10 @@ class LhpEmisiSumberTidakBergerakController extends Controller
                     'rejected_at' => Carbon::now()->format('Y-m-d H:i:s'),
                     'rejected_by' => $this->karyawan,
                 ]);
+            }else {
+                return response()->json([
+                    'message' => 'Data LHP dengan no sampel ' . $request->no_sampel . ' tidak ditemukan!',
+                ], 401);
             }
 
             DB::commit();
