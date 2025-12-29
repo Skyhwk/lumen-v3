@@ -19,7 +19,7 @@ class SalesDailyQSD
         // kalkulasikan juga untuk tahun depan
         if ($currentMonth === 12) {
             self::handle($currentYear);
-            self::handle($nextYear);
+            // self::handle($nextYear);
         } else {
             self::handle($currentYear);
         }
@@ -29,10 +29,12 @@ class SalesDailyQSD
     {
         Log::info('[SalesDailyQSD] Starting QSD data update...');
 
-        // $currentYear = '2024';
-        // $maxDate     = '2024-12-31';
-        // Mendapatkan tanggal terakhir di bulan 12 (Desember) untuk tahun yang diparsing
         $maxDate = Carbon::create($currentYear, 12, 1)->endOfMonth()->format('Y-m-d');
+        $nextYear = Carbon::create($currentYear, 12, 1)->addYear(2)->endOfMonth()->format('Y');
+        $maxDateNextYear = Carbon::create($nextYear, 12, 1)->endOfMonth()->format('Y-m-d');
+        for ($i = $currentYear; $i <= $nextYear; $i++) {
+            $arrayYears[] = $i;
+        }
         /**
          * =====================================================
          * BUILD QUERY QSD
@@ -45,7 +47,11 @@ class SalesDailyQSD
                 COUNT(DISTINCT order_detail.cfr) AS total_cfr,
                 order_detail.nama_perusahaan,
                 order_detail.konsultan,
-                order_detail.kategori_1 as status_sampling,
+                GROUP_CONCAT(
+                    DISTINCT order_detail.kategori_1 
+                    ORDER BY order_detail.kategori_1 
+                    SEPARATOR ", "
+                ) AS status_sampling,
                 MIN(CASE order_detail.kontrak WHEN "C" THEN rqkd.periode_kontrak ELSE NULL END) as periode,
                 order_detail.kontrak,
                 MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkh.sales_id ELSE NULL END) as sales_id_kontrak,
@@ -73,8 +79,8 @@ class SalesDailyQSD
                 MIN(order_detail.tanggal_sampling) as tanggal_sampling_min
             ')
             ->where('order_detail.is_active', true)
-            ->whereDate('order_detail.tanggal_sampling', '<=', $maxDate)
-            ->whereRaw("YEAR(order_detail.tanggal_sampling) = ?", [$currentYear]);
+            ->whereDate('order_detail.tanggal_sampling', '<=', $maxDateNextYear);
+            // ->whereRaw("YEAR(order_detail.tanggal_sampling) = ?", [$currentYear]);
 
         // JOIN KONTRAK
         $rekapOrder->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
@@ -83,9 +89,9 @@ class SalesDailyQSD
                 ->where('rqkh.is_active', true);
         });
 
-        $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($currentYear) {
+        $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($arrayYears) {
             $join->on('rqkh.id', '=', 'rqkd.id_request_quotation_kontrak_H')
-                ->whereRaw("LEFT(rqkd.periode_kontrak, 4) = ?", [$currentYear]);
+                ->whereIn(DB::raw('LEFT(rqkd.periode_kontrak, 4)'), $arrayYears);
         });
 
         $rekapOrder->leftJoin('master_karyawan as mk_kontrak', 'rqkh.sales_id', '=', 'mk_kontrak.id');
@@ -100,13 +106,13 @@ class SalesDailyQSD
         $rekapOrder->leftJoin('master_karyawan as mk_non_kontrak', 'rq.sales_id', '=', 'mk_non_kontrak.id');
 
         // FILTER UTAMA
-        $rekapOrder->where(function ($q) use ($currentYear) {
-            $q->where(function ($x) use ($currentYear) {
+        $rekapOrder->where(function ($q) use ($arrayYears) {
+            $q->where(function ($x) use ($arrayYears) {
                 $x->where('order_detail.kontrak', 'C')
                     ->whereNotNull('rqkh.id')
                     ->whereColumn('order_detail.periode', 'rqkd.periode_kontrak')
                     ->whereNotNull('rqkd.id')
-                    ->whereRaw("LEFT(rqkd.periode_kontrak,4)=?", [$currentYear]);
+                    ->whereIn(DB::raw('LEFT(rqkd.periode_kontrak, 4)'), $arrayYears);
             })->orWhere(function ($x) {
                 $x->where('order_detail.kontrak', '!=', 'C')
                     ->whereNotNull('rq.id');
@@ -118,7 +124,6 @@ class SalesDailyQSD
             order_detail.no_quotation,
             order_detail.nama_perusahaan,
             order_detail.konsultan,
-            order_detail.kategori_1,
             order_detail.periode,
             order_detail.kontrak,
             CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
@@ -140,10 +145,10 @@ class SalesDailyQSD
          * =====================================================
          */
         DB::table('daily_qsd')
-            ->whereYear('tanggal_sampling_min', $currentYear)
+            ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
             ->delete();
 
-        Log::info('[SalesDailyQSD] Old data deleted for year ' . $currentYear);
+        Log::info('[SalesDailyQSD] Old data deleted for year ' . implode(', ', $arrayYears));
 
         /**
          * =====================================================
@@ -151,7 +156,7 @@ class SalesDailyQSD
          * =====================================================
          */
         $quotationList = DB::table('order_detail')
-            ->whereYear('tanggal_sampling', $currentYear)
+            ->whereIn(DB::raw('LEFT(tanggal_sampling, 4)'), $arrayYears)
             ->distinct()
             ->pluck('no_quotation');
 
@@ -242,7 +247,7 @@ class SalesDailyQSD
                 'kontrak'         => $items->first()['kontrak'],
                 'sales_id'        => $items->first()['sales_id'],
                 'sales_nama'      => $items->first()['sales_nama'],
-                'status_sampling'      => $items->first()['status_sampling'],
+                'status_sampling' => $items->pluck('status_sampling')->unique()->implode(', '),
 
                 // ====== SUM FIELD ======
                 'total_discount' => $items->sum('total_discount'),
