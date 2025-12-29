@@ -10,4 +10,9 @@ class Withdraw extends Sector{
 
 
     public $timestamps = false;
+    
+    public function sales_in_detail()
+    {
+        return $this->belongsTo(SalesInDetail::class, 'id_sales_in_detail', 'id');
+    }
 }
