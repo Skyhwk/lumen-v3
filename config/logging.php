@@ -213,11 +213,17 @@ return [
             'days' => 90,
         ],
 
+        // 'log_request' => [
+        //     'driver' => 'daily',
+        //     'path' => storage_path('log_request/request.log'),
+        //     'level' => 'info',
+        //     'days' => 10,
+        // ],
+
         'log_request' => [
-            'driver' => 'daily',
-            'path' => storage_path('log_request/request.log'),
-            'level' => 'info',
-            'days' => 10,
+            'driver' => 'custom',
+            'via' => App\Logging\HourlyLogRequest::class,
+            'level' => 'info'
         ],
 
         'papertrail' => [
