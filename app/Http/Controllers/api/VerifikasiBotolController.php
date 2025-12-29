@@ -307,6 +307,10 @@ class VerifikasiBotolController extends Controller
 
 
                 $ftc = Ftc::where('no_sample', $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel)->first();
+                if($ftc == null){
+                    $ftc = new Ftc();
+                    $ftc->no_sample = $request->tipe == 'sampel' ? $request->no_sampel : $no_sampel;
+                }
                 $ftc->ftc_verifier = Carbon::now()->format('Y-m-d H:i:s');
                 $ftc->user_verifier = $this->user_id;
                 $ftc->save();
