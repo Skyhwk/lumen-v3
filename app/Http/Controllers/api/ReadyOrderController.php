@@ -1649,8 +1649,8 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            $workerOperation = new WorkerOperation();
-            $workerOperation->index($data, $data_to_log, $bcc, $this->user_id);
+            // $workerOperation = new WorkerOperation();
+            // $workerOperation->index($data, $data_to_log, $bcc, $this->user_id);
             // $reorderNotifierService = new ReorderNotifierService();
             // $reorderNotifierService->run($data, $data_to_log, $bcc, $this->user_id);
 
@@ -2494,8 +2494,8 @@ class ReadyOrderController extends Controller
                 return !in_array($item, $excludes_bcc);
             });
 
-            $workerOperation = new WorkerOperation();
-            $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
+            // $workerOperation = new WorkerOperation();
+            // $workerOperation->index($updateHeader, $data_to_log, $bcc, $this->user_id);
 
             // $reorderNotifierService = new ReorderNotifierService();
             // $reorderNotifierService->run($updateHeader, $data_to_log, $bcc, $this->user_id);
