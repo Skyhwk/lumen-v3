@@ -754,7 +754,15 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         $nilai    = null;
 
         if ($index === null) {
-
+            $nilai = null;
+            for ($i = 0; $i <= 10; $i++) {
+                $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
+                if (! empty($ws[$key])) {
+                    $nilai = $ws[$key];
+                    break;
+                }
+            }
+            
             // Kalau belum ketemu, cari dari C...C10
             for ($i = 0; $i <= 10; $i++) {
                 $key = $i === 0 ? 'C' : "C$i";
@@ -774,9 +782,12 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
             $nilai = $nilai ?? '-';
         } else {
-            $hasilKey = "C$index";
+            // $hasilKey = "C$index";
 
-            $nilai = $ws[$hasilKey] ?? $ws[$hasilKey] ?? '-';
+            // $nilai = $ws[$hasilKey] ?? $ws[$hasilKey] ?? '-';
+            $hasilKey = "C$index";
+            $fkoreksiKey = "f_koreksi_c$index";
+            $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
         }
         return $nilai;
 
@@ -808,6 +819,11 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
             $nilai = $ws[$fKoreksiKey] ?? $ws[$fKoreksiKey] ?? '-';
         }
+
+        if ($ws['nil_koreksi'] !== null && $ws['nil_koreksi'] !== '') {
+            $nilai = $ws['nil_koreksi'] ?? '-';
+        }
+
         return $nilai;
 
     }

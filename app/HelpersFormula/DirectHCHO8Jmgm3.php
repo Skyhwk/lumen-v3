@@ -31,13 +31,31 @@ class DirectHCHO8Jmgm3 {
 
         $c1 = $c2 = $c3 = $c4 = $c5 = $c15 = $c16 = $c17 = NULL;
         
-        $c2 = round($average * ($suhu / $tekanan_udara) * (298 / 760), 4); // mg/m³
-        $c1 = round($c2 * 1000, 4); // ug/Nm³ 
-        $c3 = round(($c2 / 30.03) * 24.45, 4); // mg/m³
-        $c15 = $c3; // BDS
-        $c17 = round($average, 4); // mg/m³
-        $c16 = round($c17 * 1000, 4); // ug/m³ 
+        // $c2 = round($average * ($suhu / $tekanan_udara) * (298 / 760), 4); // mg/m³
+        // $c1 = round($c2 * 1000, 4); // ug/Nm³ 
+        // $c3 = round(($c2 / 30.03) * 24.45, 4); // mg/m³
+        // $c15 = $c3; // BDS
+        // $c17 = round($average, 4); // mg/m³
+        // $c16 = round($c17 * 1000, 4); // ug/m³ 
+        // $satuan = 'mg/Nm3';
+
+        // HITUNG NILAI MENTAH
+        $c2_raw  = $average * ($suhu / $tekanan_udara) * (298 / 760); // mg/Nm³
+        $c1_raw  = $c2_raw * 1000;                                  // ug/Nm³
+        $c3_raw  = ($c2_raw / 30.03) * 24.45;                       // mg/m³
+        $c17_raw = $average;                                        // mg/m³
+        $c16_raw = $c17_raw * 1000;                                 // ug/m³
+
+        // POTONG (BUKAN ROUND)
+        $c2  = $this->cutDecimal($c2_raw, 4);
+        $c1  = $this->cutDecimal($c1_raw, 4);
+        $c3  = $this->cutDecimal($c3_raw, 4);
+        $c15 = $c3;
+        $c17 = $this->cutDecimal($c17_raw, 4);
+        $c16 = $this->cutDecimal($c16_raw, 4);
+
         $satuan = 'mg/Nm3';
+
 
         return [
             'c1'     => $c1,
@@ -51,4 +69,10 @@ class DirectHCHO8Jmgm3 {
             'satuan' => $satuan
         ];
     }
+
+    private function cutDecimal($value, $decimal)
+        {
+            $factor = pow(10, $decimal);
+            return floor($value * $factor) / $factor;
+        }
 }

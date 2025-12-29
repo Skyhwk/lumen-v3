@@ -42,17 +42,6 @@ class LogRequest
                 ];
 
                 Log::channel('log_request')->info('new request : ', $data_req);
-
-                // RequestLog::create([
-                //     'name_req' => $name_req,
-                //     'date_req' => date('Y-m-d H:i:s'),
-                //     'data_req' => json_encode($request->all()),
-                //     'user_agent' => $request->header('User-Agent'),
-                //     'result' => $response->getContent(),
-                //     'path_info' => $request->path(),
-                //     'ip' => $request->ip(),
-                //     'platform' => $platform
-                // ]);
             }
         }
 

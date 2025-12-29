@@ -1,11 +1,10 @@
 <?php
-
 namespace App\Services;
 
+use App\Models\Invoice;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Models\Invoice;
 
 class SalesDailyQSD
 {
@@ -29,6 +28,7 @@ class SalesDailyQSD
                 COUNT(DISTINCT order_detail.cfr) AS total_cfr,
                 order_detail.nama_perusahaan,
                 order_detail.konsultan,
+                order_detail.kategori_1 as status_sampling,
                 MIN(CASE order_detail.kontrak WHEN "C" THEN rqkd.periode_kontrak ELSE NULL END) as periode,
                 order_detail.kontrak,
                 MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkh.sales_id ELSE NULL END) as sales_id_kontrak,
@@ -48,6 +48,8 @@ class SalesDailyQSD
                 MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.total_pph ELSE NULL END) as total_pph_non_kontrak,
                 MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.biaya_akhir ELSE NULL END) as biaya_akhir_non_kontrak,
                 MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.grand_total ELSE NULL END) as grand_total_non_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkh.pelanggan_ID ELSE NULL END) as pelanggan_id_kontrak,
+                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.pelanggan_ID ELSE NULL END) as pelanggan_id_non_kontrak,
                 MAX(CASE WHEN order_detail.kontrak != "C"
                     THEN (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0))
                     ELSE NULL END) as total_revenue_non_kontrak,
@@ -99,6 +101,7 @@ class SalesDailyQSD
             order_detail.no_quotation,
             order_detail.nama_perusahaan,
             order_detail.konsultan,
+            order_detail.kategori_1,
             order_detail.periode,
             order_detail.kontrak,
             CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
@@ -141,13 +144,16 @@ class SalesDailyQSD
             ->get()
             ->groupBy(fn($i) => $i->no_quotation . '|' . $i->periode);
 
+
+        // Log::info('[SalesDailyQSD] Found ' . count($existingCustomerIDs) . ' existing customer IDs');
+
         /**
          * =====================================================
          * INSERT DATA
          * =====================================================
          */
-        $buffer = [];
-        $bufferSize = 500;
+        $buffer        = [];
+        $bufferSize    = 500;
         $totalInserted = 0;
 
         foreach ($rows as $row) {
@@ -165,16 +171,20 @@ class SalesDailyQSD
 
             [$noInvoice, $isLunas] = self::buildInvoiceInfo($invoices);
 
+
+
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
                 'is_lunas'             => $isLunas,
                 'no_quotation'         => $row->no_quotation,
                 'total_cfr'            => $row->total_cfr,
+                'pelanggan_ID'         => $row->kontrak === 'C' ? $row->pelanggan_id_kontrak : $row->pelanggan_id_non_kontrak,
                 'nama_perusahaan'      => $row->nama_perusahaan,
                 'konsultan'            => $row->konsultan,
                 'periode'              => $row->periode,
                 'kontrak'              => $row->kontrak,
+                'status_sampling'      => $row->status_sampling,
                 'sales_id'             => $row->kontrak === 'C' ? $row->sales_id_kontrak : $row->sales_id_non_kontrak,
                 'sales_nama'           => $row->kontrak === 'C' ? $row->sales_nama_kontrak : $row->sales_nama_non_kontrak,
                 'total_discount'       => $row->kontrak === 'C' ? $row->total_discount_kontrak : $row->total_discount_non_kontrak,
@@ -201,7 +211,7 @@ class SalesDailyQSD
 
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
         Log::info('[SalesDailyQSD] Completed successfully');
-        
+
         return true;
     }
 
@@ -221,11 +231,13 @@ class SalesDailyQSD
 
         foreach ($invoices as $inv) {
             $nominal =
-                $inv->recordPembayaran->sum('nilai_pembayaran') +
-                $inv->recordWithdraw->sum('nilai_pembayaran');
+            $inv->recordPembayaran->sum('nilai_pembayaran') +
+            $inv->recordWithdraw->sum('nilai_pembayaran');
 
             $status = $nominal >= $inv->nilai_tagihan ? ' (Lunas)' : '';
-            if ($status) $isLunas = true;
+            if ($status) {
+                $isLunas = true;
+            }
 
             $noInvoice[] = $inv->no_invoice . $status;
         }

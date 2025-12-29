@@ -208,7 +208,7 @@
                         <tr>
                             <td class="custom5">Keterangan</td>
                             <td class="custom5">:</td>
-                            <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                            <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
                         </tr>
                     @endif
                     {{-- <tr>
@@ -293,6 +293,24 @@
                                 @endif
                             @endforeach
                         @endforeach
+                    </table>
+                @endif
+                @php
+                    $isPager = false;
+
+                    foreach ($detail as $v) {
+                        if ($v['hasil_uji'] === '##') {
+                            $isPager = true;
+                            break;
+                        }
+                    }
+                @endphp
+
+                @if($isPager)
+                    <table style="padding: 5px 0px 0px 10px;" width="100%">
+                        <tr>
+                            <td class="custom5" colspan="3">(##) Hasil analisa dalam proses di Laboratorium</td>
+                        </tr>
                     </table>
                 @endif
             </td>

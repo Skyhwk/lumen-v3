@@ -647,21 +647,29 @@ class MasterKaryawanController extends Controller
 
     public function nonActive(Request $request)
     {
-        $karyawan = MasterKaryawan::find($request->id);
-
-        $karyawan->effective_date = $request->effective_date;
-        $karyawan->reason_non_active = $request->reason_non_active;
-        $karyawan->notes = $request->notes;
-        $karyawan->updated_by = $this->karyawan;
-        $karyawan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-        $karyawan->active = false;
-        $karyawan->is_active = false;
-
-        $karyawan->save();
-
-        $job = new NonaktifKaryawanJob($karyawan, $this->karyawan);
-        $this->dispatch($job);
-
-        return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
+        DB::beginTransaction();
+        try {
+            $karyawan = MasterKaryawan::find($request->id);
+    
+            $karyawan->effective_date = $request->effective_date;
+            $karyawan->reason_non_active = $request->reason_non_active;
+            $karyawan->notes = $request->notes;
+            $karyawan->updated_by = $this->karyawan;
+            $karyawan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+            $karyawan->active = false;
+            $karyawan->is_active = false;
+    
+            $karyawan->save();
+    
+            $job = new NonaktifKaryawanJob($karyawan);
+            $this->dispatch($job);
+    
+            DB::commit();
+            return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
+            //throw $th;
+        }
     }
 }

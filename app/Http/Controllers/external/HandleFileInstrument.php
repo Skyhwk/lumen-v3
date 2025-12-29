@@ -501,6 +501,7 @@ class HandleFileInstrument extends BaseController
                                         'fp' => $pengecer
                                     ];
                                     $data_parsing = (object)$data_parsing;
+                                    $data_parsing->parameter = $paramKey;
                                     $data_kalkulasi = AnalystFormula::where('function', 'Perkalian')
                                         ->where('data', $data_parsing)
                                         ->where('id_parameter', $par->id)

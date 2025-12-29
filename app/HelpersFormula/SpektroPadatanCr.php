@@ -2,7 +2,7 @@
 
 namespace App\HelpersFormula;
 
-class SpektroPadatan
+class SpektroPadatanCr
 {
 	public function index($data, $id_parameter, $mdl)
 	{

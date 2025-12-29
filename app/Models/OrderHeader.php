@@ -15,6 +15,11 @@ class OrderHeader extends Sector
         return $this->hasMany(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
     }
 
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class, 'no_order', 'no_order')->where('is_active', true);
+    }
+
     public function all_quote()
     {
         return $this->hasMany(AllQuote::class, 'no_document', 'no_document');

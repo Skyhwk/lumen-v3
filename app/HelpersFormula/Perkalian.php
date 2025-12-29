@@ -44,6 +44,10 @@ class Perkalian
             if (!is_null($mdl) && $rumus < $mdl) {
                 $rumus = '<' . $mdl;
             }
+
+            if($data->parameter == 'Mg Terlarut' && $rumus < 0.021){
+                $rumus = '<0.021';
+            }
         }
 
         $processed = [
