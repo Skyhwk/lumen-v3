@@ -407,10 +407,29 @@ class SalesDailyQSD
                 // ===== DELETE DATA LAMA YANG TIDAK ADA =====
                 if (!empty($validIds)) {
                     DB::table('daily_qsd')
+                        ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
                         ->whereNotIn('uuid', $validIds)
                         ->delete();
                 }
             });
+
+            DB::statement("
+                UPDATE daily_qsd q
+                JOIN (
+                    SELECT
+                        uuid,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY pelanggan_ID
+                            ORDER BY
+                                COALESCE(tanggal_sampling_min, '9999-12-31'),
+                                CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED),
+                                CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED),
+                                uuid
+                        ) AS rn
+                    FROM daily_qsd
+                ) x ON x.uuid = q.uuid
+                SET q.status_customer = IF(x.rn = 1, 'new', 'exist')
+            ");
         }
 
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
