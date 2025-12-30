@@ -18,12 +18,7 @@ class SalesDailyQSD
 
         // Jika sudah memasuki bulan Desember (1 bulan terakhir dalam tahun berjalan), 
         // kalkulasikan juga untuk tahun depan
-        if ($currentMonth === 12) {
-            self::handle($currentYear);
-            // self::handle($nextYear);
-        } else {
-            self::handle($currentYear);
-        }
+        self::handle($currentYear);
     }
 
     private static function handle($currentYear)
@@ -339,7 +334,7 @@ class SalesDailyQSD
 
             DB::disableQueryLog();
         
-            DB::transaction(function () use ($result, &$totalInserted) {
+            DB::transaction(function () use ($result, $arrayYears, &$totalInserted) {
         
                 $now = Carbon::now()->subHours(7);
         
