@@ -291,7 +291,9 @@ class GenerateHasilPengujianController extends Controller
             $emailCC = json_decode($emailInfo->email_cc, true);
         }
 
-        array_unique($emailCC);
+        if($emailCC != null) {
+            array_unique($emailCC);
+        }
 
         return response()->json(
             [
