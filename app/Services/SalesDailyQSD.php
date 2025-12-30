@@ -215,19 +215,44 @@ class SalesDailyQSD
             ->whereIn(DB::raw('LEFT(tanggal_sampling, 4)'), $arrayYears)
             ->distinct()
             ->pluck('no_quotation');
+        
+        $excludeInv = Invoice::where('is_active', 1)
+            ->whereIn('no_invoice', function ($query) {
+                $query->select('no_invoice')
+                    ->from('invoice')
+                    ->where('is_active', 1)
+                    ->groupBy('no_invoice')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->havingRaw('COUNT(DISTINCT no_quotation) > 1');
+            })
+            ->groupBy('no_invoice')
+            ->pluck('no_invoice');
 
+        /**
+         * =====================================================
+         * INVOICE NORMAL BEBERAPA ORDER ATAU 1 ORDER 1 INV
+         * =====================================================
+         */
         $invoiceMap = Invoice::with(['recordPembayaran', 'recordWithdraw'])
             ->whereIn('no_quotation', $quotationList)
+            ->whereNotIn('no_invoice', $excludeInv)
             ->where('is_active', true)
             ->get()
             ->groupBy(fn($i) => $i->no_quotation . '|' . $i->periode);
 
-
-        // Log::info('[SalesDailyQSD] Found ' . count($existingCustomerIDs) . ' existing customer IDs');
+        /**
+         * =====================================================
+         * SPESIAL INVOICE UNTUK 1 INV BANYAK NO ORDER
+         * =====================================================
+         */
+        $spesialInv = Invoice::with(['recordPembayaran', 'recordWithdraw'])
+        ->where('is_active', 1)
+        ->whereIn('no_invoice', $excludeInv)
+        ->get();
 
         /**
          * =====================================================
-         * INSERT DATA
+         * MAPING DATA
          * =====================================================
          */
         $buffer        = [];
@@ -247,8 +272,6 @@ class SalesDailyQSD
             }
 
             [$noInvoice, $isLunas, $pelunasan, $nominal] = self::buildInvoiceInfo($invoices);
-
-
 
             $buffer[] = [
                 'no_order'             => $row->no_order,
@@ -287,14 +310,16 @@ class SalesDailyQSD
         $withInvoice = $collection->filter(fn ($row) => !empty($row['no_invoice']));
         $withoutInvoice = $collection->filter(fn ($row) => empty($row['no_invoice']));
 
+        
+
         $grouped = $withInvoice
         ->groupBy('no_invoice')
         ->map(function ($items) {
             return [
                 // ====== KEY UTAMA ======
                 'no_invoice' => $items->first()['no_invoice'], //ok
-                'nilai_invoice' => $items->first()['nilai_invoice'],
-                'nilai_pembayaran' => $items->sum('nilai_pembayaran'),
+                'nilai_invoice' => $items->sum('nilai_invoice'),
+                'nilai_pembayaran' => $items->first()['nilai_pembayaran'],
                 // ====== AMBIL DATA MIN / FIRST ======
                 'no_order'        => $items->min('no_order'), //ok
                 'no_quotation'    => $items->first()['no_quotation'],
