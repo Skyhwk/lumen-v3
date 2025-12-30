@@ -153,24 +153,23 @@ class FeeSalesMonthly
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
                     ->get()
-                    ->filter(function ($qsd) use ($feeSalesRecap) {
-                        $exists = $feeSalesRecap->contains(function ($recap) use ($qsd) {
-                            if ($recap['no_order'] != $qsd->no_order) return false;
+                    ->map(function ($qsd) use ($feeSalesRecap) {
+                        $existsInFeeSales = $feeSalesRecap->contains(function ($recap) use ($qsd) {
+                            if ($recap['no_order'] !== $qsd->no_order) return false;
                             if (!$qsd->periode) return true;
 
-                            return $recap['periode'] == $qsd->periode;
+                            return $recap['periode'] === $qsd->periode;
                         });
 
-                        if ($exists) return false;
+                        if ($existsInFeeSales) return null;
 
                         if ($qsd->periode) {
                             $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
-
-                            return $qsd->orderHeader->orderDetail->isNotEmpty();
                         }
 
-                        return true;
+                        return $qsd;
                     })
+                    ->filter()
                     ->values();
 
                 if ($quotations->isEmpty()) continue;
