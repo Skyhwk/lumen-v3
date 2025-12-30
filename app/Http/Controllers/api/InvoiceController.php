@@ -143,6 +143,11 @@ class InvoiceController extends Controller
                         $q->Where('order_header.konsultan', 'like', "%{$keyword}%");
                     });
                 })
+                ->filterColumn('document', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->Where('order_header.no_document', 'like', "%{$keyword}%");
+                    });
+                })
                 ->make(true);
         } catch (\Throwable $th) {
             dd($th);
