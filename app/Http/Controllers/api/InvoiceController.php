@@ -94,12 +94,13 @@ class InvoiceController extends Controller
 
             return Datatables::of($data)
                 ->addColumn('history', function ($row) {
-                    $record = RecordPembayaranInvoice::where('no_invoice', $row->no_invoice)
+                    $record = RecordPembayaranInvoice::with('sales_in_detail')->where('no_invoice', $row->no_invoice)
                         ->where('is_active', true)
                         ->orderByDesc('id')
                         ->get()
                         ->map(function ($r) {
                             return [
+                                'batch_id' => $r->sales_in_detail->header->no_dokumen ?? 'data lama',
                                 'type' => 'record',
                                 'nilai_pembayaran' => $r->nilai_pembayaran,
                                 'nilai_pengurangan' => null,
@@ -111,11 +112,12 @@ class InvoiceController extends Controller
                             ];
                         });
 
-                    $withdraw = Withdraw::where('no_invoice', $row->no_invoice)
+                    $withdraw = Withdraw::with('sales_in_detail')->where('no_invoice', $row->no_invoice)
                         ->orderByDesc('id')
                         ->get()
                         ->map(function ($w) {
                             return [
+                                'batch_id' => $w->sales_in_detail->header->no_dokumen ?? 'data lama',
                                 'type' => 'withdraw',
                                 'nilai_pembayaran' => null,
                                 'nilai_pengurangan' => $w->nilai_pembayaran,
@@ -139,6 +141,11 @@ class InvoiceController extends Controller
                 ->filterColumn('consultant', function ($query, $keyword) {
                     $query->where(function($q) use ($keyword) {
                         $q->Where('order_header.konsultan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('document', function ($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->Where('order_header.no_document', 'like', "%{$keyword}%");
                     });
                 })
                 ->make(true);

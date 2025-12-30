@@ -282,7 +282,7 @@
                     $isPager = false;
 
                     foreach ($detail as $v) {
-                        if ($v['hasil_uji'] === '##') {
+                        if ($v['C'] === '##') {
                             $isPager = true;
                             break;
                         }
