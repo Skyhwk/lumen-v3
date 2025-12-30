@@ -331,28 +331,19 @@ class SalesDailyQSD
         ->values();// reset index
 
         if ($result->isNotEmpty()) {
-
             DB::disableQueryLog();
-        
             DB::transaction(function () use ($result, $arrayYears, &$totalInserted) {
-        
                 $now = Carbon::now()->subHours(7);
-        
                 // ===== NORMALISASI & GENERATE ID =====
                 $result = $result
                     ->filter(fn ($r) => !empty($r['no_order']))
                     ->map(function ($r) use ($now) {
-        
                         $periodeKey = $r['periode'] ?? '__NULL__';
-        
                         $r['uuid'] = (new Crypto())->encrypt(
                             trim($r['no_order']) . '|' . trim($periodeKey)
                         );
-        
                         $r['updated_at'] = $now;
-        
                         unset($r['created_at']); // biar tidak reset
-        
                         return $r;
                     });
         
