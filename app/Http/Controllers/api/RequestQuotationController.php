@@ -854,6 +854,27 @@ class RequestQuotationController extends Controller
 
             $total_diskon = 0;
 
+            // ==================== DISKON DENGAN KODE PROMO ===================== //
+            if (floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+                $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
+                $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
+                $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->discount_promo = json_encode((object)[
+                    'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
+                ]);
+                $data->total_discount_promo = floatval($total_discount_promo);
+                $total_diskon += $total_discount_promo;
+                $harga_total -= floatval($total_discount_promo);
+            } else {
+                // $harga_total += 0;
+                // $data->discount_air = null;
+                $data->total_discount_promo = 0;
+            }
+            // ==================== END DISKON DENGAN KODE PROMO ======================= //
+
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = \str_replace("%", "", $payload->data_diskon->discount_air);
                 $data->total_discount_air = (floatval($harga_air) / 100 * floatval(\str_replace("%", "", $payload->data_diskon->discount_air)));
@@ -1727,6 +1748,27 @@ class RequestQuotationController extends Controller
 
             $total_diskon = 0;
 
+            // ==================== DISKON DENGAN KODE PROMO ===================== //
+            if (floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+                $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
+                $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
+                $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                $data->kode_promo = $payload->data_diskon->kode_promo_discount;
+                $data->discount_promo = json_encode((object)[
+                    'deskripsi_promo_discount' => $payload->data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $payload->data_diskon->jumlah_promo_discount
+                ]);
+                $data->total_discount_promo = floatval($total_discount_promo);
+                $total_diskon += $total_discount_promo;
+                $harga_total -= floatval($total_discount_promo);
+            } else {
+                // $harga_total += 0;
+                // $data->discount_air = null;
+                $data->total_discount_promo = 0;
+            }
+            // ==================== END DISKON DENGAN KODE PROMO ======================= //
+
             if (floatval($payload->data_diskon->discount_air) > 0) {
                 $data->discount_air = $payload->data_diskon->discount_air;
                 $data->total_discount_air = (floatval($harga_air) / 100 * floatval(\str_replace("%", "", $payload->data_diskon->discount_air)));
@@ -2544,6 +2586,12 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = null;
                 }
 
+                $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
+                $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
+                    'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                ]) : null;
+
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
@@ -3105,6 +3153,28 @@ class RequestQuotationController extends Controller
                         return response()->json(['message' => 'Periode ' . $periodeNotExist . ' tidak ditemukan pada group diskon', 'status' => '500'], 403);
                     }
 
+                    // ==================== DISKON DENGAN KODE PROMO ===================== //
+                    if (floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                        $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                        $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
+                        $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                        $total_diskon += $total_discount_promo;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->discount_promo = json_encode((object)[
+                            'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                            'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                        ]);
+                        $dataD->total_discount_promo = floatval($total_discount_promo);
+                        $total_diskon += $total_discount_promo;
+                        $harga_total -= floatval($total_discount_promo);
+                    } else {
+                        // $harga_total += 0;
+                        // $data->discount_air = null;
+                        $dataD->total_discount_promo = 0;
+                    }
+                    // ==================== END DISKON DENGAN KODE PROMO ======================= //
+
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
                         $dataD->total_discount_air = ($harga_air / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_air));
@@ -3537,6 +3607,7 @@ class RequestQuotationController extends Controller
                                             SUM(total_discount_perdiem) as total_discount_perdiem,
                                             SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
                                             SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
+                                            SUM(total_discount_promo) as total_discount_promo,
                                             SUM(ppn) as ppn,
                                             SUM(total_ppn) as total_ppn,
                                             SUM(total_pph) as total_pph,
@@ -3622,6 +3693,8 @@ class RequestQuotationController extends Controller
                 $editH->total_discount_perdiem = $Dd[0]->total_discount_perdiem;
 
                 $editH->total_discount_perdiem_24jam = $Dd[0]->total_discount_perdiem_24jam;
+
+                $editH->total_discount_promo = $Dd[0]->total_discount_promo;
 
                 $editH->total_custom_discount = $Dd[0]->total_custom_discount;
 
@@ -4001,6 +4074,13 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = null;
                 }
                 // END CUSTOM DISCOUNT
+                // PROMO DISCOUNT
+                $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
+                $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
+                    'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                    'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                ]) : null;
+                // END PROMO DISCOUNT
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
 
                 //======================================START LOOP DATA PENDUKUNG HEADER=======================================
@@ -4526,6 +4606,28 @@ class RequestQuotationController extends Controller
                         return response()->json(['message' => 'Periode ' . $periodeNotExist . ' tidak ditemukan pada group diskon', 'status' => '500'], 403);
                     }
 
+                    // ==================== DISKON DENGAN KODE PROMO ===================== //
+                    if (floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                        $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
+                        $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
+                        $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
+    
+                        $total_diskon += $total_discount_promo;
+                        $dataD->kode_promo = $data_diskon->kode_promo_discount;
+                        $dataD->discount_promo = json_encode((object)[
+                            'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
+                            'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
+                        ]);
+                        $dataD->total_discount_promo = floatval($total_discount_promo);
+                        $total_diskon += $total_discount_promo;
+                        $harga_total -= floatval($total_discount_promo);
+                    } else {
+                        // $harga_total += 0;
+                        // $data->discount_air = null;
+                        $dataD->total_discount_promo = 0;
+                    }
+                    // ==================== END DISKON DENGAN KODE PROMO ======================= //
+
                     if ($isPeriodeDiskonExist && $data_diskon->discount_data[$indexDataDiskon]->discount_air > 0) {
                         $dataD->discount_air = $data_diskon->discount_data[$indexDataDiskon]->discount_air;
                         $dataD->total_discount_air = ($harga_air / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_air));
@@ -4986,6 +5088,7 @@ class RequestQuotationController extends Controller
                                             SUM(total_discount_perdiem) as total_discount_perdiem,
                                             SUM(discount_perdiem_24jam) as discount_perdiem_24jam,
                                             SUM(total_discount_perdiem_24jam) as total_discount_perdiem_24jam,
+                                            SUM(total_discount_promo) as total_discount_promo,
                                             SUM(ppn) as ppn,
                                             SUM(total_ppn) as total_ppn,
                                             SUM(total_pph) as total_pph,
@@ -5072,6 +5175,8 @@ class RequestQuotationController extends Controller
                 $editH->total_discount_perdiem_24jam = $Dd[0]->total_discount_perdiem_24jam;
 
                 $editH->total_custom_discount = $Dd[0]->total_custom_discount;
+
+                $editH->total_discount_promo = $Dd[0]->total_discount_promo;
 
                 $editH->total_ppn = $Dd[0]->total_ppn;
                 $editH->total_pph = $Dd[0]->total_pph;

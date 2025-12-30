@@ -712,6 +712,15 @@ class RenderNonKontrak
                     );
                 }
             }
+            $disc_promo = json_decode($data->discount_promo);
+            if ($disc_promo != null) {
+                $pdf->WriteHTML(
+                    ' <tr>
+                        <td style="text-align:center;padding:5px;">' . $disc_promo->deskripsi_promo_discount .' '. $disc_promo->jumlah_promo_discount .'</td>
+                        <td style="text-align:right;padding:5px;">' . self::rupiah($data->total_discount_promo) . '</td>
+                    </tr> '
+                );
+            }
             if ($data->total_dpp != $data->grand_total && $data->total_ppn != null && $data->total_ppn != '0.00') {
                 $pdf->WriteHTML(
                     ' <tr>
