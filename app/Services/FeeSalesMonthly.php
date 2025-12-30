@@ -145,30 +145,33 @@ class FeeSalesMonthly
                 $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'period' => $this->currentPeriod])->exists();
                 if ($masterFeeSalesExists) continue;
 
+                $feeSalesRecap = MasterFeeSales::where('sales_id', $sales->id)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
+
                 $quotations = DailyQsd::with(['orderHeader.orderDetail', 'orderHeader.invoices.recordWithdraw'])
                     ->where('sales_id', $sales->id)
                     ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
-                    ->whereRaw("
-                        NOT EXISTS (
-                            SELECT 1
-                            FROM master_fee_sales
-                            JOIN JSON_TABLE(
-                                master_fee_sales.recap,
-                                '$[*]' COLUMNS (id_qsd INT PATH '$.id_qsd')
-                            ) mfs
-                            WHERE mfs.id_qsd = daily_qsd.id
-                        )
-                    ")
                     ->get()
-                    ->map(function ($qsd) {
-                        if (!$qsd->periode) return $qsd;
+                    ->filter(function ($qsd) use ($feeSalesRecap) {
+                        $exists = $feeSalesRecap->contains(function ($recap) use ($qsd) {
+                            if ($recap['no_order'] != $qsd->no_order) return false;
+                            if (!$qsd->periode) return true;
 
-                        $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            return $recap['periode'] == $qsd->periode;
+                        });
 
-                        return $qsd;
-                    });
+                        if ($exists) return false;
+
+                        if ($qsd->periode) {
+                            $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+
+                            return $qsd->orderHeader->orderDetail->isNotEmpty();
+                        }
+
+                        return true;
+                    })
+                    ->values();
 
                 if ($quotations->isEmpty()) continue;
 
@@ -214,8 +217,8 @@ class FeeSalesMonthly
 
                 // RECAP
                 $recap = $quotations->map(fn($quotation) => [
-                    'id_qsd' => $quotation->id,
                     'no_document' => $quotation->no_quotation,
+                    'no_order' => $quotation->no_order,
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
                     'kategori_3' => $quotation->orderHeader->orderDetail->map(fn($orderDetail) => $orderDetail->kategori_3),

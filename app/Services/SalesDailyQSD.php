@@ -5,6 +5,7 @@ use App\Models\Invoice;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\Crypto;
 
 class SalesDailyQSD
 {
@@ -129,9 +130,6 @@ class SalesDailyQSD
             CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
         ');
 
-        $rekapOrder->orderBy('tanggal_sampling_min', 'desc')
-            ->orderBy('order_detail.no_order', 'asc');
-
         /**
          * =====================================================
          * AMBIL DATA NON PENGUJIAN
@@ -139,47 +137,54 @@ class SalesDailyQSD
          */
 
         $rekapOrderNonPengujian = DB::table('order_header as oh')
-            ->join('master_karyawan as mk', 'oh.sales_id', '=', 'mk.id')
-            ->leftJoin('request_quotation as rq', function ($join) {
-                $join->on('oh.no_document', '=', 'rq.no_document')
-                    ->where('rq.is_active', 1)
-                    ->whereNotIn('rq.pelanggan_ID', ['SAIR02', 'T2PE01']);
-            })
+        ->join('request_quotation as rq', 'oh.no_document', '=', 'rq.no_document')
+        ->join('master_karyawan as mk', 'rq.sales_id', '=', 'mk.id')
             ->where('oh.is_active', 1)
             ->whereIn(DB::raw('LEFT(oh.tanggal_order, 4)'), $arrayYears)
+            ->whereNotIn('oh.id_pelanggan', ['SAIR02', 'T2PE01'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('order_detail as od')
-                    ->whereRaw('od.id_order_header = oh.id');
+                    ->whereRaw('od.id_order_header = oh.id')
+                    ->where('od.is_active', 1);
             })
             ->selectRaw('
-                oh.no_order,
-                oh.no_document,
-                0 AS total_cfr,
-                oh.nama_perusahaan,
-                oh.konsultan,
-                "Non Pengujian" AS status_sampling,
-                NULL AS periode,
-                "N" AS kontrak,
-                NULL AS sales_id_kontrak,
-                NULL AS sales_nama_kontrak,
-                NULL AS total_discount_kontrak,
-                NULL AS total_ppn_kontrak,
-                NULL AS total_pph_kontrak,
-                NULL AS biaya_akhir_kontrak,
-                NULL AS grand_total_kontrak,
-                NULL AS total_revenue_kontrak,
-                oh.sales_id AS sales_id_non_kontrak,
-                mk.nama_lengkap AS sales_nama_non_kontrak,
-                rq.total_discount AS total_discount_non_kontrak,
-                rq.total_ppn AS total_ppn_non_kontrak,
-                rq.total_pph AS total_pph_non_kontrak,
-                rq.biaya_akhir AS biaya_akhir_non_kontrak,
-                rq.grand_total AS grand_total_non_kontrak,
-                rq.pelanggan_ID AS pelanggan_id_kontrak,
-                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
-                (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) as total_revenue_non_kontrak,
-                oh.tanggal_order AS tanggal_sampling_min
+                oh.no_order,                                 -- 1
+                oh.no_document AS no_quotation,              -- 2
+                0 AS total_cfr,                              -- 3
+                oh.nama_perusahaan,                          -- 4
+                oh.konsultan,                                -- 5
+                "Non Pengujian" AS status_sampling,          -- 6
+                NULL AS periode,                             -- 7
+                "N" AS kontrak,                              -- 8
+
+                NULL AS sales_id_kontrak,                    -- 9
+                NULL AS sales_nama_kontrak,                  -- 10
+
+                rq.sales_id AS sales_id_non_kontrak,         -- 11
+                mk.nama_lengkap AS sales_nama_non_kontrak,   -- 12
+
+                NULL AS total_discount_kontrak,              -- 13
+                NULL AS total_ppn_kontrak,                   -- 14
+                NULL AS total_pph_kontrak,                   -- 15
+                NULL AS biaya_akhir_kontrak,                 -- 16
+                NULL AS grand_total_kontrak,                 -- 17
+                NULL AS total_revenue_kontrak,               -- 18
+
+                rq.total_discount AS total_discount_non_kontrak, -- 19
+                rq.total_ppn AS total_ppn_non_kontrak,           -- 20
+                rq.total_pph AS total_pph_non_kontrak,           -- 21
+                rq.biaya_akhir AS biaya_akhir_non_kontrak,       -- 22
+                rq.grand_total AS grand_total_non_kontrak,       -- 23
+
+                rq.pelanggan_ID AS pelanggan_id_kontrak,     -- 24
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak, -- 25
+
+                (COALESCE(rq.biaya_akhir,0)
+                + COALESCE(rq.total_pph,0)
+                - COALESCE(rq.total_ppn,0)) AS total_revenue_non_kontrak, -- 26
+
+                oh.tanggal_order AS tanggal_sampling_min     -- 27
             ');
 
         /**
@@ -187,19 +192,24 @@ class SalesDailyQSD
          * STREAM DATA
          * =====================================================
          */
-        $rekapOrder = $rekapOrder->unionAll($rekapOrderNonPengujian);
-        $rows = $rekapOrder->cursor();
+        $union = $rekapOrder->unionAll($rekapOrderNonPengujian);
+
+        $rows = DB::query()
+            ->fromSub($union, 'rekap')
+            ->orderBy('tanggal_sampling_min', 'desc')
+            ->orderBy('no_order', 'asc')
+            ->cursor();
 
         /**
          * =====================================================
          * DELETE DATA YEAR
          * =====================================================
          */
-        DB::table('daily_qsd')
-            ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
-            ->delete();
+        // DB::table('daily_qsd')
+        //     ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
+        //     ->delete();
 
-        Log::info('[SalesDailyQSD] Old data deleted for year ' . implode(', ', $arrayYears));
+        // Log::info('[SalesDailyQSD] Old data deleted for year ' . implode(', ', $arrayYears));
 
         /**
          * =====================================================
@@ -226,7 +236,6 @@ class SalesDailyQSD
          * =====================================================
          */
         $buffer        = [];
-        $bufferSize    = 500;
         $totalInserted = 0;
 
         foreach ($rows as $row) {
@@ -242,13 +251,15 @@ class SalesDailyQSD
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
 
-            [$noInvoice, $isLunas] = self::buildInvoiceInfo($invoices);
+            [$noInvoice, $isLunas, $pelunasan, $nominal] = self::buildInvoiceInfo($invoices);
 
 
 
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
+                'nilai_invoice'        => $nominal,
+                'nilai_pembayaran'     => $pelunasan,
                 'is_lunas'             => $isLunas,
                 'no_quotation'         => $row->no_quotation,
                 'total_cfr'            => $row->total_cfr,
@@ -287,7 +298,8 @@ class SalesDailyQSD
             return [
                 // ====== KEY UTAMA ======
                 'no_invoice' => $items->first()['no_invoice'], //ok
-
+                'nilai_invoice' => $items->first()['nilai_invoice'],
+                'nilai_pembayaran' => $items->sum('nilai_pembayaran'),
                 // ====== AMBIL DATA MIN / FIRST ======
                 'no_order'        => $items->min('no_order'), //ok
                 'no_quotation'    => $items->first()['no_quotation'],
@@ -324,12 +336,80 @@ class SalesDailyQSD
         ->values();// reset index
 
         if ($result->isNotEmpty()) {
+
             DB::disableQueryLog();
+        
             DB::transaction(function () use ($result, &$totalInserted) {
+        
+                $now = Carbon::now()->subHours(7);
+        
+                // ===== NORMALISASI & GENERATE ID =====
+                $result = $result
+                    ->filter(fn ($r) => !empty($r['no_order']))
+                    ->map(function ($r) use ($now) {
+        
+                        $periodeKey = $r['periode'] ?? '__NULL__';
+        
+                        $r['uuid'] = (new Crypto())->encrypt(
+                            trim($r['no_order']) . '|' . trim($periodeKey)
+                        );
+        
+                        $r['updated_at'] = $now;
+        
+                        unset($r['created_at']); // biar tidak reset
+        
+                        return $r;
+                    });
+        
+                // ===== SIMPAN KEY VALID (ID) =====
+                $validIds = $result
+                    ->pluck('uuid')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+        
+                // ===== UPSERT =====
                 $result->chunk(500)->each(function ($chunk) use (&$totalInserted) {
-                    DB::table('daily_qsd')->insert($chunk->toArray());
+        
+                    DB::table('daily_qsd')->upsert(
+                        $chunk->toArray(),
+                        ['uuid'], // PRIMARY KEY
+                        [
+                            'no_order',
+                            'periode',
+                            'no_invoice',
+                            'nilai_invoice',
+                            'nilai_pembayaran',
+                            'no_quotation',
+                            'pelanggan_ID',
+                            'nama_perusahaan',
+                            'konsultan',
+                            'kontrak',
+                            'sales_id',
+                            'sales_nama',
+                            'status_sampling',
+                            'total_discount',
+                            'total_ppn',
+                            'total_pph',
+                            'biaya_akhir',
+                            'grand_total',
+                            'total_revenue',
+                            'total_cfr',
+                            'tanggal_sampling_min',
+                            'is_lunas',
+                            'updated_at',
+                        ]
+                    );
+        
                     $totalInserted += $chunk->count();
                 });
+        
+                // ===== DELETE DATA LAMA YANG TIDAK ADA =====
+                if (!empty($validIds)) {
+                    DB::table('daily_qsd')
+                        ->whereNotIn('uuid', $validIds)
+                        ->delete();
+                }
             });
         }
 
@@ -347,25 +427,30 @@ class SalesDailyQSD
     private static function buildInvoiceInfo($invoices)
     {
         if ($invoices->isEmpty()) {
-            return [null, false];
+            return [null, false, null, null];
         }
 
         $noInvoice = [];
         $isLunas   = false;
-
+        $nilaiInvoice = 0;
+        $nilaiPelunasan = 0;
         foreach ($invoices as $inv) {
             $nominal =
-            $inv->recordPembayaran->sum('nilai_pembayaran') +
-            $inv->recordWithdraw->sum('nilai_pembayaran');
+                ($inv->recordPembayaran ? $inv->recordPembayaran->sum('nilai_pembayaran') : 0) +
+                ($inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0);
 
             $status = $nominal >= $inv->nilai_tagihan ? ' (Lunas)' : '';
-            if ($status) {
+            if ($status == ' (Lunas)') {
                 $isLunas = true;
             }
 
             $noInvoice[] = $inv->no_invoice . $status;
+            $nilaiPelunasan += $nominal;
+            $nilaiInvoice += $inv->nilai_tagihan;
         }
 
-        return [implode(', ', $noInvoice), $isLunas];
+        if ($nilaiPelunasan == 0) $nilaiPelunasan = null;
+
+        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice];
     }
 }

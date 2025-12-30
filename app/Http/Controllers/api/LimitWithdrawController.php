@@ -30,6 +30,10 @@ class LimitWithdrawController extends Controller
         $existingKaryawan = LimitWithdraw::where('is_active', true)->pluck('user_id')->toArray();
 
         $karyawan = MasterKaryawan::where('is_active', true)
+            ->whereIn('id_jabatan', [
+                24, // Sales Officer
+                148, // Customer Relation Officer
+            ])
             ->whereNotIn('id', $existingKaryawan)
             ->select('id', 'nama_lengkap')
             ->get();
