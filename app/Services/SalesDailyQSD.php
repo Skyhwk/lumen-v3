@@ -415,6 +415,7 @@ class SalesDailyQSD
                     FROM daily_qsd
                 ) x ON x.uuid = q.uuid
                 SET q.status_customer = IF(x.rn = 1, 'new', 'exist')
+                WHERE q.status_customer IS NULL
             ");
         }
 
