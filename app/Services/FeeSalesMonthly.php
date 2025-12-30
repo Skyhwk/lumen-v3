@@ -150,17 +150,11 @@ class FeeSalesMonthly
                     ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
-                    ->whereRaw("
-                        NOT EXISTS (
-                            SELECT 1
-                            FROM master_fee_sales
-                            JOIN JSON_TABLE(
-                                master_fee_sales.recap,
-                                '$[*]' COLUMNS (id_qsd INT PATH '$.id_qsd')
-                            ) mfs
-                            WHERE mfs.id_qsd = daily_qsd.id
-                        )
-                    ")
+                    ->whereRaw("NOT EXISTS (
+                        SELECT 1 FROM master_fee_sales
+                        JOIN JSON_TABLE(master_fee_sales.recap, '$[*]' COLUMNS (no_order VARCHAR(50) PATH '$.no_order', periode VARCHAR(20) PATH '$.periode')) mfs
+                        WHERE mfs.no_order = daily_qsd.no_order AND (daily_qsd.periode IS NULL OR mfs.periode = daily_qsd.periode)
+                    )")
                     ->get()
                     ->map(function ($qsd) {
                         if (!$qsd->periode) return $qsd;
@@ -214,8 +208,8 @@ class FeeSalesMonthly
 
                 // RECAP
                 $recap = $quotations->map(fn($quotation) => [
-                    'id_qsd' => $quotation->id,
                     'no_document' => $quotation->no_quotation,
+                    'no_order' => $quotation->no_order,
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
                     'kategori_3' => $quotation->orderHeader->orderDetail->map(fn($orderDetail) => $orderDetail->kategori_3),
