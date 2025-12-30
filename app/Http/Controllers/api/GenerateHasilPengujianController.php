@@ -240,6 +240,14 @@ class GenerateHasilPengujianController extends Controller
 
     public function getEmailCC(Request $request)
     {
+
+        $order = OrderHeader::where('no_order', $request->no_order)->where('is_active', true)->first();
+        if (str_contains($order->no_document, 'QTC')) {
+            $emailInfo = QuotationKontrakH::where('no_document', $order->no_document)->first();
+        } else {
+            $emailInfo = QuotationNonKontrak::where('no_document', $order->no_document)->first();
+        }
+
         $emails = ['sales@intilab.com', 'Billing@intilab.com', 'sales.draft@intilab.com', 'adminlhp@intilab.com'];
         $filterEmails = [
             'inafitri@intilab.com',
@@ -278,6 +286,12 @@ class GenerateHasilPengujianController extends Controller
             $emailCC = explode(',', $emailLhp->email_cc);
             $emailTo = $emailLhp->email_to;
         }
+
+        if($emailInfo) {
+            $emailCC = json_decode($emailInfo->email_cc, true);
+        }
+
+        array_unique($emailCC);
 
         return response()->json(
             [

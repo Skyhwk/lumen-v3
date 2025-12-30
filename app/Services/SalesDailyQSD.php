@@ -18,12 +18,7 @@ class SalesDailyQSD
 
         // Jika sudah memasuki bulan Desember (1 bulan terakhir dalam tahun berjalan), 
         // kalkulasikan juga untuk tahun depan
-        if ($currentMonth === 12) {
-            self::handle($currentYear);
-            // self::handle($nextYear);
-        } else {
-            self::handle($currentYear);
-        }
+        self::handle($currentYear);
     }
 
     private static function handle($currentYear)
@@ -336,28 +331,19 @@ class SalesDailyQSD
         ->values();// reset index
 
         if ($result->isNotEmpty()) {
-
             DB::disableQueryLog();
-        
-            DB::transaction(function () use ($result, &$totalInserted) {
-        
+            DB::transaction(function () use ($result, $arrayYears, &$totalInserted) {
                 $now = Carbon::now()->subHours(7);
-        
                 // ===== NORMALISASI & GENERATE ID =====
                 $result = $result
                     ->filter(fn ($r) => !empty($r['no_order']))
                     ->map(function ($r) use ($now) {
-        
                         $periodeKey = $r['periode'] ?? '__NULL__';
-        
                         $r['uuid'] = (new Crypto())->encrypt(
                             trim($r['no_order']) . '|' . trim($periodeKey)
                         );
-        
                         $r['updated_at'] = $now;
-        
                         unset($r['created_at']); // biar tidak reset
-        
                         return $r;
                     });
         
@@ -407,10 +393,30 @@ class SalesDailyQSD
                 // ===== DELETE DATA LAMA YANG TIDAK ADA =====
                 if (!empty($validIds)) {
                     DB::table('daily_qsd')
+                        ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
                         ->whereNotIn('uuid', $validIds)
                         ->delete();
                 }
             });
+
+            DB::statement("
+                UPDATE daily_qsd q
+                JOIN (
+                    SELECT
+                        uuid,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY pelanggan_ID
+                            ORDER BY
+                                COALESCE(tanggal_sampling_min, '9999-12-31'),
+                                CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED),
+                                CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED),
+                                uuid
+                        ) AS rn
+                    FROM daily_qsd
+                ) x ON x.uuid = q.uuid
+                SET q.status_customer = IF(x.rn = 1, 'new', 'exist')
+                WHERE q.status_customer IS NULL
+            ");
         }
 
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
