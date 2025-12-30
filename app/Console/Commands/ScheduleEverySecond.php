@@ -18,29 +18,29 @@ class ScheduleEverySecond extends Command
 
     public function handle()
     {
-        while (true) {
-            try {
-                EmailBlast::sendEmailBlast();
+        // while (true) {
+        //     try {
+        //         EmailBlast::sendEmailBlast();
 
-                // WorkerReassign::run();
+        //         // WorkerReassign::run();
 
-                // WorkerSummaryQSD::run();
+        //         // WorkerSummaryQSD::run();
 
-                // WorkerDailyQSDSales::run();
+        //         // WorkerDailyQSDSales::run();
 
-                // WorkerApproveAnalyst::run();
+        //         // WorkerApproveAnalyst::run();
 
-                WorkerSummaryParameter::run();
+        //         WorkerSummaryParameter::run();
 
-                // WorkerUpdateKpiSales::run();
+        //         // WorkerUpdateKpiSales::run();
 
-                // WorkerFeeSales::run();
+                WorkerFeeSales::run();
 
-                // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
-            } catch (\Throwable $th) {
-                Log::error($th);
-            }
-            sleep(1);
-        }
+        //         // Log::info('[ScheduleEverySecond] Loop berjalan pada: ' . date('Y-m-d H:i:s'));
+        //     } catch (\Throwable $th) {
+        //         Log::error($th);
+        //     }
+        //     sleep(1);
+        // }
     }
 }
