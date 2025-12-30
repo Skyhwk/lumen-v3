@@ -19,7 +19,7 @@ class SalesDailyQSD
         // kalkulasikan juga untuk tahun depan
         if ($currentMonth === 12) {
             self::handle($currentYear);
-            self::handle($nextYear);
+            // self::handle($nextYear);
         } else {
             self::handle($currentYear);
         }
@@ -29,10 +29,12 @@ class SalesDailyQSD
     {
         Log::info('[SalesDailyQSD] Starting QSD data update...');
 
-        // $currentYear = '2024';
-        // $maxDate     = '2024-12-31';
-        // Mendapatkan tanggal terakhir di bulan 12 (Desember) untuk tahun yang diparsing
         $maxDate = Carbon::create($currentYear, 12, 1)->endOfMonth()->format('Y-m-d');
+        $nextYear = Carbon::create($currentYear, 12, 1)->addYear(2)->endOfMonth()->format('Y');
+        $maxDateNextYear = Carbon::create($nextYear, 12, 1)->endOfMonth()->format('Y-m-d');
+        for ($i = $currentYear; $i <= $nextYear; $i++) {
+            $arrayYears[] = $i;
+        }
         /**
          * =====================================================
          * BUILD QUERY QSD
@@ -133,65 +135,28 @@ class SalesDailyQSD
                     ->where('od.is_active', true);
             })
             ->selectRaw('
-                oh.no_order,
-                oh.no_document as no_quotation,
-                COUNT(DISTINCT od.cfr) AS total_cfr,
-                oh.nama_perusahaan,
-                oh.konsultan,
-                COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) as kontrak,
-                od.kategori_1 as status_sampling,
-                MIN(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.periode_kontrak
-                    ELSE NULL
-                END) as periode,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkh.sales_id
-                    ELSE NULL
-                END) as sales_id_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN mk_kontrak.nama_lengkap
-                    ELSE NULL
-                END) as sales_nama_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) != "C"
-                    THEN rq.sales_id
-                    ELSE NULL
-                END) as sales_id_non_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) != "C"
-                    THEN mk_non_kontrak.nama_lengkap
-                    ELSE NULL
-                END) as sales_nama_non_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.total_discount
-                    ELSE NULL
-                END) as total_discount_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.total_ppn
-                    ELSE NULL
-                END) as total_ppn_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.total_pph
-                    ELSE NULL
-                END) as total_pph_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.biaya_akhir
-                    ELSE NULL
-                END) as biaya_akhir_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
-                    THEN rqkd.grand_total
-                    ELSE NULL
-                END) as grand_total_kontrak,
-                MAX(CASE
-                    WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C"
+                order_detail.no_order,
+                order_detail.no_quotation,
+                COUNT(DISTINCT order_detail.cfr) AS total_cfr,
+                order_detail.nama_perusahaan,
+                order_detail.konsultan,
+                GROUP_CONCAT(
+                    DISTINCT order_detail.kategori_1 
+                    ORDER BY order_detail.kategori_1 
+                    SEPARATOR ", "
+                ) AS status_sampling,
+                MIN(CASE order_detail.kontrak WHEN "C" THEN rqkd.periode_kontrak ELSE NULL END) as periode,
+                order_detail.kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkh.sales_id ELSE NULL END) as sales_id_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN mk_kontrak.nama_lengkap ELSE NULL END) as sales_nama_kontrak,
+                MAX(CASE WHEN order_detail.kontrak != "C" THEN rq.sales_id ELSE NULL END) as sales_id_non_kontrak,
+                MAX(CASE WHEN order_detail.kontrak != "C" THEN mk_non_kontrak.nama_lengkap ELSE NULL END) as sales_nama_non_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_discount ELSE NULL END) as total_discount_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_ppn ELSE NULL END) as total_ppn_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.total_pph ELSE NULL END) as total_pph_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.biaya_akhir ELSE NULL END) as biaya_akhir_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C" THEN rqkd.grand_total ELSE NULL END) as grand_total_kontrak,
+                MAX(CASE WHEN order_detail.kontrak = "C"
                     THEN (COALESCE(rqkd.biaya_akhir,0)+COALESCE(rqkd.total_pph,0)-COALESCE(rqkd.total_ppn,0))
                     ELSE NULL
                 END) as total_revenue_kontrak,
@@ -237,20 +202,9 @@ class SalesDailyQSD
                 END) as total_revenue_non_kontrak,
                 COALESCE(MIN(od.tanggal_sampling), MIN(oh.tanggal_order)) as tanggal_sampling_min
             ')
-            ->where('oh.is_active', true)
-            ->where(function ($query) use ($maxDate, $currentYear) {
-                $query->where(function ($q) use ($maxDate, $currentYear) {
-                    // Jika ada order_detail
-                    $q->whereNotNull('od.no_order')
-                        ->whereDate('od.tanggal_sampling', '<=', $maxDate)
-                        ->whereRaw("YEAR(od.tanggal_sampling) = ?", [$currentYear]);
-                })->orWhere(function ($q) use ($maxDate, $currentYear) {
-                    // Jika tidak ada order_detail
-                    $q->whereNull('od.no_order')
-                        ->whereDate('oh.tanggal_order', '<=', $maxDate)
-                        ->whereRaw("YEAR(oh.tanggal_order) = ?", [$currentYear]);
-                });
-            });
+            ->where('order_detail.is_active', true)
+            ->whereDate('order_detail.tanggal_sampling', '<=', $maxDateNextYear);
+            // ->whereRaw("YEAR(order_detail.tanggal_sampling) = ?", [$currentYear]);
 
         // JOIN KONTRAK
         $rekapOrder->leftJoin('request_quotation_kontrak_H as rqkh', function ($join) {
@@ -259,9 +213,9 @@ class SalesDailyQSD
                 ->where('rqkh.is_active', true);
         });
 
-        $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($currentYear) {
+        $rekapOrder->leftJoin('request_quotation_kontrak_D as rqkd', function ($join) use ($arrayYears) {
             $join->on('rqkh.id', '=', 'rqkd.id_request_quotation_kontrak_H')
-                ->whereRaw("LEFT(rqkd.periode_kontrak, 4) = ?", [$currentYear]);
+                ->whereIn(DB::raw('LEFT(rqkd.periode_kontrak, 4)'), $arrayYears);
         });
 
         $rekapOrder->leftJoin('master_karyawan as mk_kontrak', 'rqkh.sales_id', '=', 'mk_kontrak.id');
@@ -276,10 +230,9 @@ class SalesDailyQSD
         $rekapOrder->leftJoin('master_karyawan as mk_non_kontrak', 'rq.sales_id', '=', 'mk_non_kontrak.id');
 
         // FILTER UTAMA
-        $rekapOrder->where(function ($q) use ($currentYear) {
-            $q->where(function ($x) use ($currentYear) {
-                // KONTRAK - dengan atau tanpa order_detail
-                $x->whereRaw("COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE '%QTC%' THEN 'C' ELSE 'N' END) = 'C'")
+        $rekapOrder->where(function ($q) use ($arrayYears) {
+            $q->where(function ($x) use ($arrayYears) {
+                $x->where('order_detail.kontrak', 'C')
                     ->whereNotNull('rqkh.id')
                     ->where(function ($subQ) use ($currentYear) {
                         $subQ->where(function ($detailExist) use ($currentYear) {
@@ -292,7 +245,7 @@ class SalesDailyQSD
                         });
                     })
                     ->whereNotNull('rqkd.id')
-                    ->whereRaw("LEFT(rqkd.periode_kontrak,4)=?", [$currentYear]);
+                    ->whereIn(DB::raw('LEFT(rqkd.periode_kontrak, 4)'), $arrayYears);
             })->orWhere(function ($x) {
                 // NON KONTRAK - dengan atau tanpa order_detail
                 $x->whereRaw("COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE '%QTC%' THEN 'C' ELSE 'N' END) != 'C'")
@@ -301,24 +254,74 @@ class SalesDailyQSD
         });
 
         $rekapOrder->groupByRaw('
-            oh.no_order,
-            oh.no_document,
-            oh.nama_perusahaan,
-            oh.konsultan,
-            COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END),
-            od.kategori_1,
-            od.periode,
-            CASE WHEN COALESCE(od.kontrak, CASE WHEN oh.no_document LIKE "%QTC%" THEN "C" ELSE "N" END) = "C" THEN rqkd.periode_kontrak ELSE NULL END
+            order_detail.no_order,
+            order_detail.no_quotation,
+            order_detail.nama_perusahaan,
+            order_detail.konsultan,
+            order_detail.periode,
+            order_detail.kontrak,
+            CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
         ');
 
         $rekapOrder->orderBy('tanggal_sampling_min', 'desc')
-            ->orderBy('oh.no_order', 'asc');
+            ->orderBy('order_detail.no_order', 'asc');
+
+        /**
+         * =====================================================
+         * AMBIL DATA NON PENGUJIAN
+         * =====================================================
+         */
+
+        $rekapOrderNonPengujian = DB::table('order_header as oh')
+            ->join('master_karyawan as mk', 'oh.sales_id', '=', 'mk.id')
+            ->leftJoin('request_quotation as rq', function ($join) {
+                $join->on('oh.no_document', '=', 'rq.no_document')
+                    ->where('rq.is_active', 1)
+                    ->whereNotIn('rq.pelanggan_ID', ['SAIR02', 'T2PE01']);
+            })
+            ->where('oh.is_active', 1)
+            ->whereIn(DB::raw('LEFT(oh.tanggal_order, 4)'), $arrayYears)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('order_detail as od')
+                    ->whereRaw('od.id_order_header = oh.id');
+            })
+            ->selectRaw('
+                oh.no_order,
+                oh.no_document,
+                0 AS total_cfr,
+                oh.nama_perusahaan,
+                oh.konsultan,
+                "Non Pengujian" AS status_sampling,
+                NULL AS periode,
+                "N" AS kontrak,
+                NULL AS sales_id_kontrak,
+                NULL AS sales_nama_kontrak,
+                NULL AS total_discount_kontrak,
+                NULL AS total_ppn_kontrak,
+                NULL AS total_pph_kontrak,
+                NULL AS biaya_akhir_kontrak,
+                NULL AS grand_total_kontrak,
+                NULL AS total_revenue_kontrak,
+                oh.sales_id AS sales_id_non_kontrak,
+                mk.nama_lengkap AS sales_nama_non_kontrak,
+                rq.total_discount AS total_discount_non_kontrak,
+                rq.total_ppn AS total_ppn_non_kontrak,
+                rq.total_pph AS total_pph_non_kontrak,
+                rq.biaya_akhir AS biaya_akhir_non_kontrak,
+                rq.grand_total AS grand_total_non_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_kontrak,
+                rq.pelanggan_ID AS pelanggan_id_non_kontrak,
+                (COALESCE(rq.biaya_akhir,0)+COALESCE(rq.total_pph,0)-COALESCE(rq.total_ppn,0)) as total_revenue_non_kontrak,
+                oh.tanggal_order AS tanggal_sampling_min
+            ');
 
         /**
          * =====================================================
          * STREAM DATA
          * =====================================================
          */
+        $rekapOrder = $rekapOrder->unionAll($rekapOrderNonPengujian);
         $rows = $rekapOrder->cursor();
 
         /**
@@ -327,10 +330,10 @@ class SalesDailyQSD
          * =====================================================
          */
         DB::table('daily_qsd')
-            ->whereYear('tanggal_sampling_min', $currentYear)
+            ->whereIn(DB::raw('LEFT(tanggal_sampling_min, 4)'), $arrayYears)
             ->delete();
 
-        Log::info('[SalesDailyQSD] Old data deleted for year ' . $currentYear);
+        Log::info('[SalesDailyQSD] Old data deleted for year ' . implode(', ', $arrayYears));
 
         /**
          * =====================================================
@@ -338,7 +341,7 @@ class SalesDailyQSD
          * =====================================================
          */
         $quotationList = DB::table('order_detail')
-            ->whereYear('tanggal_sampling', $currentYear)
+            ->whereIn(DB::raw('LEFT(tanggal_sampling, 4)'), $arrayYears)
             ->distinct()
             ->pluck('no_quotation');
 
@@ -426,7 +429,7 @@ class SalesDailyQSD
                 'kontrak'         => $items->first()['kontrak'],
                 'sales_id'        => $items->first()['sales_id'],
                 'sales_nama'      => $items->first()['sales_nama'],
-                'status_sampling'      => $items->first()['status_sampling'],
+                'status_sampling' => $items->pluck('status_sampling')->unique()->implode(', '),
 
                 // ====== SUM FIELD ======
                 'total_discount' => $items->sum('total_discount'),
