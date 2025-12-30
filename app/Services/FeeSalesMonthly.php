@@ -145,24 +145,33 @@ class FeeSalesMonthly
                 $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'period' => $this->currentPeriod])->exists();
                 if ($masterFeeSalesExists) continue;
 
+                $feeSalesRecap = MasterFeeSales::where('sales_id', $sales->id)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
+
                 $quotations = DailyQsd::with(['orderHeader.orderDetail', 'orderHeader.invoices.recordWithdraw'])
                     ->where('sales_id', $sales->id)
                     ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
-                    ->whereRaw("NOT EXISTS (
-                        SELECT 1 FROM master_fee_sales
-                        JOIN JSON_TABLE(master_fee_sales.recap, '$[*]' COLUMNS (no_order VARCHAR(50) PATH '$.no_order', periode VARCHAR(20) PATH '$.periode')) mfs
-                        WHERE mfs.no_order = daily_qsd.no_order AND (daily_qsd.periode IS NULL OR mfs.periode = daily_qsd.periode)
-                    )")
                     ->get()
-                    ->map(function ($qsd) {
-                        if (!$qsd->periode) return $qsd;
+                    ->filter(function ($qsd) use ($feeSalesRecap) {
+                        $exists = $feeSalesRecap->contains(function ($recap) use ($qsd) {
+                            if ($recap['no_order'] != $qsd->no_order) return false;
+                            if (!$qsd->periode) return true;
 
-                        $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            return $recap['periode'] == $qsd->periode;
+                        });
 
-                        return $qsd;
-                    });
+                        if ($exists) return false;
+
+                        if ($qsd->periode) {
+                            $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+
+                            return $qsd->orderHeader->orderDetail->isNotEmpty();
+                        }
+
+                        return true;
+                    })
+                    ->values();
 
                 if ($quotations->isEmpty()) continue;
 
