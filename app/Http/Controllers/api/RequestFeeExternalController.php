@@ -6,6 +6,7 @@ use App\Models\ClaimFeeExternal;
 use App\Models\OrderHeader;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 
 class RequestFeeExternalController extends Controller
@@ -110,7 +111,7 @@ class RequestFeeExternalController extends Controller
         $claim->status_pembayaran = "PROCESSED";
         $claim->save();
 
-        return response()->json(['message' => 'Claim Fee External Berhasil Dihapus']);
+        return response()->json(['message' => 'Claim Fee External Berhasil Disetujui']);
     }
 
     public function transfer(Request $request)
@@ -125,6 +126,21 @@ class RequestFeeExternalController extends Controller
         $claim->save();
 
         return response()->json(['message' => 'Claim Fee External Berhasil Ditransfer']);
+    }
+
+    public function reject(Request $request)
+    {
+        $claim = ClaimFeeExternal::find($request->id);
+        if (!$claim) {
+            return response()->json(['message' => 'Claim Fee External tidak ditemukan'], 404);
+        }
+
+        $claim->status_pembayaran = "REJECTED";
+        $claim->rejected_by = $this->karyawan;
+        $claim->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
+        $claim->save();
+
+        return response()->json(['message' => 'Claim Fee External Berhasil Ditolak']);
     }
 
     private function applyDateFilter($query, $column, $value)
