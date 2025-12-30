@@ -14,7 +14,7 @@ class WorkerFeeSales
     {
         if (
             Carbon::today()->isLastOfMonth()
-            && Carbon::now()->hour == 20
+            && Carbon::now()->hour == 22
             && Carbon::now()->minute == 00
             && Carbon::now()->second == 00
         ) {
