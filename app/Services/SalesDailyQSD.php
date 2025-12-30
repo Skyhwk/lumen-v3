@@ -28,11 +28,11 @@ class SalesDailyQSD
         $rekapOrderNonPengujian = self::buildQueryNonPengujian($arrayYears);
         $rows = self::streamData($rekapOrder, $rekapOrderNonPengujian);
         // Invoice Mapping
-        [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv] = self::buildInvoiceMaps($arrayYears);
+        [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv, $groupedInvSpesial] = self::buildInvoiceMaps($arrayYears);
         // Buffering
         $buffer = self::bufferMapping($rows, $invoiceMap);
         // First Grouped/Grouped Data
-        [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result] = self::processGroupings($buffer, $spesialInv, $mapedInv);
+        [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result] = self::processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial);
         // Simpan ke DB
         $totalInserted = 0;
         if ($result->isNotEmpty()) {
@@ -156,6 +156,7 @@ class SalesDailyQSD
             ->whereIn(DB::raw('LEFT(tanggal_sampling, 4)'), $arrayYears)
             ->distinct()
             ->pluck('no_quotation');
+
         $excludeInv = Invoice::where('is_active', 1)
             ->whereIn('no_invoice', function ($q) {
                 $q->select('no_invoice')
@@ -167,18 +168,32 @@ class SalesDailyQSD
             })
             ->groupBy('no_invoice')
             ->pluck('no_invoice');
+
         $invoiceMap = Invoice::with(['recordPembayaran', 'recordWithdraw'])
             ->whereIn('no_quotation', $quotationList)
             ->whereNotIn('no_invoice', $excludeInv)
             ->where('is_active', true)
             ->get()
             ->groupBy(fn($i) => $i->no_quotation . '|' . $i->periode);
+
         $spesialInv = Invoice::with(['recordPembayaran', 'recordWithdraw'])
             ->where('is_active', 1)
             ->whereIn('no_invoice', $excludeInv);
+
         $noQTSpesial = $spesialInv->pluck('no_quotation')->toArray();
+
         $mapedInv = $spesialInv->get()->groupBy(fn($i) => $i->no_quotation);
-        return [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv];
+
+        $groupedInvSpesial = $spesialInv
+            ->select(
+                'no_invoice',
+                DB::raw('SUM(nilai_tagihan) as nilai_tagihan')
+            )
+            ->groupBy('no_invoice')
+            ->get()
+            ->keyBy('no_invoice');
+
+        return [$invoiceMap, $spesialInv, $noQTSpesial, $mapedInv, $groupedInvSpesial];
     }
 
     private static function bufferMapping($rows, $invoiceMap)
@@ -223,22 +238,25 @@ class SalesDailyQSD
         return $buffer;
     }
 
-    private static function processGroupings($buffer, $spesialInv, $mapedInv)
+    private static function processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial)
     {
         $collection = collect($buffer);
         $withInvoice = $collection->filter(fn ($row) => !empty($row['no_invoice']));
         $withoutInvoice = $collection->filter(fn ($row) => empty($row['no_invoice']));
-        $noQTSpesial = $spesialInv->pluck('no_quotation')->toArray();
+        
         $groupedSpesial = $withoutInvoice
             ->filter(fn($item) => in_array($item['no_quotation'], $noQTSpesial))
             ->groupBy('no_quotation')
-            ->map(function ($items) use ($mapedInv) {
+            ->map(function ($items) use ($mapedInv, $groupedInvSpesial) {
                 $no_quotation = $items->first()['no_quotation'];
+                
                 $inv = isset($mapedInv[$no_quotation]) ? $mapedInv[$no_quotation]->first() : null;
                 $no_inv = $inv->no_invoice ?? null;
-                $nilai_invoice = $inv->nilai_tagihan ?? 0;
-                $pembayaran = $inv->recordPembayaran->sum('nilai_pembayaran') ?? 0;
-                $withdraw = $inv->recordWithdraw->sum('nilai_pembayaran') ?? 0;
+
+                $nilai_invoice = $groupedInvSpesial[$no_inv]->nilai_tagihan ?? 0;
+
+                $pembayaran = $groupedInvSpesial[$no_inv]->recordPembayaran->sum('nilai_pembayaran') ?? 0;
+                $withdraw = $groupedInvSpesial[$no_inv]->recordWithdraw->sum('nilai_pembayaran') ?? 0;
                 $nominal = $pembayaran + $withdraw;
                 $isLunas = $nilai_invoice > 0 ? ($nominal >= $nilai_invoice) : false;
                 $status = $isLunas ? ' (Lunas)' : '';
