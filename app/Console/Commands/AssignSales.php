@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 class AssignSales extends Command
 {
-    protected $signature   = 'reassign-sales';
+    protected $signature   = 'reassignsales';
     protected $description = 'Run the scheduler every second (manual loop)';
 
     public function handle()
