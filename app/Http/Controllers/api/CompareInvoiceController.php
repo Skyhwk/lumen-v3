@@ -7,6 +7,8 @@ use App\Models\Invoice;
 use App\Models\DailyQsd;
 use App\Services\GenerateToken;
 use App\Http\Controllers\Controller;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
 use App\Models\SalesInDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -270,6 +272,27 @@ class CompareInvoiceController extends Controller
                 });
             })
             ->make(true);
+    }
+
+    public function getDocumentDetail(Request $request)
+    {
+        if($request->type == 'invoice'){
+            $data = Invoice::where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
+        } else if($request->type == 'quotation'){
+            if($request->mode == 'kontrak'){
+                $data = QuotationKontrakH::where('no_document', $request->no_document)->where('is_active', true)->first();
+            }else{
+                $data = QuotationNonKontrak::where('no_document', $request->no_document)->where('is_active', true)->first();
+            }
+        } else {
+            return response()->json(['message' => 'Invalid document type.'], 400);
+        }
+
+        if(!$data){
+            return response()->json(['message' => 'Document not found.'], 404);
+        }
+
+        return response()->json(['message' => 'Success', 'data' => $data], 200);
     }
 
     function updateOutstandingData(Request $request) {
