@@ -189,89 +189,183 @@ class CompareInvoiceController extends Controller
         }
     }
 
+    // public function needCompareIndex(Request $request)
+    // {
+    //     $isMatched = filter_var($request->is_matched, FILTER_VALIDATE_BOOLEAN);
+
+    //     // ================= NORMAL (group by quotation) =================
+    //     $dataNormal = DailyQsd::select(
+    //             DB::raw('MAX(uuid) AS id'),
+    //             DB::raw('GROUP_CONCAT(DISTINCT no_invoice ORDER BY no_invoice SEPARATOR ", ") AS no_invoice'),
+    //             DB::raw('no_quotation'),
+    //             DB::raw('MAX(konsultan) AS konsultan'),
+    //             DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+    //             DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+    //             DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
+    //             DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+    //         )
+    //         ->whereYear('tanggal_sampling_min', $request->year)
+    //         ->groupBy('no_quotation')
+    //         ->havingRaw(
+    //             $isMatched
+    //                 ? 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) <= 50'
+    //                 : 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) > 50'
+    //         );
+
+    //     // ================= SPECIAL (group by invoice) =================
+    //     $dataSpecial = DailyQsd::select(
+    //             DB::raw('MAX(uuid) AS id'),
+    //             DB::raw('no_invoice'),
+    //             DB::raw('GROUP_CONCAT(DISTINCT no_quotation ORDER BY no_quotation SEPARATOR ", ") AS no_quotation'),
+    //             DB::raw('MAX(konsultan) AS konsultan'),
+    //             DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+    //             DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+    //             DB::raw('MIN(nilai_invoice) AS nilai_invoice'),
+    //             DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+    //         )
+    //         ->whereYear('tanggal_sampling_min', $request->year)
+    //         ->groupBy('no_invoice')
+    //         ->havingRaw(
+    //             $isMatched
+    //                 ? 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) <= 50'
+    //                 : 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) > 50'
+    //         );
+
+    //     // ================= UNION =================
+    //     $union = $dataNormal->unionAll($dataSpecial);
+
+    //     $finalQuery = DB::query()
+    //         ->fromSub($union, 'u')
+    //         ->select(
+    //             DB::raw('MAX(id) AS id'),
+    //             DB::raw('GROUP_CONCAT(DISTINCT no_invoice ORDER BY no_invoice SEPARATOR ", ") AS no_invoice'),
+    //             DB::raw('GROUP_CONCAT(DISTINCT no_quotation ORDER BY no_quotation SEPARATOR ", ") AS no_quotation'),
+    //             DB::raw('MAX(konsultan) AS konsultan'),
+    //             DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+    //             DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+    //             DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
+    //             DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+    //         )
+    //         ->groupBy(
+    //             DB::raw('COALESCE(no_invoice, "")'),
+    //             DB::raw('COALESCE(no_quotation, "")')
+    //         );
+
+    //     // ================= FINAL DEDUP (UNIK PER BARIS) =================
+    //     $data = DB::query()
+    //         ->fromSub($finalQuery, 'qsd')
+    //         ->select(
+    //             DB::raw('MAX(id) AS id'),
+    //             DB::raw('no_invoice'),
+    //             DB::raw('no_quotation'),
+    //             DB::raw('MAX(konsultan) AS konsultan'),
+    //             DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+    //             DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+    //             DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
+    //             DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+    //         )
+    //         ->groupBy('no_invoice', 'no_quotation') // 🔥 KUNCI UNIK
+    //         ->orderByDesc('tanggal_sampling_min');
+
+    //     return Datatables::of($data)
+    //         ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+    //             $query->where(function($q) use ($keyword) {
+    //                 $q->where('nama_perusahaan', 'like', "%{$keyword}%");
+    //             });
+    //         })
+    //         ->filterColumn('konsultan', function ($query, $keyword) {
+    //             $query->where(function($q) use ($keyword) {
+    //                 $q->Where('konsultan', 'like', "%{$keyword}%");
+    //             });
+    //         })
+    //         ->filterColumn('no_invoice', function ($query, $keyword) {
+    //             $query->where(function($q) use ($keyword) {
+    //                 $q->where('no_invoice', 'like', "%{$keyword}%");
+    //             });
+    //         })
+    //         ->filterColumn('no_quotation', function ($query, $keyword) {
+    //             $query->where(function($q) use ($keyword) {
+    //                 $q->where('no_quotation', 'like', "%{$keyword}%");
+    //             });
+    //         })
+    //         ->make(true);
+    // }
+
     public function needCompareIndex(Request $request)
     {
         $isMatched = filter_var($request->is_matched, FILTER_VALIDATE_BOOLEAN);
 
-        // ================= NORMAL (group by quotation) =================
-        $dataNormal = DailyQsd::select(
-                DB::raw('MAX(uuid) AS id'),
-                DB::raw('GROUP_CONCAT(DISTINCT no_invoice ORDER BY no_invoice SEPARATOR ", ") AS no_invoice'),
-                DB::raw('no_quotation'),
-                DB::raw('MAX(konsultan) AS konsultan'),
-                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
-                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
-                DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
-                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
-            )
-            ->whereYear('tanggal_sampling_min', $request->year)
-            ->groupBy('no_quotation')
-            ->havingRaw(
-                $isMatched
-                    ? 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) <= 50'
-                    : 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) > 50'
-            );
-
-        // ================= SPECIAL (group by invoice) =================
-        $dataSpecial = DailyQsd::select(
-                DB::raw('MAX(uuid) AS id'),
-                DB::raw('no_invoice'),
-                DB::raw('GROUP_CONCAT(DISTINCT no_quotation ORDER BY no_quotation SEPARATOR ", ") AS no_quotation'),
-                DB::raw('MAX(konsultan) AS konsultan'),
-                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
-                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
-                DB::raw('MIN(nilai_invoice) AS nilai_invoice'),
-                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
-            )
-            ->whereYear('tanggal_sampling_min', $request->year)
+        $excludeInv = Invoice::where('is_active', 1)
+            ->whereIn('no_invoice', function ($q) {
+                $q->select('no_invoice')
+                    ->from('invoice')
+                    ->where('is_active', 1)
+                    ->groupBy('no_invoice')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->havingRaw('COUNT(DISTINCT no_quotation) > 1');
+            })
             ->groupBy('no_invoice')
-            ->havingRaw(
-                $isMatched
-                    ? 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) <= 50'
-                    : 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) > 50'
-            );
+            ->pluck('no_invoice')->toArray();
+        
+        $dataNormal = DailyQsd::whereNotNull('no_invoice')->whereYear('tanggal_sampling_min', $request->year)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->uuid,
+                    'no_invoice' => $item->no_invoice,
+                    'no_quotation' => $item->no_quotation,
+                    'konsultan' => $item->konsultan,
+                    'nama_perusahaan' => $item->nama_perusahaan,
+                    'biaya_akhir' => $item->biaya_akhir,
+                    'nilai_invoice' => $item->nilai_invoice,
+                    'tanggal_sampling_min' => $item->tanggal_sampling_min,
+                ];
+            });
+            $dataCollect = collect($dataNormal)->sortBy('no_invoice');
+            
+            $dataExclude = $dataCollect
+                ->filter(function ($item) use ($excludeInv) {
+                    $noInvoice = str_replace(' (Lunas)', '', $item['no_invoice']);
+                    return in_array($noInvoice, $excludeInv);
+                })
+                ->groupBy(function ($item) {
+                    return str_replace(' (Lunas)', '', $item['no_invoice']);
+                })
+                ->map(function ($items, $noInvoice) {
+                    return [
+                        'id' => $items->max('id'),
+                        'no_invoice' => $noInvoice,
+                        'no_quotation' => $items
+                            ->pluck('no_quotation')
+                            ->filter()
+                            ->unique()
+                            ->implode(', '),
+                        'konsultan' => $items->pluck('konsultan')->filter()->first(),
+                        'nama_perusahaan' => $items->pluck('nama_perusahaan')->filter()->first(),
+                        'biaya_akhir' => $items->sum('biaya_akhir'),
+                        'nilai_invoice' => $items->max('nilai_invoice'),
+                        'tanggal_sampling_min' => $items->max('tanggal_sampling_min'),
+                    ];
+                })
+                ->values();
 
-        // ================= UNION =================
-        $union = $dataNormal->unionAll($dataSpecial);
 
-        // ================= FINAL DEDUP (UNIK PER BARIS) =================
-        $data = DB::query()
-            ->fromSub($union, 'qsd')
-            ->select(
-                DB::raw('MAX(id) AS id'),
-                DB::raw('no_invoice'),
-                DB::raw('no_quotation'),
-                DB::raw('MAX(konsultan) AS konsultan'),
-                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
-                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
-                DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
-                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
-            )
-            ->groupBy('no_invoice', 'no_quotation') // 🔥 KUNCI UNIK
-            ->orderByDesc('tanggal_sampling_min');
+            $dataInclude = $dataCollect->filter(function ($item) use ($excludeInv) {
+                return !in_array(str_replace(' (Lunas)', '', ($item['no_invoice'])), $excludeInv);
+            })->values();
+            
+            $allData = $dataInclude->merge($dataExclude);
 
-        return Datatables::of($data)
-            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->where('nama_perusahaan', 'like', "%{$keyword}%");
-                });
-            })
-            ->filterColumn('konsultan', function ($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->Where('konsultan', 'like', "%{$keyword}%");
-                });
-            })
-            ->filterColumn('no_invoice', function ($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->where('no_invoice', 'like', "%{$keyword}%");
-                });
-            })
-            ->filterColumn('no_quotation', function ($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->where('no_quotation', 'like', "%{$keyword}%");
-                });
-            })
-            ->make(true);
+            $allData = $allData->filter(function ($item) use ($isMatched) {
+                $difference = abs($item['biaya_akhir'] - $item['nilai_invoice']);
+                return $isMatched ? ($difference <= 50) : ($difference > 50);
+            });
+            
+            return response()->json([
+                'message' => 'Success',
+                'status' => true,
+                'data' => $allData->sortByDesc('tanggal_sampling_min')->values(),
+            ], 200);
     }
 
     public function getDocumentDetail(Request $request)
