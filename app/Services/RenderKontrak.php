@@ -746,7 +746,7 @@ class RenderKontrak
                 );
             }
 
-            if ($data->total_discount_promo !== null || $data->total_discount_promo > 0) {
+            if ($data->total_discount_promo > 0) {
                 $disc_promo = json_decode($data->discount_promo);
                 $pdf->WriteHTML(
                     ' <tr>
@@ -1513,7 +1513,7 @@ class RenderKontrak
                     }
                 }
 
-                if ($v->discount_promo != null || $v->total_discount_promo > 0) {
+                if ($v->total_discount_promo > 0) {
                     $disc_promo = json_decode($v->discount_promo);
                     $pdf->WriteHTML(
                         ' <tr>
