@@ -398,8 +398,10 @@ class SalesKpiMonthly
     public static function run()
     {
        try {
-        $currentMonth = Carbon::now()->month;
-        $currentYear = Carbon::now()->year;
+        $currentMonth = 12;
+        $currentYear = 2024;
+
+        // dd($currentMonth, $currentYear);
 
         $monthList = [];
         for ($i = 1; $i <= $currentMonth; $i++) {

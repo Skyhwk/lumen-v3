@@ -98,7 +98,7 @@ class DashboardSalesController extends Controller
     public function getSales(Request $request)
     {
         $karyawan_id = 890;
-        $bawahanIds = GetBawahan::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
+        $bawahanIds  = GetBawahan::where('id', $karyawan_id)->get()->pluck('id')->unique()->values()->toArray();
 
         $data = MasterKaryawan::where('is_active', true)
             ->where(function ($query) {
@@ -314,11 +314,60 @@ class DashboardSalesController extends Controller
                     ->orderBy('revenue_sp', 'desc')
                     ->get();
 
+                $years = [
+                    $tahun - 1,
+                    $tahun,
+                ];
+
+                $allKpiBar = SalesKpi::where(function ($q) use ($years) {
+                    foreach ($years as $yr) {
+                        $q->orWhere('periode', 'like', $yr . '-%');
+                    }
+                })
+                    ->selectRaw('periode,
+                        SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+                        SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+                        SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+                        SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
+                    ')
+                    ->groupBy('periode')
+                    ->get()
+                    ->keyBy('periode');
+
+                $result = [];
+
+                foreach ($years as $yr) {
+                    $chartBar = [];
+
+                    foreach ($months as $mnthName => $mnthNum) {
+                        $periodeKey = $yr . '-' . $mnthNum;
+
+                        if (isset($allKpiBar[$periodeKey])) {
+                            $item  = $allKpiBar[$periodeKey];
+                            $value =
+                                ($item->revenue_order_nonkontrak_new ?? 0) +
+                                ($item->revenue_order_nonkontrak_exist ?? 0) +
+                                ($item->revenue_order_kontrak_new ?? 0) +
+                                ($item->revenue_order_kontrak_exist ?? 0);
+                        } else {
+                            $value = null;
+                        }
+
+                        $chartBar[] = [
+                            'month' => $mnthName,
+                            'value' => $value,
+                        ];
+                    }
+
+                    $result[$yr] = $chartBar;
+                }
+
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
                     'chart'    => $chart,
                     'piechart' => $piechart,
+                    'chartBar' => $result
                 ], 200);
 
             } else if (strpos($request->mode, "team") !== false) {
