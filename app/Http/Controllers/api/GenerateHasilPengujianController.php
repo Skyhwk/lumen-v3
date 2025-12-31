@@ -277,23 +277,34 @@ class GenerateHasilPengujianController extends Controller
         
         $emails = array_merge($emails, ['admsales03@intilab.com', 'admsales04@intilab.com']);
 
-        $emailCC = null;
+        $emailCC = [];
         $emailTo = null;
 
         $emailLhp = EmailLhp::where('no_order', $request->no_order)->first();
 
         if ($emailLhp) {
-            $emailCC = explode(',', $emailLhp->email_cc);
+            if (!empty($emailLhp->email_cc)) {
+                $emailCC = array_merge(
+                    $emailCC,
+                    array_map('trim', explode(',', $emailLhp->email_cc))
+                );
+            }
+
             $emailTo = $emailLhp->email_to;
         }
 
-        if($emailInfo) {
-            $emailCC = json_decode($emailInfo->email_cc, true);
+        if ($emailInfo && !empty($emailInfo->email_cc)) {
+            $emailCC = array_merge(
+                $emailCC,
+                array_map('trim', json_decode($emailInfo->email_cc, true))
+            );
         }
 
-        if($emailCC != null) {
-            array_unique($emailCC);
-        }
+        // Bersihkan duplikat & nilai kosong
+        $emailCC = array_values(array_unique(array_filter($emailCC)));
+
+        // Jika kosong, set null (opsional)
+        $emailCC = count($emailCC) > 0 ? $emailCC : null;
 
         return response()->json(
             [
