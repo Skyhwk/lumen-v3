@@ -275,6 +275,16 @@ class InvoiceController extends Controller
                 );
             }
 
+            if ($request->filled('nama_customer')) {
+                $data->havingRaw(
+                    'COALESCE(
+                        MAX(order_header.nama_perusahaan),
+                        MAX(order_header.konsultan)
+                    ) LIKE ?',
+                    ['%' . $request->nama_customer . '%']
+                );
+            }
+
             if ($request->filled('emailed_at')) {
                 $data->havingRaw(
                     'DATE(MAX(invoice.emailed_at)) LIKE ?',
