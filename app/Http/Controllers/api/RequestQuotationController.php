@@ -2586,7 +2586,7 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = null;
                 }
 
-                if($data_diskon->jumlah_promo_diskon > 0){
+                if($data_diskon->jumlah_promo_discount > 0){
                     $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
                         'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
@@ -4077,7 +4077,7 @@ class RequestQuotationController extends Controller
                 }
                 // END CUSTOM DISCOUNT
                 // PROMO DISCOUNT
-                if($data_diskon->jumlah_promo_diskon > 0){
+                if($data_diskon->jumlah_promo_discount > 0){
                     $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
                         'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
