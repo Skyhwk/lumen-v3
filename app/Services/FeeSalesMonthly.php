@@ -147,7 +147,7 @@ class FeeSalesMonthly
 
                 $feeSalesRecap = MasterFeeSales::where('sales_id', $sales->id)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
 
-                $quotations = DailyQsd::with(['orderHeader.orderDetail', 'orderHeader.invoices.recordWithdraw'])
+                $quotations = DailyQsd::with('orderHeader.orderDetail')
                     ->where('sales_id', $sales->id)
                     ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
@@ -164,7 +164,10 @@ class FeeSalesMonthly
                         if ($existsInFeeSales) return null;
 
                         if ($qsd->periode) {
-                            $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            $orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode == $qsd->periode)->values();
+                            if ($orderDetail->isNotEmpty()) {
+                                $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
+                            }
                         }
 
                         return $qsd;
@@ -220,7 +223,7 @@ class FeeSalesMonthly
                     'no_order' => $quotation->no_order,
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
-                    'kategori_3' => $quotation->orderHeader->orderDetail->map(fn($orderDetail) => $orderDetail->kategori_3),
+                    'kategori_3' => $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray(),
                     'no_invoice' => $quotation->no_invoice,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values();
