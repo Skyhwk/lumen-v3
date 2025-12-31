@@ -177,6 +177,7 @@ class MasterTargetSalesController extends Controller
             ->whereIn('id', $idBawahan)
             ->whereIn('id_jabatan', [24, 148])
             ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->orderBy('nama_lengkap', 'asc')
             ->get();
 
         return response()->json([

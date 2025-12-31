@@ -30,29 +30,18 @@ class FeeSalesController extends Controller
     ];
 
     private $idJabatanSales = [
-        // 15, // Sales Manager
-        // 21, // Sales Supervisor
-        // 22, // Sales Admin Supervisor
-        // 23, // Senior Sales Admin Staff
         24, // Sales Officer
-        // 25, // Sales Admin Staff
-        // 140, // Sales Assistant Manager
-        // 145, // Sales Intern
-        // 147, // Sales & Marketing Manager
-        // 154, // Senior Sales Manager
-        // 155, // Sales Executive
-        // 156, // Sales Staff
         148, // Customer Relation Officer
-        // 157, // Customer Relationship Officer Manager
     ];
 
     public function getSalesList(Request $request)
     {
         $currentUser = $request->attributes->get('user')->karyawan;
 
-        $sales = MasterKaryawan::whereIn('id_jabatan', $this->idJabatanSales)
+        $sales = MasterKaryawan::where('is_active', true)
+            ->whereIn('id_jabatan', $this->idJabatanSales)
+            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
             ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
-            ->where('is_active', true)
             ->orderBy('nama_lengkap', 'asc')
             ->get();
 

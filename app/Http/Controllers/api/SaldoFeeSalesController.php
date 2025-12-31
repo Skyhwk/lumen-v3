@@ -28,9 +28,10 @@ class SaldoFeeSalesController extends Controller
     {
         $currentUser = $request->attributes->get('user')->karyawan;
 
-        $sales = MasterKaryawan::whereIn('id_jabatan', $this->idJabatanSales)
+        $sales = MasterKaryawan::where('is_active', true)
+            ->whereIn('id_jabatan', $this->idJabatanSales)
+            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
             ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
-            ->where('is_active', true)
             ->orderBy('nama_lengkap', 'asc')
             ->get();
 
@@ -98,6 +99,16 @@ class SaldoFeeSalesController extends Controller
 
     public function requestWithdrawal(Request $request)
     {
+        $limitWithdraw = LimitWithdraw::where('user_id', $request->sales_id)->latest()->first();
+        if (!$limitWithdraw) return response()->json(['message' => 'Withdraw Limit not found'], 404);
+        $usedLimit = WithdrawalFeeSales::where('sales_id', $request->sales_id)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->whereMonth('created_at', Carbon::now()->month())
+            ->sum('amount');
+        $limit = $limitWithdraw->limit - $usedLimit;
+
+        if ($request->amount > $limit) return response()->json(['message' => 'Withdrawal amount exceeds limit'], 400);
+
         $withdrawalFeeSales = new WithdrawalFeeSales();
 
         $withdrawalFeeSales->sales_id = $request->sales_id;
