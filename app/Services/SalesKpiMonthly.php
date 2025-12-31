@@ -465,10 +465,11 @@ class SalesKpiMonthly
             
             // Query untuk mendapatkan data quotation (belum jadi order)
             // Asumsi: jika ada no_order berarti sudah jadi order, jika NULL masih quotation
+
            $quotationData = DB::table('daily_qsd as d')
                     ->whereIn('d.sales_id', $getAllSales)
-                    ->whereDate('d.tanggal_sampling_min', '>=', $period['awal'])
-                    ->whereDate('d.tanggal_sampling_min', '<=', $period['akhir'])
+                    ->whereYear('d.tanggal_sampling_min', '=', explode('-', $periodeBulan)[0])
+                    ->whereMonth('d.tanggal_sampling_min', '=', explode('-', $periodeBulan)[1])
                     ->selectRaw("
                         d.sales_id,
                         d.kontrak,
@@ -561,47 +562,79 @@ class SalesKpiMonthly
                 ];
             }
 
-            // Debug - uncomment jika perlu
-            // dd($dataInsert);
-            
+            // Debug - uncomment jika perlu            
             // Insert/Update ke database
-            foreach ($dataInsert as $item) {
-                SalesKpi::updateOrCreate(
-                    [
-                        'karyawan_id' => $item['karyawan_id'],
-                        'periode' => $item['periode'],
-                    ],
-                    [
-                        'dfus_call' => $item['dfus_call'] ?? 0,
-                        'duration' => $item['duration'] ?? 0,
-                        'qty_qt_nonkontrak_new' => $item['qty_qt_nonkontrak_new'] ?? 0,
-                        'qty_qt_nonkontrak_exist' => $item['qty_qt_nonkontrak_exist'] ?? 0,
-                        'qty_qt_kontrak_new' => $item['qty_qt_kontrak_new'] ?? 0,
-                        'qty_qt_kontrak_exist' => $item['qty_qt_kontrak_exist'] ?? 0,
-                        'qty_qt_order_nonkontrak_new' => $item['qty_qt_order_nonkontrak_new'] ?? 0,
-                        'qty_qt_order_nonkontrak_exist' => $item['qty_qt_order_nonkontrak_exist'] ?? 0,
-                        'qty_qt_order_kontrak_new' => $item['qty_qt_order_kontrak_new'] ?? 0,
-                        'qty_qt_order_kontrak_exist' => $item['qty_qt_order_kontrak_exist'] ?? 0,
-                        'amount_order_nonkontrak_new' => $item['amount_order_nonkontrak_new'] ?? 0,
-                        'amount_order_nonkontrak_exist' => $item['amount_order_nonkontrak_exist'] ?? 0,
-                        'amount_order_kontrak_new' => $item['amount_order_kontrak_new'] ?? 0,
-                        'amount_order_kontrak_exist' => $item['amount_order_kontrak_exist'] ?? 0,
-                        'amount_bysampling_order_nonkontrak_new' => $item['amount_bysampling_order_nonkontrak_new'] ?? 0,
-                        'amount_bysampling_order_nonkontrak_exist' => $item['amount_bysampling_order_nonkontrak_exist'] ?? 0,
-                        'amount_bysampling_order_kontrak_new' => $item['amount_bysampling_order_kontrak_new'] ?? 0,
-                        'amount_bysampling_order_kontrak_exist' => $item['amount_bysampling_order_kontrak_exist'] ?? 0,
-                        'revenue_order_nonkontrak_new' => $item['revenue_order_nonkontrak_new'] ?? 0,
-                        'revenue_order_nonkontrak_exist' => $item['revenue_order_nonkontrak_exist'] ?? 0,
-                        'revenue_order_kontrak_new' => $item['revenue_order_kontrak_new'] ?? 0,
-                        'revenue_order_kontrak_exist' => $item['revenue_order_kontrak_exist'] ?? 0,
-                        'revenue_bysampling_order_nonkontrak_new' => $item['revenue_bysampling_order_nonkontrak_new'] ?? 0,
-                        'revenue_bysampling_order_nonkontrak_exist' => $item['revenue_bysampling_order_nonkontrak_exist'] ?? 0,
-                        'revenue_bysampling_order_kontrak_new' => $item['revenue_bysampling_order_kontrak_new'] ?? 0,
-                        'revenue_bysampling_order_kontrak_exist' => $item['revenue_bysampling_order_kontrak_exist'] ?? 0,
-                        'updated_at' => $item['updated_at'] ?? now(),
-                    ]
-                );
-            }
+            // foreach ($dataInsert as $item) {
+            //     SalesKpi::updateOrCreate(
+            //         [
+            //             'karyawan_id' => $item['karyawan_id'],
+            //             'periode' => $item['periode'],
+            //         ],
+            //         [
+            //             'dfus_call' => $item['dfus_call'] ?? 0,
+            //             'duration' => $item['duration'] ?? 0,
+            //             'qty_qt_nonkontrak_new' => $item['qty_qt_nonkontrak_new'] ?? 0,
+            //             'qty_qt_nonkontrak_exist' => $item['qty_qt_nonkontrak_exist'] ?? 0,
+            //             'qty_qt_kontrak_new' => $item['qty_qt_kontrak_new'] ?? 0,
+            //             'qty_qt_kontrak_exist' => $item['qty_qt_kontrak_exist'] ?? 0,
+            //             'qty_qt_order_nonkontrak_new' => $item['qty_qt_order_nonkontrak_new'] ?? 0,
+            //             'qty_qt_order_nonkontrak_exist' => $item['qty_qt_order_nonkontrak_exist'] ?? 0,
+            //             'qty_qt_order_kontrak_new' => $item['qty_qt_order_kontrak_new'] ?? 0,
+            //             'qty_qt_order_kontrak_exist' => $item['qty_qt_order_kontrak_exist'] ?? 0,
+            //             'amount_order_nonkontrak_new' => $item['amount_order_nonkontrak_new'] ?? 0,
+            //             'amount_order_nonkontrak_exist' => $item['amount_order_nonkontrak_exist'] ?? 0,
+            //             'amount_order_kontrak_new' => $item['amount_order_kontrak_new'] ?? 0,
+            //             'amount_order_kontrak_exist' => $item['amount_order_kontrak_exist'] ?? 0,
+            //             'amount_bysampling_order_nonkontrak_new' => $item['amount_bysampling_order_nonkontrak_new'] ?? 0,
+            //             'amount_bysampling_order_nonkontrak_exist' => $item['amount_bysampling_order_nonkontrak_exist'] ?? 0,
+            //             'amount_bysampling_order_kontrak_new' => $item['amount_bysampling_order_kontrak_new'] ?? 0,
+            //             'amount_bysampling_order_kontrak_exist' => $item['amount_bysampling_order_kontrak_exist'] ?? 0,
+            //             'revenue_order_nonkontrak_new' => $item['revenue_order_nonkontrak_new'] ?? 0,
+            //             'revenue_order_nonkontrak_exist' => $item['revenue_order_nonkontrak_exist'] ?? 0,
+            //             'revenue_order_kontrak_new' => $item['revenue_order_kontrak_new'] ?? 0,
+            //             'revenue_order_kontrak_exist' => $item['revenue_order_kontrak_exist'] ?? 0,
+            //             'revenue_bysampling_order_nonkontrak_new' => $item['revenue_bysampling_order_nonkontrak_new'] ?? 0,
+            //             'revenue_bysampling_order_nonkontrak_exist' => $item['revenue_bysampling_order_nonkontrak_exist'] ?? 0,
+            //             'revenue_bysampling_order_kontrak_new' => $item['revenue_bysampling_order_kontrak_new'] ?? 0,
+            //             'revenue_bysampling_order_kontrak_exist' => $item['revenue_bysampling_order_kontrak_exist'] ?? 0,
+            //             'updated_at' => $item['updated_at'] ?? now(),
+            //         ]
+            //     );
+            // }
+
+            SalesKpi::upsert(
+                $dataInsert,
+                ['karyawan_id', 'periode'], // unique constraint
+                [
+                    'dfus_call',
+                    'duration',
+                    'qty_qt_nonkontrak_new',
+                    'qty_qt_nonkontrak_exist',
+                    'qty_qt_kontrak_new',
+                    'qty_qt_kontrak_exist',
+                    'qty_qt_order_nonkontrak_new',
+                    'qty_qt_order_nonkontrak_exist',
+                    'qty_qt_order_kontrak_new',
+                    'qty_qt_order_kontrak_exist',
+                    'amount_order_nonkontrak_new',
+                    'amount_order_nonkontrak_exist',
+                    'amount_order_kontrak_new',
+                    'amount_order_kontrak_exist',
+                    'amount_bysampling_order_nonkontrak_new',
+                    'amount_bysampling_order_nonkontrak_exist',
+                    'amount_bysampling_order_kontrak_new',
+                    'amount_bysampling_order_kontrak_exist',
+                    'revenue_order_nonkontrak_new',
+                    'revenue_order_nonkontrak_exist',
+                    'revenue_order_kontrak_new',
+                    'revenue_order_kontrak_exist',
+                    'revenue_bysampling_order_nonkontrak_new',
+                    'revenue_bysampling_order_nonkontrak_exist',
+                    'revenue_bysampling_order_kontrak_new',
+                    'revenue_bysampling_order_kontrak_exist',
+                    'updated_at'
+                ]
+            );
         }
         
         Log::channel('update_kpi_sales')->info('Update KPI Sales berhasil dijalankan pada '. Carbon::now()->format('Y-m-d H:i:s'));
