@@ -187,6 +187,91 @@ class CompareInvoiceController extends Controller
         }
     }
 
+    public function needCompareIndex(Request $request)
+    {
+        $isMatched = filter_var($request->is_matched, FILTER_VALIDATE_BOOLEAN);
+
+        // ================= NORMAL (group by quotation) =================
+        $dataNormal = DailyQsd::select(
+                DB::raw('MAX(uuid) AS id'),
+                DB::raw('GROUP_CONCAT(DISTINCT no_invoice ORDER BY no_invoice SEPARATOR ", ") AS no_invoice'),
+                DB::raw('no_quotation'),
+                DB::raw('MAX(konsultan) AS konsultan'),
+                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+                DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
+                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+            )
+            ->whereYear('tanggal_sampling_min', $request->year)
+            ->groupBy('no_quotation')
+            ->havingRaw(
+                $isMatched
+                    ? 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) <= 50'
+                    : 'ABS(SUM(biaya_akhir) - SUM(nilai_invoice)) > 50'
+            );
+
+        // ================= SPECIAL (group by invoice) =================
+        $dataSpecial = DailyQsd::select(
+                DB::raw('MAX(uuid) AS id'),
+                DB::raw('no_invoice'),
+                DB::raw('GROUP_CONCAT(DISTINCT no_quotation ORDER BY no_quotation SEPARATOR ", ") AS no_quotation'),
+                DB::raw('MAX(konsultan) AS konsultan'),
+                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+                DB::raw('MIN(nilai_invoice) AS nilai_invoice'),
+                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+            )
+            ->whereYear('tanggal_sampling_min', $request->year)
+            ->groupBy('no_invoice')
+            ->havingRaw(
+                $isMatched
+                    ? 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) <= 50'
+                    : 'ABS(SUM(biaya_akhir) - MIN(nilai_invoice)) > 50'
+            );
+
+        // ================= UNION =================
+        $union = $dataNormal->unionAll($dataSpecial);
+
+        // ================= FINAL DEDUP (UNIK PER BARIS) =================
+        $data = DB::query()
+            ->fromSub($union, 'qsd')
+            ->select(
+                DB::raw('MAX(id) AS id'),
+                DB::raw('no_invoice'),
+                DB::raw('no_quotation'),
+                DB::raw('MAX(konsultan) AS konsultan'),
+                DB::raw('MAX(nama_perusahaan) AS nama_perusahaan'),
+                DB::raw('SUM(biaya_akhir) AS biaya_akhir'),
+                DB::raw('SUM(nilai_invoice) AS nilai_invoice'),
+                DB::raw('MAX(tanggal_sampling_min) AS tanggal_sampling_min')
+            )
+            ->groupBy('no_invoice', 'no_quotation') // 🔥 KUNCI UNIK
+            ->orderByDesc('tanggal_sampling_min');
+
+        return Datatables::of($data)
+            ->filterColumn('nama_perusahaan', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('nama_perusahaan', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('konsultan', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->Where('konsultan', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('no_invoice', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('no_invoice', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('no_quotation', function ($query, $keyword) {
+                $query->where(function($q) use ($keyword) {
+                    $q->where('no_quotation', 'like', "%{$keyword}%");
+                });
+            })
+            ->make(true);
+    }
+
     function updateOutstandingData(Request $request) {
         DB::beginTransaction();
         try {
