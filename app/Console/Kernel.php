@@ -10,6 +10,7 @@ use App\Console\Commands\CacheCommand;
 use App\Console\Commands\SchaduleUpdateQsd;
 use App\Console\Commands\SchaduleUpdateSummaryQsd;
 use App\Console\Commands\FeeSales;
+use App\Console\Commands\AssignSales;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -26,7 +27,8 @@ class Kernel extends ConsoleKernel
         Commands\CacheCommand::class,
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
-        Commands\FeeSales::class
+        Commands\FeeSales::class,
+        Commands\AssignSales::class
     ];
 
     /**
