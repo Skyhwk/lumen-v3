@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 use App\Models\{
-    MasterKaryawan,
+    // MasterKaryawan,
     DailyQsd,
     MasterTargetSales,
     MasterFeeSales,
@@ -104,7 +104,7 @@ class FeeSalesMonthly
     public function __construct()
     {
         $this->currentYear = Carbon::now()->year;
-        $this->currentMonth = Carbon::now()->format('m');
+        $this->currentMonth = '03'; // Carbon::now()->format('m');
         $this->currentPeriod = $this->currentYear . "-" . $this->currentMonth;
 
         $monthStr = [
@@ -129,42 +129,45 @@ class FeeSalesMonthly
     {
         DB::beginTransaction();
         try {
-            $salesList = MasterKaryawan::whereIn('id_jabatan', [
-                24, // Sales Officer
-                148, // Customer Relation Officer
-            ])
-                ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
-                ->where('is_active', true)
-                ->orderBy('nama_lengkap', 'asc')
-                ->get();
+            // $salesList = MasterKaryawan::whereIn('id_jabatan', [
+            //     24, // Sales Officer
+            //     148, // Customer Relation Officer
+            // ])
+            //     ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            //     ->where('is_active', true)
+            //     ->orderBy('nama_lengkap', 'asc')
+            //     ->get();
 
-            foreach ($salesList as $sales) {
-                $masterTargetSales = MasterTargetSales::where(['karyawan_id' => $sales->id, 'tahun' => $this->currentYear, 'is_active' => true])->whereNotNull($this->currentMonthStr)->latest()->first();
-                if (!$masterTargetSales) continue;
+            $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
 
-                $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'period' => $this->currentPeriod])->exists();
+            foreach ($masterTargetSales as $targetSales) {
+                $salesId = $targetSales->karyawan_id;
+
+                $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $salesId, 'period' => $this->currentPeriod])->exists();
                 if ($masterFeeSalesExists) continue;
 
-                $feeSalesRecap = MasterFeeSales::where('sales_id', $sales->id)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
+                $feeSalesRecap = MasterFeeSales::where('sales_id', $salesId)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
+                $isExistsInFeeSales = fn($qsd) => $feeSalesRecap->contains(function ($recap) use ($qsd) {
+                    if ($recap['no_order'] !== $qsd->no_order) return false;
+                    if (!$qsd->periode) return true;
 
-                $quotations = DailyQsd::with(['orderHeader.orderDetail', 'orderHeader.invoices.recordWithdraw'])
-                    ->where('sales_id', $sales->id)
-                    ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
+                    return $recap['periode'] === $qsd->periode;
+                });
+
+                $quotations = DailyQsd::with('orderHeader.orderDetail')
+                    ->where('sales_id', $salesId)
+                    ->whereDate('tanggal_sampling_min', '>=', '2025-01-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
                     ->get()
-                    ->map(function ($qsd) use ($feeSalesRecap) {
-                        $existsInFeeSales = $feeSalesRecap->contains(function ($recap) use ($qsd) {
-                            if ($recap['no_order'] !== $qsd->no_order) return false;
-                            if (!$qsd->periode) return true;
-
-                            return $recap['periode'] === $qsd->periode;
-                        });
-
-                        if ($existsInFeeSales) return null;
+                    ->map(function ($qsd) use ($isExistsInFeeSales) {
+                        if ($isExistsInFeeSales($qsd)) return null;
 
                         if ($qsd->periode) {
-                            $qsd->orderHeader->orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            $orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            if ($orderDetail->isNotEmpty()) {
+                                $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
+                            }
                         }
 
                         return $qsd;
@@ -175,14 +178,14 @@ class FeeSalesMonthly
                 if ($quotations->isEmpty()) continue;
 
                 // FEE AMOUNT
-                $targetAmount = json_decode($masterTargetSales->target, true)[$this->currentPeriod];
+                $targetAmount = json_decode($targetSales->target, true)[$this->currentPeriod];
                 $achievedAmount = $quotations->sum('total_revenue');
                 $percentageAmount = $achievedAmount / $targetAmount;
                 $rate = ($achievedAmount >= $targetAmount ? 5 : 1) / 100;
                 // $feeAmount = $achievedAmount * $rate;
 
                 // FEE CATEGORY
-                $targetCategory = collect($masterTargetSales->{$this->currentMonthStr});
+                $targetCategory = collect($targetSales->{$this->currentMonthStr});
                 $achievedCategoryDetails = $targetCategory->map(
                     function ($_, $category) use ($quotations, $targetCategory) {
                         $target = $targetCategory[$category];
@@ -209,7 +212,7 @@ class FeeSalesMonthly
                     'total_point' => $totalAchievedPoint . '/' . $totalTargetPoint,
                     'achieved_category_details' => $achievedCategoryDetails->toArray(),
                 ]);
-                $percentageCategory = $achievedCategoryDetails->sum('point') / $totalTargetPoint;
+                $percentageCategory = $totalAchievedPoint / $totalTargetPoint;
 
                 // TOTAL FEE
                 $totalFee = $totalAchievedPoint / $totalTargetPoint * $rate * $achievedAmount;
@@ -220,7 +223,7 @@ class FeeSalesMonthly
                     'no_order' => $quotation->no_order,
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
-                    'kategori_3' => $quotation->orderHeader->orderDetail->map(fn($orderDetail) => $orderDetail->kategori_3),
+                    'kategori_3' => $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray(),
                     'no_invoice' => $quotation->no_invoice,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values();
@@ -228,7 +231,7 @@ class FeeSalesMonthly
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
-                $masterFeeSales->sales_id = $sales->id;
+                $masterFeeSales->sales_id = $salesId;
                 $masterFeeSales->period = $this->currentPeriod;
                 $masterFeeSales->target_amount = $targetAmount;
                 $masterFeeSales->achieved_amount = $achievedAmount;
@@ -253,7 +256,7 @@ class FeeSalesMonthly
 
                 $mutasiFeeSales = new MutasiFeeSales();
 
-                $mutasiFeeSales->sales_id = $sales->id;
+                $mutasiFeeSales->sales_id = $salesId;
                 $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
                 $mutasiFeeSales->mutation_type = 'Debit';
                 $mutasiFeeSales->amount = $totalFee;
@@ -265,10 +268,16 @@ class FeeSalesMonthly
                 $mutasiFeeSales->save();
 
                 // SALDO FEE SALES
-                $saldoFeeSales = SaldoFeeSales::firstOrNew(['sales_id' => $sales->id]);
-                $saldoFeeSales->active_balance = ($saldoFeeSales->active_balance ?: 0) + $totalFee;
-                $saldoFeeSales->created_by = 'System';
+                $saldoFeeSales = SaldoFeeSales::where('sales_id', $salesId)->latest()->first();
+                if ($saldoFeeSales) {
+                    $saldoFeeSales->active_balance += $totalFee;
+                } else {
+                    $saldoFeeSales = new SaldoFeeSales();
+                    $saldoFeeSales->sales_id = $salesId;
+                    $saldoFeeSales->active_balance = $totalFee;
+                }
                 $saldoFeeSales->updated_by = 'System';
+                $saldoFeeSales->created_by = 'System';
                 $saldoFeeSales->save();
             }
             DB::commit();
