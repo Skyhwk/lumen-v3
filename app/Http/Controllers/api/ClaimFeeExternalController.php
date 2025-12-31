@@ -3,7 +3,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ClaimFeeExternal;
-use App\Models\OrderHeader;
+use App\Models\DailyQsd;
 use Yajra\DataTables\Facades\DataTables;
 use App\Services\GetBawahan;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ class ClaimFeeExternalController extends Controller
 
         $query = ClaimFeeExternal::query()
             ->where('is_active', true)
-            ->whereIn('status_pembayaran', ['WAITING PROCESS', 'PROCESSED']);
+            ->whereIn('status_pembayaran', ['WAITING PROCESS', 'PROCESSED', 'REJECTED']);
 
         if (in_array($jabatan, [24, 86, 148])) {
             $query->where('sales_id', $this->user_id);
@@ -30,7 +30,6 @@ class ClaimFeeExternalController extends Controller
 
             $query->whereIn('sales_id', $bawahan);
         }
-
         return DataTables::of($query)->make(true);
     }
 
@@ -72,8 +71,7 @@ class ClaimFeeExternalController extends Controller
             ]);
         }
 
-        $query = OrderHeader::with('invoice')
-            ->where('is_active', true)
+        $query = DailyQsd::where('is_lunas', true)
             ->where(function ($q) use ($term) {
                 $q->where('no_order', 'like', "%{$term}%");
             });
@@ -90,12 +88,42 @@ class ClaimFeeExternalController extends Controller
             $query->whereIn('sales_id', $bawahan);
         }
 
-        $data = $query->get();
-
+        $data = $query
+            ->selectRaw('
+                no_order,
+                COUNT(DISTINCT periode) as total_kontrak,
+                GROUP_CONCAT(DISTINCT periode SEPARATOR ", ") as kontrak,
+                MAX(nama_perusahaan) as nama_perusahaan,
+                MAX(no_quotation) as no_quotation,
+                MAX(no_invoice) as no_invoice,
+                MAX(biaya_akhir) as biaya_akhir
+            ')
+            ->groupBy('no_order')
+            ->get();
 
         return response()->json([
             'data' => $data
         ]);
+    }
+
+    public function getOrderByKontrak(Request $request)
+    {
+        $order = DailyQsd::where('no_order', $request->no_order)
+            ->where('periode', $request->kontrak)
+            ->where('is_lunas', true)
+            ->first();
+
+        return response()->json($order);
+    }
+
+    public function getOrderDetail(Request $request)
+    {
+        $order = DailyQsd::where('is_lunas', true)
+            ->where('no_order', $request->no_order)
+            ->where('kontrak', 'N')
+            ->first();
+
+        return response()->json($order);
     }
 
     public function store(Request $request)
@@ -103,7 +131,7 @@ class ClaimFeeExternalController extends Controller
         DB::beginTransaction();
         try {
             $id = $request->id;
-            
+            $noInvoice = preg_replace('/\s*\(Lunas\)/i', '', $request->no_invoice);
             // Cek apakah ini mode edit (ada id) atau tambah baru
             if ($id) {
                 // Mode UPDATE
@@ -126,11 +154,12 @@ class ClaimFeeExternalController extends Controller
             $claim->nama_perusahaan = $request->nama_perusahaan;
             $claim->nominal = $request->nominal;
             $claim->due_date = $request->tanggal_claim;
-            $claim->status_pembayaran = $request->status;
+            $claim->status_pembayaran = 'WAITING PROCESS';
             $claim->no_quotation = $request->no_quotation;
             $claim->sales_id = $this->user_id;
-            $claim->no_invoice = $request->no_invoice;
+            $claim->no_invoice = $noInvoice;
             $claim->biaya_akhir = $request->biaya_akhir;
+            $claim->periode = $request->periode;
             $claim->save();
             
             DB::commit();

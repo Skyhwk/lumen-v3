@@ -465,51 +465,34 @@ class SalesKpiMonthly
             
             // Query untuk mendapatkan data quotation (belum jadi order)
             // Asumsi: jika ada no_order berarti sudah jadi order, jika NULL masih quotation
-            $quotationData = DB::table('daily_qsd as d')
-                ->leftJoin(DB::raw("
-                    (
-                        SELECT no_order, COUNT(*) as order_count
-                        FROM daily_qsd
-                        WHERE no_order IS NOT NULL AND no_order <> ''
-                        GROUP BY no_order
-                    ) as order_check
-                "), 'd.no_order', '=', 'order_check.no_order')
-                ->leftJoin(DB::raw("
-                    (
-                        SELECT nama_perusahaan, COUNT(DISTINCT no_order) as total_order_perusahaan
-                        FROM daily_qsd
-                        WHERE no_order IS NOT NULL AND no_order <> ''
-                        GROUP BY nama_perusahaan
-                    ) as company_orders
-                "), 'd.nama_perusahaan', '=', 'company_orders.nama_perusahaan')
-                ->whereIn('d.sales_id', $getAllSales)
-                ->whereDate('d.tanggal_sampling_min', '>=', $period['awal'])
-                ->whereDate('d.tanggal_sampling_min', '<=', $period['akhir'])
-                ->selectRaw("
-                    d.sales_id,
-                    d.kontrak,
-                    
-                    -- Quotation counts (semua record)
-                    COUNT(DISTINCT d.no_quotation) as total_quotation,
-                    SUM(CASE WHEN company_orders.total_order_perusahaan > 1 OR company_orders.total_order_perusahaan IS NOT NULL THEN 1 ELSE 0 END) as qt_exist_count,
-                    SUM(CASE WHEN company_orders.total_order_perusahaan = 1 OR company_orders.total_order_perusahaan IS NULL THEN 1 ELSE 0 END) as qt_new_count,
-                    
-                    -- Order counts (hanya yang punya no_order)
-                    COUNT(DISTINCT CASE WHEN d.no_order IS NOT NULL AND d.no_order <> '' THEN d.no_order END) as total_order,
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND company_orders.total_order_perusahaan > 1 THEN 1 ELSE 0 END) as order_exist_count,
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND (company_orders.total_order_perusahaan = 1 OR company_orders.total_order_perusahaan IS NULL) THEN 1 ELSE 0 END) as order_new_count,
-                    
-                    -- Amount & Revenue untuk order exist
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND company_orders.total_order_perusahaan > 1 THEN d.biaya_akhir ELSE 0 END) as amount_exist,
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND company_orders.total_order_perusahaan > 1 THEN d.total_revenue ELSE 0 END) as revenue_exist,
-                    
-                    -- Amount & Revenue untuk order new
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND (company_orders.total_order_perusahaan = 1 OR company_orders.total_order_perusahaan IS NULL) THEN d.biaya_akhir ELSE 0 END) as amount_new,
-                    SUM(CASE WHEN (d.no_order IS NOT NULL AND d.no_order <> '') AND (company_orders.total_order_perusahaan = 1 OR company_orders.total_order_perusahaan IS NULL) THEN d.total_revenue ELSE 0 END) as revenue_new
-                ")
-                ->groupBy('d.sales_id', 'd.kontrak')
-                ->get();
-
+           $quotationData = DB::table('daily_qsd as d')
+                    ->whereIn('d.sales_id', $getAllSales)
+                    ->whereDate('d.tanggal_sampling_min', '>=', $period['awal'])
+                    ->whereDate('d.tanggal_sampling_min', '<=', $period['akhir'])
+                    ->selectRaw("
+                        d.sales_id,
+                        d.kontrak,
+                        
+                        -- Quotation counts berdasarkan status_customer
+                        COUNT(DISTINCT d.no_quotation) as total_quotation,
+                        SUM(CASE WHEN d.status_customer = 'exist' THEN 1 ELSE 0 END) as qt_exist_count,
+                        SUM(CASE WHEN d.status_customer = 'new' THEN 1 ELSE 0 END) as qt_new_count,
+                        
+                        -- Order counts berdasarkan status_customer
+                        COUNT(DISTINCT d.no_order) as total_order,
+                        SUM(CASE WHEN d.status_customer = 'exist' THEN 1 ELSE 0 END) as order_exist_count,
+                        SUM(CASE WHEN d.status_customer = 'new' THEN 1 ELSE 0 END) as order_new_count,
+                        
+                        -- Amount & Revenue untuk exist customer
+                        SUM(CASE WHEN d.status_customer = 'exist' THEN d.biaya_akhir ELSE 0 END) as amount_exist,
+                        SUM(CASE WHEN d.status_customer = 'exist' THEN d.total_revenue ELSE 0 END) as revenue_exist,
+                        
+                        -- Amount & Revenue untuk new customer
+                        SUM(CASE WHEN d.status_customer = 'new' THEN d.biaya_akhir ELSE 0 END) as amount_new,
+                        SUM(CASE WHEN d.status_customer = 'new' THEN d.total_revenue ELSE 0 END) as revenue_new
+                    ")
+                    ->groupBy('d.sales_id', 'd.kontrak')
+                    ->get();
 
             // dd($quotationData);
 
