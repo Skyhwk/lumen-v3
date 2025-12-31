@@ -282,7 +282,6 @@ class FdlEmisiCerobongController extends Controller
                         $orderDetail->save();
                     }
 
-
                     DB::commit();
                     return response()->json([
                         'message' => "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan"
@@ -403,14 +402,17 @@ class FdlEmisiCerobongController extends Controller
                     if ($request->waktu_selesai != '') $data->waktu_selesai           = $request->waktu_selesai;
                     if ($request->foto_struk != '') $data->foto_struk     = self::convertImg($request->foto_struk, 4, $this->user_id);
                     if ($request->foto_lain2 != '') $data->foto_lain2     = self::convertImg($request->foto_lain2, 5, $this->user_id);
-                    $data->created_by                                                   = $this->karyawan;
-                    $data->created_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
+                    $data->updated_by                                                   = $this->karyawan;
+                    $data->updated_at                                                  = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
                     $data->save();
                     
-                    DB::table('order_detail')
-                        ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                        ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
+
+                    if($orderDetail->tanggal_terima == null){
+                        $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                        $orderDetail->save();
+                    }
 
                     DB::commit();
                     $this->resultx = "Data Sampling EMISI CEROBONG Dengan No Sample $request->no_sample berhasil disimpan oleh $this->karyawan";
@@ -517,14 +519,17 @@ class FdlEmisiCerobongController extends Controller
                     if ($request->foto_lain3 != '') $data->foto_lain3     = self::convertImg($request->foto_lain3, 7, $this->user_id);
 
                     $data->permission_3                     = (empty($request->permission)) ? 1 : $request->permission;
-                    $data->created_by                                                 = $this->karyawan;
-                    $data->created_at                                                = Carbon::now()->format('Y-m-d H:i:s');
+                    $data->updated_by                                                 = $this->karyawan;
+                    $data->updated_at                                                = Carbon::now()->format('Y-m-d H:i:s');
                     $data->is_rejected                                      = 0;
                     $data->save();
 
-                    DB::table('order_detail')
-                        ->where('no_sampel', strtoupper(trim($request->no_sample)))
-                        ->update(['tanggal_terima' => Carbon::now()->format('Y-m-d H:i:s')]);
+                    $orderDetail = OrderDetail::where('no_sampel', strtoupper(trim($request->no_sample)))->where('is_active', 1)->first();
+
+                    if($orderDetail->tanggal_terima == null){
+                        $orderDetail->tanggal_terima = Carbon::now()->format('Y-m-d');
+                        $orderDetail->save();
+                    }
 
                     DB::commit();
                     return response()->json([

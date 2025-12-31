@@ -638,6 +638,7 @@ class DraftAirController extends Controller
             $masterParameter = Parameter::where('nama_lab', 'pH')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
+                'id' => 1,
                 'name' => 'pH',
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',
@@ -698,6 +699,7 @@ class DraftAirController extends Controller
             $masterParameterSuhu = Parameter::where('nama_lab', 'Suhu')->where('id_kategori', 1)->where('is_active', true)->first();
 
             $results[] = [
+               'id' => 2,
                 'name' => 'Suhu',
                 'no_sampel' => $lapanganAir->no_sampel,
                 'akr' => '',

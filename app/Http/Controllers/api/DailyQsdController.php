@@ -81,6 +81,85 @@ class DailyQsdController extends Controller
                 $query->where('periode', $tahun . '-' . $bulan);
             }
         })
+        ->filterColumn('tanggal_pembayaran', function ($query, $keyword) use ($request) {
+            $bulanMap = [
+                "januari" => "01", "februari" => "02", "maret" => "03", "april" => "04",
+                "mei" => "05", "juni" => "06", "juli" => "07", "agustus" => "08",
+                "september" => "09", "oktober" => "10", "november" => "11", "desember" => "12"
+            ];
+            
+            $keyword = strtolower(trim($keyword));
+            $bulan = null;
+            $tahun = null;
+            $tanggal = null;
+
+            // Strip all unwanted chars for splitting/regex
+            $keyword = preg_replace('/[\s\-,.]+/', ' ', $keyword);
+            $parts = explode(' ', $keyword);
+
+            // Coba tangkap berbagai pola tanggal-bulan-tahun dll
+            // Contoh: "16 des 2025", "1des", "02feb", "des 2023", "16des", "feb23", "16 desember"
+            // 1. Gabungan angka-bulan (ddMMMyyyy atau dMMMyyyy atau ddMMMyy)
+            if (preg_match('/^(\d{1,2})?([a-z]+)(\d{2,4})?$/i', str_replace(' ', '', $keyword), $m)) {
+                // Jika ada angka di depan -> tanggal
+                if (!empty($m[1])) {
+                    $tanggal = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                }
+                // Ambil bulan dari nama/singkatan
+                $bk = $m[2];
+                foreach ($bulanMap as $nama => $angka) {
+                    if ($bk === $angka || strpos($nama, $bk) === 0 || substr($nama, 0, 3) === substr($bk, 0, 3)) {
+                        $bulan = $angka;
+                        break;
+                    }
+                }
+                // Cek tahun jika ada
+                if (!empty($m[3])) {
+                    $tahun = strlen($m[3]) == 2 ? ('20' . $m[3]) : $m[3];
+                }
+            }
+
+            // 2. Format: [dd] [bulan(nama/angka)] [yyyy|yy] (contoh: "16 desember 2025", "02 des")
+            if (!$bulan && count($parts) > 0) {
+                foreach ($parts as $ix => $val) {
+                    // Cek bulan
+                    foreach ($bulanMap as $nama => $angka) {
+                        if ($val === $angka || strpos($nama, $val) === 0 || substr($nama, 0, 3) === substr($val, 0, 3)) {
+                            $bulan = $angka;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            // Tangkap tanggal (jika di depan atau di mana saja)
+            foreach ($parts as $val) {
+                if (is_numeric($val) && intval($val) >= 1 && intval($val) <= 31) {
+                    if (strlen($val) <= 2) {
+                        $tanggal = str_pad($val, 2, '0', STR_PAD_LEFT);
+                        break;
+                    } else {
+                        // Tahun, bukan tanggal
+                        if (strlen($val) == 4) $tahun = $val;
+                        if (strlen($val) == 2 && intval($val) > 31) $tahun = '20' . $val;
+                    }
+                }
+            }
+            // Tangkap tahun (4 digit paling akhir, atau 2 digit jika > 31)
+            foreach ($parts as $val) {
+                if (preg_match('/^\d{4}$/', $val)) $tahun = $val;
+                if (preg_match('/^\d{2}$/', $val) && intval($val) > 31) $tahun = '20' . $val;
+            }
+            if ($bulan) {
+                $tahun = $tahun ?: $request->tanggal_sampling; // fallback tahun current jika tidak ada
+                if ($tanggal) {
+                    // Filter persis tanggal_sampling_min
+                    $query->where('tanggal_pembayaran', "$tahun-$bulan-$tanggal");
+                } else {
+                    // Filter bulan+tahun
+                    $query->whereRaw("DATE_FORMAT(tanggal_pembayaran, '%Y-%m') = ?", ["$tahun-$bulan"]);
+                }
+            }
+        })
         ->filterColumn('tanggal_sampling_min', function ($query, $keyword) use ($request) {
             $bulanMap = [
                 "januari" => "01", "februari" => "02", "maret" => "03", "april" => "04",

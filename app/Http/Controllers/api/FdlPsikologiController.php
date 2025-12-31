@@ -283,13 +283,13 @@ class FdlPsikologiController extends Controller
     public function getDataAdmin(Request $request)
     {
         if (isset($request->no_document) && $request->no_document != null) {
-            $data = DataLapanganPsikologi::where('no_order', $request->no_document)->get();
+            $qrPsikologi = QrPsikologi::where('token', $request->token)->first();
+            $data = DataLapanganPsikologi::where('no_order', $request->no_document)->where('periode', $qrPsikologi->periode)->get();
             $header = DataLapanganPsikologi::where('no_order', $request->no_document)->first();
 
             $noSampelTerkumpul = $data->pluck('no_sampel')->toArray();
-            
             $order_header = OrderHeader::where('no_order', $request->no_document)->first();
-            $order_detail = OrderDetail::where('no_order', $order_header->no_order)->where('is_active', true)->whereJsonContains('parameter', '318;Psikologi')->get();
+            $order_detail = OrderDetail::where('no_order', $order_header->no_order)->where('periode', $qrPsikologi->periode)->where('is_active', true)->whereJsonContains('parameter', '318;Psikologi')->get();
             return response()->json([
                 'message' => 'Data Dengan No Order ' . $request->no_document,
                 'nama_pekerja' => $data->map(function ($item) {
@@ -306,7 +306,7 @@ class FdlPsikologiController extends Controller
                 }),
                 'nama_pt' => $header->nama_perusahaan ?? '-',
                 'no_order' => $header->no_order ?? '-',
-                'periode' => $header->periode ?? '-',
+                'periode' => $qrPsikologi->periode ?? '-',
                 'order_detail' => $order_detail
 
             ], 200);

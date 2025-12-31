@@ -6,7 +6,7 @@
                     <th width="8%" class="custom" rowspan="2">NO</th>
                     <th width="25%" class="custom" rowspan="2" colspan="2">KETERANGAN</th>
                     <th width="15%" class="custom" rowspan="2">SUMBER GETARAN</th>
-                    <th width="13%" class="custom" rowspan="2">DUARSI JAM PEMAPARAN PER HARI</th>
+                    <th width="13%" class="custom" rowspan="2">DURASI JAM PEMAPARAN PER HARI</th>
                     <th width="10%" class="custom">HASIL UJI</th>
                     <th width="10%" class="custom">NAB</th>
                     <th width="19%" class="custom" rowspan="2">TANGGAL SAMPLING</th>
