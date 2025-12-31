@@ -52,7 +52,7 @@ class SalesDailyQSD
                 $result->chunk(500)->each(function ($chunk) use (&$totalInserted) {
                     DB::table('daily_qsd')->upsert(
                         $chunk->toArray(), ['uuid'], [
-                            'no_order', 'periode', 'no_invoice', 'nilai_invoice', 'nilai_pembayaran',
+                            'no_order', 'periode', 'no_invoice', 'nilai_invoice', 'nilai_pembayaran', 'tanggal_pembayaran',
                             'no_quotation', 'pelanggan_ID', 'nama_perusahaan', 'konsultan', 'kontrak',
                             'sales_id', 'sales_nama', 'status_sampling', 'total_discount', 'total_ppn',
                             'total_pph', 'biaya_akhir', 'grand_total', 'total_revenue', 'total_cfr',
@@ -208,12 +208,13 @@ class SalesDailyQSD
             } else {
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
-            [$noInvoice, $isLunas, $pelunasan, $nominal] = self::buildInvoiceInfo($invoices);
+            [$noInvoice, $isLunas, $pelunasan, $nominal, $tanggalPembayaran] = self::buildInvoiceInfo($invoices);
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
                 'nilai_invoice'        => $nominal,
                 'nilai_pembayaran'     => $pelunasan,
+                'tanggal_pembayaran'   => $tanggalPembayaran,
                 'is_lunas'             => $isLunas,
                 'no_quotation'         => $row->no_quotation,
                 'total_cfr'            => $row->total_cfr,
@@ -260,10 +261,18 @@ class SalesDailyQSD
                 $nominal = $pembayaran + $withdraw;
                 $isLunas = $nilai_invoice > 0 ? ($nominal >= $nilai_invoice) : false;
                 $status = $isLunas ? ' (Lunas)' : '';
+
+                if(isset($groupedInvSpesial[$no_inv]) && isset($groupedInvSpesial[$no_inv]->recordPembayaran) && $groupedInvSpesial[$no_inv]->recordPembayaran->isNotEmpty()) {
+                    $tanggalPembayaran = $groupedInvSpesial[$no_inv]->recordPembayaran->first()->tgl_pembayaran;
+                } else {
+                    $tanggalPembayaran = null;
+                }
+
                 return [
                     'no_invoice'            => $no_inv ? $no_inv . $status : null,
                     'nilai_invoice'         => $nilai_invoice,
                     'nilai_pembayaran'      => $nominal,
+                    'tanggal_pembayaran'    => $tanggalPembayaran,
                     'no_order'              => $items->first()['no_order'],
                     'no_quotation'          => $no_quotation,
                     'pelanggan_ID'          => $items->first()['pelanggan_ID'],
@@ -295,6 +304,7 @@ class SalesDailyQSD
                 'no_invoice' => $items->first()['no_invoice'],
                 'nilai_invoice' => $items->sum('nilai_invoice'),
                 'nilai_pembayaran' => $items->first()['nilai_pembayaran'],
+                'tanggal_pembayaran' => $items->first()['tanggal_pembayaran'],
                 'no_order'   => $items->min('no_order'),
                 'no_quotation'    => $items->first()['no_quotation'],
                 'pelanggan_ID'    => $items->first()['pelanggan_ID'],
@@ -329,12 +339,15 @@ class SalesDailyQSD
     private static function buildInvoiceInfo($invoices)
     {
         if ($invoices->isEmpty()) {
-            return [null, false, null, null];
+            return [null, false, null, null, null];
         }
+
         $noInvoice = [];
         $isLunas   = false;
         $nilaiInvoice = 0;
         $nilaiPelunasan = 0;
+        $tanggalPembayaran = [];
+
         foreach ($invoices as $inv) {
             $nominal = ($inv->recordPembayaran ? $inv->recordPembayaran->sum('nilai_pembayaran') : 0)
                 + ($inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0);
@@ -345,8 +358,13 @@ class SalesDailyQSD
             $noInvoice[] = $inv->no_invoice . $status;
             $nilaiPelunasan += $nominal;
             $nilaiInvoice += $inv->nilai_tagihan;
+
+            if(isset($inv->recordPembayaran) && $inv->recordPembayaran->isNotEmpty()) {
+                $tanggalPembayaran[] = $inv->recordPembayaran->first()->tgl_pembayaran;
+            }
         }
+
         if ($nilaiPelunasan == 0) $nilaiPelunasan = null;
-        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice];
+        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice, implode(', ', $tanggalPembayaran)];
     }
 }
