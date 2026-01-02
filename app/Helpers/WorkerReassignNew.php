@@ -6,17 +6,17 @@ use Illuminate\Support\Facades\Log;
 
 use Carbon\Carbon;
 
-use App\Services\FeeSalesMonthly;
+use App\Services\RandomSalesAssign;
 
-class WorkerFeeSales
+class WorkerReassignNew
 {
     public static function run()
     {
         try {
-            $feeSalesMonthly = new FeeSalesMonthly();
+            $feeSalesMonthly = new RandomSalesAssign();
             $feeSalesMonthly->run();
         } catch (\Throwable $th) {
-            Log::error('[WorkerFeeSales] Error: ' . $th->getMessage());
+            Log::error('[Worker Reassign] Error: ' . $th->getMessage());
         }
     }
 }
