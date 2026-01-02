@@ -80,19 +80,22 @@ use App\Services\{
     GeneratePraSampling,
     GenerateQrDocumentLhp,
     LhpTemplate,
-    RandomSalesAssign
+    RandomSalesAssign,
+    SendEmail
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log as FacadesLog;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 use App\Services\SalesDailyQSD;
-
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ClientException;
 use Mpdf\Mpdf;
 
 Carbon::setLocale('id');
@@ -108,10 +111,85 @@ class TestingController extends Controller
             //code...
 
             switch ($request->menu) {
-                case 'daily-qsd':
-                    $header = new SalesDailyQSD();
-                    $cek = $header->run();
-                    dd($cek);
+                case 'addSubscriber':
+                    $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
+                    $token = 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS';
+
+                    // 1. Ambil email valid & distinct
+                    $emails = DB::table('kontak_pelanggan as kp')
+                        ->select('kp.email_perusahaan')
+                        ->whereNotNull('kp.email_perusahaan')
+                        ->whereRaw("kp.email_perusahaan REGEXP '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'")
+                        ->distinct()
+                        ->pluck('email_perusahaan');
+                    
+                    if ($emails->isEmpty()) {
+                        return 'Tidak ada email valid.';
+                    }
+
+                    $success = 0;
+                    $duplicate = 0;
+                    $failed = 0;
+
+                    // Pastikan Http client tersedia
+                    // untuk Laravel 7+ sudah built-in, pakai Illuminate\Support\Facades\Http;
+                    
+
+                    // 2. Bulk subscribe
+                    foreach ($emails as $email) {
+                        try {
+                            $response = Http::withHeaders([
+                                    'X-MLMMJADMIN-API-AUTH-TOKEN' => $token,
+                                    'Content-Type' => 'application/json',
+                                ])
+                                ->timeout(10)
+                                ->withoutVerifying()
+                                ->post($endpoint, [
+                                    'email' => $email
+                                ]);
+
+                            // Uncomment ini jika mau debug response
+                            // dd($response->body());
+
+                            if ($response->successful()) {
+                                $success++;
+                                FacadesLog::error("Subscribe Success ({$response->status()}): {$email}");
+                            } elseif ($response->status() == 409) {
+                                // email sudah subscribe
+                                $duplicate++;
+                                FacadesLog::error("Subscribe duplicate ({$response->status()}): {$email}");
+                            } else {
+                                $failed++;
+                                FacadesLog::error("Subscribe gagal ({$response->status()}): {$email}");
+                            }
+                        } catch (\Exception $e) {
+                            $failed++;
+                            FacadesLog::error("Error subscribe: {$email} - " . $e->getMessage());
+                        }
+                    }
+
+                    return [
+                        'total_email' => $emails->count(),
+                        'success'     => $success,
+                        'duplicate'   => $duplicate,
+                        'failed'      => $failed
+                    ];
+                    break;
+                case 'send-promo':
+                    $body = view('Email.Intilabbration')->render();
+                    $email = SendEmail::where('to', 'promotion@intilab.com')
+                    // $email = SendEmail::where('to', 'dedi@intilab.com')
+                    ->where('subject', '🎁 Kado Istimewa Intilabration 7th')
+                    ->where('body', $body)
+                    ->where('cc', null)
+                    ->where('bcc', null)
+                    ->where('replyto', ['m.promo@intilab.com'])
+                    ->where('attachments', null)
+                    ->where('karyawan', $this->karyawan)
+                    ->fromPromoSales()
+                    ->send();
+
+                    dd($email);
                     break;
                 case 'this':
                     $cek = DB::table('order_detail')
@@ -2090,7 +2168,7 @@ class TestingController extends Controller
                     DB::rollBack();
                     $errorCount++;
 
-                    Log::error('Error processing document: ' . $data->no_document, [
+                    FacadesLog::error('Error processing document: ' . $data->no_document, [
                         'error' => $e->getMessage(),
                         'line' => $e->getLine(),
                         'file' => $e->getFile()
@@ -2107,7 +2185,7 @@ class TestingController extends Controller
                 'total' => $dataList->count()
             ], 200);
         } catch (Exception $e) {
-            Log::error('Critical error in changeDataPendukungSamplingNonKontrak: ' . $e->getMessage(), [
+            FacadesLog::error('Critical error in changeDataPendukungSamplingNonKontrak: ' . $e->getMessage(), [
                 'line' => $e->getLine(),
                 'file' => $e->getFile(),
                 'trace' => $e->getTraceAsString()

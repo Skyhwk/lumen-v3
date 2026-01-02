@@ -265,7 +265,11 @@ class BlastEmailController extends Controller
     {
         $response = Http::withHeaders([
             'X-MLMMJADMIN-API-AUTH-TOKEN' => 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS'
-        ])->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
+        ])
+        ->withOptions([
+            'verify' => false // Disable SSL verification - WARNING: For debugging purposes only!
+        ])
+        ->get('https://mail.intilab.com/api/promotion@intilab.com/subscribers');
 
         if (!$response->successful()) {
             return response()->json([
@@ -286,6 +290,11 @@ class BlastEmailController extends Controller
             ], 500);
         }
 
-        return Datatables::of($data)->make(true);
+        return response()->json([
+            'data' => $data,
+            'message' => 'Data subscribers berhasil diambil',
+            'status' => 200,
+            'success' => true
+        ], 200);
     }
 }
