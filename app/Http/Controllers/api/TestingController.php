@@ -192,66 +192,29 @@ class TestingController extends Controller
                     dd($email);
                     break;
                 case 'this':
-                    $cek = DB::table('order_detail')
-                        ->where('is_active', 1)
-                        ->where('tanggal_sampling', '>=', '2025-12-30')
-                        ->get()
-                        ->map(function ($item) {
-                            return [
-                                'no_quotation' => $item->no_quotation,
-                                'no_sampel' => $item->no_sampel,
-                                'no_order' => $item->no_order,
-                                'kategori' => \explode('-', $item->kategori_3)[1] . ' - ' . \explode('/', $item->no_sampel)[1],
-                            ];
-                        })->toArray();
+                    $cekData = OrderDetail::where('is_active', 1)
+                        ->where('tanggal_sampling', '>=', '2026-01-01')
+                        ->get();
 
-                    dd($cek[0]);
-                    
-                    // $data = DB::table('master_pelanggan')
-                    //     ->whereIn('id', $cek)
-                    //     ->get();
+                    foreach ($cekData as $item) {
+                        $no_qt = $item->no_quotation;
+                        $kategori = \explode('-', $item->kategori_3)[1] . ' - ' . \explode('/', $item->no_sampel)[1];
+                        $cekJadwal = Jadwal::where('no_quotation', $no_qt)
+                        ->where('kategori', 'LIKE', '%' . $kategori . '%')
+                        ->where('is_active', 1)->first();
+                        if ($cekJadwal != NULL) {
+                            $tanggalJadwal = $cekJadwal->tanggal;
+                            $tanggalSampling = $item->tanggal_sampling;
+                            if ($tanggalJadwal != $tanggalSampling) {
+                                $item->tanggal_sampling = $tanggalJadwal;
+                                $item->save();
 
-                    // foreach ($data as $item) {
+                                FacadesLog::info('Update tanggal sampling: ' . $item->no_sampel . ' dari tanggal awal: ' . $tanggalSampling . ' ke tanggal jadwal: ' . $tanggalJadwal);
+                            }
+                        }
+                    }
 
-                    //     $namaPic = null;
-                    //     $emailPic = null;
-
-                    //     // 1. Cek quotation biasa
-                    //     $quotation = DB::table('request_quotation')
-                    //         ->where('pelanggan_ID', $item->id_pelanggan)
-                    //         ->orderBy('id', 'desc')
-                    //         ->first();
-                        
-                    //     if ($quotation) {
-                    //         $namaPic  = $quotation->nama_pic_order;
-                    //         $emailPic = $quotation->email_pic_order;
-                    //     } else {
-                    //         // 2. Cek kontrak
-                    //         $kontrak = DB::table('request_quotation_kontrak_H')
-                    //             ->where('pelanggan_ID', $item->id_pelanggan)
-                    //             ->orderBy('id', 'desc')
-                    //             ->first();
-
-                    //         if ($kontrak) {
-                    //             $namaPic  = $kontrak->nama_pic_order;
-                    //             $emailPic = $kontrak->email_pic_order;
-                    //         }
-                    //     }
-
-                    //     // 3. Kalau tetap tidak ketemu → skip
-                    //     if (!$namaPic || !$emailPic) {
-                    //         continue;
-                    //     }
-                    //     // 4. Update PIC jika nama cocok
-                    //     DB::table('pic_pelanggan')
-                    //         ->where('pelanggan_id', $item->id)
-                    //         ->where('nama_pic', $namaPic)
-                    //         ->update([
-                    //             'email_pic' => $emailPic
-                    //         ]);
-                    // }
-                    
-                    return response()->json($data, 200);
+                    return response()->json(['message' => 'Berhasil update tanggal sampling'], 200);
                     break;
                 case 'attributes':
                     dd($request->attributes->get('user')->karyawan);
