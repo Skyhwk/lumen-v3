@@ -1478,6 +1478,7 @@ class RequestQuotationController extends Controller
             $data->no_document = $payload->informasi_pelanggan->new_no_document;
             $data->pelanggan_ID = $dataOld->pelanggan_ID;
             $data->id_cabang = $this->idcabang;
+            $data->is_generate_data_lab = $dataOld->is_generate_data_lab;
             // $data->sales_id = $payload->informasi_pelanggan->sales_id;
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
@@ -3997,6 +3998,7 @@ class RequestQuotationController extends Controller
                 $dataH->no_document = $no_document;
                 $dataH->pelanggan_ID = $dataOld->pelanggan_ID;
                 $dataH->id_cabang = $this->idcabang;
+                $dataH->is_generate_data_lab = $dataOld->is_generate_data_lab;
 
                 $dataH->nama_perusahaan = $dataOld->nama_perusahaan;
                 $dataH->konsultan = $dataOld->konsultan;
