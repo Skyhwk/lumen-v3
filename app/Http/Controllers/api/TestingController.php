@@ -68,7 +68,8 @@ use App\Models\{
     DataLimbah,
     DataPsikologi,
     DetailFlowMeter,
-    DetailSoundMeter
+    DetailSoundMeter,
+    DailyQsd
 };
 use App\Services\{
     GetAtasan,
@@ -81,7 +82,8 @@ use App\Services\{
     GenerateQrDocumentLhp,
     LhpTemplate,
     RandomSalesAssign,
-    SendEmail
+    SendEmail,
+    GetBawahan
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -104,6 +106,111 @@ Carbon::setLocale('id');
 
 class TestingController extends Controller
 {
+    private function buildStrukturSales(array $data)
+    {
+        // mapping by id biar cepat
+        $byId = [];
+        foreach ($data as $row) {
+            $row['atasan_langsung'] = json_decode($row['atasan_langsung'], true) ?? [];
+            $byId[$row['id']] = $row;
+        }
+    
+        // cari ROOT (manager / spv yg tidak punya manager di data)
+        $roots = [];
+        foreach ($byId as $row) {
+            if (!in_array($row['grade'], ['MANAGER', 'SUPERVISOR'])) {
+                continue;
+            }
+    
+            $punyaAtasanDiData = false;
+            foreach ($row['atasan_langsung'] as $atasanId) {
+                if (isset($byId[$atasanId]) && $byId[$atasanId]['grade'] === 'MANAGER') {
+                    $punyaAtasanDiData = true;
+                    break;
+                }
+            }
+    
+            if (!$punyaAtasanDiData) {
+                $roots[$row['id']] = [
+                    'id'   => $row['id'],
+                    'nama' => $row['nama_lengkap'],
+                    'grade'=> $row['grade'],
+                    'child'=> []
+                ];
+            }
+        }
+    
+        // helper cari bawahan langsung
+        $getBawahan = function ($atasanId) use ($byId) {
+            $out = [];
+            foreach ($byId as $row) {
+                if (in_array($atasanId, $row['atasan_langsung'])) {
+                    $out[] = $row;
+                }
+            }
+            return $out;
+        };
+    
+        // bangun struktur
+        foreach ($roots as $rootId => &$root) {
+    
+            // ROOT MANAGER → MANAGER > SUPERVISOR > STAFF
+            if ($root['grade'] === 'MANAGER') {
+    
+                $supervisors = $getBawahan($rootId);
+                foreach ($supervisors as $spv) {
+                    if ($spv['grade'] !== 'SUPERVISOR') continue;
+    
+                    $spvNode = [
+                        'id'   => $spv['id'],
+                        'nama' => $spv['nama_lengkap'],
+                        'grade'=> 'SUPERVISOR',
+                        'child'=> []
+                    ];
+    
+                    $staffs = $getBawahan($spv['id']);
+                    foreach ($staffs as $staff) {
+                        if (
+                            $staff['grade'] === 'STAFF' &&
+                            in_array($staff['id_jabatan'], [24, 148])
+                        ) {
+                            $spvNode['child'][] = [
+                                'id'   => $staff['id'],
+                                'nama' => $staff['nama_lengkap'],
+                                'grade'=> 'STAFF',
+                                'id_jabatan' => $staff['id_jabatan']
+                            ];
+                        }
+                    }
+    
+                    if (!empty($spvNode['child'])) {
+                        $root['child'][] = $spvNode;
+                    }
+                }
+    
+            // ROOT SUPERVISOR → SUPERVISOR > STAFF
+            } else {
+    
+                $staffs = $getBawahan($rootId);
+                foreach ($staffs as $staff) {
+                    if (
+                        $staff['grade'] === 'STAFF' &&
+                        in_array($staff['id_jabatan'], [24, 148])
+                    ) {
+                        $root['child'][] = [
+                            'id'   => $staff['id'],
+                            'nama' => $staff['nama_lengkap'],
+                            'grade'=> 'STAFF',
+                            'id_jabatan' => $staff['id_jabatan']
+                        ];
+                    }
+                }
+            }
+        }
+    
+        return array_values($roots);
+    }
+    
     public function show(Request $request)
     { 
         
@@ -192,6 +299,95 @@ class TestingController extends Controller
                     dd($email);
                     break;
                 case 'this':
+
+                    $tanggal = $request->tanggal;
+                    // $qt_non_kontrak = OrderHeader::where('no_document', 'like', '%QT/%')
+                    //     ->where('is_active', 1)
+                    //     ->where('tanggal_order', $tanggal)
+                    //     ->pluck('no_document')->toArray();
+
+                    // $dataNonKontrak = DailyQsd::whereIn('no_quotation', $qt_non_kontrak)
+                    //     ->select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
+                    //     ->get()->toArray();
+
+                    // $dataKontrak = DailyQsd::select('sales_id', 'no_quotation', 'total_revenue', 'biaya_akhir')
+                    //     ->where('tanggal_sampling_min', $tanggal)
+                    //     ->where('no_quotation', 'LIKE', '%QTC/%')
+                    //     ->get()->toArray();
+                    
+                    // $allData = array_merge($dataNonKontrak, $dataKontrak);
+
+                    // dd($allData);
+                    // $result = [];
+                    // foreach ($allData as $row) {
+                    //     $sales_id = $row['sales_id'];
+                    //     if (!isset($result[$sales_id])) {
+                    //         $result[$sales_id] = [
+                    //             'sales_id' => $sales_id,
+                    //             'jumlah_order' => 0,
+                    //             'total_revenue' => 0,
+                    //             'biaya_akhir' => 0,
+                    //         ];
+                    //     }
+                    //     $result[$sales_id]['jumlah_order'] += 1;
+                    //     $result[$sales_id]['total_revenue'] += floatval($row['total_revenue']);
+                    //     $result[$sales_id]['biaya_akhir'] += floatval($row['biaya_akhir']);
+                    // }
+
+                    // $result = array_values($result);
+                    $result = DailyQsd::query()
+                    ->select('sales_id')
+                    ->selectRaw('COUNT(*) as jumlah_order')
+                    ->selectRaw('SUM(total_revenue) as total_revenue')
+                    ->selectRaw('SUM(biaya_akhir) as biaya_akhir')
+                    ->where(function($q) use ($tanggal) {
+                        $q->whereHas('orderHeader', function($qh) use ($tanggal) {
+                            $qh->where('no_document', 'like', '%QT/%')
+                                ->where('is_active', 1)
+                                ->where('tanggal_order', $tanggal);
+                        })
+                        ->orWhere(function($qq) use ($tanggal) {
+                            $qq->where('tanggal_sampling_min', $tanggal)
+                                ->where('no_quotation', 'LIKE', '%QTC/%');
+                        });
+                    })
+                    ->groupBy('sales_id')
+                    ->get()
+                    ->map(function($row) {
+                        return [
+                            'sales_id' => $row->sales_id,
+                            'jumlah_order' => (int) $row->jumlah_order,
+                            'total_revenue' => (float) $row->total_revenue,
+                            'biaya_akhir' => (float) $row->biaya_akhir,
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+                    dd($result);
+
+                    $dataBawahan = Getbawahan::where('id', 890)
+                        ->get()
+                        ->filter(function($q){
+                            return $q->id != 890;
+                        })
+                        ->map(function($q){
+                            return[
+                                'id' => $q->id,
+                                'nama_lengkap' => $q->nama_lengkap,
+                                'grade' => $q->grade,
+                                'id_jabatan' => $q->id_jabatan,
+                                'atasan_langsung' => $q->atasan_langsung
+                            ];
+                        })->values()->toArray();
+
+                    $strukturSales = $this->buildStrukturSales($dataBawahan);
+
+                    return response()->json([
+                        'strukturSales' => $strukturSales,
+                        'penjualan' => $result
+                    ], 200);
+
+
                     $cekData = OrderDetail::where('is_active', 1)
                         ->where('tanggal_sampling', '>=', '2026-01-01')
                         ->get();
