@@ -15,8 +15,7 @@ class SalesDailyQSD
     public static function run(): void
     {
         $now = Carbon::now();
-        // $currentYear = $now->format('Y');
-        $currentYear = 2025;
+        $currentYear = $now->format('Y');
         self::handle((int)$currentYear);
     }
 
@@ -69,6 +68,8 @@ class SalesDailyQSD
                 }
             });
             DB::statement("UPDATE daily_qsd q\nJOIN (\nSELECT uuid, ROW_NUMBER() OVER (PARTITION BY pelanggan_ID\nORDER BY COALESCE(tanggal_sampling_min, '9999-12-31'), CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED), CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED), uuid) AS rn\nFROM daily_qsd) x ON x.uuid = q.uuid\nSET q.status_customer = IF(x.rn = 1, 'new', 'exist')\nWHERE q.status_customer IS NULL");
+
+            DB::statement("UPDATE daily_qsd SET total_revenue = 0 WHERE no_invoice IS NULL AND total_revenue <> 0 AND LEFT(tanggal_sampling_min, 4) >= '2025'");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
         Log::info('[SalesDailyQSD] Completed successfully');
@@ -210,13 +211,12 @@ class SalesDailyQSD
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
             [$noInvoice, $isLunas, $pelunasan, $nominal, $tanggalPembayaran] = self::buildInvoiceInfo($invoices);
-            $revenue = $noInvoice == null ? 0 : $row->kontrak === 'C' ? $row->total_revenue_kontrak : $row->total_revenue_non_kontrak;
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
                 'nilai_invoice'        => $nominal,
                 'nilai_pembayaran'     => $pelunasan,
-                'tanggal_pembayaran'   => $tanggalPembayaran,
+                'tanggal_pembayaran'   => $tanggalPembayaran === '' ? null : $tanggalPembayaran,
                 'is_lunas'             => $isLunas,
                 'no_quotation'         => $row->no_quotation,
                 'total_cfr'            => $row->total_cfr,
@@ -233,7 +233,7 @@ class SalesDailyQSD
                 'total_pph'            => $row->kontrak === 'C' ? $row->total_pph_kontrak : $row->total_pph_non_kontrak,
                 'biaya_akhir'          => $row->kontrak === 'C' ? $row->biaya_akhir_kontrak : $row->biaya_akhir_non_kontrak,
                 'grand_total'          => $row->kontrak === 'C' ? $row->grand_total_kontrak : $row->grand_total_non_kontrak,
-                'total_revenue'        => $revenue,
+                'total_revenue'        => $row->kontrak === 'C' ? $row->total_revenue_kontrak : $row->total_revenue_non_kontrak,
                 'tanggal_sampling_min' => $row->tanggal_sampling_min,
                 'created_at'           => Carbon::now()->subHours(7),
             ];
@@ -270,8 +270,6 @@ class SalesDailyQSD
                     $tanggalPembayaran = null;
                 }
 
-                $revenue = $no_inv == null ? 0 : $items->first()['total_revenue'];
-
                 return [
                     'no_invoice'            => $no_inv ? $no_inv . $status : null,
                     'nilai_invoice'         => $nilai_invoice,
@@ -292,7 +290,7 @@ class SalesDailyQSD
                     'total_pph'             => $items->first()['total_pph'],
                     'biaya_akhir'           => $items->first()['biaya_akhir'],
                     'grand_total'           => $items->first()['grand_total'],
-                    'total_revenue'         => $revenue,
+                    'total_revenue'         => $items->first()['total_revenue'],
                     'total_cfr'             => $items->first()['total_cfr'],
                     'tanggal_sampling_min'  => $items->min('tanggal_sampling_min'),
                     'is_lunas'              => $isLunas,
@@ -302,11 +300,8 @@ class SalesDailyQSD
         $withoutInvoice = $withoutInvoice->filter(function ($item) use ($noQTSpesial) {
             return !in_array($item['no_quotation'], $noQTSpesial);
         })->values();
-
         $firstGrouped = $groupedSpesial->merge($withoutInvoice)->values();
-
         $grouped = $withInvoice->groupBy('no_invoice')->map(function ($items) {
-            $revenue = $items->first()['total_revenue'];
             return [
                 'no_invoice' => $items->first()['no_invoice'],
                 'nilai_invoice' => $items->sum('nilai_invoice'),
@@ -327,7 +322,7 @@ class SalesDailyQSD
                 'total_pph'      => $items->sum('total_pph'),
                 'biaya_akhir'    => $items->sum('biaya_akhir'),
                 'grand_total'    => $items->sum('grand_total'),
-                'total_revenue'  => $revenue,
+                'total_revenue'  => $items->sum('total_revenue'),
                 'total_cfr'      => $items->sum('total_cfr'),
                 'tanggal_sampling_min' => $items->min('tanggal_sampling_min'),
                 'is_lunas'        => $items->contains('is_lunas', false) ? false : true,
@@ -372,6 +367,11 @@ class SalesDailyQSD
         }
 
         if ($nilaiPelunasan == 0) $nilaiPelunasan = null;
-        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice, implode(', ', $tanggalPembayaran)];
+        if (!empty($tanggalPembayaran)) {
+            $tanggalPembayaran = min($tanggalPembayaran);
+        } else {
+            $tanggalPembayaran = null;
+        }
+        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice, $tanggalPembayaran];
     }
 }
