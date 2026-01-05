@@ -67,7 +67,7 @@ class ReassignCustomerController extends Controller
                 });
             })
             ->filterColumn('tanggal_rotasi', function ($query, $keyword) {
-                $query->whereDate('tanggal_rotasi', "{$keyword}");
+                $query->whereDate('tanggal_rotasi', 'like', "%{$keyword}%");
             })
             ->make(true);
     }
