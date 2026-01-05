@@ -351,7 +351,7 @@ class QtApproveController extends Controller
                 if($data->is_generate_data_lab == 0){
                     $data->flag_status = 'sp';
                     $data->is_ready_order = 1;
-                    $data->is_konfirmasi_order = 1;
+                    // $data->is_konfirmasi_order = 1;
                 }
 
                 $data->save();
