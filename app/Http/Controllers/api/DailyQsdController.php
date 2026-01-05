@@ -242,6 +242,14 @@ class DailyQsdController extends Controller
         ->filterColumn('no_order', function ($query, $keyword) {
             $query->where('no_order', 'like', "%$keyword%")->orderBy('no_order', 'asc');
         })
+        ->filterColumn('status_sampling', function ($query, $keyword) {
+            if( $keyword != 'Gabungan') 
+            {
+                $query->where('status_sampling', "$keyword");
+            } else {
+                $query->where('status_sampling', 'like', "%,%");
+            }
+        })
         ->with([
             'sumRevenue' => function ($query) {
                 return $query->sum('total_revenue');
