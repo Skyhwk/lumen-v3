@@ -38,7 +38,6 @@ class ApprovalFeeExternalController extends Controller
             $claim->is_approved_manajer = true;
             $claim->approved_manajer_at = Carbon::now()->format('Y-m-d H:i:s');
             $claim->approved_manajer_by = $this->karyawan;
-            dd($claim);
             $claim->save();
 
             DB::commit();
@@ -58,7 +57,6 @@ class ApprovalFeeExternalController extends Controller
             $claim->status_pembayaran = 'REJECTED';
             $claim->rejected_at = Carbon::now()->format('Y-m-d H:i:s');
             $claim->rejected_by = $this->karyawan;
-            dd($claim);
             $claim->save();
 
             DB::commit();
