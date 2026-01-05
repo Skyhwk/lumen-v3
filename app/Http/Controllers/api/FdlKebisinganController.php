@@ -646,23 +646,18 @@ class FdlKebisinganController extends Controller
             $nilaiMax = collect($total)->map(fn($t) => max($t))->max();
 
             // ==== Tentukan Fungsi Formula Berdasarkan Durasi ====
-            $function = null;
             $dataParsing = (object) $request->all();
             $dataParsing->total = $total;
-
+            $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
+            ->where('is_approve', true)
+            ->count();
+            $function = null;
+            
             if ($jenis_durasi === "24 Jam") {
-                $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
-                    ->where('is_approve', true)
-                    ->count();
-
                 if ($approvedCount >= 6) {
                     $function = 'DirectKebisingan24L7';
                 }
             } elseif ($jenis_durasi === "8 Jam") {
-                $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
-                    ->where('is_approve', true)
-                    ->count();
-
                 if ($approvedCount >= 7) {
                     $function = Formula::where('id_parameter', $param->id)
                         ->where('is_active', true)
