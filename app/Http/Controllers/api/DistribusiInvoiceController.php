@@ -159,6 +159,9 @@ class DistribusiInvoiceController extends Controller
             ->editColumn('alamat', function($row) {
                 return $row->alamat ?? '-';
             })
+            ->editColumn('type_pengiriman', function($row) {
+                return $row->type_pengiriman ?? '-';
+            })
             ->make(true);
     }
     public function getInvoiceSelect2(Request $request)
@@ -181,8 +184,8 @@ class DistribusiInvoiceController extends Controller
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
                 DB::raw('FLOOR(SUM(nilai_tagihan)) AS nilai_tagihan'),
                 DB::raw('MAX(nilai_pelunasan) AS nilai_pelunasan'),
-                DB::raw('MAX(nama_pj) AS nama_pj'),
-                DB::raw('MAX(no_po) AS no_po'),
+                DB::raw('MAX(nama_pic) AS nama_pic'),
+                DB::raw('MAX(no_pic) AS no_pic'),
                 DB::raw('MAX(no_spk) AS no_spk'),
                 DB::raw('MAX(created_at) AS created_at'),
                 DB::raw('MAX(created_by) AS created_by'),
@@ -206,7 +209,9 @@ class DistribusiInvoiceController extends Controller
                 'inv.tgl_jatuh_tempo',
                 'inv.tgl_pelunasan',
                 'inv.no_orders',
-                'inv.alamat_penagihan'
+                'inv.alamat_penagihan',
+                'inv.nama_pic',
+                'inv.no_pic'
             )
             ->leftJoin('order_header as oh', 'inv.primary_no_order', '=', 'oh.no_order')
             // PERBAIKAN 1: Gunakan leftJoinSub agar invoice yang belum dibayar tetap muncul
@@ -229,7 +234,9 @@ class DistribusiInvoiceController extends Controller
                         'text' => $item->no_invoice, // Teks yang muncul
                         'no_invoice' => $item->no_invoice,
                         'nama_customer' => $item->nama_customer,
-                        'alamat_penagihan' => $item->alamat_penagihan ?? 'Alamat belum diisi'
+                        'alamat_penagihan' => $item->alamat_penagihan ?? 'Alamat belum diisi',
+                        'nama_pic' =>$item->nama_pic,
+                        'no_pic' =>$item->no_pic
                     ];
                 }),
                 'total_count' => $result->total()
@@ -275,8 +282,8 @@ class DistribusiInvoiceController extends Controller
                     $distribusi = new DistribusiInvoice();
                     $distribusi->no_invoice       = $item['no_invoice']; // Ambil dari array item
                     $distribusi->alamat           = $item['alamat_tujuan_final'];
-                    $distribusi->nama_penerima    = $request->input('penerima.nama'); 
-                    $distribusi->no_telp          = $request->input('penerima.no_telp');
+                    $distribusi->nama_penerima    = $item['nama_penerima']; 
+                    $distribusi->no_telp          = $item['no_telp'];
                     $distribusi->tanggal_pengiriman = $request->tgl_pengiriman;
                     $distribusi->type_pengiriman  = $request->tipe_pengiriman;
                     $distribusi->pengiriman       = $request->data_pengiriman;
