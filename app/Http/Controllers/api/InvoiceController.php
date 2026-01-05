@@ -285,6 +285,27 @@ class InvoiceController extends Controller
                 );
             }
 
+            if ($request->filled('tanggal_pembayaran')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_pelunasan)) LIKE ?',
+                    ['%' . $request->tanggal_pembayaran . '%']
+                );
+            }
+            
+            if ($request->filled('tanggal_invoice')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_invoice)) LIKE ?',
+                    ['%' . $request->tanggal_invoice . '%']
+                );
+            }
+            
+            if ($request->filled('tanggal_jatuh_tempo')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_jatuh_tempo)) LIKE ?',
+                    ['%' . $request->tanggal_jatuh_tempo . '%']
+                );
+            }
+
             if ($request->filled('emailed_at')) {
                 $data->havingRaw(
                     'DATE(MAX(invoice.emailed_at)) LIKE ?',
