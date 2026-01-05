@@ -12,7 +12,7 @@ use Carbon\Carbon;
 
 class DistribusiInvoiceController extends Controller
 {
-    public function index(Request $request)
+    public function indexInvoice(Request $request)
     {
         // 1. Subquery Withdraw
         $withdrawSub = DB::table('withdraw')
@@ -27,9 +27,9 @@ class DistribusiInvoiceController extends Controller
                 DB::raw('SUM(total_tagihan) AS total_tagihan'),
                 DB::raw('FLOOR(SUM(nilai_tagihan)) AS nilai_tagihan'),
                 DB::raw('MAX(nilai_pelunasan) AS nilai_pelunasan'),
-                DB::raw('MAX(nama_pj) AS nama_pj'),
-                DB::raw('MAX(no_po) AS no_po'),
-                DB::raw('MAX(no_spk) AS no_spk'),
+                DB::raw('MAX(nama_pic) AS nama_pic'),
+                DB::raw('MAX(no_pic) AS no_pic'),
+                DB::raw('MAX(alamat_penagihan) AS alamat_penagihan'),
                 DB::raw('MAX(created_at) AS created_at'),
                 DB::raw('MAX(created_by) AS created_by'),
                 DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
@@ -51,9 +51,9 @@ class DistribusiInvoiceController extends Controller
                 // Perbaikan logic sisa bayar & total bayar handle NULL
                 DB::raw('(inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0)) AS total_pembayaran'),
                 DB::raw('(inv.nilai_tagihan - (inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0))) AS sisa_tagihan'), 
-                'inv.nama_pj',
-                'inv.no_po',
-                'inv.no_spk',
+                'inv.nama_pic',
+                'inv.no_pic',
+                'inv.alamat_penagihan',
                 DB::raw('COALESCE(oh.nama_perusahaan, oh.konsultan) AS nama_customer'),
                 'oh.konsultan', // Tambahkan ini agar filterColumn konsultan jalan
                 'inv.tgl_jatuh_tempo',
@@ -68,19 +68,19 @@ class DistribusiInvoiceController extends Controller
             });
 
         // 4. Filter Kategori (Applied ke Query Builder, BUKAN Collection)
-        
-        if ($request->has('filtered')) {
-            if ($request->filtered == 'invoice') {
-                $query->where('inv.nilai_tagihan', '>', 5000000);
-                $query->whereNotExists(function ($q) {
-                    $q->select(DB::raw(1))
-                    ->from('distribusi_invoice')
-                    ->whereRaw('distribusi_invoice.no_invoice = inv.no_invoice');
-                });
-            } elseif ($request->filtered == 'distribusi') {
-                $query->join('distribusi_invoice as di', 'inv.no_invoice', '=', 'di.no_invoice');
-            }
-        }
+        $query->where('inv.nilai_tagihan', '>', 5000000);
+        $query->whereNotExists(function ($q) {
+            $q->select(DB::raw(1))
+            ->from('distribusi_invoice')
+            ->whereRaw('distribusi_invoice.no_invoice = inv.no_invoice');
+        });
+        // if ($request->has('filtered')) {
+        //     if ($request->filtered == 'invoice') {
+                
+        //     } elseif ($request->filtered == 'distribusi') {
+        //         $query->join('distribusi_invoice as di', 'inv.no_invoice', '=', 'di.no_invoice');
+        //     }
+        // }
 
         // 5. Return DataTables (Server Side)
         // PERBAIKAN 2: Gunakan $query langsung, jangan di ->get()
@@ -94,11 +94,11 @@ class DistribusiInvoiceController extends Controller
                     ->orWhere('oh.konsultan', 'like', "%{$keyword}%");
                 });
             })
-            ->filterColumn('nama_pj', function($query, $keyword) {
-                $query->where('inv.nama_pj', 'like', "%{$keyword}%");
+            ->filterColumn('nama_pic', function($query, $keyword) {
+                $query->where('inv.nama_pic', 'like', "%{$keyword}%");
             })
-            ->filterColumn('no_po', function($query, $keyword) {
-                $query->where('inv.no_po', 'like', "%{$keyword}%");
+            ->filterColumn('no_pic', function($query, $keyword) {
+                $query->where('inv.no_pic', 'like', "%{$keyword}%");
             })
             ->filterColumn('konsultan', function($query, $keyword) {
                 $query->where('oh.konsultan', 'like', "%{$keyword}%");
@@ -111,6 +111,54 @@ class DistribusiInvoiceController extends Controller
                 return number_format($invoice->sisa_tagihan, 0, ',', '.');
             })
             ->rawColumns(['withdraw_status'])
+            ->make(true);
+    }
+    public function indexDistribusi(Request $request)
+    {
+        // 1. Query
+        $query = DistribusiInvoice::query() // Sesuaikan query kamu sebelumnya
+            ->when($request->year, function($q) use ($request) {
+                $q->whereYear('created_at', $request->year);
+            })
+            ->when($request->month, function($q) use ($request) {
+                $q->whereMonth('created_at', $request->month);
+            });
+
+        // 2. DataTables Processing
+        return datatables()->of($query)
+            // --- 1. KOLOM NAMA KURIR ---
+            // Ambil dari JSON key "nama"
+            ->addColumn('nama_kurir', function($row) {
+                // Karena sudah di-cast 'array', kita bisa akses seperti array biasa
+                // Gunakan '??' (null coalescing) untuk handle jika key tidak ada
+                return $row->pengiriman['nama'] ?? '-';
+            })
+
+            // --- 2. KOLOM CABANG ---
+            // Ambil dari JSON key "cabang"
+            ->addColumn('cabang', function($row) {
+                return $row->pengiriman['cabang'] ?? '-';
+            })
+
+            // --- 3. KOLOM NO RESI ---
+            // Ambil dari JSON key "no_resi"
+            ->addColumn('no_resi', function($row) {
+                return $row->pengiriman['no_resi'] ?? '-';
+            })
+
+            // --- 4. KOLOM EKSPEDISI ---
+            // Ambil dari JSON key "nama_ekspedisi"
+            ->addColumn('nama_ekspedisi', function($row) {
+                return $row->pengiriman['nama_ekspedisi'] ?? '-';
+            })
+
+            // Format tanggal standar
+            ->editColumn('created_at', function($row) {
+                return $row->created_at ? date('d-m-Y H:i', strtotime($row->created_at)) : '-';
+            })
+            ->editColumn('alamat', function($row) {
+                return $row->alamat ?? '-';
+            })
             ->make(true);
     }
     public function getInvoiceSelect2(Request $request)
@@ -227,8 +275,8 @@ class DistribusiInvoiceController extends Controller
                     $distribusi = new DistribusiInvoice();
                     $distribusi->no_invoice       = $item['no_invoice']; // Ambil dari array item
                     $distribusi->alamat           = $item['alamat_tujuan_final'];
-                    $distribusi->nama_pengirim    = $request->input('pengirim.nama'); 
-                    $distribusi->no_telp          = $request->input('pengirim.no_telp');
+                    $distribusi->nama_penerima    = $request->input('penerima.nama'); 
+                    $distribusi->no_telp          = $request->input('penerima.no_telp');
                     $distribusi->tanggal_pengiriman = $request->tgl_pengiriman;
                     $distribusi->type_pengiriman  = $request->tipe_pengiriman;
                     $distribusi->pengiriman       = $request->data_pengiriman;
@@ -250,8 +298,7 @@ class DistribusiInvoiceController extends Controller
             }
         }catch (\Illuminate\Database\QueryException $e) {
         DB::rollBack();
-
-        // Cek apakah error disebabkan oleh Duplicate Entry (SQL Code 1062)
+        //Duplicate Entry (SQL Code 1062)
         if ($e->errorInfo[1] == 1062) {
             // Kita ambil nomor invoice yang duplikat dari pesan errornya
             preg_match("/entry '(.*?)' for key/", $e->getMessage(), $matches);
@@ -264,10 +311,10 @@ class DistribusiInvoiceController extends Controller
         }
 
         // Jika error database lain
-        Log::error("Database Error: " . $e->getMessage());
+
         return response()->json([
             "status" => "error",
-            "message" => "Terjadi kesalahan pada database."
+            "message" => $e->getMessage()
         ], 400);
 
     }catch (\Throwable $th) {
