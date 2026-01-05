@@ -855,7 +855,7 @@ class RequestQuotationController extends Controller
             $total_diskon = 0;
 
             // ==================== DISKON DENGAN KODE PROMO ===================== //
-            if (floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+            if (!empty($payload->data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
                 $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
@@ -872,6 +872,8 @@ class RequestQuotationController extends Controller
                 // $harga_total += 0;
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
+                $data->discount_promo = null;
+                $data->kode_promo = null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -1750,7 +1752,7 @@ class RequestQuotationController extends Controller
             $total_diskon = 0;
 
             // ==================== DISKON DENGAN KODE PROMO ===================== //
-            if (floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
+            if (!empty($payload->data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount)) > 0) {
                 $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah + $harga_pangan;
                 $discount_promo = floatval(str_replace('%', '', $payload->data_diskon->jumlah_promo_discount));
                 $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
@@ -1767,6 +1769,8 @@ class RequestQuotationController extends Controller
                 // $harga_total += 0;
                 // $data->discount_air = null;
                 $data->total_discount_promo = 0;
+                $data->discount_promo = null;
+                $data->kode_promo = null;
             }
             // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -2588,12 +2592,15 @@ class RequestQuotationController extends Controller
                     $dataH->custom_discount = null;
                 }
 
-                if($data_diskon->jumlah_promo_discount > 0){
+                if(!empty($data_diskon->kode_promo_discount) && $data_diskon->jumlah_promo_discount > 0){
                     $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
                         'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
                         'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
                     ]) : null;
+                }else{
+                    $dataH->kode_promo = null;
+                    $dataH->discount_promo = null;
                 }
 
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
@@ -3158,7 +3165,7 @@ class RequestQuotationController extends Controller
                     }
 
                     // ==================== DISKON DENGAN KODE PROMO ===================== //
-                    if (floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                    if (!empty($data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
                         $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
@@ -3176,6 +3183,8 @@ class RequestQuotationController extends Controller
                         // $harga_total += 0;
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
+                        $dataD->discount_promo = null;
+                        $dataD->kode_promo = null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
@@ -4080,12 +4089,15 @@ class RequestQuotationController extends Controller
                 }
                 // END CUSTOM DISCOUNT
                 // PROMO DISCOUNT
-                if($data_diskon->jumlah_promo_discount > 0){
+                if(!empty($data_diskon->kode_promo_discount) && $data_diskon->jumlah_promo_discount > 0){
                     $dataH->kode_promo = isset($data_diskon->kode_promo_discount) ? $data_diskon->kode_promo_discount : null;
                     $dataH->discount_promo = isset($data_diskon->jumlah_promo_discount) ? json_encode((object)[
                         'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
                         'jumlah_promo_discount' => $data_diskon->jumlah_promo_discount
                     ]) : null;
+                }else {
+                    $dataH->kode_promo = null;
+                    $dataH->discount_promo = null;
                 }
                 // END PROMO DISCOUNT
                 $dataPendukungHeader = $this->groupDataSampling($data_pendukung);
@@ -4614,7 +4626,7 @@ class RequestQuotationController extends Controller
                     }
 
                     // ==================== DISKON DENGAN KODE PROMO ===================== //
-                    if (floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
+                    if (!empty($data_diskon->kode_promo_discount) && floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount)) > 0) {
                         $biaya_pengujian = $harga_air + $harga_udara + $harga_emisi + $harga_padatan + $harga_swab_test + $harga_tanah;
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
@@ -4632,6 +4644,8 @@ class RequestQuotationController extends Controller
                         // $harga_total += 0;
                         // $data->discount_air = null;
                         $dataD->total_discount_promo = 0;
+                        $dataD->discount_promo = null;
+                        $dataD->kode_promo = null;
                     }
                     // ==================== END DISKON DENGAN KODE PROMO ======================= //
 
