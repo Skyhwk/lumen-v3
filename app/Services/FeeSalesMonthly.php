@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 use App\Models\{
+    ClaimFeeExternal,
     // MasterKaryawan,
     DailyQsd,
     MasterTargetSales,
@@ -162,6 +163,9 @@ class FeeSalesMonthly
                     ->get()
                     ->map(function ($qsd) use ($isExistsInFeeSales) {
                         if ($isExistsInFeeSales($qsd)) return null;
+
+                        $totalFeeExternal = ClaimFeeExternal::where('no_order', $qsd->no_order)->when($qsd->periode, fn ($q) =>$q->where('periode', $qsd->periode))->where('is_active', true)->sum('nominal');
+                        $qsd->total_revenue -= $totalFeeExternal;
 
                         if ($qsd->periode) {
                             $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
