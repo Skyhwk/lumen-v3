@@ -1958,6 +1958,222 @@ class TestingController extends Controller
                         'total_found' => count($results),
                         'data' => $results
                     ]);
+                case 'missing-qrcode':
+                    try {
+                        // 1. Input Array
+                        $listSamples = $request->input('no_sampel', []); 
+
+                        if (empty($listSamples) || !is_array($listSamples)) {
+                            throw new \Exception("Input 'samples' harus array.");
+                        }
+
+                        // 2. Setup MPDF
+                        $pdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => [50, 15],
+                            'margin_left' => 1,
+                            'margin_right' => 1,
+                            'margin_top' => 0.5,
+                            'margin_header' => 0,
+                            'margin_bottom' => 0,
+                            'margin_footer' => 0,
+                        ]);
+
+                        $filename = 'MISSING_QR_' . time() . '.pdf';
+
+                        // --- CSS untuk membuat kotak rounded (Sticker Style) ---
+                        $style = '';
+
+                        $pdf->WriteHTML($style . '<body><table width="100%" class="main-table">');
+
+                        $counter = 0;
+
+                        foreach ($listSamples as $noSampel) {
+                            
+                            $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
+                            if (!$orderDetail) continue;
+
+                            $qrImageFile = $this->generateQRCoding($noSampel); 
+                            $pathQR = '/qrcode/sample/'; 
+
+                            // Decode JSON Persiapan
+                            $listPersiapan = json_decode($orderDetail->persiapan, true);
+                            if (empty($listPersiapan)) {
+                                $listPersiapan = [['type_botol' => 'SAMPEL']]; 
+                            }
+
+                            foreach ($listPersiapan as $item) {
+                                
+                                $labelParameter = $item['type_botol'] ?? '-';
+
+                                // Buka baris baru jika counter genap
+                                if ($counter % 2 == 0) {
+                                    $pdf->WriteHTML("<tr>");
+                                }
+                                $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+
+                                // Render SATU KOTAK STIKER
+                                // Kita gunakan <div> dengan border-radius di dalam <td>
+                                $pdf->WriteHTML('
+                                    <th style="padding: ' . $padding . ';">
+                                        <table width="100%">
+                                            <tr>
+                                                <td style="text-align: left;"><img src="' . public_path() . $pathQR . $qrImageFile . '"></td>
+                                                <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                            </tr>
+                                            <tr><td colspan="2" style="font-size: 12px;">' . $noSampel . '</td></tr>
+                                        </table>
+                                    </th>
+                                ');
+
+                                // Tutup baris jika counter ganjil
+                                if ($counter % 2 == 1) {
+                                    $pdf->WriteHTML("</tr>");
+                                }
+                                
+                                $counter++;
+                            }
+                        }
+
+                        // Tutup row jika ganjil (sisa 1 kolom kosong)
+                        if ($counter % 2 != 0) {
+                            $pdf->WriteHTML('<td style="width: 50%;"></td></tr>');
+                        }
+
+                        $pdf->WriteHTML('</table></body>');
+
+                        // Output File
+                        $dir = public_path("cs");
+                        if (!file_exists($dir)) mkdir($dir, 0755, true);
+                        $pdf->Output(public_path() . '/cs/' . $filename, 'I');
+
+                        return response()->json([
+                            'status' => true,
+                            'data' => $filename
+                        ], 200);
+
+                    } catch (\Exception $e) {
+                        return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+                    }
+                    break;
+                case 'missing-label':
+                    try {
+                        // 1. Input Array dari Request
+                        // Contoh: { "samples": ["CS/123/LOGAM", "CS/124/BOD"] }
+                        $listSamples = $request->input('no_sampel', []);
+
+                        if (empty($listSamples) || !is_array($listSamples)) {
+                            throw new \Exception("Input 'samples' harus array.");
+                        }
+
+                        // 2. Setup MPDF (Tetap sesuai settingan awal Anda)
+                        $pdf = new Mpdf([
+                            'mode' => 'utf-8',
+                            'format' => [50, 15],
+                            'margin_left' => 1,
+                            'margin_right' => 1,
+                            'margin_top' => 0.5,
+                            'margin_header' => 0,
+                            'margin_bottom' => 0,
+                            'margin_footer' => 0,
+                        ]);
+
+                        $filename = 'MISSING_LABEL_' . time() . '.pdf';
+
+                        $pdf->WriteHTML('
+                            <!DOCTYPE html>
+                            <html>
+                                <head>
+                                    <style>
+                                        .colom1 { text-align: center; padding-right: 40px; }
+                                        .line { border-width: 10; color: black; }
+                                    </style>
+                                </head>
+                                <body>
+                        ');
+
+                        $pdf->WriteHTML('<table width="100%">');
+
+                        $counter = 0;
+
+                        // 3. Loop Utama berdasarkan input samples
+                        foreach ($listSamples as $noSampel) {
+                            
+                            // Ambil data OrderDetail berdasarkan no_sampel
+                            $orderDetail = OrderDetail::where('no_sampel', $noSampel)->first();
+
+                            if (!$orderDetail) {
+                                continue; 
+                            }
+
+                            // Ambil kolom 'label' dan decode JSON-nya
+                            // Asumsi isi kolom label: ["Botol 1", "Botol 2", "Botol 3"]
+                            $listLabels = json_decode($orderDetail->parameter, true);
+
+                            if (empty($listLabels) || !is_array($listLabels)) {
+                                // Fallback jika kosong, setidaknya print 1 dengan nama default
+                                $listLabels = ['SAMPEL'];
+                            }
+                            
+                            // Format Tanggal Sampling
+                            $tglSampling = \Carbon\Carbon::parse($orderDetail->tanggal_sampling)->translatedFormat('d F Y');
+
+                            // 4. Loop Label (Print sebanyak jumlah label yang ada)
+                            foreach ($listLabels as $labelText) {
+                                
+                                // Buka baris baru jika counter genap
+                                if ($counter % 2 == 0) {
+                                    $pdf->WriteHTML("<tr>");
+                                }
+
+                                // Padding logic (Ganjil/Genap) - Sesuai kode asli Anda
+                                $padding = ($counter % 2 == 0) ? '8% 40% 0% 0%;' : '8% 0% 0% 0%;';
+
+                                // Render HTML Label
+                                $pdf->WriteHTML('
+                                    <td style="text-align: center; padding: ' . $padding . '">
+                                        <span style="font-size: 18px; font-weight: bold;">' . $noSampel . '.</span><br>
+                                        <span style="font-size: 14px; font-weight: bold;">' . $text = explode('-',$orderDetail->kategori_3)[1] . '</span><br>
+                                        <hr>
+                                        <span style="font-size: 16px; font-weight: bold;">' . $tglSampling . '</span>
+                                    </td>
+                                ');
+
+                                // Tutup baris jika counter ganjil
+                                if ($counter % 2 == 1) {
+                                    $pdf->WriteHTML("</tr>");
+                                }
+                                
+                                $counter++;
+                            }
+                        }
+
+                        // Tutup row jika sisa ganjil
+                        if ($counter % 2 != 0) {
+                            $pdf->WriteHTML('<td></td></tr>');
+                        }
+
+                        $pdf->WriteHTML('</table></body></html>');
+
+                        // 5. Output File
+                        $dir = public_path("cs");
+                        if (!file_exists($dir)) {
+                            mkdir($dir, 0755, true);
+                        }
+
+                        // Mode 'F' untuk simpan ke file agar bisa direturn nama filenya ke JSON response
+                        $pdf->Output(public_path() . '/cs/' . $filename, 'I'); 
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Label generated successfully',
+                            'data' => $filename
+                        ], 200);
+
+                    } catch (\Throwable $th) {
+                        return response()->json(['status' => false, 'message' => $th->getMessage()], 500);
+                    }
+                    break;
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
@@ -3766,6 +3982,41 @@ class TestingController extends Controller
         QrCode::format('png')->size(200)->generate($no_sampel, $path);
 
         return $filename;
+    }
+
+    private function generateQRCoding($no_sampel, $directory = null)
+    {
+        try {
+            // Validasi input
+            if (empty($no_sampel)) {
+                throw new \Exception("No sampel tidak boleh kosong");
+            }
+
+            if ($directory !== null) {
+                $filename = \str_replace("/", "_", $no_sampel) . '.png';
+                $path = public_path() . "$directory/$filename";
+            } else {
+                $filename = \str_replace("/", "_", $no_sampel) . '.png';
+                $path = public_path() . "/qrcode/sample/$filename";
+            }
+
+            // Pastikan direktori ada
+            $dir = dirname($path);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            QrCode::format('png')->size(200)->generate($no_sampel, $path);
+
+            return $filename;
+        } catch (\Exception $th) {
+            // Log error untuk debugging
+            \Log::error("Error generating QR: " . $th->getMessage(), [
+                'no_sampel' => $no_sampel,
+                'directory' => $directory
+            ]);
+            throw $th;
+        }
     }
 
     public function updateQTKelengkapan(Request $request)
