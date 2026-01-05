@@ -50,7 +50,7 @@ class SaldoFeeSalesController extends Controller
         if (!$limitWithdraw) return response()->json(['message' => 'Withdraw Limit not found'], 404);
         $usedLimit = WithdrawalFeeSales::where('sales_id', $request->salesId)
             ->whereIn('status', ['Pending', 'Approved'])
-            ->whereMonth('created_at', Carbon::now()->month())
+            ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
             ->sum('amount');
         $limitWithdraw->limit -= $usedLimit;
 
@@ -103,7 +103,7 @@ class SaldoFeeSalesController extends Controller
         if (!$limitWithdraw) return response()->json(['message' => 'Withdraw Limit not found'], 404);
         $usedLimit = WithdrawalFeeSales::where('sales_id', $request->sales_id)
             ->whereIn('status', ['Pending', 'Approved'])
-            ->whereMonth('created_at', Carbon::now()->month())
+            ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
