@@ -224,7 +224,7 @@ class InvoiceController extends Controller
                     DB::raw('GROUP_CONCAT(DISTINCT invoice.no_order) AS no_orders'),
                     DB::raw("
                         CASE
-                            WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Buat Invoice'
+                            WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
                             WHEN (SUM(invoice.nilai_tagihan)
                                 - (COALESCE(MAX(invoice.nilai_pelunasan),0)
                                     + COALESCE(MAX(w.total_pembayaran),0))
@@ -255,7 +255,7 @@ class InvoiceController extends Controller
                 
                 $data->havingRaw("
                     CASE
-                        WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Buat Invoice'
+                        WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
                         WHEN (SUM(invoice.nilai_tagihan)
                             - (COALESCE(MAX(invoice.nilai_pelunasan),0)
                                 + COALESCE(MAX(w.total_pembayaran),0))
@@ -282,6 +282,27 @@ class InvoiceController extends Controller
                         MAX(order_header.konsultan)
                     ) LIKE ?',
                     ['%' . $request->nama_customer . '%']
+                );
+            }
+
+            if ($request->filled('tanggal_pembayaran')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_pelunasan)) LIKE ?',
+                    ['%' . $request->tanggal_pembayaran . '%']
+                );
+            }
+            
+            if ($request->filled('tanggal_invoice')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_invoice)) LIKE ?',
+                    ['%' . $request->tanggal_invoice . '%']
+                );
+            }
+            
+            if ($request->filled('tanggal_jatuh_tempo')) {
+                $data->havingRaw(
+                    'DATE(MAX(invoice.tgl_jatuh_tempo)) LIKE ?',
+                    ['%' . $request->tanggal_jatuh_tempo . '%']
                 );
             }
 

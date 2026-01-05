@@ -17,9 +17,9 @@ use App\Models\MasterKuotaTarget;
 
 class MasterTargetSalesController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $data = MasterTargetSales::with('sales')->where('is_active', true);
+        $data = MasterTargetSales::with('sales')->where('tahun', $request->tahun)->where('is_active', true);
 
         return Datatables::of($data)->make(true);
     }
@@ -28,46 +28,69 @@ class MasterTargetSalesController extends Controller
     {
         DB::beginTransaction();
         try {
-            $cek = MasterTargetSales::where([
+            $masterTargetSales = MasterTargetSales::where([
                 'karyawan_id' => $request->karyawan_id,
                 'tahun' => $request->tahun,
                 'is_active' => true,
-            ])->first();
+            ])->when($request->id, fn($q) => $q->where('id', '!=', $request->id))->first();
 
-            if ($cek) return response()->json(['message' => 'Data Sudah Ada'], 401);
+            if ($masterTargetSales) return response()->json(['message' => 'Data Sudah Ada untuk Sales dan Tahun tersebut'], 401);
 
             $kuota = [];
-            foreach ($request->KATEGORI as $key => $value) {
-                $kuota[$value] = (int) $request->VALUE[$key];
+            if ($request->KATEGORI) {
+                foreach ($request->KATEGORI as $key => $value) {
+                    $kuota[$value] = (int) $request->VALUE[$key];
+                }
             }
 
-            $target = [];
-            foreach ($request->periode as $periode) {
+            if ($request->id) {
+                $data = MasterTargetSales::find($request->id);
+                $data->updated_by = $this->karyawan;
+                $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
+
+                $target = json_decode($data->target, true);
+            } else {
+                $data = new MasterTargetSales();
+                $data->created_by = $this->karyawan;
+                $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+
+                $target = [];
+            }
+
+            $periodeArr = $request->periode ?? [];
+            foreach ($periodeArr as $periode) {
                 $target[$periode] = (int) $request->total_target;
             }
 
-            $data = new MasterTargetSales();
             $data->karyawan_id  = $request->karyawan_id;
             $data->tahun        = $request->tahun;
-            $data->januari      = in_array($request->tahun . '-01', $request->periode) ? $kuota : null;
-            $data->februari     = in_array($request->tahun . '-02', $request->periode) ? $kuota : null;
-            $data->maret        = in_array($request->tahun . '-03', $request->periode) ? $kuota : null;
-            $data->april        = in_array($request->tahun . '-04', $request->periode) ? $kuota : null;
-            $data->mei          = in_array($request->tahun . '-05', $request->periode) ? $kuota : null;
-            $data->juni         = in_array($request->tahun . '-06', $request->periode) ? $kuota : null;
-            $data->juli         = in_array($request->tahun . '-07', $request->periode) ? $kuota : null;
-            $data->agustus      = in_array($request->tahun . '-08', $request->periode) ? $kuota : null;
-            $data->september    = in_array($request->tahun . '-09', $request->periode) ? $kuota : null;
-            $data->oktober      = in_array($request->tahun . '-10', $request->periode) ? $kuota : null;
-            $data->november     = in_array($request->tahun . '-11', $request->periode) ? $kuota : null;
-            $data->desember     = in_array($request->tahun . '-12', $request->periode) ? $kuota : null;
-            $data->target       = json_encode($target);
-            $data->created_by   = $this->karyawan;
-            $data->created_at   = Carbon::now()->format('Y-m-d H:i:s');
+
+            foreach (
+                [
+                    '01' => 'januari',
+                    '02' => 'februari',
+                    '03' => 'maret',
+                    '04' => 'april',
+                    '05' => 'mei',
+                    '06' => 'juni',
+                    '07' => 'juli',
+                    '08' => 'agustus',
+                    '09' => 'september',
+                    '10' => 'oktober',
+                    '11' => 'november',
+                    '12' => 'desember'
+                ] as $k => $v
+            ) {
+                $checkPeriod = $request->tahun . '-' . $k;
+                if (in_array($checkPeriod, $periodeArr)) $data->{$v} = $kuota;
+            }
+
+            $data->target = json_encode($target);
+
             $data->save();
 
             DB::commit();
-            return response()->json(['message' => 'Saved Successfully'], 201);
+            return response()->json(['message' => 'Saved Successfully'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
             return response()->json(['message' => $th->getMessage()], 401);
@@ -152,7 +175,9 @@ class MasterTargetSalesController extends Controller
 
         $sales = MasterKaryawan::where('is_active', true)
             ->whereIn('id', $idBawahan)
-            ->whereIn('id_jabatan', [24, 21])
+            ->whereIn('id_jabatan', [24, 148])
+            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->orderBy('nama_lengkap', 'asc')
             ->get();
 
         return response()->json([

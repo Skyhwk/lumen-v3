@@ -80,7 +80,7 @@ class QtApproveController extends Controller
             $quotationNonKontrak = QuotationNonKontrak::where('id', $request->id)->first();
 
             // GENERATE QR
-            GenerateQrDocument::insert('quotation_non_kontrak', $quotationNonKontrak, $this->karyawan);
+            (new GenerateQrDocument())->insert('quotation_non_kontrak', $quotationNonKontrak, $this->karyawan);
 
             // GENERATE DOCUMENT
             JobTask::insert([
@@ -94,8 +94,9 @@ class QtApproveController extends Controller
             $this->dispatch($job);
 
             // GENERATE LINK & TOKEN
-            $token = GenerateToken::save('non_kontrak', $quotationNonKontrak, $this->karyawan, 'quotation');
-
+            $generateToken = new GenerateToken();
+            $token = $generateToken->save('non_kontrak', $quotationNonKontrak, $this->karyawan, 'quotation');
+            
             $quotationNonKontrak->is_generated = true;
             $quotationNonKontrak->generated_by = $this->karyawan;
             $quotationNonKontrak->generated_at = Carbon::now()->format('Y-m-d H:i:s');
@@ -107,7 +108,7 @@ class QtApproveController extends Controller
             $quotationKontrak = QuotationKontrakH::where('id', $request->id)->first();
 
             // GENERATE QR
-            GenerateQrDocument::insert('quotation_kontrak', $quotationKontrak, $this->karyawan);
+            (new GenerateQrDocument())->insert('quotation_kontrak', $quotationKontrak, $this->karyawan);
 
             // GENERATE DOCUMENT
             JobTask::insert([
@@ -121,7 +122,8 @@ class QtApproveController extends Controller
             $this->dispatch($job);
 
             // GENERATE LINK & TOKEN
-            $token = GenerateToken::save('kontrak', $quotationKontrak, $this->karyawan, 'quotation');
+            $generateToken = new GenerateToken();
+            $token = $generateToken->save('kontrak', $quotationKontrak, $this->karyawan, 'quotation');
 
             $quotationKontrak->is_generated = true;
             $quotationKontrak->generated_by = $this->karyawan;
@@ -324,31 +326,6 @@ class QtApproveController extends Controller
                 ->send();
 
             if ($email) {
-                /* Fix bug and optimize by 565: 2025-06-18
-                if ($data->data_lama !== null && $data->data_lama !== 'null') {
-                    $data_lama = json_decode($data->data_lama);
-                    if ($data_lama->status_sp == 'false') {
-                        $cek_sp = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', 1)->where('is_approved', 1)->first();
-                        if ($cek_sp != null) {
-                            $data->flag_status = 'sp';
-                            $data->is_ready_order = 1;
-                        }
-                    }
-                } else {
-                    $status_sampling = array_unique($status_sampling);
-
-                    if (count($status_sampling) == 1) {
-                        $status_sampling = implode($status_sampling);
-                        if ($status_sampling == 'SD') {
-                            $data->flag_status = 'sp';
-                            $data->is_ready_order = 1;
-                        } else if ($nonPengujian) {
-                            $data->flag_status = 'sp';
-                            $data->is_ready_order = 1;
-                        }
-                    }
-                }*/
-
                 if ($data->data_lama !== null && $data->data_lama !== 'null') {
                     $data_lama = json_decode($data->data_lama);
                     if ($data_lama->status_sp == 'false') {
@@ -369,6 +346,12 @@ class QtApproveController extends Controller
                         $data->flag_status = 'sp';
                         $data->is_ready_order = 1;
                     }
+                }
+
+                if($data->is_generate_data_lab == 0){
+                    $data->flag_status = 'sp';
+                    $data->is_ready_order = 1;
+                    // $data->is_konfirmasi_order = 1;
                 }
 
                 $data->save();

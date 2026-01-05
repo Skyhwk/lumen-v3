@@ -9,38 +9,29 @@ use Illuminate\Http\Request;
 use DataTables;
 
 use App\Models\{
+    LimitWithdraw,
     MasterKaryawan,
     SaldoFeeSales,
     MutasiFeeSales,
     WithdrawalFeeSales
 };
+use Illuminate\Support\Carbon;
 
 class SaldoFeeSalesController extends Controller
 {
     private $idJabatanSales = [
-        15, // Sales Manager
-        21, // Sales Supervisor
-        22, // Sales Admin Supervisor
-        23, // Senior Sales Admin Staff
         24, // Sales Officer
-        25, // Sales Admin Staff
-        140, // Sales Assistant Manager
-        145, // Sales Intern
-        147, // Sales & Marketing Manager
-        154, // Senior Sales Manager
-        155, // Sales Executive
-        156, // Sales Staff
         148, // Customer Relation Officer
-        157, // Customer Relationship Officer Manager
     ];
 
     public function getSalesList(Request $request)
     {
         $currentUser = $request->attributes->get('user')->karyawan;
 
-        $sales = MasterKaryawan::whereIn('id_jabatan', $this->idJabatanSales)
-            ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales), fn($q) => $q->where('id', $currentUser->id))
-            ->where('is_active', true)
+        $sales = MasterKaryawan::where('is_active', true)
+            ->whereIn('id_jabatan', $this->idJabatanSales)
+            ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            ->when(in_array($currentUser->id_jabatan, $this->idJabatanSales) || $currentUser->nama_lengkap == 'Novva Novita Ayu Putri Rukmana', fn($q) => $q->where('id', $currentUser->id))
             ->orderBy('nama_lengkap', 'asc')
             ->get();
 
@@ -54,6 +45,16 @@ class SaldoFeeSalesController extends Controller
     {
         $saldoFeeSales = SaldoFeeSales::where('sales_id', $request->salesId)->latest()->first();
         if (!$saldoFeeSales) return response()->json(['message' => 'Saldo Fee Sales not found'], 404);
+
+        $limitWithdraw = LimitWithdraw::where('user_id', $request->salesId)->latest()->first();
+        if($limitWithdraw) {
+            if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
+            $usedLimit = WithdrawalFeeSales::where('sales_id', $request->salesId)
+                ->whereIn('status', ['Pending', 'Approved'])
+                ->whereMonth('created_at', Carbon::now()->month())
+                ->sum('amount');
+            $limitWithdraw->limit -= $usedLimit;
+        }
 
         $pendingWithdrawal = WithdrawalFeeSales::where('sales_id', $request->salesId)->where('status', 'pending');
 
@@ -69,6 +70,7 @@ class SaldoFeeSalesController extends Controller
 
         return response()->json([
             'saldoFeeSales' => $saldoFeeSales,
+            'limitWithdraw' => $limitWithdraw,
             'pendingWithdrawal' => [
                 'amount' => $pendingWithdrawal->sum('amount'),
                 'count' => $pendingWithdrawal->count(),
@@ -99,6 +101,16 @@ class SaldoFeeSalesController extends Controller
 
     public function requestWithdrawal(Request $request)
     {
+        $limitWithdraw = LimitWithdraw::where('user_id', $request->sales_id)->latest()->first();
+        if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
+        $usedLimit = WithdrawalFeeSales::where('sales_id', $request->sales_id)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->whereMonth('created_at', Carbon::now()->month())
+            ->sum('amount');
+        $limit = $limitWithdraw->limit - $usedLimit;
+
+        if ($request->amount > $limit) return response()->json(['message' => 'Anda tidak memiliki limit untuk melakukan penarikan'], 400);
+
         $withdrawalFeeSales = new WithdrawalFeeSales();
 
         $withdrawalFeeSales->sales_id = $request->sales_id;
@@ -110,6 +122,10 @@ class SaldoFeeSalesController extends Controller
         $withdrawalFeeSales->updated_by = $this->karyawan;
 
         $withdrawalFeeSales->save();
+
+        $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
+        $saldoFeeSales->active_balance -= $withdrawalFeeSales->amount;
+        $saldoFeeSales->save();
 
         return response()->json(['message' => 'Withdrawal Fee Sales requested successfully'], 201);
     }

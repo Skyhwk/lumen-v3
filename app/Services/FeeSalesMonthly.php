@@ -8,11 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 use App\Models\{
-    MasterKaryawan,
+    // MasterKaryawan,
+    DailyQsd,
     MasterTargetSales,
     MasterFeeSales,
-    QuotationKontrakH,
-    QuotationNonKontrak,
     MutasiFeeSales,
     SaldoFeeSales,
 };
@@ -21,27 +20,8 @@ class FeeSalesMonthly
 {
     private $currentYear;
     private $currentMonth;
-
-    public function __construct()
-    {
-        $this->currentYear = Carbon::now()->year;
-        $this->currentMonth = Carbon::now()->format('m');
-    }
-
-    private $monthStr = [
-        '01' => 'januari',
-        '02' => 'februari',
-        '03' => 'maret',
-        '04' => 'april',
-        '05' => 'mei',
-        '06' => 'juni',
-        '07' => 'juli',
-        '08' => 'agustus',
-        '09' => 'september',
-        '10' => 'oktober',
-        '11' => 'november',
-        '12' => 'desember',
-    ];
+    private $currentPeriod;
+    private $currentMonthStr;
 
     private $categoryStr = [
         'AIR LIMBAH' => [
@@ -121,108 +101,151 @@ class FeeSalesMonthly
         ],
     ];
 
+    public function __construct()
+    {
+        $this->currentYear = Carbon::now()->year;
+        $this->currentMonth =  Carbon::now()->format('m');
+        $this->currentPeriod = $this->currentYear . "-" . $this->currentMonth;
+
+        $monthStr = [
+            '01' => 'januari',
+            '02' => 'februari',
+            '03' => 'maret',
+            '04' => 'april',
+            '05' => 'mei',
+            '06' => 'juni',
+            '07' => 'juli',
+            '08' => 'agustus',
+            '09' => 'september',
+            '10' => 'oktober',
+            '11' => 'november',
+            '12' => 'desember',
+        ];
+
+        $this->currentMonthStr = $monthStr[$this->currentMonth];
+    }
+
     public function run()
     {
         DB::beginTransaction();
         try {
-            $month = $this->monthStr[$this->currentMonth];
+            // $salesList = MasterKaryawan::whereIn('id_jabatan', [
+            //     24, // Sales Officer
+            //     148, // Customer Relation Officer
+            // ])
+            //     ->orWhere('nama_lengkap', 'Novva Novita Ayu Putri Rukmana')
+            //     ->where('is_active', true)
+            //     ->orderBy('nama_lengkap', 'asc')
+            //     ->get();
 
-            $salesList = MasterKaryawan::whereIn('id_jabatan', [
-                15, // Sales Manager
-                21, // Sales Supervisor
-                22, // Sales Admin Supervisor
-                23, // Senior Sales Admin Staff
-                24, // Sales Officer
-                25, // Sales Admin Staff
-                140, // Sales Assistant Manager
-                145, // Sales Intern
-                147, // Sales & Marketing Manager
-                154, // Senior Sales Manager
-                155, // Sales Executive
-                156, // Sales Staff
-                148, // Customer Relation Officer
-                157, // Customer Relationship Officer Manager
-            ])
-                ->where('is_active', true)
-                ->orderBy('nama_lengkap', 'asc')
-                ->get();
+            $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
 
-            foreach ($salesList as $sales) {
-                $masterTargetSales = MasterTargetSales::where(['karyawan_id' => $sales->id, 'tahun' => $this->currentYear, 'is_active' => true])->whereNotNull($month)->latest()->first();
-                if (!$masterTargetSales) continue;
+            foreach ($masterTargetSales as $targetSales) {
+                $salesId = $targetSales->karyawan_id;
 
-                $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $sales->id, 'periode' => $this->currentYear . "-" . $this->currentMonth])->exists();
+                $masterFeeSalesExists = MasterFeeSales::where(['sales_id' => $salesId, 'period' => $this->currentPeriod])->exists();
                 if ($masterFeeSalesExists) continue;
 
-                $orderDetailFilter = fn($q) => $q->where('is_approve', true)
-                    ->whereYear('tanggal_sampling', $this->currentYear)
-                    ->whereMonth('tanggal_sampling', $this->currentMonth)
-                    ->where('tanggal_sampling', '>=', '2025-12-17');
+                $feeSalesRecap = MasterFeeSales::where('sales_id', $salesId)->get()->flatMap(fn($mfs) => collect(json_decode($mfs->recap, true)));
+                $isExistsInFeeSales = fn($qsd) => $feeSalesRecap->contains(function ($recap) use ($qsd) {
+                    if ($recap['no_order'] !== $qsd->no_order) return false;
+                    if (!$qsd->periode) return true;
 
-                $quotations = collect([QuotationKontrakH::class, QuotationNonKontrak::class])
-                    ->flatMap(fn($model) => $model::with(['orderHeader.orderDetail' => $orderDetailFilter, 'orderHeader.invoices.recordWithdraw'])
-                        ->where(['sales_id'  => $sales->id, 'is_active' => true])
-                        ->whereHas('orderHeader.orderDetail', $orderDetailFilter)
-                        ->whereHas('orderHeader.invoices')
-                        ->get()
-                        ->filter(fn($quotation) => ($invoices = $quotation->orderHeader->invoices) && $invoices->sum('nilai_tagihan') === ($invoices->sum('nilai_pelunasan') + $invoices->flatMap->recordWithdraw->sum('nilai_pembayaran'))));
+                    return $recap['periode'] === $qsd->periode;
+                });
+
+                $quotations = DailyQsd::with('orderHeader.orderDetail')
+                    ->where('sales_id', $salesId)
+                    ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
+                    ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
+                    ->where('is_lunas', true)
+                    ->get()
+                    ->map(function ($qsd) use ($isExistsInFeeSales) {
+                        if ($isExistsInFeeSales($qsd)) return null;
+
+                        if ($qsd->periode) {
+                            $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
+                            if ($orderDetail->isNotEmpty()) {
+                                $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
+                            }
+                        }
+
+                        return $qsd;
+                    })
+                    ->filter()
+                    ->values();
 
                 if ($quotations->isEmpty()) continue;
 
-                // ACHIEVED CATEGORY
-                $achievedCategory = collect($masterTargetSales->$month)->map(fn($_, $category) => $quotations->flatMap(fn($q) => $q->orderHeader->orderDetail)->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))->count());
+                // FEE AMOUNT
+                $targetAmount = json_decode($targetSales->target, true)[$this->currentPeriod];
+                $achievedAmount = $quotations->sum('total_revenue');
+                $percentageAmount = $achievedAmount / $targetAmount;
+                $rate = ($achievedAmount >= $targetAmount ? 5 : 1) / 100;
+                // $feeAmount = $achievedAmount * $rate;
 
-                // ACHIEVED AMOUNT
-                $achievedAmount = $quotations->sum('biaya_akhir') + $quotations->sum('total_pph') - $quotations->sum('total_ppn');
+                // FEE CATEGORY
+                $targetCategory = collect($targetSales->{$this->currentMonthStr});
+                $achievedCategoryDetails = $targetCategory->map(
+                    function ($_, $category) use ($quotations, $targetCategory) {
+                        $target = $targetCategory[$category];
+
+                        $achieved = $quotations->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)
+                            ->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))
+                            ->count();
+
+                        return [
+                            'target' => $target,
+                            'achieved' => $achieved,
+                            'point' => $target && $achieved ? floor($achieved / $target) : 0,
+                        ];
+                    }
+                );
+
+                $totalAchievedPoint = $achievedCategoryDetails->sum('point');
+                $totalAchievedPoint = $totalAchievedPoint == 0 ? 1 : $totalAchievedPoint;
+                $totalTargetPoint = $targetCategory->filter(fn($value) => $value > 0)->count();
+
+                $achievedCategory = collect([
+                    'total_target' => $achievedCategoryDetails->sum('target'),
+                    'total_achieved' => $achievedCategoryDetails->sum('achieved'),
+                    'total_point' => $totalAchievedPoint . '/' . $totalTargetPoint,
+                    'achieved_category_details' => $achievedCategoryDetails->toArray(),
+                ]);
+                $percentageCategory = $totalAchievedPoint / $totalTargetPoint;
+
+                // TOTAL FEE
+                $totalFee = $totalAchievedPoint / $totalTargetPoint * $rate * $achievedAmount;
 
                 // RECAP
                 $recap = $quotations->map(fn($quotation) => [
-                    'no_document' => $quotation->no_document,
-                    'tanggal_penawaran' => $quotation->tanggal_penawaran,
-                    'order_header' => [
-                        'no_order' => $quotation->orderHeader->no_order,
-                        'order_detail' => $quotation->orderHeader->orderDetail
-                            ->map(fn($orderDetail) => [
-                                'kategori_3' => $orderDetail->kategori_3,
-                                'cfr' => $orderDetail->cfr,
-                                'tanggal_sampling' => $orderDetail->tanggal_sampling,
-                                'approved_at' => $orderDetail->approved_at
-                            ]),
-                        'invoices' => $quotation->orderHeader->invoices
-                            ->map(fn($invoice) => [
-                                'no_invoice' => $invoice->no_invoice,
-                                'nilai_pelunasan' => $invoice->nilai_pelunasan,
-                                'record_withdraw' => $invoice->recordWithdraw->map(fn($w) => ['nilai_pembayaran' => $w->nilai_pembayaran])
-                            ]),
-                    ],
-                    'biaya_akhir' => $quotation->biaya_akhir,
-                    'total_pph' => $quotation->total_pph,
-                    'total_ppn' => $quotation->total_ppn,
-                ]);
-
-                // FEE CATEGORY & AMOUNT
-                $targetAmount = json_decode($masterTargetSales->target, true)[$this->currentYear . "-" . $this->currentMonth];
-                $percentage = $achievedAmount >= $targetAmount ? 0.05 : 0.01;
-                $countAchievedCategory = $achievedCategory->sum();
-                $countTargetCategory = collect($masterTargetSales->$month)->sum();
-                $feeCategory = $countAchievedCategory >= $countTargetCategory ? $countAchievedCategory / $countTargetCategory * $percentage * $achievedAmount : 0;
-                $feeAmount = $achievedAmount * $percentage;
-
-                $totalFee = $feeCategory + $feeAmount;
+                    'no_document' => $quotation->no_quotation,
+                    'no_order' => $quotation->no_order,
+                    'nama_perusahaan' => $quotation->nama_perusahaan,
+                    'periode' => $quotation->periode,
+                    'kategori_3' => optional($quotation->orderHeader)->orderDetail ? $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray() : [],
+                    'no_invoice' => $quotation->no_invoice,
+                    'total_revenue' => $quotation->total_revenue,
+                ])->values();
 
                 // MASTER FEE SALES
                 $masterFeeSales = new MasterFeeSales();
 
-                $masterFeeSales->sales_id = $sales->id;
-                $masterFeeSales->periode = $this->currentYear . "-" . $this->currentMonth;
-                $masterFeeSales->target_category = json_encode($masterTargetSales->$month);
+                $masterFeeSales->sales_id = $salesId;
+                $masterFeeSales->period = $this->currentPeriod;
                 $masterFeeSales->target_amount = $targetAmount;
-                $masterFeeSales->achieved_category = json_encode($achievedCategory);
                 $masterFeeSales->achieved_amount = $achievedAmount;
-                $masterFeeSales->recap = json_encode($recap);
-                $masterFeeSales->fee_category = $feeCategory;
-                $masterFeeSales->fee_amount = $feeAmount;
+                $masterFeeSales->percentage_amount = $percentageAmount;
+                $masterFeeSales->rate = $rate;
+
+                $masterFeeSales->target_category = json_encode($targetCategory);
+                $masterFeeSales->achieved_category = json_encode($achievedCategory);
+                $masterFeeSales->percentage_category = $percentageCategory;
+
                 $masterFeeSales->total_fee = $totalFee;
+
+                $masterFeeSales->recap = json_encode($recap);
+
                 $masterFeeSales->created_by = 'System';
                 $masterFeeSales->updated_by = 'System';
 
@@ -233,11 +256,11 @@ class FeeSalesMonthly
 
                 $mutasiFeeSales = new MutasiFeeSales();
 
-                $mutasiFeeSales->sales_id = $sales->id;
+                $mutasiFeeSales->sales_id = $salesId;
                 $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
                 $mutasiFeeSales->mutation_type = 'Debit';
                 $mutasiFeeSales->amount = $totalFee;
-                $mutasiFeeSales->description = 'Fee Sales ' . Carbon::createFromFormat('Y-m', $this->currentYear . '-' . $this->currentMonth)->translatedFormat('F Y');
+                $mutasiFeeSales->description = 'Fee Sales ' . Carbon::createFromFormat('Y-m', $this->currentPeriod)->translatedFormat('F Y');
                 $mutasiFeeSales->status = 'Done';
                 $mutasiFeeSales->created_by = 'System';
                 $mutasiFeeSales->updated_by = 'System';
@@ -245,16 +268,22 @@ class FeeSalesMonthly
                 $mutasiFeeSales->save();
 
                 // SALDO FEE SALES
-                $saldoFeeSales = SaldoFeeSales::firstOrNew(['sales_id' => $sales->id]);
-                $saldoFeeSales->active_balance = ($saldoFeeSales->active_balance ?: 0) + $totalFee;
-                $saldoFeeSales->created_by = 'System';
+                $saldoFeeSales = SaldoFeeSales::where('sales_id', $salesId)->latest()->first();
+                if ($saldoFeeSales) {
+                    $saldoFeeSales->active_balance += $totalFee;
+                } else {
+                    $saldoFeeSales = new SaldoFeeSales();
+                    $saldoFeeSales->sales_id = $salesId;
+                    $saldoFeeSales->active_balance = $totalFee;
+                }
                 $saldoFeeSales->updated_by = 'System';
+                $saldoFeeSales->created_by = 'System';
                 $saldoFeeSales->save();
             }
             DB::commit();
         } catch (\Throwable $th) {
             DB::rollBack();
-            Log::error('[FeeSalesMonthly] Error: ' . $th->getMessage());
+            Log::error('[FeeSalesMonthly] Error: ' . $th->getMessage() . ' Line: ' . $th->getLine());
         }
     }
 }
