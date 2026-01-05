@@ -114,8 +114,11 @@ class BankDataCustomerController extends Controller
 
             $numbers = $data
                 ->flatMap(function ($pelanggan) {
-                    return $pelanggan->kontak_pelanggan
-                        ?->pluck('no_tlp_perusahaan') ?? [];
+                    if ($pelanggan->kontak_pelanggan) {
+                        return $pelanggan->kontak_pelanggan->pluck('no_tlp_perusahaan');
+                    }
+
+                    return [];
                 })
                 ->filter()
                 ->values()

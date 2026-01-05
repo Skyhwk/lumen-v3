@@ -114,7 +114,7 @@
                     <tr>
                         <td class="custom5" width="120">Nama Pelanggan</td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $header->nama_pelanggan }}</td>
+                        <td class="custom5"><strong>{!! html_entity_decode($header->nama_pelanggan) !!}</strong></td>
                     </tr>
                 </table>
 
@@ -210,7 +210,7 @@
                         <tr>
                             <td class="custom5">Keterangan</td>
                             <td class="custom5">:</td>
-                            <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                            <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
                         </tr>
                     @endif
                     {{-- <tr>

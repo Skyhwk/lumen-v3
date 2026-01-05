@@ -656,11 +656,11 @@ class DraftUlkController extends Controller
                     ['parameter', 'asc']
                 ])->values()->toArray();
 
-                $data_custom = collect($data_custom)->sortBy([
-                    ['tanggal_sampling', 'asc'],
-                    ['no_sampel', 'asc'],
-                    ['parameter', 'asc']
-                ])->values()->toArray();
+                // $data_custom = collect($data_custom)->sortBy([
+                //     ['tanggal_sampling', 'asc'],
+                //     ['no_sampel', 'asc'],
+                //     ['parameter', 'asc']
+                // ])->values()->toArray();
 
                 array_push($defaultMethods, '-');
 

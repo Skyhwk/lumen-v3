@@ -2,29 +2,8 @@
     use App\Models\TabelRegulasi;
     use App\Models\MasterRegulasi;
     use App\Models\DetailLingkunganKerja;
+    use App\Models\LhpsLingCustom;
     use Carbon\Carbon;
-
-    // $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->first();
-    // $tanggal_sampling = '';
-    // if($header->status_sampling == 'S24'){
-    //     $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
-
-    //     $tanggalAwal = $header->tanggal_sampling;
-
-    //     $tanggalAkhir = Carbon::parse($tanggalAwal)->addDay()->format('Y-m-d');
-    //     $tanggalAwal = Carbon::parse($tanggalAwal)->format('Y-m-d');
-
-    //     if ($tanggalAwal || $tanggalAkhir) {
-    //         if ($tanggalAwal == $tanggalAkhir) {
-    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal);
-    //         } else {
-    //             $tanggal_sampling = \App\Helpers\Helper::tanggal_indonesia($tanggalAwal) . ' - ' . \App\Helpers\Helper::tanggal_indonesia($tanggalAkhir);
-    //         }
-    //     } else {
-    //         $tanggal_sampling = '-';
-    //     }
-
-    // } else {
         
     $isManyNoSampel = $header->is_many_sampel == 1 ? true : false;
     if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
@@ -50,7 +29,52 @@
     } else {
         $tanggal_sampling = '-';
     }
-    // }
+
+    $regulasiThisPage = null;
+    $isPagi = false;
+    $isSiang = false;
+    $isSore = false;
+
+    $waktu_pengukuran = $header->waktu_pengukuran;
+    $cuaca = $header->cuaca;
+    $suhu = $header->suhu;
+    $kelembapan = $header->kelembapan;
+
+    $kecepatan_angin = $header->kec_angin;
+    $arah_angin = $header->arah_angin;
+    $tekanan_udara = $header->tekanan_udara;
+
+    if ($header->regulasi_custom != null){
+        foreach (json_decode($header->regulasi_custom) as $key => $y) {
+            if ($y->page == $page) {
+                $regulasiThisPage = $y->regulasi;
+            }
+        }
+    }
+    
+    if (stripos($regulasiThisPage, "shift 1") !== false) $isPagi = true;
+    if (stripos($regulasiThisPage, "shift 2") !== false) $isSiang = true;
+    if (stripos($regulasiThisPage, "shift 3") !== false) $isSore = true;
+
+    $cekDetail = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter_lab')->toArray();
+    
+    if(in_array('NO2 (8 Jam)', $cekDetail) || in_array('SO2 (8 Jam)', $cekDetail)) {
+        $shift = $isPagi ? 'L1' : ($isSiang ? 'L2' : ($isSore ? 'L3' : null));
+        if ($shift) {
+            $cekDataLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', $shift)->whereIn('parameter', ['NO2 (8 Jam)', 'SO2 (8 Jam)'])->first();
+            
+            $waktu_pengukuran = $cekDataLapangan->waktu_pengukuran;
+            $cuaca = $cekDataLapangan->cuaca;
+            $suhu = $cekDataLapangan->suhu;
+            $kelembapan = $cekDataLapangan->kelembapan;
+
+            $kecepatan_angin = ($cekDataLapangan->kecepatan_angin !== null && $cekDataLapangan->kecepatan_angin !== "") 
+                ? str_replace(',', '', number_format($cekDataLapangan->kecepatan_angin * 3.6, 2)) 
+                : '-';
+            // $arah_angin = $cekDataLapangan->arah_angin;
+            $tekanan_udara = $cekDataLapangan->tekanan_udara;
+        }
+    }
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -208,7 +232,7 @@
                         <tr>
                             <td class="custom5">Keterangan</td>
                             <td class="custom5">:</td>
-                            <td class="custom5">{{ $header->deskripsi_titik }}</td>
+                            <td class="custom5"><strong>{{ $header->deskripsi_titik }}</strong></td>
                         </tr>
                     @endif
                     {{-- <tr>
@@ -236,17 +260,17 @@
                                     <tr>
                                         <td class="custom5" width="120">Suhu Lingkungan</td>
                                         <td class="custom5" width="12">:</td>
-                                        <td class="custom5">{{ $header->suhu }} °C</td>
+                                        <td class="custom5">{{ $suhu }} °C</td>
                                     </tr>
                                     <tr>
                                         <td class="custom5" width="120">Kelembapan</td>
                                         <td class="custom5" width="12">:</td>
-                                        <td class="custom5">{{ $header->kelembapan }} %</td>
+                                        <td class="custom5">{{ $kelembapan }} %</td>
                                     </tr>
                                     <tr>
                                         <td class="custom5" width="120">Tekanan Udara</td>
                                         <td class="custom5" width="12">:</td>
-                                        <td class="custom5">{{ $header->tekanan_udara }} mmHg</td>
+                                        <td class="custom5">{{ $tekanan_udara }} mmHg</td>
                                     </tr>
                                 </table>
                             </td>
@@ -255,19 +279,18 @@
                 @endif
 
 
-                @if (!empty($header->regulasi_custom))
-
-                    @foreach (json_decode($header->regulasi_custom) as $y)
-                        <table style="padding-top: 10px;" width="100%">
-                            <tr>
-                                @php
-                                @endphp
-                                <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
-                            </tr>
-                        </table>
-                    @endforeach
-
+                @if ($header->regulasi_custom != null)
+                    <table style="padding: 10px 0px 0px 0px;" width="100%">
+                        @foreach (json_decode($header->regulasi_custom) as $key => $y)
+                            @if ($y->page == $page)
+                                <tr>
+                                    <td class="custom5" colspan="3"><strong>{{ $y->regulasi }}</strong></td>
+                                </tr>
+                            @endif
+                        @endforeach
+                    </table>
                 @endif
+                    {{-- Keterangan --}}
                 @php
                     $temptArrayPush = [];
                     if (!empty($detail)) {

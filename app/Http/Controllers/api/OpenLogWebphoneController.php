@@ -37,16 +37,16 @@ class OpenLogWebphoneController extends Controller
             ->where('is_active', true)
             ->first(); // ⬅️ WAJIB
 
-        if(empty($data)) {
-            return response()->json([
-                'message' => 'Tidak ada data dengan id pelanggan ' . $request->value,
-            ], 404);
+        $numbers = [];
+
+        if ($data && $data->kontak_pelanggan) {
+            $numbers = $data->kontak_pelanggan
+                ->pluck('no_tlp_perusahaan')
+                ->filter()
+                ->values()
+                ->toArray();
         }
-        $numbers = $data?->kontak_pelanggan
-            ?->pluck('no_tlp_perusahaan')
-            ->filter()
-            ->values()
-            ->toArray() ?? [];
+
 
         $logIds = LogWebphone::whereIn('number', $numbers)
             ->where('created_at', '>=', Carbon::now()->subMonths(2))

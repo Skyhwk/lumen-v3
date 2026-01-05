@@ -7,7 +7,10 @@ use Laravel\Lumen\Console\Kernel as ConsoleKernel;
 use App\Console\Commands\CleanOldRequestLogs;
 use App\Console\Commands\ScheduleEverySecond;
 use App\Console\Commands\CacheCommand;
-use App\Services\{EmailBlast};
+use App\Console\Commands\SchaduleUpdateQsd;
+use App\Console\Commands\SchaduleUpdateSummaryQsd;
+use App\Console\Commands\FeeSales;
+use App\Console\Commands\AssignSales;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -21,7 +24,11 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
-        Commands\CacheCommand::class
+        Commands\CacheCommand::class,
+        Commands\SchaduleUpdateQsd::class,
+        Commands\SchaduleUpdateSummaryQsd::class,
+        Commands\FeeSales::class,
+        Commands\AssignSales::class
     ];
 
     /**
@@ -32,9 +39,6 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->call(function () {
-        //     EmailBlast::sendEmailBlast();
-        // })->everySecond();
     }
 
     protected function commands()

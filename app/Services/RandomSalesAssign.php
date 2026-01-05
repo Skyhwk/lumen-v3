@@ -216,45 +216,6 @@ class RandomSalesAssign
                     $chunkIndex++;
                 });
 
-            // example Data
-            // $selectedData = collect($AssignToSalesNewByCheckingAll);
-            // $firstMatch = $selectedData->first(function ($customer) {
-            //     return $customer->latestOrder
-            //         && ($customer->latestNonKontrakQuotation
-            //             || $customer->latestKontrakQuotation);
-            // });
-            // $lastMatch = $selectedData->last(function ($customer) {
-            //     return $customer->latestOrder
-            //         && ($customer->latestNonKontrakQuotation
-            //             || $customer->latestKontrakQuotation);
-            // });
-
-            // $reasons = collect($AssignToSalesNewByCheckingAll)
-            //     ->pluck('reAssignReason')
-            //     ->filter()
-            //     ->unique()
-            //     ->values()
-            //     ->toArray();
-
-            // $grouped = collect($AssignToSalesNewByCheckingAll)
-            //     ->filter(fn($item) => !empty($item['reAssignReason']))
-            //     ->groupBy('reAssignReason')
-            //     ->map(function ($items, $reason) {
-            //         return $items->take(3)->values();
-            //     });
-            // dump($reasons);
-            // dd('masuk');
-
-            // Log::channel('reassign_customer')->info(
-            //     ">>> All reason for reassign customer <<<",
-            //     ['data' => $reasons]
-            // );
-
-            // Log::channel('reassign_customer')->info(
-            //     ">>> All reason for reassign customer <<<",
-            //     ['data' => $grouped]
-            // );
-
             $allDataNeedAssign = collect($AssignToSalesNew)->merge(collect($AssignToSalesNewByCheckingAll));
             $AssignToSalesExecutive = collect($AssignToSalesExecutive);
             $bankDataToAssign = collect([]);
@@ -288,64 +249,63 @@ class RandomSalesAssign
                 'timestamp' => Carbon::now()->toDateTimeString(),
             ]);
 
+            Log::channel('reassign_customer')->info("=== Processing Reassign Data ===", [
+                'timestamp' => Carbon::now()->toDateTimeString(),
+            ]);
 
-            // dd('----------------------------------------------');
-
-            if ($type == 'check') {
-                return [
-                    'status' => 'success',
-                    'message' => 'Success get data to reassign.',
-                    'new_sales' => self::$salesIdNew,
-                    'data from resign sales to new sales' => count($AssignToSalesNew),
-                    'data from resign sales to sales executive' => count($AssignToSalesExecutive),
-                    'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
-                    'data not reassign' => count($NotReAssign),
-                    'data assign to bank data' => count($bankDataToAssign),
-                    // 'reasons' => $reasons,
-                    // 'data' => $grouped
-                ];
-            } else if ($type == 'reassign') {
-                Log::channel('reassign_customer')->info("=== Processing Reassign Data ===", [
-                    'timestamp' => Carbon::now()->toDateTimeString(),
-                ]);
-
-                try {
-                    DB::statement('SET SESSION innodb_lock_wait_timeout = 120');
-                    DB::statement('SET SESSION lock_wait_timeout = 120');
-                } catch (\Exception $e) {
-                    Log::channel('reassign_customer')->warning("=== Could not set timeout: " . $e->getMessage());
-                }
-                // Delete webphone and log
-                // dump(count($allDataNeedAssign), count($bankDataToAssign), count($AssignToSalesExecutive));
-                $allForDelete = collect($allDataNeedAssign)
-                    ->merge(collect($bankDataToAssign))
-                    ->merge(collect($AssignToSalesExecutive));
-
-                self::deteleAllReAssignDataWebphoneAndLog($allForDelete);
-
-                // Assign
-                DB::transaction(function () use (
-                    $bankDataToAssign,
-                    $AssignToSalesExecutive,
-                    $allDataNeedAssign,
-                ) {
-                    self::assignToBankData(collect($bankDataToAssign) ?? []);
-                    self::assignToSalesExecutive($AssignToSalesExecutive);
-                    self::assignToNewSales($allDataNeedAssign);
-                });
-                Log::channel('reassign_customer')->info("=== FINISH REASSIGN === ");
-
-                return [
-                    'status' => 'success',
-                    'message' => 'Success get data to reassign.',
-                    'new_sales' => self::$salesIdNew,
-                    'data from resign sales to new sales' => count($AssignToSalesNew),
-                    'data from resign sales to sales executive' => count($AssignToSalesExecutive),
-                    'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
-                    'data not reassign' => count($NotReAssign),
-                    'data assign to bank data' => count($bankDataToAssign),
-                ];
+            try {
+                DB::statement('SET SESSION innodb_lock_wait_timeout = 120');
+                DB::statement('SET SESSION lock_wait_timeout = 120');
+            } catch (\Exception $e) {
+                Log::channel('reassign_customer')->warning("=== Could not set timeout: " . $e->getMessage());
             }
+            // Delete webphone and log
+            // dump(count($allDataNeedAssign), count($bankDataToAssign), count($AssignToSalesExecutive));
+            $allForDelete = collect($allDataNeedAssign)
+                ->merge(collect($bankDataToAssign))
+                ->merge(collect($AssignToSalesExecutive));
+
+            self::deteleAllReAssignDataWebphoneAndLog($allForDelete);
+
+            // Assign
+            DB::transaction(function () use (
+                $bankDataToAssign,
+                $AssignToSalesExecutive,
+                $allDataNeedAssign
+            ) {
+                self::assignToBankData(collect($bankDataToAssign) ?? []);
+                self::assignToSalesExecutive($AssignToSalesExecutive);
+                self::assignToNewSales($allDataNeedAssign);
+            });
+            Log::channel('reassign_customer')->info("=== FINISH REASSIGN === ");
+
+            // if ($type == 'check') {
+            //     return [
+            //         'status' => 'success',
+            //         'message' => 'Success get data to reassign.',
+            //         'new_sales' => self::$salesIdNew,
+            //         'data from resign sales to new sales' => count($AssignToSalesNew),
+            //         'data from resign sales to sales executive' => count($AssignToSalesExecutive),
+            //         'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
+            //         'data not reassign' => count($NotReAssign),
+            //         'data assign to bank data' => count($bankDataToAssign),
+            //         // 'reasons' => $reasons,
+            //         // 'data' => $grouped
+            //     ];
+            // } else if ($type == 'reassign') {
+                
+
+            //     return [
+            //         'status' => 'success',
+            //         'message' => 'Success get data to reassign.',
+            //         'new_sales' => self::$salesIdNew,
+            //         'data from resign sales to new sales' => count($AssignToSalesNew),
+            //         'data from resign sales to sales executive' => count($AssignToSalesExecutive),
+            //         'data reassign to new sales' => count($AssignToSalesNewByCheckingAll),
+            //         'data not reassign' => count($NotReAssign),
+            //         'data assign to bank data' => count($bankDataToAssign),
+            //     ];
+            // }
         } catch (\Throwable $th) {
             dd($th);
             Log::channel('reassign_customer')->error('error', [$th->getMessage(), $th->getLine(), $th->getFile()]);

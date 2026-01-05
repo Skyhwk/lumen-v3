@@ -1,478 +1,304 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\SummaryQSDServices;
-use App\Models\SummaryQSD;
+use App\Services\GetBawahan;
 use Carbon\Carbon;
-
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SummaryQSDController extends Controller
 {
-    private $summaryQSDServices;
+    private $managerIds;
+    private $teamLookup;
+    private $emptyOrder;
 
     public function __construct()
     {
-        $this->summaryQSDServices = new SummaryQSDServices();
+        $this->managerIds = [19, 41, 14];
     }
 
     public function index(Request $request)
     {
-        switch (strtolower(trim($request->type))) {
-            case 'order':
-                $response = $this->order($request);
-                $summaryQSD = json_decode($response->getContent(), true);
+        $year = $request->input('tahun', Carbon::now()->year);
+        $type = strtolower(trim($request->type ?? 'order'));
 
-                $resp_forecast = $this->forecast($request);
-                $forecast = json_decode($resp_forecast->getContent(), true)['all_total_periode'];
+        // Initialize empty order once
+        $this->emptyOrder = $this->getEmptyOrder();
 
-                $summaryQSD['order_forecast_periode'] = collect($summaryQSD['all_total_periode'])
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($forecast[$bulan] ?? 0)
-                    ])
-                    ->toArray();
+        // Get all team members with hierarchy
+        $allMembers   = $this->getAllTeamMembers();
+        $allMemberIds = collect($allMembers)->pluck('id')->unique()->toArray();
 
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
+        // Build team lookup map once
+        $this->teamLookup = $this->buildTeamLookupMap($allMembers);
 
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'forecast':
-                $response = $this->forecast($request);
-                $summaryQSD = json_decode($response->getContent(), true);
+        // Get revenue data - OPTIMIZED
+        $bulkDPP = $this->getRevenueFromDailyQSD($allMemberIds, $year, $type);
 
-                $resp_order = $this->order($request);
-                $order = json_decode($resp_order->getContent(), true)['all_total_periode'];
+        // Find resigned members
+        $resignedMemberIds = array_diff(array_keys($bulkDPP), $allMemberIds);
 
-                $summaryQSD['order_forecast_periode'] = collect($summaryQSD['all_total_periode'])
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($order[$bulan] ?? 0)
-                    ])
-                    ->toArray();
-
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'sampling':
-                $response = $this->sampling($request);
-                $summaryQSD = json_decode($response->getContent(), true);
-
-                $resp_order = $this->order($request);
-                $order = json_decode($resp_order->getContent(), true)['all_total_periode'];
-
-                $resp_forecast = $this->forecast($request);
-                $forecast = json_decode($resp_forecast->getContent(), true)['all_total_periode'];
-
-                $summaryQSD['order_forecast_periode'] = collect($order)
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($forecast[$bulan] ?? 0)
-                    ])
-                    ->toArray();
-
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'sd':
-                $response = $this->sampelDiantar($request);
-                $summaryQSD = json_decode($response->getContent(), true);
-
-                $resp_order = $this->order($request);
-                $order = json_decode($resp_order->getContent(), true)['all_total_periode'];
-
-                $resp_forecast = $this->forecast($request);
-                $forecast = json_decode($resp_forecast->getContent(), true)['all_total_periode'];
-
-                $summaryQSD['order_forecast_periode'] = collect($order)
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($forecast[$bulan] ?? 0)
-                    ])
-                    ->toArray();
-
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'contract':
-                $response = $this->contract($request);
-                $summaryQSD = json_decode($response->getContent(), true);
-
-                $resp_order = $this->order($request);
-                $order = json_decode($resp_order->getContent(), true)['all_total_periode'];
-
-                $resp_forecast = $this->forecast($request);
-                $forecast = json_decode($resp_forecast->getContent(), true)['all_total_periode'];
-
-                $summaryQSD['order_forecast_periode'] = collect($order)
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($forecast[$bulan] ?? 0)
-                    ])
-                    ->toArray();
-
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'new':
-                $response = $this->new($request);
-                $summaryQSD = json_decode($response->getContent(), true);
-
-                $resp_order = $this->order($request);
-                $order = json_decode($resp_order->getContent(), true)['all_total_periode'];
-
-                $resp_forecast = $this->forecast($request);
-                $forecast = json_decode($resp_forecast->getContent(), true)['all_total_periode'];
-
-                $summaryQSD['order_forecast_periode'] = collect($order)
-                    ->mapWithKeys(fn($total, $bulan) => [
-                        $bulan => $total + ($forecast[$bulan] ?? 0)
-                    ])
-                    ->toArray();
-
-                $summaryQSD['order_forecast'] = array_sum($summaryQSD['order_forecast_periode']);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $summaryQSD['data'],
-                    'all_total_periode' => $summaryQSD['all_total_periode'],
-                    'all_total' => $summaryQSD['all_total'],
-                    'order_forecast_periode' => $summaryQSD['order_forecast_periode'],
-                    'order_forecast' => $summaryQSD['order_forecast'],
-                    'message' => 'Data berhasil diproses!',
-                ], 200);
-            case 'get_all':
-                $response = (new SummaryQSDServices())->year($request->tahun)->run();
-
-                return $response;
-            default:
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Type Data Tidak Valid!',
-                ], 404);
+        if (!empty($resignedMemberIds)) {
+            $resignedMembers = $this->getResignedMembersWithTeam($resignedMemberIds);
+            $allMembers      = array_merge($allMembers, $resignedMembers);
         }
-    }
 
-    public function order(Request $request)
-    {
-        $summaryQSD = SummaryQSD::where('type', 'order')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
+        $teamsData = $this->processTeamData($allMembers, $bulkDPP);
 
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->order($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
+        // Calculate team totals - OPTIMIZED
+        $allteam_total_periode = $this->emptyOrder;
+
+        foreach ($teamsData as &$teamData) {
+            $teamTotal      = $this->emptyOrder;
+            $teamTotalStaff = $this->emptyOrder;
+
+            foreach (['staff', 'supervisor', 'manager'] as $grade) {
+                if (!empty($teamData[$grade])) {
+                    foreach ($teamData[$grade] as &$member) {
+                        foreach ($member['order'] as $month => $amount) {
+                            $teamTotal[$month] += $amount;
+                            $allteam_total_periode[$month] += $amount;
+                            
+                            if ($grade === 'staff') {
+                                $teamTotalStaff[$month] += $amount;
+                            }
+                        }
+                    }
+                }
             }
+
+            $teamData['team_total_periode']       = $teamTotal;
+            $teamData['team_total']               = array_sum($teamTotal);
+            $teamData['team_total_staff_periode'] = $teamTotalStaff;
+            $teamData['team_total_staff']         = array_sum($teamTotalStaff);
         }
 
         return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
+            'success'           => true,
+            'type'              => $type,
+            'year'              => $year,
+            'data'              => array_values($teamsData),
+            'all_total_periode' => $allteam_total_periode,
+            'all_total'         => array_sum($allteam_total_periode),
+            'message'           => 'Data berhasil diproses!',
         ], 200);
     }
 
-    public function orderAll(Request $request)
+    private function getTeams()
     {
-        $summaryQSD = SummaryQSD::where('type', 'order_all')
+        $teams    = [];
+        $addedIds = [];
+
+        foreach ($this->managerIds as $manager) {
+            $team = GetBawahan::on('id', $manager)
+                ->all()
+                ->filter(function ($item) use (&$addedIds) {
+                    if (in_array($item->id, $addedIds)) {
+                        return false;
+                    }
+                    $addedIds[] = $item->id;
+                    return true;
+                })
+                ->map(function ($item) {
+                    return [
+                        'id'              => $item->id,
+                        'nama_lengkap'    => $item->nama_lengkap,
+                        'grade'           => $item->grade,
+                        'is_active'       => $item->is_active,
+                        'atasan_langsung' => $item->atasan_langsung,
+                        'image'           => $item->image,
+                    ];
+                })
+                ->values();
+
+            $teams[] = $team;
+        }
+
+        return $teams;
+    }
+
+    private function getAllTeamMembers()
+    {
+        $teams      = $this->getTeams();
+        $allMembers = [];
+
+        foreach ($teams as $teamIndex => $team) {
+            foreach ($team as $member) {
+                $allMembers[] = [
+                    'id'         => $member['id'],
+                    'team_index' => $teamIndex,
+                    'grade'      => strtolower($member['grade']),
+                    'data'       => $member,
+                ];
+            }
+        }
+
+        return $allMembers;
+    }
+
+    // OPTIMASI: Build lookup map untuk team index
+    private function buildTeamLookupMap($allMembers)
+    {
+        $lookup = [];
+
+        foreach ($allMembers as $member) {
+            $lookup[$member['id']] = $member['team_index'];
+        }
+
+        foreach ($this->managerIds as $index => $managerId) {
+            $lookup[$managerId] = $index;
+        }
+
+        return $lookup;
+    }
+
+    // OPTIMASI: Process team data dalam satu loop
+    private function processTeamData($allMembers, $bulkDPP)
+    {
+        $teamsData = [];
+
+        foreach ($allMembers as $member) {
+            $teamIndex  = $member['team_index'];
+            $grade      = $member['grade'];
+            $memberId   = $member['id'];
+            $isResigned = $member['is_resigned'] ?? false;
+
+            if (!isset($teamsData[$teamIndex])) {
+                $teamsData[$teamIndex] = [
+                    'staff'      => [],
+                    'supervisor' => [],
+                    'manager'    => [],
+                ];
+            }
+
+            $memberData                = $member['data'];
+            $memberData['order']       = $bulkDPP[$memberId] ?? $this->emptyOrder;
+            $memberData['total_order'] = array_sum($memberData['order']);
+            $memberData['is_resigned'] = $isResigned;
+
+            if ($memberData['total_order'] > 0 || in_array($grade, ['manager', 'supervisor'])) {
+                $teamsData[$teamIndex][$grade][] = $memberData;
+            }
+        }
+
+        return $teamsData;
+    }
+
+    // OPTIMASI: Query database yang lebih efisien
+    private function getRevenueFromDailyQSD($allMemberIds, $tahun, $type = 'order')
+    {
+        if (empty($allMemberIds)) {
+            return [];
+        }
+
+        // Base query dengan filter awal
+        $query = DB::table('daily_qsd')
             ->select(
-                'data',
-                'team_total_periode',
-                'team_total_staff_periode',
-                'team_total_upper_periode',
-                'team_total',
-                'team_total_staff',
-                'team_total_upper'
+                'sales_id',
+                DB::raw("MONTH(tanggal_sampling_min) as month_num"),
+                DB::raw('SUM(total_revenue) as total_revenue')
             )
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
+            ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
+            ->whereYear('tanggal_sampling_min', $tahun);
 
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->team_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->team_total_staff_periode = json_decode($summaryQSD->all_total, true);
-            $summaryQSD->team_total_upper_periode = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->orderAll($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
+        // Apply type filters
+        switch ($type) {
+            case 'order':
+                $query->whereNotNull('no_order')
+                    ->where('no_order', '!=', '');
+                break;
+
+            case 'contract':
+                $query->where('kontrak', 'C')
+                    ->whereNotNull('no_order');
+                break;
+
+            case 'sampling':
+                $query->whereIn('status_sampling', ['S', 'S24'])
+                    ->whereNotNull('no_order');
+                break;
+
+            case 'sampel_diantar':
+            case 'sd':
+                $query->whereIn('status_sampling', ['SD', 'SP'])
+                    ->whereNotNull('no_order');
+                break;
+
+            case 'new':
+                $query->where('status_customer', 'new')
+                    ->whereNotNull('no_order');
+                break;
+
+            default:
+                return [];
         }
 
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'team_total_periode' => $summaryQSD['team_total_periode'],
-            'team_total' => $summaryQSD['team_total'],
-            'team_total_staff_periode' => $summaryQSD['team_total_staff_periode'],
-            'team_total_staff' => $summaryQSD['team_total_staff'],
-            'team_total_upper_periode' => $summaryQSD['team_total_upper_periode'],
-            'team_total_upper' => $summaryQSD['team_total_upper'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
+        $data = $query->groupBy('sales_id', 'month_num')->get();
+
+        if ($data->isEmpty()) {
+            return [];
+        }
+
+        // OPTIMASI: Mapping bulan lebih efisien dengan array statis
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        $result     = [];
+
+        foreach ($data as $record) {
+            $salesId = $record->sales_id;
+            
+            if (!isset($result[$salesId])) {
+                $result[$salesId] = $this->emptyOrder;
+            }
+            
+            $monthKey = $monthNames[$record->month_num];
+            $result[$salesId][$monthKey] += $record->total_revenue;
+        }
+
+        return $result;
     }
 
-    public function forecast(Request $request)
+    // OPTIMASI: Static array tanpa loop
+    private function getEmptyOrder()
     {
-        $summaryQSD = SummaryQSD::where('type', 'forecast')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
-
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->forecast($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
+        return [
+            'Jan' => 0, 'Feb' => 0, 'Mar' => 0, 'Apr' => 0,
+            'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agu' => 0,
+            'Sep' => 0, 'Okt' => 0, 'Nov' => 0, 'Des' => 0
+        ];
     }
 
-    public function sampling(Request $request)
+    // OPTIMASI: Batch query dengan lookup map
+    private function getResignedMembersWithTeam($resignedMemberIds)
     {
-        $summaryQSD = SummaryQSD::where('type', 'sampling')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
+        // Single query untuk semua resigned users
+        $resignedUsers = DB::table('master_karyawan')
+            ->select('id', 'nama_lengkap', 'grade', 'atasan_langsung', 'image')
+            ->whereIn('id', $resignedMemberIds)
+            ->get();
 
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->sampling($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
+        $resignedMembers = [];
+
+        foreach ($resignedUsers as $user) {
+            // Gunakan lookup map yang sudah dibuat
+            $teamIndex = $this->teamLookup[$user->atasan_langsung] ?? 0;
+
+            $resignedMembers[] = [
+                'id'          => $user->id,
+                'team_index'  => $teamIndex,
+                'grade'       => strtolower($user->grade ?? 'staff'),
+                'is_resigned' => true,
+                'data'        => [
+                    'id'              => $user->id,
+                    'nama_lengkap'    => $user->nama_lengkap,
+                    'grade'           => $user->grade,
+                    'is_active'       => 0,
+                    'atasan_langsung' => $user->atasan_langsung,
+                    'image'           => $user->image,
+                ],
+            ];
         }
 
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
-    }
-
-    public function sampelDiantar(Request $request)
-    {
-        $summaryQSD = SummaryQSD::where('type', 'sampel_diantar')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
-
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->sampelDiantar($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
-    }
-
-    public function contract(Request $request)
-    {
-        $summaryQSD = SummaryQSD::where('type', 'contract')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
-
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->contract($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
-    }
-
-    public function new(Request $request)
-    {
-        $summaryQSD = SummaryQSD::where('type', 'new')
-            ->select('data', 'all_total_periode', 'all_total')
-            ->where('tahun', $request->tahun)
-            ->where('created_at', '>', Carbon::now()->subMinutes(30))
-            ->orderByDesc('id')
-            ->first();
-
-        if ($summaryQSD) {
-            $summaryQSD->data = json_decode($summaryQSD->data, true);
-            $summaryQSD->all_total_periode = json_decode($summaryQSD->all_total_periode, true);
-            $summaryQSD->all_total = json_decode($summaryQSD->all_total, true);
-            $summaryQSD = $summaryQSD->toArray();
-        } else {
-            try {
-                $summaryQSD = new SummaryQSDServices();
-                $summaryQSD = $summaryQSD->new($request->tahun);
-            } catch (\Throwable $th) {
-                dd($th);
-                return response()->json([
-                    'success' => false,
-                    'message' => $th->getMessage(),
-                    'line' => $th->getLine(),
-                    'file' => $th->getFile(),
-                    'trace' => $th->getTrace(),
-                ], 500);
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $summaryQSD['data'],
-            'all_total_periode' => $summaryQSD['all_total_periode'],
-            'all_total' => $summaryQSD['all_total'],
-            'message' => 'Data berhasil diproses',
-        ], 200);
+        return $resignedMembers;
     }
 }

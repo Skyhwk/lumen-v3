@@ -15,6 +15,7 @@ use App\Models\QuotationNonKontrak;
 use App\Http\Controllers\Controller;
 use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
+use App\Models\PerbantuanSampler;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
 use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
@@ -141,20 +142,48 @@ class RequestSamplingPlanController extends Controller
 
     public function getSampler()
     {
-        $samplers = MasterKaryawan::with('jabatan')
-            ->whereIn('id_jabatan', [70, 75, 94, 110]) // 'Sampler', 'K3 Staff'
-            ->where('is_active', true)
-            ->orderBy('nama_lengkap')
-            ->get();
-        $privateSampler =  MasterKaryawan::with('jabatan')
-            ->whereIn('user_id', [21, 35, 39, 56, 95, 112, 171, 377, 311, 377, 531, 779, 346,96])
-            ->where('is_active', true)
-            ->orderBy('nama_lengkap')
-            ->get();
-        $allSamplers = $samplers->merge($privateSampler);
-        $allSamplers = $allSamplers->sortBy('nama_lengkap')->values();
-
         
+        $samplers = MasterKaryawan::with('jabatan')
+            ->whereIn('id_jabatan', [94]) // 'Sampler', 'K3 Staff'
+            ->where('is_active', true)
+            ->orderBy('nama_lengkap')
+            ->get();
+        $privateSampler =  PerbantuanSampler::with('users.jabatan')
+            ->where('is_active', true)
+            ->orderBy('nama_lengkap')
+            ->get();
+        
+        $privateSampler->transform(function ($item) {
+            $digitCount = strlen((string)$item->user_id);
+            if ($digitCount > 4) {
+                $item->nama_display = $item->nama_lengkap . ' (freelance)';
+            } else {
+                $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            }
+            // $item->nama_display = $item->nama_lengkap . ' (perbantuan)';
+            unset($item->jabatan);
+            if ($item->users && $item->users->jabatan) {
+                // Kita "copy" objek jabatan dari dalam users ke root item
+                // Sehingga nanti di frontend bisa panggil item.jabatan.nama_jabatan
+                $jabatanObj = $item->users->getRelation('jabatan');
+                $item->setRelation('jabatan', $jabatanObj);
+            } else {
+                // Fallback jika data kosong (opsional, biar frontend gak error undefined)
+                $jabatanObj = (object)[
+                    "nama_jabatan" => "Freelance Sampler"
+                ];
+                $item->jabatan = $jabatanObj;
+            }
+            unset($item->users);
+            return $item;
+        });
+        $samplers->transform(function ($item) {
+            $item->nama_display = $item->nama_lengkap;
+            return $item;
+        });
+        $allSamplers = $samplers->concat($privateSampler);
+        $allSamplers = $allSamplers->unique('user_id');
+        $allSamplers = $allSamplers->sortBy('nama_display')->values();
         return response()->json($allSamplers, 200);
     }
 

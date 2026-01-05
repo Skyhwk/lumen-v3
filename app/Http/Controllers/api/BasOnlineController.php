@@ -3416,6 +3416,13 @@ class BasOnlineController extends Controller
                 "model2" => null
             ],
             [
+                "parameter" => "Medan Magnet",
+                "requiredCount" => 1,
+                "category" => "4-Udara",
+                "model" => DataLapanganMedanLM::class,
+                "model2" => null
+            ],
+            [
                 "parameter" => "Power Density",
                 "requiredCount" => 1,
                 "category" => "4-Udara",

@@ -240,6 +240,14 @@ class GenerateHasilPengujianController extends Controller
 
     public function getEmailCC(Request $request)
     {
+
+        $order = OrderHeader::where('no_order', $request->no_order)->where('is_active', true)->first();
+        if (str_contains($order->no_document, 'QTC')) {
+            $emailInfo = QuotationKontrakH::where('no_document', $order->no_document)->first();
+        } else {
+            $emailInfo = QuotationNonKontrak::where('no_document', $order->no_document)->first();
+        }
+
         $emails = ['sales@intilab.com', 'Billing@intilab.com', 'sales.draft@intilab.com', 'adminlhp@intilab.com'];
         $filterEmails = [
             'inafitri@intilab.com',
@@ -264,22 +272,39 @@ class GenerateHasilPengujianController extends Controller
                 continue;
             }
 
-            if (in_array($item, $filterEmails)) {
-                $emails[] = 'admsales03@intilab.com';
-                $emails[] = 'admsales04@intilab.com';
-            }
-
             $emails[] = $item;
         }
-        $emailCC = null;
+        
+        $emails = array_merge($emails, ['admsales03@intilab.com', 'admsales04@intilab.com']);
+
+        $emailCC = [];
         $emailTo = null;
 
         $emailLhp = EmailLhp::where('no_order', $request->no_order)->first();
 
         if ($emailLhp) {
-            $emailCC = explode(',', $emailLhp->email_cc);
+            if (!empty($emailLhp->email_cc)) {
+                $emailCC = array_merge(
+                    $emailCC,
+                    array_map('trim', explode(',', $emailLhp->email_cc))
+                );
+            }
+
             $emailTo = $emailLhp->email_to;
         }
+
+        if ($emailInfo && !empty($emailInfo->email_cc)) {
+            $emailCC = array_merge(
+                $emailCC,
+                array_map('trim', json_decode($emailInfo->email_cc, true))
+            );
+        }
+
+        // Bersihkan duplikat & nilai kosong
+        $emailCC = array_values(array_unique(array_filter($emailCC)));
+
+        // Jika kosong, set null (opsional)
+        $emailCC = count($emailCC) > 0 ? $emailCC : null;
 
         return response()->json(
             [
