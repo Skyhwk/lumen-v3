@@ -44,10 +44,16 @@ class ReassignCustomerController extends Controller
 
         $query = $query->filterReassignList();
 
+
         return datatables()->eloquent($query)
             ->filterColumn('detail_pelanggan.nama_pelanggan', function ($query, $keyword) {
                 $query->whereHas('detailPelanggan', function ($q) use ($keyword) {
                     $q->where('nama_pelanggan', 'like', "%{$keyword}%");
+                });
+            })
+            ->filterColumn('detail_pelanggan.wilayah', function ($query, $keyword) {
+                $query->whereHas('detailPelanggan', function ($q) use ($keyword) {
+                    $q->where('wilayah', 'like', "%{$keyword}%");
                 });
             })
             ->filterColumn('sales_lama.nama_lengkap', function ($query, $keyword) {
@@ -59,6 +65,9 @@ class ReassignCustomerController extends Controller
                 $query->whereHas('salesBaru', function ($q) use ($keyword) {
                     $q->where('nama_lengkap', 'like', "%{$keyword}%");
                 });
+            })
+            ->filterColumn('tanggal_rotasi', function ($query, $keyword) {
+                $query->whereDate('tanggal_rotasi', "{$keyword}");
             })
             ->make(true);
     }
