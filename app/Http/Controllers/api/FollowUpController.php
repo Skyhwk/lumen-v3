@@ -392,12 +392,13 @@ class FollowUpController extends Controller
                             'id_pelanggan' => $item['id_pelanggan'],
                             'kontak' => 'Perusahaan - ' . $kontak,
                             'sales_penanggung_jawab' => $item['sales_penanggung_jawab'],
-                            'tanggal' => Carbon::now()->format('Y-m-d'),
-                            'jam' => Carbon::now()->format('H:i:s'),
+                            'tanggal' => $item['tanggal'] ?? Carbon::now()->format('Y-m-d'),
+                            'jam' => $item['jam'] ?? Carbon::now()->format('H:i:s'),
                             'created_by' => $this->karyawan,
                             'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                         ];
                     }
+
 
                     // kalau ada yang udah dihubungi, batalkan insert
                     if (!empty($sudahDihubungi)) {
@@ -409,6 +410,7 @@ class FollowUpController extends Controller
 
                     // aman semua → insert
                     if (!empty($data)) {
+                        // dd(DFUS::insert($data));
                         DFUS::insert($data);
                         return response()->json([
                             'status' => 'success',

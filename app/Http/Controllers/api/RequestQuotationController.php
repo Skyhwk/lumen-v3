@@ -575,7 +575,7 @@ class RequestQuotationController extends Controller
                 ->first();
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
-            // $data->nama_perusahaan = strtoupper(trim($payload->informasi_pelanggan->nama_perusahaan));
+            $data->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
             $data->tanggal_penawaran = $payload->informasi_pelanggan->tgl_penawaran;
             // $data->konsultan = isset($payload->informasi_pelanggan->konsultan) && $payload->informasi_pelanggan->konsultan !== '' ? strtoupper(trim($payload->informasi_pelanggan->konsultan)) : null;
             $data->alamat_kantor = $payload->informasi_pelanggan->alamat_kantor;
@@ -1478,6 +1478,7 @@ class RequestQuotationController extends Controller
             $data->no_document = $payload->informasi_pelanggan->new_no_document;
             $data->pelanggan_ID = $dataOld->pelanggan_ID;
             $data->id_cabang = $this->idcabang;
+            $data->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
             // $data->sales_id = $payload->informasi_pelanggan->sales_id;
 
             //data customer order     -------------------------------------------------------> save ke master customer parrent
@@ -2515,6 +2516,7 @@ class RequestQuotationController extends Controller
                     ->where('id', $informasi_pelanggan->id)
                     ->first();
 
+                $dataH->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
                 $dataH->tanggal_penawaran = $informasi_pelanggan->tgl_penawaran;
                 if (isset($informasi_pelanggan->alamat_kantor) && $informasi_pelanggan->alamat_kantor != '')
                     $dataH->alamat_kantor = $informasi_pelanggan->alamat_kantor;
@@ -3997,6 +3999,7 @@ class RequestQuotationController extends Controller
                 $dataH->no_document = $no_document;
                 $dataH->pelanggan_ID = $dataOld->pelanggan_ID;
                 $dataH->id_cabang = $this->idcabang;
+                $dataH->is_generate_data_lab = $payload->data_wilayah->is_generate_data_lab;
 
                 $dataH->nama_perusahaan = $dataOld->nama_perusahaan;
                 $dataH->konsultan = $dataOld->konsultan;

@@ -104,7 +104,7 @@ class FeeSalesMonthly
     public function __construct()
     {
         $this->currentYear = Carbon::now()->year;
-        $this->currentMonth = '03'; // Carbon::now()->format('m');
+        $this->currentMonth =  Carbon::now()->format('m');
         $this->currentPeriod = $this->currentYear . "-" . $this->currentMonth;
 
         $monthStr = [
@@ -156,7 +156,7 @@ class FeeSalesMonthly
 
                 $quotations = DailyQsd::with('orderHeader.orderDetail')
                     ->where('sales_id', $salesId)
-                    ->whereDate('tanggal_sampling_min', '>=', '2025-01-01')
+                    ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
                     ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
                     ->get()
@@ -164,7 +164,7 @@ class FeeSalesMonthly
                         if ($isExistsInFeeSales($qsd)) return null;
 
                         if ($qsd->periode) {
-                            $orderDetail = $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values();
+                            $orderDetail = optional($qsd->orderHeader)->orderDetail ? $qsd->orderHeader->orderDetail->filter(fn($od) => $od->periode === $qsd->periode)->values() : collect();
                             if ($orderDetail->isNotEmpty()) {
                                 $qsd->orderHeader->setRelation('orderDetail', $orderDetail);
                             }
@@ -190,7 +190,7 @@ class FeeSalesMonthly
                     function ($_, $category) use ($quotations, $targetCategory) {
                         $target = $targetCategory[$category];
 
-                        $achieved = $quotations->flatMap(fn($q) => $q->orderHeader->orderDetail)
+                        $achieved = $quotations->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)
                             ->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))
                             ->count();
 
@@ -223,7 +223,7 @@ class FeeSalesMonthly
                     'no_order' => $quotation->no_order,
                     'nama_perusahaan' => $quotation->nama_perusahaan,
                     'periode' => $quotation->periode,
-                    'kategori_3' => $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray(),
+                    'kategori_3' => optional($quotation->orderHeader)->orderDetail ? $quotation->orderHeader->orderDetail->pluck('kategori_3')->toArray() : [],
                     'no_invoice' => $quotation->no_invoice,
                     'total_revenue' => $quotation->total_revenue,
                 ])->values();
@@ -283,7 +283,7 @@ class FeeSalesMonthly
             DB::commit();
         } catch (\Throwable $th) {
             DB::rollBack();
-            Log::error('[FeeSalesMonthly] Error: ' . $th->getMessage());
+            Log::error('[FeeSalesMonthly] Error: ' . $th->getMessage() . ' Line: ' . $th->getLine());
         }
     }
 }

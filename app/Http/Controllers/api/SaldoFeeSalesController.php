@@ -100,14 +100,14 @@ class SaldoFeeSalesController extends Controller
     public function requestWithdrawal(Request $request)
     {
         $limitWithdraw = LimitWithdraw::where('user_id', $request->sales_id)->latest()->first();
-        if (!$limitWithdraw) return response()->json(['message' => 'Withdraw Limit not found'], 404);
+        if (!$limitWithdraw) return response()->json(['message' => 'Limit penarikan belum diatur'], 404);
         $usedLimit = WithdrawalFeeSales::where('sales_id', $request->sales_id)
             ->whereIn('status', ['Pending', 'Approved'])
             ->where(fn($q) => $q->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month))
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
-        if ($request->amount > $limit) return response()->json(['message' => 'Withdrawal amount exceeds limit'], 400);
+        if ($request->amount > $limit) return response()->json(['message' => 'Anda tidak memiliki limit untuk melakukan penarikan'], 400);
 
         $withdrawalFeeSales = new WithdrawalFeeSales();
 
