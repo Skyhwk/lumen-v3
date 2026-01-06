@@ -15,7 +15,7 @@ class SalesDailyQSD
     public static function run(): void
     {
         $now = Carbon::now();
-        $currentYear = $now->format('Y');
+        $currentYear = '2025';
         self::handle((int)$currentYear);
     }
 
@@ -68,8 +68,6 @@ class SalesDailyQSD
                 }
             });
             DB::statement("UPDATE daily_qsd q\nJOIN (\nSELECT uuid, ROW_NUMBER() OVER (PARTITION BY pelanggan_ID\nORDER BY COALESCE(tanggal_sampling_min, '9999-12-31'), CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED), CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED), uuid) AS rn\nFROM daily_qsd) x ON x.uuid = q.uuid\nSET q.status_customer = IF(x.rn = 1, 'new', 'exist')\nWHERE q.status_customer IS NULL");
-
-            DB::statement("UPDATE daily_qsd SET total_revenue = 0 WHERE no_invoice IS NULL AND total_revenue <> 0 AND LEFT(tanggal_sampling_min, 4) >= '2025'");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
         Log::info('[SalesDailyQSD] Completed successfully');
@@ -78,9 +76,9 @@ class SalesDailyQSD
 
     private static function getYearRange(int $currentYear): array
     {
-        $nextYear = (int)Carbon::create($currentYear, 12, 1)->addYear(2)->endOfMonth()->format('Y');
+        $nextYear = (int)Carbon::create($currentYear, 12, 1)->addYear(1)->endOfMonth()->format('Y');
         $arrayYears = [];
-        for ($i = $currentYear; $i <= $nextYear; $i++) {
+        for ($i = ($currentYear - 1); $i <= $nextYear; $i++) {
             $arrayYears[] = $i;
         }
         return $arrayYears;
@@ -210,13 +208,16 @@ class SalesDailyQSD
             } else {
                 $invoices = $invoiceMap[$keyExact] ?? collect();
             }
-            [$noInvoice, $isLunas, $pelunasan, $nominal, $tanggalPembayaran] = self::buildInvoiceInfo($invoices);
+            [$noInvoice, $isLunas, $pelunasan, $nominal, $revenueInvoice, $pengurangan, $tanggalPembayaran, $po] = self::buildInvoiceInfo($invoices);
             $buffer[] = [
                 'no_order'             => $row->no_order,
                 'no_invoice'           => $noInvoice,
                 'nilai_invoice'        => $nominal,
                 'nilai_pembayaran'     => $pelunasan,
+                'nilai_pengurangan'    => $pengurangan,
+                'revenue_invoice'      => $revenueInvoice,
                 'tanggal_pembayaran'   => $tanggalPembayaran === '' ? null : $tanggalPembayaran,
+                'no_po'                => $po === '' ? null : $po,
                 'is_lunas'             => $isLunas,
                 'no_quotation'         => $row->no_quotation,
                 'total_cfr'            => $row->total_cfr,
@@ -269,12 +270,16 @@ class SalesDailyQSD
                 } else {
                     $tanggalPembayaran = null;
                 }
+                $po = $inv->no_po ?? null;
 
                 return [
                     'no_invoice'            => $no_inv ? $no_inv . $status : null,
                     'nilai_invoice'         => $nilai_invoice,
                     'nilai_pembayaran'      => $nominal,
+                    'nilai_pengurangan'     => $withdraw,
+                    'revenue_invoice'       => $pembayaran,
                     'tanggal_pembayaran'    => $tanggalPembayaran,
+                    'no_po'                 => $po,
                     'no_order'              => $items->first()['no_order'],
                     'no_quotation'          => $no_quotation,
                     'pelanggan_ID'          => $items->first()['pelanggan_ID'],
@@ -303,30 +308,33 @@ class SalesDailyQSD
         $firstGrouped = $groupedSpesial->merge($withoutInvoice)->values();
         $grouped = $withInvoice->groupBy('no_invoice')->map(function ($items) {
             return [
-                'no_invoice' => $items->first()['no_invoice'],
-                'nilai_invoice' => $items->sum('nilai_invoice'),
-                'nilai_pembayaran' => $items->first()['nilai_pembayaran'],
-                'tanggal_pembayaran' => $items->first()['tanggal_pembayaran'],
-                'no_order'   => $items->min('no_order'),
-                'no_quotation'    => $items->first()['no_quotation'],
-                'pelanggan_ID'    => $items->first()['pelanggan_ID'],
-                'nama_perusahaan' => $items->first()['nama_perusahaan'],
-                'konsultan'       => $items->first()['konsultan'],
-                'periode'         => $items->min('periode'),
-                'kontrak'         => $items->first()['kontrak'],
-                'sales_id'        => $items->first()['sales_id'],
-                'sales_nama'      => $items->first()['sales_nama'],
-                'status_sampling' => $items->pluck('status_sampling')->unique()->implode(', '),
-                'total_discount' => $items->sum('total_discount'),
-                'total_ppn'      => $items->sum('total_ppn'),
-                'total_pph'      => $items->sum('total_pph'),
-                'biaya_akhir'    => $items->sum('biaya_akhir'),
-                'grand_total'    => $items->sum('grand_total'),
-                'total_revenue'  => $items->sum('total_revenue'),
-                'total_cfr'      => $items->sum('total_cfr'),
-                'tanggal_sampling_min' => $items->min('tanggal_sampling_min'),
-                'is_lunas'        => $items->contains('is_lunas', false) ? false : true,
-                'created_at'      => $items->first()['created_at'],
+                'no_invoice'            => $items->first()['no_invoice'],
+                'nilai_invoice'         => $items->first()['nilai_invoice'],
+                'nilai_pembayaran'      => $items->first()['nilai_pembayaran'],
+                'nilai_pengurangan'     => $items->first()['nilai_pengurangan'],
+                'revenue_invoice'       => $items->first()['revenue_invoice'],
+                'tanggal_pembayaran'    => $items->first()['tanggal_pembayaran'],
+                'no_po'                 => $items->first()['no_po'],
+                'no_order'              => $items->min('no_order'),
+                'no_quotation'          => $items->first()['no_quotation'],
+                'pelanggan_ID'          => $items->first()['pelanggan_ID'],
+                'nama_perusahaan'       => $items->first()['nama_perusahaan'],
+                'konsultan'             => $items->first()['konsultan'],
+                'periode'               => $items->min('periode'),
+                'kontrak'               => $items->first()['kontrak'],
+                'sales_id'              => $items->first()['sales_id'],
+                'sales_nama'            => $items->first()['sales_nama'],
+                'status_sampling'       => $items->pluck('status_sampling')->unique()->implode(', '),
+                'total_discount'        => $items->sum('total_discount'),
+                'total_ppn'             => $items->sum('total_ppn'),
+                'total_pph'             => $items->sum('total_pph'),
+                'biaya_akhir'           => $items->sum('biaya_akhir'),
+                'grand_total'           => $items->sum('grand_total'),
+                'total_revenue'         => $items->sum('total_revenue'),
+                'total_cfr'             => $items->sum('total_cfr'),
+                'tanggal_sampling_min'  => $items->min('tanggal_sampling_min'),
+                'is_lunas'              => $items->contains('is_lunas', false) ? false : true,
+                'created_at'            => $items->first()['created_at'],
             ];
         })->values();
         $result = $grouped->merge($firstGrouped)->values();
@@ -341,37 +349,46 @@ class SalesDailyQSD
     private static function buildInvoiceInfo($invoices)
     {
         if ($invoices->isEmpty()) {
-            return [null, false, null, null, null];
+            return [null, false, null, null, null, null, null, null];
         }
 
         $noInvoice = [];
         $isLunas   = false;
         $nilaiInvoice = 0;
         $nilaiPelunasan = 0;
+        $pengurangan = 0;
+        $revenueInvoice = 0;
         $tanggalPembayaran = [];
+        $po = [];
 
         foreach ($invoices as $inv) {
+
             $nominal = ($inv->recordPembayaran ? $inv->recordPembayaran->sum('nilai_pembayaran') : 0)
                 + ($inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0);
+
             $status = $nominal >= $inv->nilai_tagihan ? ' (Lunas)' : '';
+
+
             if ($status == ' (Lunas)') {
                 $isLunas = true;
             }
+
             $noInvoice[] = $inv->no_invoice . $status;
+            
             $nilaiPelunasan += $nominal;
             $nilaiInvoice += $inv->nilai_tagihan;
+            $revenueInvoice += ($inv->recordPembayaran ? $inv->recordPembayaran->sum('nilai_pembayaran') : 0);
+            $pengurangan += ($inv->recordWithdraw ? $inv->recordWithdraw->sum('nilai_pembayaran') : 0);
 
             if(isset($inv->recordPembayaran) && $inv->recordPembayaran->isNotEmpty()) {
                 $tanggalPembayaran[] = $inv->recordPembayaran->first()->tgl_pembayaran;
             }
+
+            $po[] = $inv->no_po;
         }
 
+        $po = array_unique($po);
         if ($nilaiPelunasan == 0) $nilaiPelunasan = null;
-        if (!empty($tanggalPembayaran)) {
-            $tanggalPembayaran = min($tanggalPembayaran);
-        } else {
-            $tanggalPembayaran = null;
-        }
-        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice, $tanggalPembayaran];
+        return [implode(', ', $noInvoice), $isLunas, $nilaiPelunasan, $nilaiInvoice, $revenueInvoice, $pengurangan, implode(', ', $tanggalPembayaran) , implode(', ', $po)];
     }
 }
