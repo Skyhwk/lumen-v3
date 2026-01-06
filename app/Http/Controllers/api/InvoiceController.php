@@ -255,7 +255,7 @@ class InvoiceController extends Controller
                 
                 $data->havingRaw("
                     CASE
-                        WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                        WHEN SUM(invoice.nilai_pelunasan) = 0 THEN 'Belum Ada Pembayaran'
                         WHEN (SUM(invoice.nilai_tagihan)
                             - (COALESCE(MAX(invoice.nilai_pelunasan),0)
                                 + COALESCE(MAX(w.total_pembayaran),0))
