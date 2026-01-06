@@ -1355,7 +1355,7 @@ class JadwalServices
                 $datcek = count($jadw6) + 1;
                 if ((int) $dataParsial->totkateg == $datcek) {
                     DB::rollBack();
-                    dd('masuk sini 2');
+                    
                     throw new Exception("Kategori sudah terinput semua.!", 401);
                 }
             }
