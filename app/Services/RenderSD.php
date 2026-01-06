@@ -807,13 +807,9 @@ class RenderSD
                                 : '-'
                         ) . '</td>
                         <td class="text-center">' . (isset($eksternal['suhu']) && $eksternal['suhu'] !== null ? $eksternal['suhu'] : '-') . '</td>';
-
-                    $warnaStatus = isset($warna['warna_status']) ? strtolower($warna['warna_status']) : '';
-                    if ($warnaStatus === 'ya') {
-                        $html3 .= '<td class="text-center">' . ($warna['warna'] ?? '-') . '</td>';
-                    }
-                    $html3 .= '<td class="text-center">' . ($warna['bau'] ?? '-') . '</td>
-                        <td class="text-center">' . ($warna['keruh'] ?? '-') . '</td>';
+                    $html3 .= '<td class="text-center">' . ($row['warna'] ?? '-') . '</td>';
+                    $html3 .= '<td class="text-center">' . ($row['bau'] ?? '-') . '</td>
+                        <td class="text-center">' . ($row['keruh'] ?? '-') . '</td>';
                     // pengawetan dan blanco
                     $html3 .='<td class="text-center">' . ($eksternal['pengawetan'] ?? '-') . '</td>
                         <td class="text-center">' . ($eksternal['deskripsi_blanko_pencucian'] ?? '-') . '</td>';
