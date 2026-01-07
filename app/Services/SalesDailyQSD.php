@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 
 class SalesDailyQSD
 {
-    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01'];
+    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01', 'TPTT01'];
 
     public static function run(): void
     {
