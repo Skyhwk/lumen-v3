@@ -1166,4 +1166,38 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			throw $th;
 		}
 	}
+
+	public function updateNilaiUji(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = new Subkontrak();
+            $header->no_sampel = $request->no_sampel;
+            $header->parameter = $request->parameter;
+            $header->created_by = $this->karyawan;
+            $header->created_at = Carbon::now()->format('Y-m-d H:i:s');
+            $header->category_id = 4;
+			$header->is_approve = 1;
+            $header->approved_by = $this->karyawan;
+            $header->approved_at = Carbon::now()->format('Y-m-d H:i:s');
+            $header->save();
+
+            $ws = new WsValueUdara();
+            $ws->no_sampel = $request->no_sampel;
+            $ws->id_subkontrak = $header->id;
+            $ws->id_po = $request->id_po;
+            for ($i = 1; $i <= 19; $i++) {
+                $field = "hasil$i";
+                $ws->$field = $request->nilai_uji;
+            }
+            $ws->save();
+
+            DB::commit();
+            return response()->json(['message' => 'Data berhasil diupdate.', 'status' => 200, "success" => true], 200);
+        } catch (\Exception $ex) {
+            DB::rollBack();
+            \Log::error('Error dalam ReplaceHasil: ' . $ex->getMessage());
+            return response()->json(['message' => 'Terjadi kesalahan: ' . $ex->getMessage()], 500);
+        }
+    }
 }
