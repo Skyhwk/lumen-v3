@@ -1416,11 +1416,11 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
                 'no_sampel'   => $request->no_sampel,
                 'parameter'   => $request->parameter,
                 'created_by'  => $this->karyawan,
-                'created_at'  => now(),
+                'created_at'  => Carbon::now()->format('Y-m-d H:i:s'),
                 'category_id' => 4,
                 'is_approve'  => 1,
                 'approved_by' => $this->karyawan,
-                'approved_at' => now(),
+                'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
             // putus semua header lama
