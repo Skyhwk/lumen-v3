@@ -49,8 +49,7 @@ class DailyBillingsController extends Controller
         //     ->havingRaw('floor(SUM(nilai_tagihan)) > (COALESCE(MAX(invoice.nilai_pelunasan), 0) + COALESCE(SUM(withdraw.nilai_pembayaran), 0))')
         //     ->where('invoice.is_active', true)
         //     ->where('is_whitelist', false)
-        //     ->where('invoice.tgl_jatuh_tempo', $request->tgl_jatuh_tempo)
-        //     ->get();
+        //     ->where('invoice.tgl_jatuh_tempo', $request->tgl_jatuh_tempo);
         $invoices = Invoice::with('followup_billings') // Data followup diambil lewat sini saja
         ->select(
             'invoice.no_invoice',
@@ -68,8 +67,7 @@ class DailyBillingsController extends Controller
         ->havingRaw('floor(MAX(invoice.nilai_tagihan)) > (COALESCE(MAX(invoice.nilai_pelunasan), 0) + COALESCE(SUM(withdraw.nilai_pembayaran), 0))')
         ->where('invoice.is_active', true)
         ->where('is_whitelist', false)
-        ->where('invoice.tgl_jatuh_tempo', $request->tgl_jatuh_tempo)
-        ->get();
+        ->where('invoice.tgl_jatuh_tempo', $request->tgl_jatuh_tempo);
         return Datatables::of($invoices)->make(true);
     }
 
@@ -94,7 +92,7 @@ class DailyBillingsController extends Controller
             if ($request->forecasted_billing) {
                 $invoice = Invoice::where('no_invoice', $request->no_invoice)->latest()->first();
                 $invoice->tgl_jatuh_tempo = $request->forecasted_billing;
-                //$invoice->save();
+                $invoice->save();
             }
             DB::commit();
             return response()->json([
