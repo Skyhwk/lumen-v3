@@ -15,7 +15,7 @@ class SalesDailyQSD
     public static function run(): void
     {
         $now = Carbon::now();
-        $currentYear = '2025';
+        $currentYear = $now->format('Y');
         self::handle((int)$currentYear);
     }
 
@@ -67,7 +67,22 @@ class SalesDailyQSD
                         ->delete();
                 }
             });
-            DB::statement("UPDATE daily_qsd q\nJOIN (\nSELECT uuid, ROW_NUMBER() OVER (PARTITION BY pelanggan_ID\nORDER BY COALESCE(tanggal_sampling_min, '9999-12-31'), CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED), CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED), uuid) AS rn\nFROM daily_qsd) x ON x.uuid = q.uuid\nSET q.status_customer = IF(x.rn = 1, 'new', 'exist')\nWHERE q.status_customer IS NULL");
+            DB::statement("
+                UPDATE daily_qsd q
+                JOIN (
+                SELECT uuid, ROW_NUMBER() OVER (PARTITION BY pelanggan_ID
+                ORDER BY COALESCE(tanggal_sampling_min, '9999-12-31'), CAST(SUBSTRING(no_order, 7, 2) AS UNSIGNED), CAST(SUBSTRING(no_order, 9, 2) AS UNSIGNED), uuid) AS rn
+                FROM daily_qsd) x ON x.uuid = q.uuid
+                SET q.status_customer = IF(x.rn = 1, 'new', 'exist')
+                WHERE q.status_customer IS NULL
+            ");
+
+            DB::statement("
+                UPDATE daily_qsd
+                SET revenue_invoice = COALESCE(nilai_pembayaran, 0) - COALESCE(nilai_pengurangan, 0)
+                WHERE revenue_invoice = 0
+                AND COALESCE(nilai_pembayaran, 0) > 0
+            ");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
         Log::info('[SalesDailyQSD] Completed successfully');
@@ -374,7 +389,7 @@ class SalesDailyQSD
             }
 
             $noInvoice[] = $inv->no_invoice . $status;
-            
+
             $nilaiPelunasan += $nominal;
             $nilaiInvoice += $inv->nilai_tagihan;
             $revenueInvoice += ($inv->recordPembayaran ? $inv->recordPembayaran->sum('nilai_pembayaran') : 0);

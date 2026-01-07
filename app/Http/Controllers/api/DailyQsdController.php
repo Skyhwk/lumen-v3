@@ -143,16 +143,31 @@ class DailyQsdController extends Controller
         $base->reorder();
         
         // Hitung normal invoice
+        // $normalSum = (clone $base)
+        //     ->whereNotIn('no_invoice', $excludeInv)
+        //     ->sum($column);
+        $excludeInvArray = is_array($excludeInv) ? $excludeInv : $excludeInv->toArray();
         $normalSum = (clone $base)
-            ->whereNotIn('no_invoice', $excludeInv)
+            ->get()
+            ->filter(function ($item) use ($excludeInvArray) {
+                $cleanInvoice = str_replace(' (Lunas)', '', $item->no_invoice);
+                return !in_array($cleanInvoice, $excludeInvArray);
+            })
             ->sum($column);
-
+        
         // Hitung special invoice (ambil MAX per no_invoice lalu sum)
         $specialSum = (clone $base)
-            ->whereIn('no_invoice', $excludeInv)
-            ->groupBy('no_invoice')
-            ->selectRaw("MAX($column) as nilai")
-            ->pluck('nilai')
+            ->get()
+            ->filter(function ($item) use ($excludeInvArray) {
+                $cleanInvoice = str_replace(' (Lunas)', '', $item->no_invoice);
+                return in_array($cleanInvoice, $excludeInvArray);
+            })
+            ->groupBy(function ($item) {
+                return str_replace(' (Lunas)', '', $item->no_invoice);
+            })
+            ->map(function ($items) use ($column) {
+                return $items->max($column);
+            })
             ->sum();
 
         return ($normalSum ?: 0) + ($specialSum ?: 0);
