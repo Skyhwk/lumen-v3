@@ -171,6 +171,19 @@ class SalesDailyQSD
             ->whereIn(DB::raw('LEFT(tanggal_sampling, 4)'), $arrayYears)
             ->distinct()
             ->pluck('no_quotation');
+        
+        $spesialQt = DB::table('order_header')->whereIn(DB::raw('LEFT(tanggal_order, 4)'), $arrayYears)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('order_detail as od')
+                    ->whereRaw('od.id_order_header = order_header.id')
+                    ->where('od.is_active', 1);
+            })
+            ->whereNotNull('no_document')
+            ->distinct()
+            ->pluck('no_document');
+
+        $quotationList = $quotationList->merge($spesialQt);
 
         $excludeInv = Invoice::where('is_active', 1)
             ->whereIn('no_invoice', function ($q) {
