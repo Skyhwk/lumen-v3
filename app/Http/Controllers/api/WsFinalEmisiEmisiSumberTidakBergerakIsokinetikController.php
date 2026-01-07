@@ -13,6 +13,7 @@ use App\Models\IsokinetikHeader;
 use App\Http\Controllers\Controller;
 use App\Models\MasterBakumutu;
 use App\Models\MasterRegulasi;
+use App\Models\MdlEmisi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -235,11 +236,22 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 				}
 
 				// fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
-				return $ws[$fKoreksiKey]
+				$nilai = $ws[$fKoreksiKey]
 					?? $ws[$hasilKey]
 					?? $ws['f_koreksi_c']
 					?? $ws['C']
 					?? "-";
+                
+                if (!str_contains($nilai, '<')) {
+                    $mdlEmisi = MdlEmisi::where('parameter_id', $item['id_parameter'])->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item['parameter']))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
+                    if ($mdlEmisi) {
+                        if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
+                            $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
+                        }
+                    }
+                }
+
+                return $nilai;
 			})
 
 			->make(true);

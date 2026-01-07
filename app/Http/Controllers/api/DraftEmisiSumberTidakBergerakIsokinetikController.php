@@ -40,6 +40,7 @@ use Yajra\Datatables\Datatables;
 
 //Helper
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\MdlEmisi;
 use App\Models\OrderHeader;
 
 class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
@@ -788,6 +789,15 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             $hasilKey = "C$index";
             $fkoreksiKey = "f_koreksi_c$index";
             $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
+        }
+
+        if (!str_contains($nilai, '<') && $nilai != '-' && $nilai != '##') {
+            $mdlEmisi = MdlEmisi::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->parameter_lab))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
+            if ($mdlEmisi) {
+                if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
+                    $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
+                }
+            }
         }
         return $nilai;
 

@@ -21,6 +21,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DebuPersonalHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsLingHeader;
+use App\Models\MdlUdara;
 use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -266,20 +267,56 @@ class TqcUdaraLingkunganKerjaController extends Controller
                             if ($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c2'] ?? $hasil['C2'] ??  $hasil['f_koreksi_2'] ??  $hasil['hasil2'] ?? '-';
                             }
+                                
+                            if (!str_contains($nilai, '<') && $nilai != '-') {
+                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                if ($mdlUdara) {
+                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
+                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
+                                    }
+                                }
+                            }
                         } else if ($index == 16) {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if ($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
+                            }
+                                
+                            if (!str_contains($nilai, '<') && $nilai != '-') {
+                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                if ($mdlUdara) {
+                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
+                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
+                                    }
+                                }
                             }
                         } else if ($index == 15) {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if ($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c3'] ?? $hasil['C3'] ??  $hasil['f_koreksi_3'] ??  $hasil['hasil3'] ?? '-';
                             }
+                                
+                            if (!str_contains($nilai, '<') && $nilai != '-') {
+                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                if ($mdlUdara) {
+                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
+                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
+                                    }
+                                }
+                            }
                         } else {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if ($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
+                            }
+                                
+                            if (!str_contains($nilai, '<') && $nilai != '-') {
+                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                if ($mdlUdara) {
+                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
+                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
+                                    }
+                                }
                             }
                         }
                     }

@@ -25,6 +25,7 @@ use App\Models\LinkLhp;
 use App\Models\MasterBakumutu;
 use App\Models\MasterKaryawan;
 use App\Models\MasterRegulasi;
+use App\Models\MdlEmisi;
 use App\Models\MetodeSampling;
 use App\Models\OrderDetail;
 
@@ -669,6 +670,15 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $hasilKey = "C$index";
             $fkoreksiKey = "f_koreksi_c$index";
             $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
+        }
+
+        if (!str_contains($nilai, '<') && $nilai != '-' && $nilai != '##') {
+            $mdlEmisi = MdlEmisi::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->parameter_lab))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
+            if ($mdlEmisi) {
+                if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
+                    $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
+                }
+            }
         }
         return $nilai;
     }

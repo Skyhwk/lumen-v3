@@ -36,6 +36,7 @@ use App\Models\DataLapanganLingkunganKerja;
 use App\Models\DataLapanganDebuPersonal;
 use App\Models\DataLapanganPartikulatMeter;
 use App\Models\DetailLingkunganKerja;
+use App\Models\MdlUdara;
 use App\Models\ParameterFdl;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -872,6 +873,15 @@ class DraftUlkController extends Controller
             $entry['durasi'] = '-';
             $entry['methode'] = '-';
             $entry['baku_mutu'] = ['-'];
+        }
+
+        if (!str_contains($entry['hasil_uji'], '<') && $entry['hasil_uji'] != '-' && $entry['hasil_uji'] != '##') {
+            $mdlUdara = MdlUdara::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->nama_lab))->whereNotNull("hasil$index")->latest()->first();
+            if ($mdlUdara) {
+                if ((float) $mdlUdara->{"hasil$index"} > (float) $entry['hasil_uji']) {
+                    $entry['hasil_uji'] = "<" . $mdlUdara->{"hasil$index"};
+                }
+            }
         }
 
         return $entry;

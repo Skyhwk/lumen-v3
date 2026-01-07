@@ -34,6 +34,7 @@ use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
 use App\Models\DebuPersonalHeader;
 use App\Models\DustFallHeader;
+use App\Models\MdlUdara;
 
 class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 {
@@ -240,14 +241,30 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						foreach ($keysToTry as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
 						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
@@ -255,14 +272,30 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						foreach ($keysToTry as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
 						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
@@ -270,14 +303,30 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						foreach ($keysToTry as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
@@ -285,14 +334,30 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						foreach ($keysToTry as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
 							if ($has($k)) {
 								if($hasil[$k] != null) {
-									return $hasil[$k];
+                                    if (!str_contains($hasil[$k], '<')) {
+                                        $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
+                                        if ($mdlUdara) {
+                                            if ((float) $mdlUdara->{"hasil$index"} > (float) $hasil[$k]) {
+                                                $hasil[$k] = "<" . $mdlUdara->{"hasil$index"};
+                                            }
+                                        }
+                                    }
+                                    return $hasil[$k];
 								}
 							}
 						}

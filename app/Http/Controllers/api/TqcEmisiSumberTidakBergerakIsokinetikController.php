@@ -8,6 +8,7 @@ use App\Models\EmisiCerobongHeader;
 use App\Models\HistoryAppReject;
 use App\Models\IsokinetikHeader;
 use App\Models\MasterBakumutu;
+use App\Models\MdlEmisi;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -159,6 +160,15 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
                     $hasilKey    = "C$index";
 
                     $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
+                }
+
+                if (!str_contains($nilai, '<')) {
+                    $mdlEmisi = MdlEmisi::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
+                    if ($mdlEmisi) {
+                        if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
+                            $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
+                        }
+                    }
                 }
 
                 $item->nilai_uji = $nilai;

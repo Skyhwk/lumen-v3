@@ -30,6 +30,7 @@ use App\Models\Subkontrak;
 use App\Services\GenerateQrDocumentLhp;
 use App\Services\LhpTemplate;
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\MdlUdara;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -948,6 +949,15 @@ class DraftUdaraAmbientController extends Controller
             $entry['durasi'] = '-';
             $entry['methode'] = '-';
             $entry['baku_mutu'] = ['-'];
+        }
+
+        if (!str_contains($entry['hasil_uji'], '<') && $entry['hasil_uji'] != '-' && $entry['hasil_uji'] != '##') {
+            $mdlUdara = MdlUdara::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->nama_lab))->whereNotNull("hasil$index")->latest()->first();
+            if ($mdlUdara) {
+                if ((float) $mdlUdara->{"hasil$index"} > (float) $entry['hasil_uji']) {
+                    $entry['hasil_uji'] = "<" . $mdlUdara->{"hasil$index"};
+                }
+            }
         }
 
         return $entry;

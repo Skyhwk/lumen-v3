@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\DataTables;
 use App\Helpers\HelperSatuan;
+use App\Models\MdlEmisi;
 
 class TqcEmisiSumberTidakBergerakController extends Controller
 {
@@ -132,6 +133,15 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                     $hasilKey    = "C$index";
 
                     $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
+                }
+
+                if (!str_contains($nilai, '<')) {
+                    $mdlEmisi = MdlEmisi::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
+                    if ($mdlEmisi) {
+                        if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
+                            $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
+                        }
+                    }
                 }
 
                 $item->nilai_uji = $nilai;
