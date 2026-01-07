@@ -80,8 +80,7 @@ class SalesDailyQSD
             DB::statement("
                 UPDATE daily_qsd
                 SET revenue_invoice = COALESCE(nilai_pembayaran, 0) - COALESCE(nilai_pengurangan, 0)
-                WHERE COALESCE(revenue_invoice, 0) = 0
-                AND COALESCE(nilai_pembayaran, 0) > 0
+                WHERE COALESCE(nilai_pembayaran, 0) > 0
             ");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
