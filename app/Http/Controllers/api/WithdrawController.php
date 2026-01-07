@@ -18,86 +18,95 @@ class WithdrawController extends Controller
 {
 
     public function outstandingIndex(Request $request)
-{
-    try {
-        // Subquery untuk total pembayaran withdraw
-        $withdrawSub = DB::table('withdraw')
-            ->select('no_invoice', DB::raw('SUM(nilai_pembayaran) as total_pembayaran'))
-            ->groupBy('no_invoice');
+    {
+        try {
+            // Subquery untuk total pembayaran withdraw
+            $withdrawSub = DB::table('withdraw')
+                ->select('no_invoice', DB::raw('SUM(nilai_pembayaran) as total_pembayaran'))
+                ->groupBy('no_invoice');
 
-        // Subquery untuk aggregate invoice data terlebih dahulu
-        $invoiceAgg = DB::table('invoice')
-            ->select(
-                'no_invoice',
-                DB::raw('SUM(total_tagihan) AS total_tagihan'),
-                DB::raw('FLOOR(SUM(nilai_tagihan)) AS nilai_tagihan'),
-                DB::raw('MAX(nilai_pelunasan) AS nilai_pelunasan'),
-                DB::raw('MAX(nama_pj) AS nama_pj'),
-                DB::raw('MAX(no_po) AS no_po'),
-                DB::raw('MAX(no_spk) AS no_spk'),
-                DB::raw('MAX(created_at) AS created_at'),
-                DB::raw('MAX(created_by) AS created_by'),
-                DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
-                DB::raw('MAX(tgl_pelunasan) AS tgl_pelunasan'),
-                DB::raw('GROUP_CONCAT(DISTINCT no_order) AS no_orders'), // DISTINCT penting!
-                DB::raw('MAX(no_order) AS primary_no_order') // untuk join ke order_header
-            )
-            ->where('nilai_pelunasan', '>', 0)
-            ->where('is_active', true)
-            ->where('is_whitelist', false)
-            ->groupBy('no_invoice');
+            // Subquery untuk aggregate invoice data terlebih dahulu
+            $invoiceAgg = DB::table('invoice')
+                ->select(
+                    'no_invoice',
+                    DB::raw('SUM(total_tagihan) AS total_tagihan'),
+                    DB::raw('FLOOR(SUM(nilai_tagihan)) AS nilai_tagihan'),
+                    DB::raw('MAX(nilai_pelunasan) AS nilai_pelunasan'),
+                    DB::raw('MAX(nama_pj) AS nama_pj'),
+                    DB::raw('MAX(no_po) AS no_po'),
+                    DB::raw('MAX(no_spk) AS no_spk'),
+                    DB::raw('MAX(created_at) AS created_at'),
+                    DB::raw('MAX(created_by) AS created_by'),
+                    DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
+                    DB::raw('MAX(tgl_pelunasan) AS tgl_pelunasan'),
+                    DB::raw('GROUP_CONCAT(DISTINCT no_order) AS no_orders'), // DISTINCT penting!
+                    DB::raw('MAX(no_order) AS primary_no_order') // untuk join ke order_header
+                )
+                ->where('nilai_pelunasan', '>', 0)
+                ->where('is_active', true)
+                ->where('is_whitelist', false)
+                ->groupBy('no_invoice');
 
-        $invoices = DB::table(DB::raw("({$invoiceAgg->toSql()}) as inv"))
-            ->mergeBindings($invoiceAgg)
-            ->select(
-                'inv.no_invoice',
-                'inv.total_tagihan',
-                'inv.nilai_tagihan',
-                DB::raw('(inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0)) AS nilai_pelunasan'),
-                'inv.nama_pj',
-                'inv.no_po',
-                'inv.no_spk',
-                DB::raw('COALESCE(oh.nama_perusahaan, oh.konsultan) AS nama_customer'),
-                'oh.konsultan',
-                'inv.created_at',
-                'inv.created_by',
-                'inv.tgl_jatuh_tempo',
-                'inv.tgl_pelunasan',
-                'inv.no_orders'
-            )
-            ->leftJoin('order_header as oh', 'inv.primary_no_order', '=', 'oh.no_order')
-            ->leftJoinSub($withdrawSub, 'w', function($join) {
-                $join->on('inv.no_invoice', '=', 'w.no_invoice');
-            })
-            ->whereRaw('inv.nilai_tagihan > (inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0))')
-            ->distinct();
+            $invoices = DB::table(DB::raw("({$invoiceAgg->toSql()}) as inv"))
+                ->mergeBindings($invoiceAgg)
+                ->select(
+                    'inv.no_invoice',
+                    'inv.total_tagihan',
+                    'inv.nilai_tagihan',
+                    DB::raw('(inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0)) AS nilai_pelunasan'),
+                    DB::raw('COALESCE(w.total_pembayaran, 0) AS total_pembayaran'),
+                    DB::raw('CASE WHEN w.total_pembayaran IS NOT NULL THEN 1 ELSE 0 END AS has_withdraw'),
+                    'inv.nama_pj',
+                    'inv.no_po',
+                    'inv.no_spk',
+                    DB::raw('COALESCE(oh.nama_perusahaan, oh.konsultan) AS nama_customer'),
+                    'oh.konsultan',
+                    'inv.created_at',
+                    'inv.created_by',
+                    'inv.tgl_jatuh_tempo',
+                    'inv.tgl_pelunasan',
+                    'inv.no_orders'
+                )
+                ->leftJoin('order_header as oh', 'inv.primary_no_order', '=', 'oh.no_order')
+                ->leftJoinSub($withdrawSub, 'w', function($join) {
+                    $join->on('inv.no_invoice', '=', 'w.no_invoice');
+                })
+                ->whereRaw('inv.nilai_tagihan > (inv.nilai_pelunasan + COALESCE(w.total_pembayaran, 0))')
+                ->distinct();
 
-        return datatables()->of($invoices)
-            ->filterColumn('no_invoice', function($query, $keyword) {
-                $query->where('inv.no_invoice', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('nama_customer', function($query, $keyword) {
-                $query->where(function($q) use ($keyword) {
-                    $q->where('oh.nama_perusahaan', 'like', "%{$keyword}%")
-                      ->orWhere('oh.konsultan', 'like', "%{$keyword}%");
-                });
-            })
-            ->filterColumn('nama_pj', function($query, $keyword) {
-                $query->where('inv.nama_pj', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('no_po', function($query, $keyword) {
-                $query->where('inv.no_po', 'like', "%{$keyword}%");
-            })
-            ->filterColumn('konsultan', function($query, $keyword) {
-                $query->where('oh.konsultan', 'like', "%{$keyword}%");
-            })
-            ->make(true);
-        
-    } catch (\Throwable $th) {
-        Log::error('Outstanding Index Error: ' . $th->getMessage());
-        return response()->json(['error' => 'Terjadi kesalahan'], 500);
+            
+            return datatables()->of($invoices)
+                ->addColumn('withdraw', function ($row) {
+                    return Withdraw::where('no_invoice', $row->no_invoice)
+                    ->orderBy('created_at')
+                    ->get()
+                    ->toArray();
+                })
+                ->filterColumn('no_invoice', function($query, $keyword) {
+                    $query->where('inv.no_invoice', 'like', "%{$keyword}%");
+                })
+                ->filterColumn('nama_customer', function($query, $keyword) {
+                    $query->where(function($q) use ($keyword) {
+                        $q->where('oh.nama_perusahaan', 'like', "%{$keyword}%")
+                        ->orWhere('oh.konsultan', 'like', "%{$keyword}%");
+                    });
+                })
+                ->filterColumn('nama_pj', function($query, $keyword) {
+                    $query->where('inv.nama_pj', 'like', "%{$keyword}%");
+                })
+                ->filterColumn('no_po', function($query, $keyword) {
+                    $query->where('inv.no_po', 'like', "%{$keyword}%");
+                })
+                ->filterColumn('konsultan', function($query, $keyword) {
+                    $query->where('oh.konsultan', 'like', "%{$keyword}%");
+                })
+                ->make(true);
+            
+        } catch (\Throwable $th) {
+            Log::error('Outstanding Index Error: ' . $th->getMessage());
+            return response()->json(['error' => 'Terjadi kesalahan'], 500);
+        }
     }
-}
 
     public function settlementIndex(Request $request)
     {
