@@ -133,77 +133,64 @@ class BreakdownKategoriController extends Controller
     }
 
     public function getDetailQuotation(Request $request){
-        $data = OrderHeader::with('orderDetail')->where('id_pelanggan', $request->id_pelanggan)->where('is_active', 1)->get();
-        dd($data);
-        // $type = \explode('/', $request->no_qt)[1];
-        // if($type == 'QTC'){
-        //     $data = QuotationKontrakH::with('sales')->where('no_document', $request->no_qt)->first();
-        //     $dataSampling = json_decode($data->data_pendukung_sampling);
+        $masterPelanggan = MasterPelanggan::where('id_pelanggan', $request->id_pelanggan)->first();
+        $data = OrderHeader::with('orderDetail')
+        ->where('id_pelanggan', $request->id_pelanggan)
+        ->where('is_active', 1)
+        ->get();
+        // Ambil semua kategori_3 dari setiap order detail, ratakan ke satu array, hilangkan duplikat
+        $kategoriList = $data->flatMap(function($item) {
+            return $item->orderDetail->pluck('kategori_3');
+        })->values()->all();
 
-        //     $array = [];
-
-        //     foreach ($dataSampling as $item) {
-        //         $kategori = explode('-', $item->kategori_2)[1];
-        //         $jumlahTitik = $item->jumlah_titik * count($item->periode);
-
-        //         if (isset($array[$kategori])) {
-        //             $array[$kategori] += $jumlahTitik;
-        //         } else {
-        //             $array[$kategori] = $jumlahTitik;
-        //         }
-        //     }
-
-        //     $buildData = $this->buildCategoryTree($array, $this->categoryStr);
-
-        // }else{
-        //     $data = QuotationNonKontrak::with('sales')->where('no_document', $request->no_qt)->first();
-        //     $dataSampling = json_decode($data->data_pendukung_sampling);
-
-        //     $array = [];
-
-        //     foreach ($dataSampling as $item) {
-        //         $kategori = explode('-', $item->kategori_2)[1];
-        //         $jumlahTitik = $item->jumlah_titik;
-
-        //         if (isset($array[$kategori])) {
-        //             $array[$kategori] += $jumlahTitik;
-        //         } else {
-        //             $array[$kategori] = $jumlahTitik;
-        //         }
-        //     }
-
-        //     $buildData = $this->buildCategoryTree($array, $this->categoryStr);
-        // }
-
-        // return response()->json([
-        //     'message' => 'Data hasbeen retrieved successfully',
-        //     'customer_detail' => $data,
-        //     'breakdown_kategori' => $buildData,
-        //     'status' => 200,
-        // ]);
+        $categoryTree = $this->buildCategoryTree($kategoriList, config('kategori.kategori.id'));
+        
+        return response()->json([
+            'message' => 'Data hasbeen retrieved successfully',
+            'customer_detail' => $masterPelanggan,
+            'breakdown_kategori' => $categoryTree,
+            'status' => 200,
+        ]);
     }
 
-    private function buildCategoryTree(array $rawData, array $categoryStr): array
+    /**
+     * Build grouped category tree, counting occurrences of each child from raw input.
+     *
+     * @param array $flatRaw array of string values (e.g., ["2-Air Limbah Domestik", ...])
+     * @param array $categoryMap associative array: parent => array of child strings
+     * @return array grouped categories and their value counts
+     */
+    private function buildCategoryTree(array $flatRaw, array $categoryMap): array
     {
+        // Hitung jumlah kemunculan setiap child
+        $counts = [];
+        foreach ($flatRaw as $item) {
+            if (!isset($counts[$item])) {
+                $counts[$item] = 1;
+            } else {
+                $counts[$item]++;
+            }
+        }
+
+
         $result = [];
-    
-        foreach ($categoryStr as $parent => $childrenList) {
+
+        foreach ($categoryMap as $parent => $children) {
             $matchedChildren = [];
-    
-            foreach ($childrenList as $childName) {
-                if (isset($rawData[$childName])) {
+
+            foreach ($children as $child) {
+                if (isset($counts[$child])) {
                     $matchedChildren[] = [
-                        'label' => $childName,
-                        'value' => $rawData[$childName],
+                        'label' => explode('-', $child)[1],
+                        'value' => $counts[$child],
                     ];
                 }
             }
-    
+
             if (empty($matchedChildren)) {
                 continue;
             }
-    
-            // RULE: parent == child → no children
+            // RULE: jika hanya satu anak dan namanya sama dgn parent, tidak pakai 'children', langsung parent
             if (
                 count($matchedChildren) === 1 &&
                 strtoupper($matchedChildren[0]['label']) === strtoupper($parent)
@@ -219,8 +206,7 @@ class BreakdownKategoriController extends Controller
                 ];
             }
         }
-    
+
         return $result;
     }
-    
 }
