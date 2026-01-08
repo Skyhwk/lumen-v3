@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 
 class SalesDailyQSD
 {
-    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01'];
+    private const EXCLUDE_CUSTOMERS = ['SAIR02', 'T2PE01', 'TPTT01'];
 
     public static function run(): void
     {
@@ -52,11 +52,33 @@ class SalesDailyQSD
                 $result->chunk(500)->each(function ($chunk) use (&$totalInserted) {
                     DB::table('daily_qsd')->upsert(
                         $chunk->toArray(), ['uuid'], [
-                            'no_order', 'periode', 'no_invoice', 'nilai_invoice', 'nilai_pembayaran', 'tanggal_pembayaran',
-                            'no_quotation', 'pelanggan_ID', 'nama_perusahaan', 'konsultan', 'kontrak',
-                            'sales_id', 'sales_nama', 'status_sampling', 'total_discount', 'total_ppn',
-                            'total_pph', 'biaya_akhir', 'grand_total', 'total_revenue', 'total_cfr',
-                            'tanggal_sampling_min', 'is_lunas', 'updated_at']
+                            'no_order', 
+                            'periode', 
+                            'no_invoice', 
+                            'nilai_invoice', 
+                            'nilai_pembayaran', 
+                            'nilai_pengurangan',
+                            'revenue_invoice',
+                            'tanggal_pembayaran',
+                            'no_po',
+                            'no_quotation', 
+                            'pelanggan_ID', 
+                            'nama_perusahaan', 
+                            'konsultan', 
+                            'kontrak',
+                            'sales_id', 
+                            'sales_nama', 
+                            'status_sampling', 
+                            'total_discount', 
+                            'total_ppn',
+                            'total_pph', 
+                            'biaya_akhir', 
+                            'grand_total', 
+                            'total_revenue', 
+                            'total_cfr',
+                            'tanggal_sampling_min', 
+                            'is_lunas', 
+                            'updated_at']
                     );
                     $totalInserted += $chunk->count();
                 });
@@ -81,6 +103,27 @@ class SalesDailyQSD
                 UPDATE daily_qsd
                 SET revenue_invoice = COALESCE(nilai_pembayaran, 0) - COALESCE(nilai_pengurangan, 0)
                 WHERE COALESCE(nilai_pembayaran, 0) > 0
+            ");
+
+            DB::statement("
+                UPDATE daily_qsd
+                SET tanggal_kelompok = CASE 
+                    WHEN tanggal_pembayaran IS NOT NULL AND
+                         STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         ) < tanggal_sampling_min
+                    THEN 
+                         STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         )
+                    ELSE tanggal_sampling_min
+                END
+                WHERE tanggal_kelompok IS NULL AND STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         ) < tanggal_sampling_min
             ");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
