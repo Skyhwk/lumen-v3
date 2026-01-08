@@ -120,6 +120,10 @@ class SalesDailyQSD
                          )
                     ELSE tanggal_sampling_min
                 END
+                WHERE tanggal_kelompok IS NULL AND STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         ) < tanggal_sampling_min
             ");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
