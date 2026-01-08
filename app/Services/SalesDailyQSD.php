@@ -52,11 +52,33 @@ class SalesDailyQSD
                 $result->chunk(500)->each(function ($chunk) use (&$totalInserted) {
                     DB::table('daily_qsd')->upsert(
                         $chunk->toArray(), ['uuid'], [
-                            'no_order', 'periode', 'no_invoice', 'nilai_invoice', 'nilai_pembayaran', 'tanggal_pembayaran',
-                            'no_quotation', 'pelanggan_ID', 'nama_perusahaan', 'konsultan', 'kontrak',
-                            'sales_id', 'sales_nama', 'status_sampling', 'total_discount', 'total_ppn',
-                            'total_pph', 'biaya_akhir', 'grand_total', 'total_revenue', 'total_cfr',
-                            'tanggal_sampling_min', 'is_lunas', 'updated_at']
+                            'no_order', 
+                            'periode', 
+                            'no_invoice', 
+                            'nilai_invoice', 
+                            'nilai_pembayaran', 
+                            'nilai_pengurangan',
+                            'revenue_invoice',
+                            'tanggal_pembayaran',
+                            'no_po',
+                            'no_quotation', 
+                            'pelanggan_ID', 
+                            'nama_perusahaan', 
+                            'konsultan', 
+                            'kontrak',
+                            'sales_id', 
+                            'sales_nama', 
+                            'status_sampling', 
+                            'total_discount', 
+                            'total_ppn',
+                            'total_pph', 
+                            'biaya_akhir', 
+                            'grand_total', 
+                            'total_revenue', 
+                            'total_cfr',
+                            'tanggal_sampling_min', 
+                            'is_lunas', 
+                            'updated_at']
                     );
                     $totalInserted += $chunk->count();
                 });
