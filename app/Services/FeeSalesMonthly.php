@@ -79,8 +79,8 @@ class FeeSalesMonthly
 
                 $quotations = DailyQsd::with('orderHeader.orderDetail')
                     ->where('sales_id', $salesId)
-                    ->whereDate('tanggal_sampling_min', '>=', '2025-10-01')
-                    ->whereDate('tanggal_sampling_min', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
+                    ->whereDate('tanggal_kelompok', '>=', '2025-10-01')
+                    ->whereDate('tanggal_kelompok', '<=', Carbon::create($this->currentYear, $this->currentMonth)->endOfMonth())
                     ->where('is_lunas', true)
                     ->get()
                     ->map(function ($qsd) use ($isExistsInFeeSales) {
