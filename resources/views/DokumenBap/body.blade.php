@@ -25,7 +25,7 @@
 
 <table style="width:95%; margin-left:5%; font-size:12px; line-height:1.6;">
     <tr>
-        <td style="width:20%;">Nama</td>
+        <td style="width:30%;">Nama</td>
         <td style="width:2%;">:</td>
         <td>{{ $data->nama_tim_teknis }}</td>
     </tr>
@@ -60,16 +60,18 @@
 </table>
 
 <table style="width:95%; margin-left:5%; font-size:12px; line-height:1.6;">
+    @foreach($data->nama_penanggung_jawab as $index => $item)
     <tr>
-        <td style="width:20%;">Nama</td>
+        <td style="width:30%;">Nama Penanggung Jawab <span> @if(count($data->nama_penanggung_jawab) > 1) {{ $index + 1 }} @endif</span></td>
         <td style="width:2%;">:</td>
-        <td>{{ $data->nama_penanggung_jawab }}</td>
+        <td>{{ $item }}</td>
     </tr>
     <tr>
-        <td>Jabatan</td>
+        <td>Jabatan Penanggung Jawab <span> @if(count($data->nama_penanggung_jawab) > 1) {{ $index + 1 }} @endif</span></td>
         <td>:</td>
-        <td>{{ $data->jabatan_penanggung_jawab }}</td>
+        <td>{{ $data->jabatan_penanggung_jawab[$index] }}</td>
     </tr>
+    @endforeach
     <tr>
         <td style="width:15%; vertical-align:top;">Alamat</td>
         <td style="width:2%; vertical-align:top;">:</td>
@@ -143,8 +145,8 @@
 <!-- TANDA TANGAN -->
 <table style="width:100%; font-size:12px; margin-top:25px; text-align:center;">
     <tr>
-        <td style="width:60%;">Penerima Kerja,</td>
-        <td style="width:40%;">Pemberi Kerja,</td>
+        <td style="width:50%;">Penerima Kerja,</td>
+        <td style="width:50%;">Pemberi Kerja,</td>
     </tr>
     <tr>
         <td><b>INTI SURYA LABORATORIUM, PT</b></td>
@@ -166,6 +168,14 @@
                 </tr>
             </table>
         </td>
-        <td>( <b>{{$data->nama_penanggung_jawab}}</b> )<br><i style="font-size:10px;">{{$data->jabatan_penanggung_jawab}}</i></td>
+        <td>
+            <table style="width:100%;">
+                <tr>
+                    @foreach($data->nama_penanggung_jawab as $index => $item)
+                        <td>( <b>{{$item}}</b> )<br><i style="font-size:10px;">{{$data->jabatan_penanggung_jawab[$index]}}</i></td>
+                    @endforeach
+                </tr>
+            </table>
+        </td>
     </tr>
 </table>

@@ -9,6 +9,8 @@ use App\Models\MasterBakumutu;
 use App\Models\MicrobioHeader;
 use App\Models\OrderDetail;
 use App\Models\SwabTestHeader;
+use App\Models\SubKontrak;
+use App\Models\Parameter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;

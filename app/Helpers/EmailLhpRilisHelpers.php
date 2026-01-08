@@ -39,7 +39,7 @@ class EmailLhpRilisHelpers
 
             if($periode != null) $periode = $periode . '_';
             
-            $subject = "e-LHP_{$no_order}_{$periode}{$company}";
+            $subject = "Update Hasil Uji_{$no_order}_{$periode}{$company}";
 
             $cc  = $cekHistory->email_cc != null  ? json_decode($cekHistory->email_cc, true)  : [];
             $bcc = $cekHistory->email_bcc != null ? json_decode($cekHistory->email_bcc, true) : [];

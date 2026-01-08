@@ -16,7 +16,7 @@ class RequestFeeExternalController extends Controller
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true);
+            ->where('is_active', true)->where('is_approved_manajer', true);
 
         if (is_array($status)) {
             $query->whereIn('status_pembayaran', $status);
@@ -61,7 +61,7 @@ class RequestFeeExternalController extends Controller
         $status = $request->status;
 
         $query = ClaimFeeExternal::query()
-            ->where('is_active', true);
+            ->where('is_active', true)->where('is_approved_manajer', true);
 
         if (is_array($status)) {
             $query->whereIn('status_pembayaran', $status);
@@ -109,6 +109,8 @@ class RequestFeeExternalController extends Controller
         }
 
         $claim->status_pembayaran = "PROCESSED";
+        $claim->processed_by = $this->karyawan;
+        $claim->processed_at = Carbon::now()->format('Y-m-d H:i:s');
         $claim->save();
 
         return response()->json(['message' => 'Claim Fee External Berhasil Disetujui']);
@@ -122,6 +124,7 @@ class RequestFeeExternalController extends Controller
         }
 
         $claim->status_pembayaran = "TRANSFER";
+        $claim->transferred_by = $this->karyawan;
         $claim->tanggal_pembayaran = $request->transfer_date;
         $claim->save();
 

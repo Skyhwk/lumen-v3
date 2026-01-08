@@ -103,8 +103,8 @@ class GenerateBapController extends Controller
         }
 
         $sales = $detail->sales_id;
-        $nama_penanggung_jawab = $detail->nama_pic_order;
-        $jabatan_penanggung_jawab = $detail->jabatan_pic_order;
+        $nama_penanggung_jawab = [$detail->nama_pic_order];
+        $jabatan_penanggung_jawab = [$detail->jabatan_pic_order];
 
         $dataDetail = $detail->order->orderDetail;
         $no_sampel = $dataDetail->where('periode', $request->periode)->where('is_active', 1)->pluck('no_sampel')->toArray();

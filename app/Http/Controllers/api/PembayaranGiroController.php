@@ -14,12 +14,16 @@ class PembayaranGiroController extends Controller
 {
     public function index(Request $request)
     {
-        $data = PembayaranGiro::whereYear('tanggal_giro', $request->year)->where('status', $request->status)->orderBy('id', 'DESC');
-        
+        $year = ($request->year != "") ? $request->year : date('Y'); 
+        $data = PembayaranGiro::whereYear('tanggal_giro', $year)
+        ->where('status', $request->status)->orderBy('id', 'DESC');
         return DataTables::of($data)
-        ->filterColumn('tanggal_giro', function ($query, $keyword) {
-            $query->where('tanggal_giro', 'like', '%' . $keyword . '%');
-        })
+        // Tambahkan closure filter dengan parameter kedua 'true' 
+        // untuk meng-override filter bawaan DataTables
+        ->filter(function ($query) {
+            // Biarkan kosong agar Yajra tidak menambahkan WHERE tambahan 
+            // dari hasil .search() yang tidak sengaja terinput
+        }, true)
         ->make(true);
     }
 

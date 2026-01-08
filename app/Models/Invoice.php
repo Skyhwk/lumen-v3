@@ -33,7 +33,7 @@ class Invoice extends Sector
 
     public function recordPembayaran()
     {
-        return $this->hasMany(RecordPembayaranInvoice::class, 'no_invoice', 'no_invoice');
+        return $this->hasMany(RecordPembayaranInvoice::class, 'no_invoice', 'no_invoice')->where('is_active', true);
     }
 
     public function recordWithdraw()

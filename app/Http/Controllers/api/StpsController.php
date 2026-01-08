@@ -430,7 +430,7 @@ class StpsController extends Controller
                 $dataPenawaran = QuotationKontrakH::with(['order', 'sampling', 'detail'])->where('no_document', $request->nomor_quotation)->first();
                 $dataOrder = $dataPenawaran->order;
                 $dataSampling = $dataPenawaran->sampling;
-
+               
                 $unik_kategori = $dataOrder->orderDetail()->where('periode', $request->periode)
                     ->where('is_active', true)->get()->pluck('kategori_3')->unique()->toArray();
 
@@ -483,7 +483,7 @@ class StpsController extends Controller
                 $getPeriodeSampling = array_filter($dataSampling->toArray(), function ($item) use ($request) {
                     return $item['periode_kontrak'] == $request->periode;
                 });
-
+                
                 $dataSampling = array_values($getPeriodeSampling)[0]['jadwal'];
                 foreach ($dataSampling as $key => $value) {
                     unset($dataSampling[$key]['id']);
@@ -514,11 +514,11 @@ class StpsController extends Controller
                     unset($dataSampling[$key]['urutan']);
                     unset($dataSampling[$key]['kendaraan']);
                 }
-
+                 
                 $dataSampling = array_values(array_filter(array_unique($dataSampling, SORT_REGULAR), function ($item) {
                     return isset($item['is_active']) && $item['is_active'] == 1;
                 }));
-                // dd($dataSampling);
+                
                 if (count($dataSampling) > 1) {
                     // jika data jadwalnya parsial
                     $dataOrderDetailPerPeriode = $dataOrder->orderDetail()
@@ -581,10 +581,11 @@ class StpsController extends Controller
                         return $numA <=> $numB; // Ascending order
                     });
                 } else {
+                   
                     $data_detail_penawaran = json_decode($dataPenawaran->detail()->where('periode_kontrak', $request->periode)->first()->data_pendukung_sampling, true);
-
                     $data_detail_penawaran = array_map(function ($item) use ($dataOrder, $pra_no_sample) {
                         $maping = array_map(function ($data_sampling) use ($item, $dataOrder, $pra_no_sample) {
+                            
                             $sampleNumbersFromOrder = $dataOrder->orderDetail()
                                 ->where('kategori_1', '!=', 'SD')
                                 ->where('kategori_2', $data_sampling['kategori_1'])
@@ -595,7 +596,6 @@ class StpsController extends Controller
                                 ->whereIn('no_sampel', $pra_no_sample)
                                 ->where('is_active', 1)
                                 ->get();
-
                             $penawaran_keys = array_merge(...array_map('array_keys', $data_sampling['penamaan_titik']));
 
                             $sampleNumbers = [];
@@ -624,12 +624,9 @@ class StpsController extends Controller
                                 }
                             }
 
+                            
                             if (empty($sampleNumbers)) {
-                                throw new \Exception(
-                                    "Parameter/regulasi/no sampel pada order tidak sesuai dengan penawaran. Kategori: " 
-                                    . ($data_sampling['kategori_2'] ?? '-') 
-                                    . " | Periode: " . ($item['periode_kontrak'] ?? '-')
-                                );
+                                return null; 
                             }
 
                             $data = [
@@ -649,10 +646,15 @@ class StpsController extends Controller
                                 'jumlah_titik' => $data_sampling['jumlah_titik'],
                                 'no_sampel' => $sampleNumbers,
                             ];
-
                             return $data;
                         }, $item['data_sampling']);
-
+                        $maping = array_values(array_filter($maping));
+                        if (empty($maping)) {
+                            $infoKategori = $item['data_sampling'][0]['kategori_2'] ?? '-';
+                            throw new \Exception(
+                                "Tidak ditemukan kecocokan sample pada penawaran ini. Periode: " . ($item['periode_kontrak'] ?? '-')
+                            );
+                        }
                         return $maping;
                     }, $data_detail_penawaran);
 

@@ -184,18 +184,10 @@ class FdlLingkunganKerjaController extends Controller
                     $foundParams = array_intersect($parameter, array_keys($targetParams));
 
                     // Ambil detail hanya sekali
-                    $detailsSesaat = DetailLingkunganKerja::where('no_sampel', $data->no_sampel)
-                        ->where('kategori_pengujian', 'Sesaat')
+                    $details = DetailLingkunganKerja::where('no_sampel', $data->no_sampel)
                         ->get();
 
-                    $details8Jam = DetailLingkunganKerja::where('no_sampel', $data->no_sampel)
-                        ->where(function ($query) {
-                            $query->where('kategori_pengujian', 'like', '%8J%')
-                                ->orWhere('kategori_pengujian', 'like', '%8 Jam%');
-                        })
-                        ->get();
-
-                    $filtered = $detailsSesaat->where('parameter', 'Pertukaran Udara');
+                    $filtered = $details->where('parameter', 'Pertukaran Udara');
 
                     // Aktifkan kembali ketika sudah di approve rumusnya oleh TA di spreadsheet
                     if ($filtered->isNotEmpty()) {
@@ -265,9 +257,7 @@ class FdlLingkunganKerjaController extends Controller
                         // Loop setiap parameter
                         foreach ($foundParams as $index => $param) {
                             $column = $targetParams[$param];
-                            $is8Jam = Str::contains($param, ['8J', '8 Jam']);
-                            // $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
-                            $details = $is8Jam ? $details8Jam : $detailsSesaat;
+                            $angkaKoma = Str::contains($param, 'Laju Ventilasi (8 Jam)');
 
                             // Handle kolom auto_laju
                             if ($column === 'auto_laju') {
@@ -277,7 +267,8 @@ class FdlLingkunganKerjaController extends Controller
 
                             // Ambil rata-rata nilai parameter
                             $nilaiList = $details->pluck($column)->filter(fn($val) => $val !== null && $val !== '');
-                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), 4) : null;
+                            $rataRata = $nilaiList->count() > 0 ? round($nilaiList->avg(), $angkaKoma ? 2 : 1) : null;
+                            // dd( $rataRata );
                             $satuan = null;
                             $lowerParam = strtolower($param);
                             if(str_contains($lowerParam, 'kecepatan angin')) {
@@ -307,12 +298,32 @@ class FdlLingkunganKerjaController extends Controller
 
                             // Mapping parameter -> field
                             $map = [
-                                'suhu' => ['lingkungan' => 'C11', 'udara' => 'hasil12', 'satuan' => '°C'],
-                                'kelembaban' => ['lingkungan' => 'C4', 'udara' => 'hasil5', 'satuan' => '%'],
-                                'laju ventilasi' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
-                                'kecepatan angin' => ['lingkungan' => 'C7', 'udara' => 'hasil8', 'satuan' => 'm/s'],
-                                // 'pertukaran udara' => ['lingkungan' => 'C17', 'udara' => 'hasil18', 'satuan' => 'km/jam'],
+                                'suhu' => [
+                                    'lingkungan' => 'C11',
+                                    'udara' => 'hasil12',
+                                    'satuan' => '°C',
+                                    'decimal' => 1
+                                ],
+                                'kelembaban' => [
+                                    'lingkungan' => 'C4',
+                                    'udara' => 'hasil5',
+                                    'satuan' => '%',
+                                    'decimal' => 1
+                                ],
+                                'laju ventilasi' => [
+                                    'lingkungan' => 'C7',
+                                    'udara' => 'hasil8',
+                                    'satuan' => 'm/s',
+                                    'decimal' => 1
+                                ],
+                                'kecepatan angin' => [
+                                    'lingkungan' => 'C7',
+                                    'udara' => 'hasil8',
+                                    'satuan' => 'm/s',
+                                    'decimal' => 4 // 👈 khusus ini
+                                ],
                             ];
+
 
                             // Default
                             $lingkunganUpdate = [];
@@ -321,12 +332,19 @@ class FdlLingkunganKerjaController extends Controller
                             // Tentukan field berdasarkan parameter
                             foreach ($map as $key => $conf) {
                                 if (Str::contains($lowerParam, $key)) {
+
                                     $satuan = $conf['satuan'];
-                                    $lingkunganUpdate[$conf['lingkungan']] = $rataRata;
-                                    $udaraUpdate[$conf['udara']] = $rataRata;
+
+                                    $formatted = $rataRata !== null
+                                        ? number_format($rataRata, $conf['decimal'], '.', '')
+                                        : null;
+
+                                    $lingkunganUpdate[$conf['lingkungan']] = $formatted;
+                                    $udaraUpdate[$conf['udara']] = $formatted;
+
+                                    break;
                                 }
                             }
-
 
                             $udaraUpdate['satuan'] = $satuan;
 

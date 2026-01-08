@@ -43,15 +43,11 @@ class WithdrawalFeeSalesController extends Controller
         $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
         $mutasiFeeSales->mutation_type = 'Kredit';
         $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
-        $mutasiFeeSales->description = $withdrawalFeeSales->description;
+        $mutasiFeeSales->description = 'Withdrawal Approved by Finance';
         $mutasiFeeSales->status = 'Done';
         $mutasiFeeSales->created_by = $this->karyawan;
         $mutasiFeeSales->updated_by = $this->karyawan;
         $mutasiFeeSales->save();
-
-        $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
-        $saldoFeeSales->active_balance -= $withdrawalFeeSales->amount;
-        $saldoFeeSales->save();
  
         $withdrawalFeeSales->save();
 
@@ -66,6 +62,21 @@ class WithdrawalFeeSalesController extends Controller
         $withdrawalFeeSales->rejected_by = $this->karyawan;
         $withdrawalFeeSales->rejected_at = Carbon::now();
         $withdrawalFeeSales->reject_reason = $request->reason;
+
+        $mutasiFeeSales = new MutasiFeeSales();
+        $mutasiFeeSales->sales_id = $withdrawalFeeSales->sales_id;
+        $mutasiFeeSales->batch_number = str_replace('.', '/', microtime(true));
+        $mutasiFeeSales->mutation_type = 'Debit';
+        $mutasiFeeSales->amount = $withdrawalFeeSales->amount;
+        $mutasiFeeSales->description = 'Withdrawal Rejected by Finance, Balance Restored';
+        $mutasiFeeSales->status = 'Done';
+        $mutasiFeeSales->created_by = $this->karyawan;
+        $mutasiFeeSales->updated_by = $this->karyawan;
+        $mutasiFeeSales->save();
+
+        $saldoFeeSales = SaldoFeeSales::where('sales_id', $withdrawalFeeSales->sales_id)->first();
+        $saldoFeeSales->active_balance += $withdrawalFeeSales->amount;
+        $saldoFeeSales->save();
 
         $withdrawalFeeSales->save();
 

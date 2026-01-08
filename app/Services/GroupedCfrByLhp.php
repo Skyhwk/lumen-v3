@@ -88,7 +88,7 @@ class GroupedCfrByLhp
                     //     ?? $item->tanggal_terima;
                     
                     $tglSampling = $item->kategori_1 != 'SD'
-                        ? ($item->tanggal_sampling ?? null)
+                        ? ($item->kategori_3 !== '118-Psikologi' ? ($item->tanggal_sampling ?? null) : ($item->tanggal_terima ?? null))
                         : ($item->tanggal_terima ?? null);
 
                     $labelSampling = optional($track)->ftc_verifier
@@ -116,11 +116,14 @@ class GroupedCfrByLhp
                         "28-Pencahayaan"
                     ];
 
+                    $labelSampling = $item->kategori_3 == '118-Psikologi' ? 'Direct' : $labelSampling;
+
                     if ($tglSampling) $steps['sampling'] = ['label' => $labelSampling, 'date' => $tglSampling];
 
                     $tglAnalisa = optional($track)->ftc_laboratory ?? ($lhps->created_at ?? null);
 
-                    if (in_array($item->kategori_3, $kategori_validation) || strpos($item->parameter, 'Ergonomi') !== false) {
+                    $isTglAnalisaEqualTglSampling = in_array($item->kategori_3, $kategori_validation) || str_contains($item->parameter, 'Ergonomi') || str_contains($item->kategori_3, 'Psikologi');
+                    if ($isTglAnalisaEqualTglSampling) {
                         $steps['analisa']['date'] = $tglSampling;
                     } else {
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;

@@ -382,9 +382,6 @@ class SendEmail
                             <p>
                                 INTI SURYA LABORATORIUM | Icon Business Park, Jl. Raya Cisauk Lapan Blok O No. 5 - 6, Sampora, Kec. Cisauk, Kabupaten Tangerang, Banten 15345 © 2024 INTI SURYA LABORATORIUM. Semua Hak Dilindungi Undang-Undang.
                             </p>
-                            <p style="font-size: 10px; color: #868e96;">
-                                Jika anda berminat silahkan untuk mereplay email ini, Terimakasih.
-                            </p>
                         </div>
                     </body>
                 </html>';

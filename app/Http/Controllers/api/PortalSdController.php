@@ -237,11 +237,11 @@ class PortalSdController extends Controller
     public function saveStep(Request $request)
     {
         try {
+            
             if ($request->mode == 'internal') {
                 $dataSave = SampelDiantarDetail::where('id_header', $request->idSampelDiantar)
                     ->where('periode', $request->periode)
                     ->first();
-
                 $incoming = $request->internal_data;
                 // Pastikan array
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
@@ -250,6 +250,7 @@ class PortalSdController extends Controller
                     $existing = json_decode($dataSave->internal_data);
                     // Buat index dari existing berdasarkan no_sampel + jenis_sampel
                     $indexed = [];
+                    
                     foreach ($existing as $item) {
                         $item = (array) $item;
                         $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
@@ -259,52 +260,57 @@ class PortalSdController extends Controller
                     // Sekarang proses incoming data
                     foreach ($incoming as $item) {
                         $key = $item['no_sampel'] . '_' . $item['jenis_sampel'];
-                        // $currentDateTime = date('Y-m-d H:i:s');
 
                         if (!isset($indexed[$key])) {
                             $item['date_time'] = $currentDateTime;
                         } else {
-                            // Data sudah ada, cek apakah ada perubahan
                             $existingItem = $indexed[$key];
                             $isChanged = false;
-                            $fieldsToCheck = ['ph', 'dhl', 'hasil_uji', 'sistem_lock', 'jenis_sampel'];
+
+                            // 1. Cek Field Sederhana (String/Angka/Null)
+                            // Masukkan 'warna', 'keruh', 'bau' ke sini karena datanya string biasa
+                            $fieldsToCheck = ['ph', 'dhl', 'sistem_lock', 'jenis_sampel', 'warna', 'keruh', 'bau', 'suhu'];
+                            
                             foreach ($fieldsToCheck as $field) {
                                 $newValue = $item[$field] ?? null;
                                 $oldValue = $existingItem[$field] ?? null;
+
+                                // Bandingkan nilai. Gunakan != agar "4" (string) dianggap sama dengan 4 (int)
                                 if ($newValue != $oldValue) {
                                     $isChanged = true;
-                                    break;
+                                    break; // Jika satu beda, sudah dianggap berubah, stop loop field
                                 }
                             }
 
-                            // Khusus jenis_wadah (array)
-                            $newWadah = $item['jenis_wadah'] ?? [];
-                            $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                            // 2. Cek Field Array (Hanya Jenis Wadah)
+                            // Hanya jalankan jika field sederhana belum ditemukan perubahan
+                            if (!$isChanged) {
+                                $newWadah = $item['jenis_wadah'] ?? [];
+                                $oldWadah = $existingItem['jenis_wadah'] ?? [];
+                                
+                                // Pastikan format array murni
+                                if (!is_array($newWadah)) $newWadah = (array)$newWadah;
+                                if (!is_array($oldWadah)) $oldWadah = (array)$oldWadah;
 
-                            if (count($newWadah) != count($oldWadah) || array_diff($newWadah, $oldWadah) || array_diff($oldWadah, $newWadah)) {
-                                $isChanged = true;
+                                // Sort agar urutan tidak mempengaruhi ('A','B' dianggap sama dengan 'B','A')
+                                sort($newWadah);
+                                sort($oldWadah);
+
+                                if (json_encode($newWadah) !== json_encode($oldWadah)) {
+                                    $isChanged = true;
+                                }
                             }
 
-                            // Khusus warna (nested array/object)
-                            $newWarna = $item['warna'] ?? [];
-                            $oldWarna = $existingItem['warna'] ?? [];
-                            $oldWarna = is_string($oldWarna) ? json_decode($oldWarna, true) : (array) $oldWarna;
-                            ksort($newWarna);
-                            ksort($oldWarna);
-                            if (json_encode($newWarna) !== json_encode($oldWarna)) {
-                                $isChanged = true;
-
-                            }
-                            // Set date_time tergantung apakah berubah atau tidak
-                            // dump($oldWarna);
+                            // Set date_time
+                            // Jika berubah update waktu, jika tidak pakai waktu lama
                             $item['date_time'] = $isChanged ? $currentDateTime : $existingItem['date_time'];
-                            // $indexed[$key] = $item; // replace or insert
                         }
+                        
+                        // Update data di indexed untuk disimpan kembali
                         $indexed[$key] = $item;
-
                     }
 
-                    // dd($indexed);
+                    
                     // Hasil akhir
                     $merged = array_values($indexed); // hilangkan key numerik, jadi array kembali
                     $dataToSave = [
@@ -339,7 +345,6 @@ class PortalSdController extends Controller
                 $incoming = $request->external_data;
                 // Pastikan array
                 $incoming = is_array($incoming) ? $incoming : json_decode($incoming, true);
-
                 $merged = $incoming;
                 if ($dataSave !== null) {
                     // Update existing record
