@@ -24,84 +24,6 @@ class FeeSalesMonthly
     private $currentPeriod;
     private $currentMonthStr;
 
-    private $categoryStr = [
-        'AIR LIMBAH' => [
-            '2-Air Limbah Domestik',
-            '3-Air Limbah Industri',
-            '51-Air Limbah',
-        ],
-        'AIR BERSIH' => [
-            '1-Air Bersih',
-        ],
-        'AIR MINUM' => [
-            '4-Air Minum',
-        ],
-        'AIR SUNGAI' => [
-            '54-Air Sungai',
-        ],
-        'AIR LAUT' => [
-            '5-Air Laut',
-        ],
-        'AIR LAINNYA' => [
-            '72-Air Tanah',
-            '63-Air Higiene Sanitasi',
-            '64-Air Khusus',
-            '40-Air Kolam Renang',
-            '56-Air Danau',
-            '6-Air Permukaan',
-            '117-Air Reverse Osmosis',
-            '62-Air Higiene Sanitasi',
-            '112-Air Lindi',
-        ],
-        'UDARA AMBIENT' => [
-            '11-Udara Ambient',
-        ],
-        'UDARA LINGKUNGAN KERJA' => [
-            '27-Udara Lingkungan Kerja',
-        ],
-        'KEBISINGAN' => [
-            '23-Kebisingan',
-            '25-Kebisingan (Indoor)',
-            '24-Kebisingan (24 Jam)',
-        ],
-        'PENCAHAYAAN' => [
-            '28-Pencahayaan',
-        ],
-        'GETARAN' => [
-            '13-Getaran',
-            '19-Getaran (Mesin)',
-            '20-Getaran (Seluruh Tubuh)',
-            '17-Getaran (Lengan & Tangan)',
-            '15-Getaran (Kejut Bangunan)',
-            '14-Getaran (Bangunan)',
-            '18-Getaran (Lingkungan)',
-        ],
-        'IKLIM KERJA' => [
-            '21-Iklim Kerja',
-        ],
-        'UDARA LAINNYA' => [
-            '53-Ergonomi',
-            '12-Udara Angka Kuman',
-            '22-Kebauan',
-            '46-Udara Swab Test',
-            '29-Udara Umum',
-            '118-Psikologi',
-            '26-Kualitas Udara Dalam Ruang',
-        ],
-        'EMISI SUMBER BERGERAK' => [
-            '30-Emisi Kendaraan',
-            '32-Emisi Kendaraan (Solar)',
-            '31-Emisi Kendaraan (Bensin)',
-            '116-Emisi Kendaraan (Gas)',
-        ],
-        'EMISI SUMBER TIDAK BERGERAK' => [
-            '34-Emisi Sumber Tidak Bergerak',
-        ],
-        'EMISI ISOKINETIK' => [
-            '119-Emisi Isokinetik',
-        ],
-    ];
-
     public function __construct()
     {
         $this->currentYear = Carbon::now()->year;
@@ -140,7 +62,7 @@ class FeeSalesMonthly
             //     ->get();
 
             $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
-
+            $categoryStr = config('kategori.kategori.id');
             foreach ($masterTargetSales as $targetSales) {
                 $salesId = $targetSales->karyawan_id;
 
@@ -195,7 +117,7 @@ class FeeSalesMonthly
                         $target = $targetCategory[$category];
 
                         $achieved = $quotations->flatMap(fn($q) => optional($q->orderHeader)->orderDetail)
-                            ->filter(fn($orderDetail) => collect($this->categoryStr[$category])->contains($orderDetail->kategori_3))
+                            ->filter(fn($orderDetail) => collect($categoryStr[$category])->contains($orderDetail->kategori_3))
                             ->count();
 
                         return [
