@@ -104,6 +104,23 @@ class SalesDailyQSD
                 SET revenue_invoice = COALESCE(nilai_pembayaran, 0) - COALESCE(nilai_pengurangan, 0)
                 WHERE COALESCE(nilai_pembayaran, 0) > 0
             ");
+
+            DB::statement("
+                UPDATE daily_qsd
+                SET tanggal_kelompok = CASE 
+                    WHEN tanggal_pembayaran IS NOT NULL AND
+                         STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         ) < tanggal_sampling_min
+                    THEN 
+                         STR_TO_DATE(
+                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+                            '%Y-%m-%d'
+                         )
+                    ELSE tanggal_sampling_min
+                END
+            ");
         }
         Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
         Log::info('[SalesDailyQSD] Completed successfully');
