@@ -1168,128 +1168,120 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 	}
 
 	public function updateNilaiUji(Request $request)
-    {
-        DB::beginTransaction();
-        try {
-            $wsUdara = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-            if (! $wsUdara) {
-                return response()->json([
-                    'message' => 'Data WsValueUdara tidak ditemukan.'
-                ], 404);
-            }
+	{
+		DB::beginTransaction();
+		try {
+			$wsList = WsValueUdara::where('no_sampel', $request->no_sampel)->get();
 
-            // Mapping header asal
-            $headerMap = [
-                'id_direct_lain_header'   => DirectLainHeader::class,
-                'id_lingkungan_header'    => LingkunganHeader::class,
-                'id_partikulat_header'    => PartikulatHeader::class,
-                'id_debu_personal_header' => DebuPersonalHeader::class,
-                'id_dustfall_header'      => DustfallHeader::class,
-            ];
+			if ($wsList->isEmpty()) {
+				return response()->json([
+					'message' => 'Data WsValueUdara tidak ditemukan.'
+				], 404);
+			}
 
-            /**
-             * =====================================================
-             * 1️⃣ CEK HEADER ASAL (LINGKUNGAN / DLL)
-             * =====================================================
-             */
-            foreach ($headerMap as $field => $model) {
-                if ($wsUdara->$field) {
-                    $headerValid = $model::where('id', $wsUdara->$field)
-                        ->where('parameter', $request->parameter)
-                        ->exists();
+			$headerMap = [
+				'id_direct_lain_header'   => DirectLainHeader::class,
+				'id_lingkungan_header'    => LingkunganHeader::class,
+				'id_partikulat_header'    => PartikulatHeader::class,
+				'id_debu_personal_header' => DebuPersonalHeader::class,
+				'id_dustfall_header'      => DustfallHeader::class,
+			];
 
-                    if ($headerValid) {
-                        // replace nilai saja
-                        for ($i = 1; $i <= 19; $i++) {
-                            $wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
-                        }
+			/**
+			 * =====================================================
+			 * 1️⃣ LOOP SEMUA WS UDARA
+			 * =====================================================
+			 */
+			foreach ($wsList as $wsUdara) {
 
-                        $wsUdara->save();
+				// 🔹 CEK SUBKONTRAK
+				if ($wsUdara->id_subkontrak) {
+					$valid = Subkontrak::where('id', $wsUdara->id_subkontrak)
+						->where('parameter', $request->parameter)
+						->exists();
 
-                        DB::commit();
-                        return response()->json([
+					if ($valid) {
+						for ($i = 1; $i <= 19; $i++) {
+							$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+						}
+						$wsUdara->save();
+
+						DB::commit();
+						return response()->json([
 							'success' => true,
-							'status'  => 200,
 							'message' => 'Hasil berhasil direplace'
-						], 200);
-                    }
+						]);
+					}
+				}
 
-                    break; // hanya boleh satu header aktif
-                }
-            }
+				// 🔹 CEK HEADER
+				foreach ($headerMap as $field => $model) {
+					if ($wsUdara->$field) {
+						$valid = $model::where('id', $wsUdara->$field)
+							->where('parameter', $request->parameter)
+							->exists();
 
-            /**
-             * =====================================================
-             * 2️⃣ CEK SUBKONTRAK
-             * =====================================================
-             */
-            if ($wsUdara->id_subkontrak) {
-                $subkontrakValid = Subkontrak::where('id', $wsUdara->id_subkontrak)
-                    ->where('parameter', $request->parameter)
-                    ->exists();
+						if ($valid) {
+							for ($i = 1; $i <= 19; $i++) {
+								$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+							}
+							$wsUdara->save();
 
-                if ($subkontrakValid) {
-                    for ($i = 1; $i <= 19; $i++) {
-                        $wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
-                    }
+							DB::commit();
+							return response()->json([
+								'success' => true,
+								'message' => 'Hasil berhasil direplace'
+							]);
+						}
+					}
+				}
+			}
 
-                    $wsUdara->save();
+			/**
+			 * =====================================================
+			 * 2️⃣ JIKA TIDAK ADA YANG MATCH → BUAT SUBKONTRAK BARU
+			 * =====================================================
+			 */
+			$subkontrak = Subkontrak::create([
+				'no_sampel'   => $request->no_sampel,
+				'parameter'   => $request->parameter,
+				'created_by'  => $this->karyawan,
+				'category_id' => 4,
+				'is_approve'  => 1,
+				'approved_by' => $this->karyawan,
+				'approved_at' => now(),
+			]);
 
-                    DB::commit();
-                    return response()->json([
-						'success' => true,
-						'status'  => 200,
-						'message' => 'Hasil berhasil direplace'
-					], 200);
-                }
-            }
+			// pakai WS pertama sebagai target
+			$wsUdara = $wsList->first();
 
-            /**
-             * =====================================================
-             * 3️⃣ BUAT SUBKONTRAK BARU
-             * =====================================================
-             */
-            $header = Subkontrak::create([
-                'no_sampel'   => $request->no_sampel,
-                'parameter'   => $request->parameter,
-                'created_by'  => $this->karyawan,
-                'created_at'  => Carbon::now()->format('Y-m-d H:i:s'),
-                'category_id' => 4,
-                'is_approve'  => 1,
-                'approved_by' => $this->karyawan,
-                'approved_at' => Carbon::now()->format('Y-m-d H:i:s'),
-            ]);
+			foreach ($headerMap as $field => $model) {
+				$wsUdara->$field = null;
+			}
 
-            // putus semua header lama
-            foreach ($headerMap as $field => $model) {
-                $wsUdara->$field = null;
-            }
+			$wsUdara->id_subkontrak = $subkontrak->id;
 
-            $wsUdara->id_subkontrak = $header->id;
+			for ($i = 1; $i <= 19; $i++) {
+				$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+			}
 
-            // replace nilai
-            for ($i = 1; $i <= 19; $i++) {
-                $wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
-            }
+			$wsUdara->save();
 
-            $wsUdara->save();
-
-            DB::commit();
-            return response()->json([
+			DB::commit();
+			return response()->json([
 				'success' => true,
-				'status'  => 200,
-				'message' => 'Hasil berhasil direplace'
-			], 200);
+				'message' => 'Hasil berhasil disimpan ke subkontrak baru'
+			]);
 
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            \Log::error($e);
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			\Log::error($e);
 
-            return response()->json([
+			return response()->json([
 				'success' => false,
-				'status'  => 500,
 				'message' => 'Terjadi kesalahan'
 			], 500);
-        }
-    }
+		}
+	}
+
 }
