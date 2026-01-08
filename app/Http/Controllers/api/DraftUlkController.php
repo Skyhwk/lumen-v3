@@ -737,14 +737,29 @@ class DraftUlkController extends Controller
                         })
                     );
                 }
-                // dd('---------------------------');
+
+                $parameters = Parameter::where(['id_kategori' => 4, 'is_active' => true])->whereIn('nama_lab', $listData->pluck('nama_lab'))->get()->map(fn($item) => ['id' => $item->id, 'parameter' => $item->nama_lab]);
+                $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+                
+                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                    if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
+                        $colToSearch = "hasil" . ($index ?: 1);
+                        $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                        if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                            $hasilUji = "<" . $mdlUdara->$colToSearch;
+                        }
+                    }
+
+                    return $hasilUji;
+                };
+
                 foreach ($listData as $item) {
-                    $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed);
+                    $entry      = $this->formatEntry((object) $item, $request->regulasi, $methodsUsed, $getHasilUji);
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
                         foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi);
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi, [], $getHasilUji);
                         }
                     }
                 }
@@ -790,7 +805,7 @@ class DraftUlkController extends Controller
         }
     }
 
-    private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+    private function formatEntry($val, $regulasiId, &$methodsUsed = [], $getHasilUji)
     {
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)
             ->where('parameter', $val->nama_lab)
@@ -875,14 +890,7 @@ class DraftUlkController extends Controller
             $entry['baku_mutu'] = ['-'];
         }
 
-        if (!str_contains($entry['hasil_uji'], '<') && $entry['hasil_uji'] != '-' && $entry['hasil_uji'] != '##') {
-            $mdlUdara = MdlUdara::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->nama_lab))->whereNotNull("hasil$index")->latest()->first();
-            if ($mdlUdara) {
-                if ((float) $mdlUdara->{"hasil$index"} > (float) $entry['hasil_uji']) {
-                    $entry['hasil_uji'] = "<" . $mdlUdara->{"hasil$index"};
-                }
-            }
-        }
+        $entry['hasil_uji'] = $getHasilUji($index, Parameter::where(['id_kategori' => 4, 'nama_lab' => $val->nama_lab, 'is_active' => true])->first()->id, $entry['hasil_uji']);
 
         return $entry;
     }

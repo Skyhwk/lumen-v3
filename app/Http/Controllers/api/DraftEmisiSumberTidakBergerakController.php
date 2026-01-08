@@ -541,13 +541,29 @@ class DraftEmisiSumberTidakBergerakController extends Controller
                         ->where('lhps', 1)
                         ->whereIn('parameter', $parameterNames)
                         ->get();
+
+                    $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+                    $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+                    
+                    $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+                        if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
+                            $colToSearch = "C$index";
+                            $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                            if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                                $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                            }
+                        }
+
+                        return $hasilUji;
+                    };
+
                     foreach ($data as $val) {
-                        $entry      = $this->formatEntry($val, $request->regulasi, $methodsUsed);
+                        $entry      = $this->formatEntry($val, $request->regulasi, $methodsUsed, $getHasilUji);
                         $mainData[] = $entry;
 
                         if ($request->other_regulasi) {
                             foreach ($request->other_regulasi as $id_regulasi) {
-                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi, $methodsUsed);
+                                $otherRegulations[$id_regulasi][] = $this->formatEntry($val, $id_regulasi, $methodsUsed, $getHasilUji);
                             }
                         }
                     }
@@ -590,7 +606,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         }
     }
 
-    private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+    private function formatEntry($val, $regulasiId, &$methodsUsed = [], $getHasilUji)
     {
         $bakumutu = MasterBakumutu::where('id_regulasi', $regulasiId)->where('parameter', $val->parameter_emisi->nama_lab)->first();
         $satuan     = $bakumutu ? $bakumutu->satuan : null;
@@ -601,7 +617,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             'no_sampel'     => $val->no_sampel,
             'parameter'     => $val->parameter_emisi->nama_lhp ?? $val->parameter_emisi->nama_regulasi,
             'parameter_lab' => $val->parameter,
-            'C'             => self::getHasilUji($val, $satuan),
+            'C'             => self::getHasilUji($val, $satuan, $getHasilUji),
             'terkoreksi'    => self::getKoreksi($val, $satuan),
             'satuan'        => $satuan,
             'methode'       => ! empty($bakumutu->method) ? $bakumutu->method : (! empty($val->method) ? $val->method : '-'),
@@ -629,7 +645,7 @@ class DraftEmisiSumberTidakBergerakController extends Controller
         return $entry;
     }
 
-    private function getHasilUji($val, $satuan)
+    private function getHasilUji($val, $satuan, $getHasilUji)
     {
 
         $cerobong  = $val->ws_value_cerobong;
@@ -671,16 +687,8 @@ class DraftEmisiSumberTidakBergerakController extends Controller
             $fkoreksiKey = "f_koreksi_c$index";
             $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
         }
-
-        if (!str_contains($nilai, '<') && $nilai != '-' && $nilai != '##') {
-            $mdlEmisi = MdlEmisi::whereHas('parameter', fn($q) => $q->where('nama_lab', $val->parameter_lab))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
-            if ($mdlEmisi) {
-                if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
-                    $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
-                }
-            }
-        }
-        return $nilai;
+        
+        return $getHasilUji($index, Parameter::where(['id_kategori' => 5, 'nama_lab' => $val->parameter, 'is_active' => true])->first()->id, $nilai);
     }
     
     private function getKoreksi($val, $satuan)

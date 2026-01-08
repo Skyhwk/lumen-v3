@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\MdlUdara;
+use App\Models\Parameter;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -153,8 +154,22 @@ class TqcUdaraLingkunganHidupController extends Controller
             $id_regulasi = $request->regulasi;
             $getSatuan = new HelperSatuan;
 
-            foreach ($processedData as $item) {
+            $parameters = $processedData->map(fn($item) => ['id' => $item->id_parameter ?: Parameter::where(['id_kategori' => 4, 'nama_lab' => $item->parameter, 'is_active' => true])->first()->id, 'parameter' => $item->parameter]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
 
+                return $hasilUji;
+            };
+
+            foreach ($processedData as $item) {
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
                     ->where('parameter', $item->parameter)
@@ -227,61 +242,25 @@ class TqcUdaraLingkunganHidupController extends Controller
                             if($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c2'] ?? $hasil['C2'] ??  $hasil['f_koreksi_2'] ??  $hasil['hasil2'] ?? '-';
                             }
-                                
-                            if (!str_contains($nilai, '<') && $nilai != '-') {
-                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
-                                if ($mdlUdara) {
-                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
-                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
-                                    }
-                                }
-                            }
                         } else if ($index == 16) {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
-                            }
-                                
-                            if (!str_contains($nilai, '<') && $nilai != '-') {
-                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
-                                if ($mdlUdara) {
-                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
-                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
-                                    }
-                                }
                             }
                         } else if ($index == 15) {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c3'] ?? $hasil['C3'] ??  $hasil['f_koreksi_3'] ??  $hasil['hasil3'] ?? '-';
                             }
-                                
-                            if (!str_contains($nilai, '<') && $nilai != '-') {
-                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
-                                if ($mdlUdara) {
-                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
-                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
-                                    }
-                                }
-                            }
                         } else {
                             $nilai = $hasil[$fKoreksiKey] ?? $hasil[$hasilKey] ??  $hasil[$fKoreksiHasil] ??  $hasil[$fhasil] ?? null;
                             if($nilai == null) {
                                 $nilai = $hasil['f_koreksi_c1'] ?? $hasil['C1'] ??  $hasil['f_koreksi_1'] ??  $hasil['hasil1'] ?? '-';
                             }
-                                
-                            if (!str_contains($nilai, '<') && $nilai != '-') {
-                                $mdlUdara = MdlUdara::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("hasil$index")->latest()->first();
-                                if ($mdlUdara) {
-                                    if ((float) $mdlUdara->{"hasil$index"} > (float) $nilai) {
-                                        $nilai = "<" . $mdlUdara->{"hasil$index"};
-                                    }
-                                }
-                            }
                         }
                     }
 
-                    $item->nilai_uji = $nilai;
+                    $item->nilai_uji = $getHasilUji($index, $item->id_parameter ?: Parameter::where(['id_kategori' => 4, 'nama_lab' => $item->parameter])->first()->id, $nilai);
                 } else {
                     $item->nilai_uji = '-';
                 }

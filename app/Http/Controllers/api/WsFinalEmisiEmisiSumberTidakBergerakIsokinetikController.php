@@ -41,6 +41,10 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 	}
 	public function detail(Request $request)
 	{
+        $parameter = OrderDetail::where('no_sampel', $request->no_sampel)
+            ->where('is_active', true)
+            ->first()->parameter;
+			
 		$data1 = IsokinetikHeader::with(['ws_value'])
 			->where('is_approved', 1)
 			->where('is_active', 1)
@@ -129,9 +133,24 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 			}
 		}
 
+        $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+        $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+        
+        $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+            if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                $colToSearch = "C$index";
+                $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                    $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                }
+            }
+
+            return $hasilUji;
+        };
+
 		// , %, -, m/s, mg/Mm³, mg/m³, mg/Nm3, mg/Nm³, ppm, °C
 		return Datatables::of($data)
-			->addColumn('nilai_uji', function ($item) {
+			->addColumn('nilai_uji', function ($item) use ($getHasilUji) {
 				$satuanIndexMap = [
 					"μg/Nm³" => "",
 					"μg/Nm3" => "",
@@ -214,7 +233,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 
 					$nilai = $nilai ?? '-';
 
-					return $nilai;
+					return $getHasilUji('', $item['id_parameter'], $nilai);
 				}
 
 				$field       = $index;
@@ -232,7 +251,7 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 
 				// jika nilai ada (termasuk 0), return nilai
 				if ($nilai !== null) {
-					return $nilai;
+					return $getHasilUji($index, $item['id_parameter'], $nilai);
 				}
 
 				// fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
@@ -241,17 +260,8 @@ class WsFinalEmisiEmisiSumberTidakBergerakIsokinetikController extends Controlle
 					?? $ws['f_koreksi_c']
 					?? $ws['C']
 					?? "-";
-                
-                if (!str_contains($nilai, '<')) {
-                    $mdlEmisi = MdlEmisi::where('parameter_id', $item['id_parameter'])->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item['parameter']))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
-                    if ($mdlEmisi) {
-                        if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
-                            $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
-                        }
-                    }
-                }
 
-                return $nilai;
+				return $getHasilUji($index, $item['id_parameter'], $nilai);
 			})
 
 			->make(true);

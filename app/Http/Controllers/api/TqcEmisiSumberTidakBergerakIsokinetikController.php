@@ -86,6 +86,21 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
             $id_regulasi = $request->regulasi;
             $getSatuan   = new HelperSatuan;
 
+            $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "C$index";
+                    $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
+
             foreach ($data as $item) {
                 $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
                     ->select('waktu_pengambilan')
@@ -162,16 +177,7 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
                     $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
                 }
 
-                if (!str_contains($nilai, '<')) {
-                    $mdlEmisi = MdlEmisi::where('parameter_id', $item->id_parameter)->orWhereHas('parameter', fn($q) => $q->where('nama_lab', $item->parameter))->whereNotNull("C" . (!$index ? '' : $index))->latest()->first();
-                    if ($mdlEmisi) {
-                        if ((float) $mdlEmisi->{"C" . (!$index ? '' : $index)} > (float) $nilai) {
-                            $nilai = "<" . $mdlEmisi->{"C" . (!$index ? '' : $index)};
-                        }
-                    }
-                }
-
-                $item->nilai_uji = $nilai;
+                $item->nilai_uji = $getHasilUji($index, $item->id_parameter, $nilai);
             }
 
             return Datatables::of($data)
