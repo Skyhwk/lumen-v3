@@ -26,11 +26,11 @@ class DailyQsdController extends Controller
     public function index(Request $request)
     {
         // Query dasar
-        $data = DailyQsd::where('tanggal_sampling_min', 'like', '%' . $request->tanggal_sampling . '%');
+        $data = DailyQsd::whereYear('tanggal_kelompok', $request->tanggal_sampling);
         
         // Apply cut off filter jika ada
-        if ($request->cut_off == "today") {
-            $data = $data->where('tanggal_sampling_min', '<=', Carbon::now()->format('Y-m-d'));
+        if ($request->cut_off != "all") {
+            $data = $data->whereMonth('tanggal_kelompok', $request->cut_off);
         }
         
         // Ambil invoice yang perlu di-exclude
