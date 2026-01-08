@@ -18,6 +18,8 @@ class RekapKategoriAnalisaController extends Controller
         ],
         'AIR BERSIH' => [
             '1-Air Bersih',
+            '63-Air Higiene Sanitasi',
+            '62-Air Higiene Sanitasi',
         ],
         'AIR MINUM' => [
             '4-Air Minum',
@@ -30,13 +32,11 @@ class RekapKategoriAnalisaController extends Controller
         ],
         'AIR LAINNYA' => [
             '72-Air Tanah',
-            '63-Air Higiene Sanitasi',
             '64-Air Khusus',
             '40-Air Kolam Renang',
             '56-Air Danau',
             '6-Air Permukaan',
             '117-Air Reverse Osmosis',
-            '62-Air Higiene Sanitasi',
             '112-Air Lindi',
         ],
         'UDARA AMBIENT' => [
