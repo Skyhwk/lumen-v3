@@ -793,7 +793,7 @@ class PersiapanSampleController extends Controller
                         continue;
                     }
                      // LOGIKA FILTER DETIL (ATOMIC CHECK)
-                        // 2. Cek Satu Per Satu (ABSENSI)
+                    // 2. Cek Satu Per Satu (ABSENSI)
                     $currentSamplers = explode(',', $schedule->sampler ?? '');
                     $pendingSamplers = [];
                     foreach ($currentSamplers as $singleSampler) {
@@ -811,7 +811,6 @@ class PersiapanSampleController extends Controller
                             $pendingSamplers[] = trim($singleSampler);
                         }
                     }
-
                     // 3. Keputusan Akhir untuk Row Ini
                     // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
                     if (empty($pendingSamplers)) {
