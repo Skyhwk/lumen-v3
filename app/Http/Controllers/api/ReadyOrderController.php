@@ -1300,7 +1300,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
             }else{
-                $kuotaExist = KuotaPengujian::where('pelangan_ID', $dataQuotation->pelanggan_ID)->first();
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
                     $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
                     if($history){
@@ -1807,7 +1807,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
             }else{
-                $kuotaExist = KuotaPengujian::where('pelangan_ID', $dataQuotation->pelanggan_ID)->first();
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
                     $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
                     if($history){
@@ -2178,7 +2178,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
             }else{
-                $kuotaExist = KuotaPengujian::where('pelangan_ID', $dataQuotation->pelanggan_ID)->first();
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
                     $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
                     if($history){
@@ -2685,7 +2685,7 @@ class ReadyOrderController extends Controller
             if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
             }else{
-                $kuotaExist = KuotaPengujian::where('pelangan_ID', $dataQuotation->pelanggan_ID)->first();
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
                     $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
                     if($history){
