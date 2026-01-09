@@ -39,7 +39,7 @@ class DraftEmisiSumberBergerakController extends Controller
             ->where('is_approve', 0)
             ->where('is_active', true)
             ->where('kategori_2', '5-Emisi')
-            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak'])
+            ->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak','119-Emisi Isokinetik'])
             ->groupBy('cfr')
             ->where('status', 2)
             ->get();

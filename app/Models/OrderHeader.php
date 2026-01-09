@@ -216,4 +216,9 @@ class OrderHeader extends Sector
     {
         return $this->belongsTo(MasterKaryawan::class, 'sales_id', 'id');
     }
+
+    public function persiapanSampelHeaderFdl()
+    {
+        return $this->hasOne(PersiapanSampelHeader::class, 'no_quotation', 'no_document')->where('is_active', true);
+    }
 }
