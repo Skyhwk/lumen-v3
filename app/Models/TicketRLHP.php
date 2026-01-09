@@ -10,11 +10,11 @@ class TicketRLHP extends Sector{
 
     public $timestamps = false;
     
-    protected $casts = [
-        'perubahan_data'     => 'array',
-        'perubahan_tanggal'  => 'array',
-        'data_perusahaan'       => 'array',
-    ];
+    // protected $casts = [
+    //     'perubahan_data'     => 'array',
+    //     'perubahan_tanggal'  => 'array',
+    //     'data_perusahaan'       => 'array',
+    // ];
 
     // public function previous()
     // {

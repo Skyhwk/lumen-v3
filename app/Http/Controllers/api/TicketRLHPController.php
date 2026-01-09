@@ -31,49 +31,129 @@ use App\Services\GetBawahan;
 
 class TicketRLHPController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     try {
+    //         $department = $request->attributes->get('user')->karyawan->id_department;
+    //         if ($department == 17 && !in_array($this->user_id, [10, 15, 93, 123])) {
+    //             $data = TicketRLHP::where('is_active', true)
+    //                 ->orderBy('id', 'desc');
+    //             return Datatables::of($data)
+    //                 ->addColumn('reff', function ($row) {
+    //                     $filePath = public_path('ticket_programming/' . $row->filename);
+    //                     if (file_exists($filePath) && is_file($filePath)) {
+    //                         return file_get_contents($filePath);
+    //                     } else {
+    //                         return 'File not found';
+    //                     }
+    //                 })
+    //                 ->make(true);
+    //         } else {
+    //             $grade =$this->grade;
+    //             if($grade == 'MANAGER') {
+    //                 $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+    //             } else {
+    //                 $getBawahan = [];
+    //             }
+    //             $data = TicketRLHP::whereIn('request_by', $getBawahan)
+    //                 ->where('is_active', true)
+    //                 ->orderBy('id', 'desc');
+
+    //             return Datatables::of($data)
+    //                 ->addColumn('reff', function ($row) {
+    //                     $filePath = public_path('ticket_programming/' . $row->filename);
+    //                     if (file_exists($filePath) && is_file($filePath)) {
+    //                         return file_get_contents($filePath);
+    //                     } else {
+    //                         return 'File not found';
+    //                     }
+    //                 })
+    //                 ->addColumn('can_approve', function ($row) use ($getBawahan) {
+    //                     // comment
+    //                     return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+    //                 })
+    //                 ->make(true);
+    //         }
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'data' => [],
+    //             'message' => $e->getMessage(),
+    //         ], 201);
+    //     }
+    // }
     public function index(Request $request)
     {
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
+
             if ($department == 17 && !in_array($this->user_id, [10, 15, 93, 123])) {
+
                 $data = TicketRLHP::where('is_active', true)
-                    ->orderBy('id', 'desc');
-                return Datatables::of($data)
+                    ->orderByDesc('id');
+
+                return DataTables::of($data)
+                    ->editColumn('data_perusahaan', function ($row) {
+                        return $row->data_perusahaan
+                            ? json_decode($row->data_perusahaan, true)
+                            : [];
+                    })
+                    ->editColumn('perubahan_data', function ($row) {
+                        return $row->perubahan_data
+                            ? json_decode($row->perubahan_data, true)
+                            : [];
+                    })
+                    ->editColumn('perubahan_tanggal', function ($row) {
+                        return $row->perubahan_tanggal
+                            ? json_decode($row->perubahan_tanggal, true)
+                            : [];
+                    })
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
+                        $filePath = public_path('ticket_rlhp/' . $row->filename);
+                        return file_exists($filePath) ? file_get_contents($filePath) : 'File not found';
                     })
                     ->make(true);
+
             } else {
-                $grade =$this->grade;
-                if($grade == 'MANAGER') {
-                    $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+
+                $grade = $this->grade;
+                if ($grade == 'MANAGER') {
+                    $getBawahan = GetBawahan::where('id', $this->user_id)
+                        ->pluck('nama_lengkap')
+                        ->toArray();
                 } else {
-                    $getBawahan = [];
+                    $getBawahan = [$this->karyawan];
                 }
+
                 $data = TicketRLHP::whereIn('request_by', $getBawahan)
                     ->where('is_active', true)
-                    ->orderBy('id', 'desc');
+                    ->orderByDesc('id');
 
-                return Datatables::of($data)
+                return DataTables::of($data)
+                    ->editColumn('data_perusahaan', function ($row) {
+                        return $row->data_perusahaan
+                            ? json_decode($row->data_perusahaan, true)
+                            : [];
+                    })
+                    ->editColumn('perubahan_data', function ($row) {
+                        return $row->perubahan_data
+                            ? json_decode($row->perubahan_data, true)
+                            : [];
+                    })
+                    ->editColumn('perubahan_tanggal', function ($row) {
+                        return $row->perubahan_tanggal
+                            ? json_decode($row->perubahan_tanggal, true)
+                            : [];
+                    })
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
-                        if (file_exists($filePath) && is_file($filePath)) {
-                            return file_get_contents($filePath);
-                        } else {
-                            return 'File not found';
-                        }
+                        $filePath = public_path('ticket_rlhp/' . $row->filename);
+                        return file_exists($filePath) ? file_get_contents($filePath) : 'File not found';
                     })
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
-                        // comment
                         return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
                     })
                     ->make(true);
             }
+
         } catch (\Exception $e) {
             return response()->json([
                 'data' => [],
@@ -81,6 +161,7 @@ class TicketRLHPController extends Controller
             ], 201);
         }
     }
+
 
     public function searchLhp(Request $request)
     {
