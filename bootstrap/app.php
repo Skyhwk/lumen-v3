@@ -63,6 +63,7 @@ $app->configure('logging');
 $app->configure('database');
 $app->configure('queue');
 $app->configure('harga_kategori');
+$app->configure('kategori');
 
 /*
 |--------------------------------------------------------------------------
