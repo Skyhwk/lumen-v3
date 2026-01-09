@@ -63,10 +63,10 @@ class EmisiCerobongDirect {
 
         // Hanya proses kalau jumlah data valid
         if (in_array($id_parameter, $paramCO2)) {
-            $c6 = $data->CO2 < 0.1 ? '<0.1' : round($data->CO2, 2);
+            $c6 = round($data->CO2, 2);
             $satuan = '%';
         } elseif (in_array($id_parameter, $paramO2)) {
-            $c6 = $data->O2 < 0.1 ? '<0.1' : round($data->O2, 2);
+            $c6 = round($data->O2, 2);
             $satuan = '%';
         } elseif (in_array($id_parameter, $paramOpasitas)) {
             // Ubah string JSON jadi array angka
@@ -77,7 +77,7 @@ class EmisiCerobongDirect {
                 $rataRata = array_sum($values) / count($values);
 
                 // Jika hasil kurang dari 0.83, tampilkan "<0.83", kalau tidak tampilkan angka dibulatkan 1 desimal
-                $c6 = $rataRata < 0.83 ? '<0.83' : round($rataRata, 2);
+                $c6 = round($rataRata, 2);
                 $satuan = '%';
             } else {
                 // Kalau datanya kosong
@@ -85,7 +85,7 @@ class EmisiCerobongDirect {
                 $satuan = null;
             }
         } elseif (in_array($id_parameter, $paramSuhu)) {
-            $c7 = $data->T_Flue < 0.1 ? '<0.1' : round($data->T_Flue, 2);
+            $c7 = round($data->T_Flue, 2);
             $satuan = '°C';
         } elseif (in_array($id_parameter, $paramVelocity)) {
            // Ambil hanya angka setelah tanda ":" (bukan angka pada Data-1)
@@ -94,7 +94,7 @@ class EmisiCerobongDirect {
             $angka = array_map('floatval', $matches[1]); // group 1 = angka setelah ':'
             if (count($angka) > 0) {
                 $c10 = array_sum($angka) / count($angka);
-                $c10 = $c10 < 0.1 ? '<0.1' : number_format($c10, 4, '.', '');
+                $c10 = number_format($c10, 4, '.', '');
                 $satuan = 'm/s';
             } else {
                 $c10 = null;
@@ -108,7 +108,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = ($id_parameter == "NO-NO2") ? 'mg/Nm³' : 'ppm';
 
         } else if (in_array($id_parameter, $paramNOX)) {
@@ -118,7 +117,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'mg/Nm³';
 
         } else if (in_array($id_parameter, $paramSO2)) {
@@ -128,7 +126,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'ppm';
 
         } else if (in_array($id_parameter, $paramEffisiensiPembakaran)) {
@@ -144,7 +141,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 0.1 ? '<0.1' : $c3;
             $satuan = 'ppm';
 
         } else if (in_array($id_parameter, $paramCO)) {
@@ -154,7 +150,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 0.1 ? '<0.1' : $c3;
             $satuan = 'ppm';
 
         } else if (in_array($id_parameter, $paramSO2P)) {
@@ -165,7 +160,6 @@ class EmisiCerobongDirect {
                 $c4 = $c1;
                 $c5 = $c2;
 
-                $c1 = $c1 < 1 ? '<1' : $c1;
                 $satuan = 'ppm';
             }
 
@@ -177,14 +171,12 @@ class EmisiCerobongDirect {
                 $c4 = $c1;
                 $c5 = $c2;
 
-                $c3 = $c3 < 0.02 ? '<0.02' : $c3;
                 $satuan = 'ppm';
             }
 
         } else if (in_array($id_parameter, $paramO2P)) {
             if ($avg_no2p !== null) {
                 $c6 = $avg_no2p;
-                $c6 = $c6 < 0.1 ? '<0.1' : $c6;
                 $satuan = '%';
             }
 
@@ -195,7 +187,6 @@ class EmisiCerobongDirect {
             $c4 = $c1;
             $c5 = $c2;
 
-            $c3 = $c3 < 1 ? '<1' : $c3;
             $satuan = 'mg/Nm³';
         }else if (in_array($id_parameter, $paramTekananUdara)) {
             $c12 = $data->tekanan_udara;

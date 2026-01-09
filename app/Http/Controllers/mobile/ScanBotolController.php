@@ -163,8 +163,8 @@ class ScanBotolController extends Controller
     {
         DB::beginTransaction();
         try {
-            $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
-            $parameters = json_decode($persiapan->parameters);
+            // $persiapan = PersiapanSampelDetail::where('no_sampel', $request->no_sampel)->first();
+            // $parameters = json_decode($persiapan->parameters);
 
             $fileNames = [];
             $path = 'scan_botol_/';

@@ -8,6 +8,7 @@ use App\Models\EmisiCerobongHeader;
 use App\Models\HistoryAppReject;
 use App\Models\IsokinetikHeader;
 use App\Models\MasterBakumutu;
+use App\Models\MdlEmisi;
 use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -85,6 +86,21 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
             $id_regulasi = $request->regulasi;
             $getSatuan   = new HelperSatuan;
 
+            $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "C$index";
+                    $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
+
             foreach ($data as $item) {
                 $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
                     ->select('waktu_pengambilan')
@@ -161,7 +177,7 @@ class TqcEmisiSumberTidakBergerakIsokinetikController extends Controller
                     $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
                 }
 
-                $item->nilai_uji = $nilai;
+                $item->nilai_uji = $getHasilUji($index, $item->id_parameter, $nilai);
             }
 
             return Datatables::of($data)

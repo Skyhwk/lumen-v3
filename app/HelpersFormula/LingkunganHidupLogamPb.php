@@ -79,16 +79,6 @@ class LingkunganHidupLogamPb
                 $C14 = \str_replace(",", "", number_format($rawC14, 5));
                 $C15 = \str_replace(",", "", number_format($rawC15, 5));
                 $C16 = \str_replace(",", "", number_format($rawC16, 5));
-
-                if($C2 < 0.00002) {
-                    $C2 = '<0.00002';
-                }
-                if($C15 < 0.15) {
-                    $C15 = '<0.15';
-                }
-                if($C16 < 0.00075) {
-                    $C16 = '<0.00075';
-                }
                 $satuan = 'mg/m3';
             }else if ($data->tipe_data == 'ambient') {
                 $rawC = (($ks - $kb) * $data->vl * $data->st) / $Vstd;
@@ -96,14 +86,6 @@ class LingkunganHidupLogamPb
                 
                 $C = \str_replace(",", "", number_format($rawC, 5));
                 $C1 = \str_replace(",", "", number_format($rawC1, 5));
-
-                if($C < 0.00034){
-                    $C = '<0.00034';
-                }
-
-                if($C1 < 0.00003){
-                    $C1 = '<0.00003';
-                }
                 $satuan = 'mg/m3';
             }
             $vl = $data->vl;

@@ -7,7 +7,7 @@ use App\Models\Sector;
 class Invoice extends Sector
 {
     protected $table = 'invoice';
-    protected $guard = [];
+    protected $guarded = ['id'];
 
 
     public $timestamps = false;

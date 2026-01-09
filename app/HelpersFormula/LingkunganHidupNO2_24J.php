@@ -82,17 +82,6 @@ class LingkunganHidupNO2_24J
         $C15 = round(floatval($C15), 4);
         $C16 = round(floatval($C16), 4);
 
-        if (floatval($C) < 5.83)
-            $C = '<5.83';
-        if (floatval($C1) < 0.00583)
-            $C1 = '<0.00583';
-        if (floatval($C2) < 0.00025)
-            $C2 = '<0.00025';
-        if (floatval($C14) < 0.00025)
-            $C14 = '<0.00025';
-        if (floatval($C15) < 5.83)
-            $C15 = '<5.83';
-
         $satuan = 'ug/Nm3';
 
         $processed = [
