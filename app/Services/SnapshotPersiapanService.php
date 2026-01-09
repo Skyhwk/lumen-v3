@@ -127,14 +127,10 @@ class SnapshotPersiapanService
                     } else {
                         $groupedData[$key] = [
                             'nomor_quotation'    => $orderHeader->no_document ?? '',
-                            'nama_perusahaan'    => $orderHeader->nama_perusahaan ?? '',
                             'periode'            => $periode,
                             'jadwal'             => $schedule->tanggal,
                             'kategori'           => $kategori,
-                            'sampler'            => $schedule->sampler ?? '', // Ini yg sudah difilter
-                            'no_order'           => $item->no_order ?? '',
-                            'is_revisi'          => $orderHeader->is_revisi,
-                            'nama_cabang'        => $namaCabang,
+                            'sampler'            => $schedule->sampler ?? ''
                         ];
                     }
                 }
