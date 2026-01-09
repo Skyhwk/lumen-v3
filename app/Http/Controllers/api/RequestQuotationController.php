@@ -592,6 +592,7 @@ class RequestQuotationController extends Controller
             $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
             $data->sales_id = $sales_id;
+            $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
             $harga_total = 0;
@@ -1502,6 +1503,7 @@ class RequestQuotationController extends Controller
             $data->no_tlp_pic_sampling = str_replace(["-", "_"], "", $payload->informasi_pelanggan->no_tlp_pic_sampling);
             $data->email_pic_sampling = $payload->informasi_pelanggan->email_pic_sampling;
             $data->sales_id = $sales_id;
+            $data->use_kuota = $payload->data_diskon->use_kuota;
 
             $data_sampling = [];
             $harga_total = 0;
@@ -2539,6 +2541,7 @@ class RequestQuotationController extends Controller
 
                 $dataH->data_pendukung_diskon = json_encode($data_diskon);
                 $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
+                $dataH->use_kuota = $data_diskon->use_kuota;
                 // dd($payload);
                 $dataH->ppn = $data_diskon->ppn;
                 $dataH->pph = $data_diskon->pph;
@@ -4032,6 +4035,7 @@ class RequestQuotationController extends Controller
 
                 $dataH->data_pendukung_diskon = json_encode($data_diskon);
                 $dataH->sales_id = $payload->informasi_pelanggan->sales_id;
+                $dataH->use_kuota = $data_diskon->use_kuota;
                 // dd($payload);
                 $dataH->ppn = $data_diskon->ppn;
                 $dataH->pph = $data_diskon->pph;
