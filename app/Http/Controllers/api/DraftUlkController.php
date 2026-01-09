@@ -140,8 +140,8 @@ class DraftUlkController extends Controller
     public function index(Request $request)
     {
         $parameterAllowed = [];
-        // $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
-        // $parameterAllowed = json_decode($parameterAllowed->parameters, true);
+        $parameterAllowed = ParameterFdl::where('nama_fdl', 'microbiologi')->first();
+        $parameterAllowed = json_decode($parameterAllowed->parameters, true);
         $parameterAllowed[] = 'Sinar UV';
         $parameterAllowed[] = 'Ergonomi';
         $parameterAllowed[] = 'Gelombang Elektro';
