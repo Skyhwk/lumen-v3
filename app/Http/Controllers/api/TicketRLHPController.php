@@ -116,8 +116,9 @@ class TicketRLHPController extends Controller
             } else {
 
                 $grade = $this->grade;
+                // dd($grade);
                 if ($grade == 'MANAGER') {
-                    $getBawahan = GetBawahan::where('id', $this->user_id)
+                    $getBawahan = GetBawahan::where('id', $this->user_id)->get()
                         ->pluck('nama_lengkap')
                         ->toArray();
                 } else {
