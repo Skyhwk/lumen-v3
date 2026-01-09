@@ -17,7 +17,8 @@ use App\Models\Subkontrak;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
-
+use App\Models\MdlUdara;
+use App\Models\Parameter;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
@@ -153,8 +154,22 @@ class TqcUdaraLingkunganHidupController extends Controller
             $id_regulasi = $request->regulasi;
             $getSatuan = new HelperSatuan;
 
-            foreach ($processedData as $item) {
+            $parameters = $processedData->map(fn($item) => ['id' => $item->id_parameter ?: Parameter::where(['id_kategori' => 4, 'nama_lab' => $item->parameter, 'is_active' => true])->first()->id, 'parameter' => $item->parameter]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
 
+                return $hasilUji;
+            };
+
+            foreach ($processedData as $item) {
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
                     ->where('parameter', $item->parameter)
@@ -245,7 +260,7 @@ class TqcUdaraLingkunganHidupController extends Controller
                         }
                     }
 
-                    $item->nilai_uji = $nilai;
+                    $item->nilai_uji = $getHasilUji($index, $item->id_parameter ?: Parameter::where(['id_kategori' => 4, 'nama_lab' => $item->parameter])->first()->id, $nilai);
                 } else {
                     $item->nilai_uji = '-';
                 }

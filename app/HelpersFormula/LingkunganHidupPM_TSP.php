@@ -66,28 +66,6 @@ class LingkunganHidupPM_TSP
             // dd($dur, $rerataFlow, $V);
             $C16 = \str_replace(",", "", number_format(((($data->w2 - $data->w1) - ($data->b2 - $data->b1)) / $V) * 1000, 6));
             $C15 = \str_replace(",", "", number_format(floatval($C16) / 1000 , 6));
-            // if ($id_param == 345) {
-            // 	if (floatval($C) < 0.0021)
-            // 		$C = '<0.0021';
-            // 	if (floatval($C1) < 2.1000)
-            // 		$C1 = '<2.1000';
-            // }else if($id_param == 342) {
-            // 	if (floatval($C) < 16.7)
-            // 		$C = '<16.7';
-            // 	if (floatval($C1) < 0.0167)
-            // 		$C1 = '<0.0167';
-            // }
-            if ($id_parameter == 345) {
-                if (floatval($C) < 0.001)
-                    $C = '<0.001';
-                if (floatval($C1) < 0.001)
-                    $C1 = '<0.001';
-            }else if($id_parameter == 342) {
-                if (floatval($C) < 0.001)
-                    $C = '<0.001';
-                if (floatval($C1) < 0.001)
-                    $C1 = '<0.001';
-            }
 
             $satuan = 'mg/m3';
         }

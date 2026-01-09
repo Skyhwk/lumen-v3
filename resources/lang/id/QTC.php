@@ -79,7 +79,7 @@ return [
             '4' => "Pembatalan atau penjadwalan ulang oleh pihak pelanggan akan dikenakan biaya transportasi dan/atau perdiem.",
             '5' => "Pekerjaan akan dilaksanakan setelah pihak kami menerima konfirmasi berupa dokumen PO / SPK dari pihak pelanggan.",
             '6' => "Bagi perusahaan yang tidak menerbitkan PO / SPK, dapat menandatangani penawaran harga sebagai bentuk persetujuan pelaksanaan pekerjaan.",
-            '7' => "Laporan Hasil Pengujian akan dikeluarkan dalam jangka waktu 10 hari kerja, terhitung sejak tanggal sampel diterima di laboratorium.",
+            '7' => "Laporan Hasil Pengujian akan dikeluarkan dalam jangka waktu 10 hari kerja, terhitung sejak tanggal sampel diterima di laboratorium (Tidak termasuk parameter khusus).",
             '8' => "Optimal perhari 1 (satu) tim sampling (2 orang) bisa mengerjakan 6 titik udara (Ambient / Lingkungan Kerja).",
             '9' => "Jangka waktu pembuatan dokumen dikerjakan selama 2 - 3 bulan, dengan kewajiban pelanggan melengkapi dokumen sebelum sampling dilakukan.",
             '10' => "Biaya sudah termasuk :costs.",
