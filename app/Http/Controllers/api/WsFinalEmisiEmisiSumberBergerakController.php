@@ -30,8 +30,7 @@ class WsFinalEmisiEmisiSumberBergerakController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '5-Emisi')
-
-			->whereNotIn('kategori_3', ['34-Emisi Sumber Tidak Bergerak', '119-Emisi Isokinetik'])
+			->whereIn('kategori_3', ['30-Emisi Kendaraan','30-Emisi Kendaraan (Bensin)', '31-Emisi Kendaraan (Solar)'])
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			// ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
