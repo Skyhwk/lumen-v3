@@ -77,16 +77,27 @@ class QtOrderedController extends Controller
                 ->addColumn('count_detail', function ($row) {
                     return $row->detail ? $row->detail->count() : 0;
                 })
-                ->filterColumn('konfirmasi', function ($query, $keyword) {
-                    // dd($query, $keyword);
+                ->addColumn('no_po', function ($row) {
+                 return $row->konfirmasi
+                    ->pluck('no_purchaseorder')
+                    ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                    ->unique()
+                    ->implode(', ') ?: '-';
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {
                         $query->where('no_order', 'like', '%' . $keyword . '%');
                     });
                 })
+                ->filterColumn('no_po', function ($query, $keyword) {
+                $query->whereHas('konfirmasi', function ($q) use ($keyword) {
+                    $q->whereNotNull('no_purchaseorder')
+                        ->where('no_purchaseorder', '!=', '')
+                        ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
+                });
+                })
                 ->make(true);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
             ], 500);
