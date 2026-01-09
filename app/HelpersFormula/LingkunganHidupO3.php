@@ -113,20 +113,6 @@ class LingkunganHidupO3
         $C15 = number_format(array_sum($C15_average) / count($C15_average), 5);
         $C16 = number_format(array_sum($C16_average) / count($C16_average), 5);
 
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.00014)
-            $C1 = '<0.00014';
-        if (floatval($C2) < 0.00007)
-            $C2 = '<0.00007';
-        if (floatval($C14) < 0.00007)
-            $C14 = '<0.00007';
-        if (floatval($C15) < 0.1419)
-            $C15 = '<0.1419';
-        if (floatval($C16) < 0.00014)
-            $C16 = '<0.00014';
-        // dd($avg_pershift);
-
         $satuan = 'ug/Nm3';
         if($data->tipe_data == 'ulk'){
             $satuan = 'mg/Nm3';

@@ -21,6 +21,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DebuPersonalHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsLingHeader;
+use App\Models\MdlUdara;
 use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -193,6 +194,22 @@ class TqcUdaraLingkunganKerjaController extends Controller
 
             $id_regulasi = $request->regulasi;
             $getSatuan = new HelperSatuan;
+
+            $parameters = $processedData->map(fn($item) => ['id' => $item->id_parameter, 'parameter' => $item->parameter]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
+
             foreach ($processedData as $item) {
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
@@ -284,7 +301,7 @@ class TqcUdaraLingkunganKerjaController extends Controller
                         }
                     }
 
-                    $item->nilai_uji = $nilai;
+                    $item->nilai_uji = $getHasilUji($index, $item->id_parameter, $nilai);
                 } else {
                     $item->nilai_uji = '-';
                 }

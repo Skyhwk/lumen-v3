@@ -33,13 +33,6 @@ class Udara_O3_LK
         $avg_C = array_sum($C_value) / count($C_value);
         $avg_C1 = array_sum($C1_value) / count($C1_value);
         $avg_C2 = array_sum($C2_value) / count($C2_value);
-
-        if (floatval($C1_value[0]) < 0.00014)
-            $C1_value[0] = '<0.00014';
-        if (floatval($C1_value[1]) < 0.00014)
-            $C1_value[1] = '<0.00014';
-        if (floatval($avg_C1) < 0.00014)
-            $avg_C1 = '<0.00014';
         
         $processed = [
             'hasil1' => $C1_value[0],

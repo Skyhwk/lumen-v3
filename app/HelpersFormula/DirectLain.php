@@ -72,10 +72,10 @@ class DirectLain {
                     // CEK BATAS BAWAH (SETELAH HITUNG SELESAI)
                     // ==========================
 
-                    $c1 = ($c1 < 11.45)     ? '<11.45'   : number_format($c1, 2, '.', '');
-                    $c2 = ($c2 < 0.01145)   ? '<0.01145' : number_format($c2, 5, '.', '');
-                    $c3 = ($c3 < 0.01)      ? '<0.01'    : number_format($c3, 2, '.', '');
-                    $c5 = ($c5 < 100)      ? '<100'    : number_format($c3, 2, '.', '');
+                    $c1 = number_format($c1, 2, '.', '');
+                    $c2 = number_format($c2, 5, '.', '');
+                    $c3 = number_format($c3, 2, '.', '');
+                    $c5 = number_format($c3, 2, '.', '');
                     $c15 = $c3;
                     $c16 = $c1;
                     $c17 = $c2;
@@ -112,7 +112,7 @@ class DirectLain {
                     };
 
                     // FORMAT AKHIR
-                    $c2  = ($c2_raw < 0.001) ? '<0.001' : number_format($cut($c2_raw), 3);
+                    $c2  = number_format($cut($c2_raw), 3);
                     $c1  = number_format($cut($c1_raw), 3);
                     $c17 = number_format($cut($c17_raw), 3);
                     $c16 = number_format($cut($c16_raw), 3);
@@ -155,11 +155,11 @@ class DirectLain {
 
                     $satuan = "ppm";
 
-                    $c1 = ($c1 < 1800)     ? '<1800'   : number_format($c1, 2, '.', '');
-                    $c2 = ($c2 < 1.8)   ? '<1.8' : number_format($c2, 1, '.', '');
-                    $c3 = ($c3 < 1)      ? '<1'    : number_format($c3, 1, '.', '');
-                    $c4 = ($c4 < 1000)      ? '<1000'    : number_format($c3, 2, '.', '');
-                    $c5 = ($c5 < 100)      ? '<100'    : number_format($c3, 2, '.', '');
+                    $c1 = number_format($c1, 2, '.', '');
+                    $c2 = number_format($c2, 1, '.', '');
+                    $c3 = number_format($c3, 1, '.', '');
+                    $c4 = number_format($c3, 2, '.', '');
+                    $c5 = number_format($c3, 2, '.', '');
                     $c15 = $c3;
                     $c16 = $c1;
                     $c17 = $c2;
