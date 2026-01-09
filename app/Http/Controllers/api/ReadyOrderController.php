@@ -1302,7 +1302,13 @@ class ReadyOrderController extends Controller
             }else{
                 $kuotaExist = KuotaPengujian::where('id_pelanggan', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
-                    HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $dataOrderHeader->no_order)->delete();
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
                 }
             }
 
@@ -1803,7 +1809,13 @@ class ReadyOrderController extends Controller
             }else{
                 $kuotaExist = KuotaPengujian::where('id_pelanggan', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
-                    HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $data_lama->no_order)->delete();
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
                 }
             }
 
@@ -2168,7 +2180,13 @@ class ReadyOrderController extends Controller
             }else{
                 $kuotaExist = KuotaPengujian::where('id_pelanggan', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
-                    HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $dataOrderHeader->no_order)->delete();
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
                 }
             }
 
@@ -2669,7 +2687,13 @@ class ReadyOrderController extends Controller
             }else{
                 $kuotaExist = KuotaPengujian::where('id_pelanggan', $dataQuotation->pelanggan_ID)->first();
                 if($kuotaExist){
-                    HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $data_lama->no_order)->delete();
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
                 }
             }
             
