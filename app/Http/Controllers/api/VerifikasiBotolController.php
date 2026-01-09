@@ -133,7 +133,7 @@ class VerifikasiBotolController extends Controller
                 $data = OrderDetail::where('no_sampel', $request->no_sampel)->first();
                 $scan = ScanBotol::where('no_sampel', $request->no_sampel)->first();
                 $dataDisplay = json_decode($data->persiapan);
-                $parameters = json_decode($persiapan->parameters);
+                $parameters = $persiapan ? json_decode($persiapan->parameters) : null;
 
                 foreach ($dataDisplay as $item) {
                     if ($data->kategori_2 == '1-Air') {
@@ -142,23 +142,25 @@ class VerifikasiBotolController extends Controller
                         $type = $item->parameter;
                     }
 
-                    if (isset($parameters->air->$type)) {
-                        $item->disiapkan = $parameters->air->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->jumlah = 1;
+                    if($persiapan){
+                        if (isset($parameters->air->$type)) {
+                            $item->disiapkan = $parameters->air->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->jumlah = 1;
+                            }
+                        } else if (isset($parameters->udara->$type)) {
+                            $item->disiapkan = $parameters->udara->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->jumlah = 1;
+                            }
+                        } else if (isset($parameters->padatan->$type)) {
+                            $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->jumlah = 1;
+                            }
+                        } else {
+                            $item->disiapkan = null;
                         }
-                    } else if (isset($parameters->udara->$type)) {
-                        $item->disiapkan = $parameters->udara->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->jumlah = 1;
-                        }
-                    } else if (isset($parameters->padatan->$type)) {
-                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->jumlah = 1;
-                        }
-                    } else {
-                        $item->disiapkan = null;
                     }
                 }
             } else {
@@ -176,7 +178,7 @@ class VerifikasiBotolController extends Controller
                 $scan = ScanSampelTc::where('no_sampel', $data->no_sampel)->first();
                 $persiapan = PersiapanSampelDetail::where('no_sampel', $data->no_sampel)->where('is_active', 1)->first();
                 $dataDisplay = json_decode($data->persiapan);
-                $parameters = json_decode($persiapan->parameters) ?? null;
+                $parameters = $persiapan ? json_decode($persiapan->parameters) : null;
 
                 foreach ($dataDisplay as $key => $item) {
                     if ($data->kategori_2 == '1-Air') {
@@ -192,32 +194,38 @@ class VerifikasiBotolController extends Controller
                             unset($dataDisplay[$key]);
                         }
                     }
-                    if (isset($parameters->air->$type)) {
-                        $item->disiapkan = $parameters->air->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else if (isset($parameters->udara->$type)) {
-                        $item->disiapkan = $parameters->udara->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else if (isset($parameters->emisi->$type)) {
+                    if($persiapan){
+                        if (isset($parameters->air->$type)) {
+                            $item->disiapkan = $parameters->air->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->scanned = 1;
+                            }
+                        } else if (isset($parameters->udara->$type)) {
+                            $item->disiapkan = $parameters->udara->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->scanned = 1;
+                            }
+                        } else if (isset($parameters->emisi->$type)) {
 
 
-                        $item->disiapkan = $parameters->emisi->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
-                        }
-                    } else if (isset($parameters->padatan->$type)) {
+                            $item->disiapkan = $parameters->emisi->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->scanned = 1;
+                            }
+                        } else if (isset($parameters->padatan->$type)) {
 
 
-                        $item->disiapkan = $parameters->padatan->$type->disiapkan;
-                        if ($item->koding == $request->no_sampel) {
-                            $item->scanned = 1;
+                            $item->disiapkan = $parameters->padatan->$type->disiapkan;
+                            if ($item->koding == $request->no_sampel) {
+                                $item->scanned = 1;
+                            }
+                        } else {
+                            $item->disiapkan = null;
                         }
-                    } else {
-                        $item->disiapkan = null;
+                    }else{
+                        if ($item->koding == $request->no_sampel) {
+                            $item->jumlah = 1;
+                        }
                     }
                 }
             }
@@ -241,6 +249,15 @@ class VerifikasiBotolController extends Controller
             } else {
                 $categoris = "emisi";
             }
+
+            $dataDisplay = array_values(
+                array_reduce($dataDisplay, function ($acc, $item) {
+                    if (!isset($acc[$item->koding])) {
+                        $acc[$item->koding] = $item;
+                    }
+                    return $acc;
+                }, [])
+            );
 
             return response()->json([
                 'message' => 'Data berhasil didapatkan',
