@@ -62,7 +62,7 @@ class FeeSalesMonthly
             //     ->get();
 
             $masterTargetSales = MasterTargetSales::where('tahun', $this->currentYear)->where('is_active', true)->whereNotNull($this->currentMonthStr)->get();
-            $categoryStr = config('kategori.kategori.id');
+            $categoryStr = config('kategori.id');
             foreach ($masterTargetSales as $targetSales) {
                 $salesId = $targetSales->karyawan_id;
 
