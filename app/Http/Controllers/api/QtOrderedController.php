@@ -78,11 +78,25 @@ class QtOrderedController extends Controller
                     return $row->detail ? $row->detail->count() : 0;
                 })
                 ->addColumn('no_po', function ($row) {
-                 return $row->konfirmasi
-                    ->pluck('no_purchaseorder')
-                    ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
-                    ->unique()
-                    ->implode(', ') ?: '-';
+                    if (is_null($row->konfirmasi)) {
+                        return '-';
+                    }
+                    
+                    if (is_iterable($row->konfirmasi)) {
+                        // konfirmasi is a collection or array
+                        $poList = collect($row->konfirmasi)
+                            ->pluck('no_purchaseorder')
+                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->unique()
+                            ->implode(', ');
+                        return $poList ?: '-';
+                    } elseif ($row->konfirmasi && !empty($row->konfirmasi->no_purchaseorder)) {
+                        // single object
+                        $po = $row->konfirmasi->no_purchaseorder;
+                        return (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else {
+                        return '-';
+                    }
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {
