@@ -53,7 +53,7 @@ class NeedContactedController extends Controller
 
             return response()->json([
                 'data' => $data,
-                'message' => 'Nomor Telepon Berhasil di approve',
+                'message' => 'Nomor Telepon Telah Dihubungi',
             ], 200);
         } catch (\Exception $th) {
             DB::rollBack();
