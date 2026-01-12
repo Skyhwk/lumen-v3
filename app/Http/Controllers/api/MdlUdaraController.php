@@ -35,14 +35,14 @@ class MdlUdaraController extends Controller
             $mdlUdara = MdlUdara::find($request->id);
 
             if ($mdlUdara->parameter_id !== $request->parameter_id) {
-                $isParameterExists = MdlUdara::where(['parameter_id' => $request->parameter_id])->where('id', '!=', $request->id)->exists();
+                $isParameterExists = MdlUdara::where(['parameter_id' => $request->parameter_id, 'is_active' => true])->where('id', '!=', $request->id)->exists();
                 if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
             }
 
             $mdlUdara->updated_by = $this->karyawan;
             $mdlUdara->updated_at = Carbon::now();
         } else {
-            $isParameterExists = MdlUdara::where(['parameter_id' => $request->parameter_id])->exists();
+            $isParameterExists = MdlUdara::where(['parameter_id' => $request->parameter_id, 'is_active' => true])->exists();
             if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
 
             $mdlUdara = new MdlUdara();
