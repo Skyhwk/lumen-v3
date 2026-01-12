@@ -142,7 +142,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
         $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
         $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
-        
         $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
             if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
                 $colToSearch = "C$index";
@@ -155,8 +154,11 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             return $hasilUji;
         };
 
+        $parameterMap = $parameters->pluck('id', 'parameter');
+
         return Datatables::of($data)
-            ->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
+            ->addColumn('nilai_uji', function ($item) 
+                use ($getSatuan, $getHasilUji, $parameterMap) {
 
                 $satuan = $item['satuan'] ?? '-';
                 $index  = $getSatuan->emisi($satuan);
@@ -165,11 +167,16 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 if (!$ws) return "noWs";
 
                 $ws = (array) $ws;
+
+                // ✅ ambil id_parameter, fallback ke parameterMap
                 $idParameter = $item['id_parameter'] ?? null;
+                if ($idParameter === null && isset($item['parameter'])) {
+                    $idParameter = $parameterMap[$item['parameter']] ?? null;
+                }
 
                 if ($index === null) {
 
-                    // ✅ HEADER TANPA PARAMETER
+                    // kalau masih null, ini header non-uji
                     if ($idParameter === null) {
                         return $ws['f_koreksi_c'] ?? '-';
                     }
@@ -188,7 +195,9 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                         for ($i = 0; $i <= 10; $i++) {
                             $key = $i === 0 ? 'C' : 'C' . $i;
                             if ($i == 3) {
-                                $nilai = !empty($ws[$key]) ? $ws[$key] : ($ws['C3_persen'] ?? null);
+                                $nilai = !empty($ws[$key])
+                                    ? $ws[$key]
+                                    : ($ws['C3_persen'] ?? null);
                                 break;
                             } elseif (!empty($ws[$key])) {
                                 $nilai = $ws[$key];
@@ -203,7 +212,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 }
 
                 // ===== index !== null =====
-
                 $field       = $index;
                 $hasilKey    = "C$field";
                 $fKoreksiKey = "f_koreksi_c$field";
@@ -219,7 +227,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                 return $getHasilUji($index, $idParameter, $nilai);
             })
             ->make(true);
-
     }
 
     public function detailLapangan(Request $request)
