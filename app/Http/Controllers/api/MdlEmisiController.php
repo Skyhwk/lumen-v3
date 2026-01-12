@@ -35,14 +35,14 @@ class MdlEmisiController extends Controller
             $mdlEmisi = MdlEmisi::find($request->id);
 
             if ($mdlEmisi->parameter_id !== $request->parameter_id) {
-                $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active', true])->where('id', '!=', $request->id)->exists();
+                $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active' => true])->where('id', '!=', $request->id)->exists();
                 if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
             }
 
             $mdlEmisi->updated_by = $this->karyawan;
             $mdlEmisi->updated_at = Carbon::now();
         } else {
-            $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active', true])->exists();
+            $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active' => true])->exists();
             if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
 
             $mdlEmisi = new MdlEmisi();
