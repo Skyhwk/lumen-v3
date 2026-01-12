@@ -142,7 +142,6 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
 
         $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
         $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
-        
         $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
             if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
                 $colToSearch = "C$index";
@@ -155,21 +154,38 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
             return $hasilUji;
         };
 
+        $parameterMap = $parameters->pluck('id', 'parameter');
+
         return Datatables::of($data)
-            ->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
+            ->addColumn('nilai_uji', function ($item) 
+                use ($getSatuan, $getHasilUji, $parameterMap) {
+
                 $satuan = $item['satuan'] ?? '-';
-                $index = $getSatuan->emisi($satuan);
+                $index  = $getSatuan->emisi($satuan);
 
                 $ws = $item['ws_value_cerobong'] ?? null;
                 if (!$ws) return "noWs";
 
-                $ws = (array) $ws; // pastikan array
+                $ws = (array) $ws;
+
+                // ✅ ambil id_parameter, fallback ke parameterMap
+                $idParameter = $item['id_parameter'] ?? null;
+                if ($idParameter === null && isset($item['parameter'])) {
+                    $idParameter = $parameterMap[$item['parameter']] ?? null;
+                }
+
                 if ($index === null) {
+
+                    // kalau masih null, ini header non-uji
+                    if ($idParameter === null) {
+                        return $ws['f_koreksi_c'] ?? '-';
+                    }
+
                     $nilai = null;
 
                     for ($i = 0; $i <= 10; $i++) {
                         $key = $i === 0 ? 'f_koreksi_c' : 'f_koreksi_c' . $i;
-                        if (! empty($ws[$key])) {
+                        if (!empty($ws[$key])) {
                             $nilai = $ws[$key];
                             break;
                         }
@@ -179,51 +195,37 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
                         for ($i = 0; $i <= 10; $i++) {
                             $key = $i === 0 ? 'C' : 'C' . $i;
                             if ($i == 3) {
-                                if (! empty($ws[$key])) {
-                                    $nilai = $ws[$key];
-                                    break;
-                                } else {
-                                    $nilai = $ws['C3_persen'];
-                                    break;
-                                }
-                            } else {
-                                if (! empty($ws[$key])) {
-                                    $nilai = $ws[$key];
-                                    break;
-                                }
+                                $nilai = !empty($ws[$key])
+                                    ? $ws[$key]
+                                    : ($ws['C3_persen'] ?? null);
+                                break;
+                            } elseif (!empty($ws[$key])) {
+                                $nilai = $ws[$key];
+                                break;
                             }
                         }
                     }
 
                     $nilai = $nilai ?? '-';
 
-                    return $getHasilUji('', $item['id_parameter'], $nilai);
+                    return $getHasilUji('', $idParameter, $nilai);
                 }
 
+                // ===== index !== null =====
                 $field       = $index;
                 $hasilKey    = "C$field";
                 $fKoreksiKey = "f_koreksi_c$field";
 
-                // ambil nilai
-                $nilai = null;
+                $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? null;
 
-                if (array_key_exists($fKoreksiKey, $ws)) {
-                    $nilai = $ws[$fKoreksiKey];
-                } elseif (array_key_exists($hasilKey, $ws)) {
-                    $nilai = $ws[$hasilKey];
-                }
-
-                // jika nilai ada (termasuk 0), return nilai
                 if ($nilai !== null) {
-                    return $getHasilUji($index, $item['id_parameter'], $nilai);
+                    return $getHasilUji($index, $idParameter, $nilai);
                 }
 
-                // fallback untuk kasus seperti partikulat (pakai C kalau C1 kosong)
-                $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? $ws['f_koreksi_c'] ?? $ws['C'] ?? "-";
+                $nilai = $ws['f_koreksi_c'] ?? $ws['C'] ?? '-';
 
-                return $getHasilUji($index, $item['id_parameter'], $nilai);
+                return $getHasilUji($index, $idParameter, $nilai);
             })
-
             ->make(true);
     }
 

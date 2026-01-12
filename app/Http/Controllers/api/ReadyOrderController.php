@@ -1991,7 +1991,7 @@ class ReadyOrderController extends Controller
 
                                 $number_imaginer = sprintf("%03d", $noSampel);
                                 $periodeNew = $periode_kontrak;
-                                $statusSamplingNew = $dataQuotation->status_sampling;
+                                $statusSamplingNew = $t->status_sampling;
                                 $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                                 if($statusSamplingNew != 'SD'){
                                     $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
