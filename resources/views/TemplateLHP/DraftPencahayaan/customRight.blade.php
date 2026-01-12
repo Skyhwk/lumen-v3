@@ -74,7 +74,40 @@
                 </table>
 
           
-                   @if (!empty($header->regulasi))
+                @if (!empty($header->regulasi_custom))
+                    @foreach (json_decode($header->regulasi_custom) as $y)
+
+                        @php
+                            $parts = explode('-', $y);
+                            $regulasiId = $parts[0] ?? null;
+                            $regulasiName = $parts[1] ?? '';
+                            $regulasi = MasterRegulasi::find($regulasiId);
+                            $tableObj = TabelRegulasi::whereJsonContains('id_regulasi', $regulasiId)->first();
+                            $table = $tableObj ? $tableObj->konten : '';
+                        @endphp
+
+                        <table width="100%" style="padding-top: 10px;">
+                            <tr>
+                                <td class="custom5" colspan="3">
+                                    <strong>{{ $regulasiName }}</strong>
+                                </td>
+                            </tr>
+                        </table>
+
+                        @if($table)
+                            <table width="100%" style="padding-top: 5px;">
+                                <tr>
+                                    <td class="custom5" colspan="3">
+                                        Lampiran di halaman terakhir
+                                    </td>
+                                </tr>
+                            </table>
+                        @endif
+
+                    @endforeach
+                @endif
+
+                <!-- @if (!empty($header->regulasi))
                 
                         @foreach (json_decode($header->regulasi) as $y)
                             <table style="padding-top: 10px;" width="100%">
@@ -100,7 +133,7 @@
                                 </tr>
                         </table>
                         @endif
-                @endif
+                @endif -->
             </td>
         </tr>
     </table>
