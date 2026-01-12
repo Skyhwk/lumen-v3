@@ -207,7 +207,7 @@ class CodingSampleController extends Controller
         // }
         try {
             $existingWork = DB::table('persiapan_sampel_header')
-            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
+            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal','is_downloaded_cs','is_downloaded_label','is_downloaded_qr','is_printed_cs','is_printed_label','is_printed_qr')
             ->where('is_active', true)
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
@@ -230,7 +230,15 @@ class CodingSampleController extends Controller
                         trim($row->tanggal_sampling), 
                         $cleanName
                     );
-                    $doneList[$key] = true;
+                    $doneList[$key] = [
+                        'is_processed'        => true, // Penanda data ada
+                        'is_downloaded_cs'    => $row->is_downloaded_cs,
+                        'is_downloaded_label' => $row->is_downloaded_label,
+                        'is_downloaded_qr'    => $row->is_downloaded_qr,
+                        'is_printed_cs'       => $row->is_printed_cs,
+                        'is_printed_label'    => $row->is_printed_label,
+                        'is_printed_qr'       => $row->is_printed_qr,
+                    ];
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
@@ -315,6 +323,14 @@ class CodingSampleController extends Controller
                     // 2. Cek Satu Per Satu (ABSENSI)
                     $currentSamplers = explode(',', $schedule->sampler ?? '');
                     $pendingSamplers = [];
+                    $statusRow = [
+                        'is_downloaded_cs' => 0,
+                        'is_downloaded_label' => 0,
+                        'is_downloaded_qr' => 0,
+                        'is_printed_cs' => 0,
+                        'is_printed_label' => 0,
+                        'is_printed_qr' => 0,
+                    ];
                     foreach ($currentSamplers as $singleSampler) {
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
@@ -328,6 +344,13 @@ class CodingSampleController extends Controller
                         // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
+                            $dataDb = $doneList[$checkKey];
+                            $statusRow['is_downloaded_cs']    = $dataDb['is_downloaded_cs']; 
+                            $statusRow['is_downloaded_label'] = $dataDb['is_downloaded_label'];
+                            $statusRow['is_downloaded_qr']    = $dataDb['is_downloaded_qr'];
+                            $statusRow['is_printed_cs']       = $dataDb['is_printed_cs'];
+                            $statusRow['is_printed_label']    = $dataDb['is_printed_label'];
+                            $statusRow['is_printed_qr']       = $dataDb['is_printed_qr'];
                         }
                     }
                     // 3. Keputusan Akhir untuk Row Ini
@@ -377,6 +400,12 @@ class CodingSampleController extends Controller
                             'info_sampling'      => $infoSampling,
                             'is_revisi'          => $orderHeader->is_revisi,
                             'nama_cabang'        => $namaCabang,
+                            'is_downloaded_cs'    => (int) $statusRow['is_downloaded_cs'],
+                            'is_downloaded_label' => (int) $statusRow['is_downloaded_label'],
+                            'is_downloaded_qr'    => (int) $statusRow['is_downloaded_qr'],
+                            'is_printed_cs'       => (int) $statusRow['is_printed_cs'],
+                            'is_printed_label'    => (int) $statusRow['is_printed_label'],
+                            'is_printed_qr'       => (int) $statusRow['is_printed_qr']
                         ];
                     }
                 }
@@ -974,6 +1003,60 @@ class CodingSampleController extends Controller
             ], 200);
         } catch (\Exception $th) {
             throw $th;
+        }
+    }
+
+    public function isDownladed (Request $request)
+    {
+        try {
+            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
+            ->where('tanggal_sampling',$request->jadwal)
+            ->where('sampler_jadwal',$request->sampler)
+            ->where('is_active',true)
+            ->first();
+            if($DB != NULL){
+                if($request->type == "label"){
+                    $DB->is_downloaded_label = true;
+                }
+                if($request->type == "qrcode"){
+                     $DB->is_downloaded_qr = true;
+                }
+                if($request->type == "document"){
+                     $DB->is_downloaded_cs = true;
+                }
+                $DB->save();
+                return response()->json(["message"=>"succes","status"=>true],200);
+            }
+            
+        } catch (\Throwable $th) {
+            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
+        }
+    }
+
+    public function isPrinted (Request $request)
+    {
+        try {
+            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
+            ->where('tanggal_sampling',$request->jadwal)
+            ->where('sampler_jadwal',$request->sampler)
+            ->where('is_active',true)
+            ->first();
+            if($DB != NULL){
+                if($request->type == "label"){
+                    $DB->is_printed_label = true;
+                }
+                if($request->type == "qrcode"){
+                    $DB->is_printed_qr = true;
+                }
+                if($request->type == "document"){
+                    $DB->is_printed_cs = true;
+                }
+                $DB->save();
+                return response()->json(["message"=>"succes","status"=>true],200);
+            }
+            
+        } catch (\Throwable $th) {
+            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
         }
     }
     // private function cetakQRCodePDF($psDetail, $generateQR = true)

@@ -171,6 +171,8 @@ class StpsController extends Controller
             $existingWork = DB::table('persiapan_sampel_header')
             ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
             ->where('is_active', true)
+            ->where('is_downloaded_stps',false)
+            ->where('is_printed_stps',false)
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
 
@@ -336,6 +338,209 @@ class StpsController extends Controller
                             'info_sampling'      => $infoSampling,
                             'is_revisi'          => $orderHeader->is_revisi,
                             'nama_cabang'        => $namaCabang,
+                        ];
+                    }
+                }
+            }
+
+            // 3. Return ke DataTables (Collection Client Side)
+            // Karena data sudah berupa Array, kita bungkus dengan collect()
+            return DataTables::of(collect(array_values($groupedData)))
+                ->make(true);
+
+        } catch (\Exception $ex) {
+            return response()->json([
+                'message' => $ex->getMessage(),
+                'line' => $ex->getLine()
+            ], 500);
+        }
+    }
+
+    public function indexRekap(Request $request)
+    {
+        try {
+            $existingWork = DB::table('persiapan_sampel_header')
+            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded_stps', 'is_printed_stps')
+            ->where('is_active', true)
+            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->get();
+
+            $doneList = [];
+            
+            // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
+            foreach ($existingWork as $row) {
+                // PENTING: Pecah nama di sini juga! 
+                $headerSamplers = explode(',', $row->sampler_jadwal ?? '');
+                foreach ($headerSamplers as $name) {
+                    $cleanName = strtolower(trim($name));
+                    if (empty($cleanName)) continue;
+                    // Kuncinya: Order + Tanggal + Nama Orang
+                    $key = sprintf('%s|%s|%s', 
+                        trim($row->no_order), 
+                        trim($row->tanggal_sampling), 
+                        $cleanName
+                    );
+                    $doneList[$key] =[
+                        'is_proccess' => true,
+                        'is_downloaded_stps' => $row->is_downloaded_stps,
+                        'is_printed_stps' => $row->is_printed_stps
+                    ];
+                }
+            }
+            // 1. Ambil Data (Eager Loading Optimized)
+            $data = OrderDetail::with([
+                'orderHeader' => function ($q) {
+                    $q->select([
+                        'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
+                        'alamat_sampling', 'nama_pic_order', 'nama_pic_sampling', 
+                        'no_tlp_pic_sampling', 'jabatan_pic_sampling', 'jabatan_pic_order', 'is_revisi'
+                    ]);
+                },
+                'orderHeader.samplingPlan' => function ($q) {
+                    $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
+                    ->where('is_active', true); // Pastikan plan aktif
+                },
+                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                    $q->select([
+                        'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
+                        // Group Concat sampler di level database agar array PHP lebih ringan
+                        DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
+                    ])
+                    ->where('is_active', true)
+                    ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                }
+            ])
+            ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
+            ->where('is_active', true)
+            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
+            ->get(); // Hati-hati, load semua ke memori
+
+            // 2. Mapping Manual (High Performance PHP Array)
+            $cabangMap = [
+                1 => 'HEAD OFFICE',
+                4 => 'RO-KARAWANG',
+                5 => 'RO-PEMALANG'
+            ];
+
+            $groupedData = [];
+
+            foreach ($data as $item) {
+                // Early exit jika relasi tidak lengkap
+                if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
+                $orderHeader = $item->orderHeader;
+                $periode = $item->periode ?? '';
+                $targetPlan = null;
+                // Prioritas 1: Cari yang periodenya COCOK
+                if ($periode) {
+                    $targetPlan = $orderHeader->sampling->firstWhere('periode_kontrak', $periode);
+                }
+                
+                // Prioritas 2: Jika tidak ada periode spesifik, atau tidak ketemu, ambil yang pertama
+                if (!$targetPlan) {
+                    $targetPlan = $orderHeader->sampling->first();
+                }
+
+                // Validasi keberadaan jadwal
+                if (!$targetPlan || $targetPlan->jadwal->isEmpty()) {
+                    continue;
+                }
+
+                // Cache info JSON untuk efisiensi
+                $infoPendukung = json_encode([
+                    'nama_pic_order'       => $orderHeader->nama_pic_order,
+                    'nama_pic_sampling'    => $orderHeader->nama_pic_sampling,
+                    'no_tlp_pic_sampling'  => $orderHeader->no_tlp_pic_sampling,
+                    'jabatan_pic_sampling' => $orderHeader->jabatan_pic_sampling,
+                    'jabatan_pic_order'    => $orderHeader->jabatan_pic_order
+                ]);
+
+                $infoSampling = json_encode([
+                    'id_request'       => $targetPlan->quotation_id,
+                    'status_quotation' => $targetPlan->status_quotation
+                ]);
+
+                // Loop Jadwal
+                foreach ($targetPlan->jadwal as $schedule) {
+                    // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    if ($schedule->tanggal !== $item->tanggal_sampling) {
+                        continue;
+                    }
+                     // LOGIKA FILTER DETIL (ATOMIC CHECK)
+                    // 2. Cek Satu Per Satu (ABSENSI)
+                    $currentSamplers = explode(',', $schedule->sampler ?? '');
+                    $pendingSamplers = [];
+                    $statusRow =[
+                        'is_proccess' => true,
+                        'is_downloaded_stps' => 0,
+                        'is_printed_stps' => 0
+                    ];
+                    foreach ($currentSamplers as $singleSampler) {
+                        $cleanTargetName = strtolower(trim($singleSampler));
+                        if (empty($cleanTargetName)) continue;
+
+                        $checkKey = sprintf('%s|%s|%s', 
+                            trim($item->no_order), 
+                            trim($schedule->tanggal), 
+                            $cleanTargetName
+                        );
+
+                        // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
+                        if (isset($doneList[$checkKey])) {
+                            $pendingSamplers[] = trim($singleSampler);
+                            $dataDb =$doneList[$checkKey];
+                            $statusRow['is_downloaded_stps']    = $dataDb['is_downloaded_stps']; 
+                            $statusRow['is_printed_stps'] = $dataDb['is_printed_stps'];
+                        }
+                    }
+                    // 3. Keputusan Akhir untuk Row Ini
+                    // Jika pending kosong, berarti SEMUA orang di jadwal ini sudah selesai -> HILANGKAN ROW
+                    if (empty($pendingSamplers)) {
+                        continue; 
+                    }
+
+                    // 4. Update Tampilan Sampler
+                    // Jika aslinya 3 orang, tapi "Adji" sudah selesai, maka implode ulang sisa 2 orang saja.
+                    // Sehingga nanti pas di Grouping, yang muncul hanya yang belum selesai.
+                    $schedule->sampler = implode(',', $pendingSamplers);
+
+                    $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
+                    $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
+
+                    // Key Unik untuk Grouping (Composite Key)
+                    $key = $orderHeader->no_document . '|' . 
+                        $item->no_order . '|' . 
+                        $schedule->tanggal . '|' . 
+                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+
+                    if (isset($groupedData[$key])) {
+                        // Jika data sudah ada, gabungkan Sampler-nya saja
+                        $existingSamplers = explode(',', $groupedData[$key]['sampler']);
+                        $newSamplers = explode(',', $schedule->sampler ?? '');
+                        
+                        // Merge & Unique
+                        $merged = array_unique(array_merge($existingSamplers, $newSamplers));
+                        $groupedData[$key]['sampler'] = implode(',', array_filter($merged));
+                    } else {
+                        // Data Baru
+                        $groupedData[$key] = [
+                            'nomor_quotation'    => $orderHeader->no_document ?? '',
+                            'nama_perusahaan'    => $orderHeader->nama_perusahaan ?? '',
+                            'status_sampling'    => $item->kategori_1 ?? '',
+                            'periode'            => $periode,
+                            'jadwal'             => $schedule->tanggal,
+                            'kategori'           => $kategori,
+                            'sampler'            => $schedule->sampler ?? '',
+                            'no_order'           => $item->no_order ?? '',
+                            'alamat_sampling'    => $orderHeader->alamat_sampling ?? '',
+                            'konsultan'          => $orderHeader->konsultan ?? '',
+                            'info_pendukung'     => $infoPendukung,
+                            'jadwal_jam_mulai'   => $schedule->jam_mulai,
+                            'jadwal_jam_selesai' => $schedule->jam_selesai,
+                            'info_sampling'      => $infoSampling,
+                            'is_revisi'          => $orderHeader->is_revisi,
+                            'nama_cabang'        => $namaCabang,
+                            'is_downloaded'      => (int)$statusRow['is_downloaded_stps'], // 1 jika sudah download, 0 jika belum
+                            'is_printed'      => (int)$statusRow['is_printed_stps'], // 1 jika sudah download, 0 jika belum
                         ];
                     }
                 }
@@ -1553,6 +1758,44 @@ class StpsController extends Controller
             return response()->json([
                 'message' => 'Data STPS tidak bisa dicetak karena data tidak sinkron dengan data jadwal.!',
             ], 500);
+        }
+    }
+
+    public function isDownladed (Request $request)
+    {
+        try {
+            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
+            ->where('tanggal_sampling',$request->jadwal)
+            ->where('sampler_jadwal',$request->sampler)
+            ->where('is_active',true)
+            ->first();
+            if($DB != NULL){
+                $DB->is_downloaded_stps = true;
+                $DB->save();
+                return response()->json(["message"=>"succes","status"=>true],200);
+            }
+            
+        } catch (\Throwable $th) {
+            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
+        }
+    }
+
+    public function isPrinted (Request $request)
+    {
+        try {
+            $DB = PersiapanSampelHeader::where('no_quotation',$request->nomor_quotation)
+            ->where('tanggal_sampling',$request->jadwal)
+            ->where('sampler_jadwal',$request->sampler)
+            ->where('is_active',true)
+            ->first();
+            if($DB != NULL){
+                $DB->is_printed_stps = true;
+                $DB->save();
+                return response()->json(["message"=>"succes","status"=>true],200);
+            }
+            
+        } catch (\Throwable $th) {
+            return response()->json(["message"=>$th->getMessage(),"line"=>$th->getLine(),"file"=>$th->getFile()],500);
         }
     }
 

@@ -692,9 +692,7 @@ class PersiapanSampleController extends Controller
             ->where('is_active', true)
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
-
             $doneList = [];
-            
             // LOOPING PERTAMA: Membangun Daftar Orang yang Sudah Selesai
             foreach ($existingWork as $row) {
                 // PENTING: Pecah nama di sini juga! 
