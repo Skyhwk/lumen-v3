@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -14,10 +15,10 @@ class MdlEmisiController extends Controller
 {
     public function index()
     {
-        $mdlEmisi = MdlEmisi::with('parameter')->latest();
+        $mdlEmisi = MdlEmisi::with('parameter')->where('is_active', true)->latest();
 
         return Datatables::of($mdlEmisi)
-            ->filterColumn('parameter.nama_lab', fn($q1, $keyword) => $q1->whereHas('parameter', fn($q2) => $q2->where('nama_lab', 'like', "%$keyword%")))
+            ->filterColumn('parameter.nama_lab', fn($q1, $keyword) => $q1->whereHas('parameter', fn($q2) => $q2->where('nama_lab', 'like', "%$keyword%")->where('is_active', true)))
             ->make(true);
     }
 
@@ -34,27 +35,28 @@ class MdlEmisiController extends Controller
             $mdlEmisi = MdlEmisi::find($request->id);
 
             if ($mdlEmisi->parameter_id !== $request->parameter_id) {
-                $isParameterExists = MdlEmisi::where('parameter_id', $request->parameter_id)->where('id', '!=', $request->id)->exists();
+                $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active', true])->where('id', '!=', $request->id)->exists();
                 if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
             }
 
             $mdlEmisi->updated_by = $this->karyawan;
+            $mdlEmisi->updated_at = Carbon::now();
         } else {
-            $isParameterExists = MdlEmisi::where('parameter_id', $request->parameter_id)->exists();
+            $isParameterExists = MdlEmisi::where(['parameter_id' => $request->parameter_id, 'is_active', true])->exists();
             if ($isParameterExists) return response()->json(['message' => 'Parameter already exists'], 400);
 
             $mdlEmisi = new MdlEmisi();
 
             $mdlEmisi->created_by = $this->karyawan;
-            $mdlEmisi->updated_by = $this->karyawan;
+            $mdlEmisi->created_at = Carbon::now();
         }
 
         $mdlEmisi->parameter_id = $request->parameter_id;
         for ($i = 0; $i <= 11; $i++) {
             if (!$i) {
-                if ($request->C) $mdlEmisi->C = $request->C;
+                $mdlEmisi->C = $request->C;
             } else {
-                if ($request->{"C$i"}) $mdlEmisi->{"C$i"} = $request->{"C$i"};
+                $mdlEmisi->{"C$i"} = $request->{"C$i"};
             }
         };
 
@@ -66,10 +68,12 @@ class MdlEmisiController extends Controller
     public function delete(Request $request)
     {
         $mdlEmisi = MdlEmisi::find($request->id);
-        $mdlEmisi->deleted_by = $this->karyawan;
-        $mdlEmisi->save();
 
-        $mdlEmisi->delete();
+        $mdlEmisi->deleted_by = $this->karyawan;
+        $mdlEmisi->deleted_at = Carbon::now();
+        $mdlEmisi->is_active = false;
+
+        $mdlEmisi->save();
 
         return response()->json(['message' => 'Deleted successfully'], 200);
     }
