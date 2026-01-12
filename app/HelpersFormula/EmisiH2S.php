@@ -67,11 +67,6 @@ class EmisiH2S
         $satuan = 'mg/Nm3';
 
 
-        if ($C1 < 0.046) {
-            $C1 = '<0.046';
-        }
-
-
         $data = [
             'tanggal_terima' => $data->tanggal_terima,
             'suhu' => $data->suhu,

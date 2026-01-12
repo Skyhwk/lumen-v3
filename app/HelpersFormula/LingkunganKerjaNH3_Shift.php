@@ -122,21 +122,7 @@ class LingkunganKerjaNH3_Shift
             }, $C16_value);
 
             $C16_average = number_format(array_sum($C16) / count($C16), 4);
-            
-            if (floatval($C14_average) < 0.00478)
-                $C14_average = '<0.00478';
-            if (floatval($C15_average) < 3.33)
-                $C15_average = '<3.33';
-            if (floatval($C16_average) < 0.00333)
-                $C16_average = '<0.00333';
         }
-
-        if (floatval($C_average) < 3.33)
-            $C_average = '<3.33';
-        if (floatval($C1_average) < 0.00333)
-            $C1_average = '<0.00333';
-        if (floatval($C2_average) < 0.00478)
-            $C2_average = '<0.00478';
 
         $data_pershift = [
             'Shift 1' => $C[0],

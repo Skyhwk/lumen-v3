@@ -52,11 +52,6 @@ class EmisiHCL
         $C2 = number_format($C2, 4,'.','');
         $C3 = number_format($C3, 4,'.','');
         $C4 = number_format($C4, 4,'.','');
-
-        if (floatval($C1) < 0.0031)
-            $C1 = '<0.0031';
-        if (floatval($C2) < 0.0021)
-            $C2 = '<0.0021';
         
         $satuan = 'mg/Nm3';
         $data = [

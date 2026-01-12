@@ -4,17 +4,15 @@ namespace App\Models;
 
 use App\Models\Sector;
 
-use Illuminate\Database\Eloquent\SoftDeletes;
-
 class MdlUdara extends Sector
 {
-    use SoftDeletes;
-
     protected $table = 'mdl_udara';
     protected $guarded = ['id'];
 
+    public $timestamps = false;
+
     public function parameter()
     {
-        return $this->belongsTo(Parameter::class);
+        return $this->belongsTo(Parameter::class)->where('is_active', true);
     }
 }

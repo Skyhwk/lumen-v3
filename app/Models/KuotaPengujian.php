@@ -22,4 +22,8 @@ class KuotaPengujian extends Sector {
     public function kategori() {
         return $this->belongsTo(MasterKategori::class, 'id_kategori', 'id');
     }
+
+    public function histories() {
+        return $this->hasMany(HistoryKuotaPengujian::class, 'id_kuota', 'id');
+    }
 }

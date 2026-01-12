@@ -143,7 +143,7 @@ class BreakdownKategoriController extends Controller
             return $item->orderDetail->pluck('kategori_3');
         })->values()->all();
 
-        $categoryTree = $this->buildCategoryTree($kategoriList, config('kategori.kategori.id'));
+        $categoryTree = $this->buildCategoryTree($kategoriList, config('kategori.id'));
         
         return response()->json([
             'message' => 'Data hasbeen retrieved successfully',

@@ -50,11 +50,6 @@ class EmisiHF
         $C4 = number_format($C4, 5, '.','');
         $Vs = number_format($Vs, 4, '.','');
         
-        if (floatval($C1) < 0.0003)
-            $C1 = '<0.0003';
-        if (floatval($C2) < 0.00036)
-            $C2 = '<0.00036';
-        
         $satuan = 'mg/Nm3';
         $data = [
             'tanggal_terima' => $data->tanggal_terima,

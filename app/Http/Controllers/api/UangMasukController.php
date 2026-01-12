@@ -63,17 +63,50 @@ class UangMasukController extends Controller
         ], 201);
     }
 
+    public function getInvoice(Request $request)
+    {
+        $data = Invoice::with('recordWithdraw')
+            ->where('is_active', true)
+            ->where('no_invoice', 'like', '%' . $request->search . '%')
+            ->orderBy('no_invoice')
+            ->get()
+            ->groupBy('no_invoice')
+            ->map(function ($groupedInvoices) {
+                $tagihan = floatval($groupedInvoices->sum('nilai_tagihan') ?? 0);
+
+                $withdraw = $groupedInvoices->first()->recordWithdraw;
+                $totalWithdraw = $withdraw ? $withdraw->sum('nilai_pembayaran') : 0;
+                $pelunasan = $totalWithdraw > 0 ? floatval($totalWithdraw) + floatval($groupedInvoices->sum('nilai_pelunasan') ?? 0) : floatval($groupedInvoices->sum('nilai_pelunasan') ?? 0);
+
+                $invoice = $groupedInvoices->first();
+                $invoice->total_tagihan = $tagihan;
+
+                return $tagihan > $pelunasan ? $invoice : null;
+            })->filter()->values();
+
+        return response()->json([
+            'message' => 'data hasbeen show',
+            'data' => $data
+        ], 201);
+    }
+
     public function prosess(Request $request)
     {
         DB::beginTransaction();
         try {
             $salesIn = SalesIn::where('id', $request->id)->first();
+
             foreach ($request->nilai_pelunasan as $no_invoice => $nilai_pelunasan) {
+                $listPenawaran = null;
+                if (!$request->no_penawaran) { // mode invoice
+                    $listPenawaran = Invoice::where(['no_invoice' => $no_invoice, 'is_active' => true])->get();
+                }
+
                 $nilai_pengurangan = $request->nilai_pengurangan[$no_invoice] ?? 0;
 
                 $dataDetail = new SalesInDetail();
                 $dataDetail->id_header = $request->id;
-                $dataDetail->no_penawaran = $request->no_penawaran;
+                $dataDetail->no_penawaran = $request->no_penawaran ? $request->no_penawaran : implode(', ', $listPenawaran->isNotEmpty() ? $listPenawaran->pluck('no_quotation')->toArray() : []);
                 $dataDetail->id_invoice = $request->id_invoice[$no_invoice];
                 $dataDetail->no_invoice = $no_invoice;
                 $dataDetail->nominal_pelunasan = str_replace(['.', ','], ['', '.'], $nilai_pelunasan);
@@ -88,7 +121,7 @@ class UangMasukController extends Controller
                 $getNilai = RecordPembayaranInvoice::select(DB::raw('SUM(nilai_pembayaran) AS nilai_pembayaran'))
                     ->where('no_invoice', $no_invoice)
                     ->where('is_active', true)
-                    ->groupBy('no_invoice', )
+                    ->groupBy('no_invoice',)
                     ->first();
 
                 if ($getNilai) {
@@ -124,13 +157,52 @@ class UangMasukController extends Controller
                     'created_by' => $this->karyawan,
                 ]);
 
-                Invoice::where('no_invoice', $no_invoice)
-                    ->update([
-                        'tgl_pelunasan' => $salesIn->tanggal_masuk,
-                        'nilai_pelunasan' => $nilaiPembayaran,
-                        'keterangan_pelunasan' => $request->keterangan,
-                        'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
-                    ]);
+                if ($listPenawaran && $listPenawaran->isNotEmpty()) {
+                    $nilaiPelunasan = $nilaiPembayaran;
+                    $lastInvoice = null;
+
+                    foreach ($listPenawaran as $penawaran) {
+                        if ($nilaiPelunasan <= 0) break;
+
+                        $invoice = Invoice::where('no_invoice', $no_invoice)
+                            ->where('no_quotation', $penawaran->no_quotation)
+                            ->where('is_active', true)
+                            ->first();
+
+                        $lastInvoice = $invoice;
+
+                        $sisaTagihan = $invoice->total_tagihan - ($invoice->nilai_pelunasan ?? 0);
+                        if ($sisaTagihan <= 0) continue;
+
+                        if ($nilaiPelunasan >= $sisaTagihan) {
+                            $bayar = $sisaTagihan;
+                        } else {
+                            $bayar = $nilaiPelunasan;
+                        }
+
+                        $invoice->update([
+                            'tgl_pelunasan' => $salesIn->tanggal_masuk,
+                            'nilai_pelunasan' => ($invoice->nilai_pelunasan ?? 0) + $bayar,
+                            'keterangan_pelunasan' => $request->keterangan,
+                        ]);
+
+                        $nilaiPelunasan -= $bayar;
+                    }
+
+                    $lebihBayar = str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]);
+                    if ($lastInvoice && $lebihBayar > 0) {
+                        $lastInvoice->update(['lebih_bayar' => $lebihBayar]);
+                    }
+                } else {
+                    Invoice::where('no_invoice', $no_invoice)
+                        ->where('is_active', true)
+                        ->update([
+                            'tgl_pelunasan' => $salesIn->tanggal_masuk,
+                            'nilai_pelunasan' => $nilaiPembayaran,
+                            'keterangan_pelunasan' => $request->keterangan,
+                            'lebih_bayar' => str_replace(['.', ','], ['', '.'], $request->lebih_bayar[$no_invoice]),
+                        ]);
+                }
 
                 if (isset($request->jenis_pelunasan[$no_invoice]) && $nilai_pengurangan) {
                     $withdraw = new Withdraw();
@@ -167,8 +239,6 @@ class UangMasukController extends Controller
         }
     }
 
-    // case 1, invoice baru dibayar 1x
-    // case 2, invoice dibayar 2x atau lebih
     public function deleteDetail(Request $request)
     {
         DB::beginTransaction();
@@ -241,8 +311,7 @@ class UangMasukController extends Controller
                 $recordPembayaranInvoice = RecordPembayaranInvoice::where('no_invoice', $salesInDetail->no_invoice)->where('nilai_pembayaran', $salesInDetail->nominal_pelunasan)->first();
                 if (!$recordPembayaranInvoice)
                     return response()->json(['message' => 'Record Pembayaran Invoice Not Found'], 404);
-            }
-            ;
+            };
 
             $recordPembayaranInvoice->is_active = false;
             $recordPembayaranInvoice->deleted_by = $this->karyawan;

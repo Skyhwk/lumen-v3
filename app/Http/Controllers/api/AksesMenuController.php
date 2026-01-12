@@ -17,7 +17,7 @@ class AksesMenuController extends Controller
 {
     public function index(Request $request)
     {
-        if($this->user_id == 1 || $this->user_id == 127 ){
+        if($this->user_id == 1 || $this->user_id == 127 || $this->user_id == 152 ){
             $aksesMenus = AksesMenu::with('karyawan');
         } else {
             $subordinates = GetBawahan::where('id', $this->user_id)->get()->pluck('user_id')->toArray();
@@ -52,7 +52,7 @@ class AksesMenuController extends Controller
     public function getKaryawan(Request $request){
         $userId = $this->user_id;
         
-        if ($userId == 1 || $userId == 127) {
+        if ($userId == 1 || $userId == 127 || $userId == 152) {
             $data = MasterKaryawan::where('master_karyawan.is_active', true)
                 ->leftJoin('akses_menu', 'master_karyawan.user_id', '=', 'akses_menu.user_id')
                 ->whereNull('akses_menu.user_id')
@@ -105,7 +105,7 @@ class AksesMenuController extends Controller
             ];
         });
 
-        if ($userId != 1 && $userId != 127) {
+        if ($userId != 1 && $userId != 127 && $userId != 152) {
             $userMenu = AksesMenu::join('master_karyawan', 'akses_menu.user_id', '=', 'master_karyawan.user_id')
                 ->where('master_karyawan.id', $userId)
                 ->select('akses_menu.*')

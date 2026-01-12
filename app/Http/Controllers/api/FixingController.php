@@ -6,10 +6,12 @@ use App\Jobs\RenderPdfPenawaran;
 use App\Models\ExpiredLink;
 use App\Models\GenerateLink;
 use App\Models\Jadwal;
-use App\Services\SalesKpiMonthly;
 use App\Models\JobTask;
+use App\Models\OrderDetail;
+use App\Models\OrderHeader;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Services\RenderJadwalKontrakCopy;
 use App\Services\RenderKontrakCopy;
 use App\Services\RenderNonKontrakCopy;
 use Carbon\Carbon;
@@ -106,7 +108,7 @@ class FixingController extends Controller
 
                     DB::commit();
 
-                } catch (Throwable $th) {
+                } catch (\Throwable $th) {
                     DB::rollback();
                     $errorCount++;
                     $errorDetails[] = [
@@ -129,7 +131,7 @@ class FixingController extends Controller
                 'error_details'   => $errorDetails,
             ], 200);
 
-        } catch (Throwable $th) {
+        } catch (\Throwable $th) {
             Log::error('System error in fixDetailStructure', [
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString(),
@@ -150,7 +152,7 @@ class FixingController extends Controller
 
             if (! $data) {
                 $data           = QuotationNonKontrak::where('is_active', true)->where('no_document', 'like', '%' . $request->no_document . '%')->first();
-                $tipe_penawaran = 'non kontrak';
+                $tipe_penawaran = 'non_kontrak';
             }
 
             if (! $data) {
@@ -226,6 +228,7 @@ class FixingController extends Controller
     {
         try {
             $data = ExpiredLink::where('id_quotation', $request->id)
+                ->where('quotation_status', $request->tipe_penawaran)
                 ->first();
 
             if (! $data) {
@@ -436,15 +439,34 @@ class FixingController extends Controller
         }
     }
 
-
-
     public function test(Request $request)
     {
-        Log::info('[FixingController][testLog] Test log at ' . date('Y-m-d H:i:s'));
-        $kpi = SalesKpiMonthly::run();
+        try {
 
-        dd($kpi);
-        return response()->json(['message' => 'Log test entry created.']);
+            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
+
+             $dataRequest = (object) [
+                    'no_document' => $request->no_quotation,
+                    'quotation_id' => $request->quotation_id,
+                    'karyawan' => $this->karyawan,
+                    'karyawan_id' => $this->user_id,
+                    'timestamp' => $timestamp,
+                ];
+            (new RenderJadwalKontrakCopy($dataRequest))
+                ->where('quotation_id', $request->quotation_id)
+                ->where('tanggal_penawaran', $request->tanggal_penawaran)
+                ->servisRenderJadwal();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Berhasil generate jadwal',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
 }

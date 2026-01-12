@@ -51,7 +51,7 @@ class MedanMagnetListrik
         // Menghitung rata-rata
         $rata_rata_nillistrik = $total_nillistrik / 3;
         // Format rata-rata
-        $rata_rata_nillistrik = $rata_rata_nillistrik < 1 ? "<1" : number_format($rata_rata_nillistrik, 2);
+        $rata_rata_nillistrik = number_format($rata_rata_nillistrik, 2);
 
         // $hasil = json_encode(["Listrik_3" => $nillistrik_3_, "Listrik_30" => $nillistrik_30_, "Listrik_100" =>$nillistrik_100_]);
         return [

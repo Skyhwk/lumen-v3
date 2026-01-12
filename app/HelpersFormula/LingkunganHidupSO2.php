@@ -80,19 +80,6 @@ class LingkunganHidupSO2
         $C15 = number_format(array_sum($C15_value) / count($C15_value), 4);
         $C16 = number_format(array_sum($C16_value) / count($C16_value), 4);
 
-        if (floatval($C) < 25.91)
-            $C = '<25.91';
-        if (floatval($C1) < 0.0259)
-            $C1 = '<0.0259';
-        if (floatval($C2) < 0.00082)
-            $C2 = '<0.00082';
-        if (floatval($C15) < 25.91)
-            $C15 = '<25.91';
-        if (floatval($C16) < 0.0259)
-            $C16 = '<0.0259';
-        if (floatval($C14) < 0.00082)
-            $C14 = '<0.00082';
-
         $data_pershift = null;
         if (count($C_value) > 1) {
             if (count($C_value) == 3) {

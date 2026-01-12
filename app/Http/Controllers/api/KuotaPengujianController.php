@@ -19,7 +19,7 @@ class KuotaPengujianController extends Controller
 {
     public function index(Request $request)
     {
-        $data = KuotaPengujian::with('kategori')
+        $data = KuotaPengujian::with(['kategori', 'histories'])
             ->where('using_template', $request->use_template)
             ->where('is_active', true);
         return DataTables::of($data)

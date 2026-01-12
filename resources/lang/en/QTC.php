@@ -79,7 +79,7 @@ return [
             '4' => "Cancellation or rescheduling by the customer will be subject to transportation and/or manpower fees.",
             '5' => "The work will be carried out after we receive confirmation in the form of a PO / SPK document from the customer.",
             '6' => "For companies that do not issue a PO / SPK, this price offer can be signed as a form of approval for the implementation of the work.",
-            '7' => "The Test Result Report will be issued within 10 working days, calculated from the date the sample is received at the laboratory.",
+            '7' => "The Test Result Report will be issued within 10 working days, calculated from the date the sample is received at the laboratory (Special parameters not included).",
             '8' => "Optimally, 1 (one) sampling team (2 people) can work on 6 air points (Ambient / Work Environment) per day.",
             '9' => "The time period for document production is 2-3 months, and the customer is obligated to complete the documents before sampling is carried out.",
             '10' => "Costs include :costs.",

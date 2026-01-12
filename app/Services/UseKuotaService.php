@@ -100,12 +100,14 @@ class UseKuotaService {
                 // ================= ORDER BARU =================
                 $used = min($currentUsed, $kuota->sisa);
 
-                HistoryKuotaPengujian::create([
-                    'id_kuota'     => $kuota->id,
-                    'no_order'     => $this->noOrder,
-                    'no_document'  => $orderHeader->no_document,
-                    'total_used'   => $used,
-                ]);
+                if($used > 0) {
+                    HistoryKuotaPengujian::create([
+                        'id_kuota'     => $kuota->id,
+                        'no_order'     => $this->noOrder,
+                        'no_document'  => $orderHeader->no_document,
+                        'total_used'   => $used,
+                    ]);
+                }
             }
             DB::commit();
         }catch (\Throwable $th) {
@@ -162,12 +164,14 @@ class UseKuotaService {
                 // ================= ORDER BARU =================
                 $used = min($currentUsed, $kuota->sisa);
 
-                HistoryKuotaPengujian::create([
-                    'id_kuota'     => $kuota->id,
-                    'no_order'     => $this->noOrder,
-                    'no_document'  => $orderHeader->no_document,
-                    'total_used'   => $used,
-                ]);
+                if($used > 0) {
+                    HistoryKuotaPengujian::create([
+                        'id_kuota'     => $kuota->id,
+                        'no_order'     => $this->noOrder,
+                        'no_document'  => $orderHeader->no_document,
+                        'total_used'   => $used,
+                    ]);
+                }
             }
             DB::commit();
         }catch (\Throwable $th) {

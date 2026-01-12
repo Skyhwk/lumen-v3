@@ -31,7 +31,7 @@ class RekapKategoriAnalisaController extends Controller
                 ->where(['sales_id' => $request->sales_id, 'is_active' => true])
                 ->whereHas('orderHeader', fn($q1) => $q1->whereHas('orderDetail', fn($q2) => $samplingDateFilter($q2)))
                 ->get());
-        $masterKategori = config('kategori.kategori.id');
+        $masterKategori = config('kategori.id');
         $result = collect($masterKategori)->mapWithKeys(fn($childs, $parent) => [
             $parent => collect($childs)->mapWithKeys(fn($child) => [
                 $child => $quotations->filter(fn($q) => $q->orderHeader->orderDetail->contains('kategori_3', $child))->count()

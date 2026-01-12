@@ -90,13 +90,6 @@ class LingkunganHidupCl2_24J
         $C15 = array_sum($C15_value) / count($C15_value);
         $C16 = array_sum($C16_value) / count($C16_value);
 
-        if (floatval($C) < 4.000)
-            $C = '<4.000';
-        if (floatval($C1) < 0.004)
-            $C1 = '<0.004';
-        if (floatval($C2) < 0.0013)
-            $C2 = '<0.0013';
-
         $satuan = 'ug/Nm3';
 
         $data = [
