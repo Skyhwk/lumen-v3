@@ -83,7 +83,8 @@ use App\Services\{
     LhpTemplate,
     RandomSalesAssign,
     SendEmail,
-    GetBawahan
+    GetBawahan,
+    SnapshotPersiapanService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -2174,6 +2175,10 @@ class TestingController extends Controller
                         return response()->json(['status' => false, 'message' => $th->getMessage()], 500);
                     }
                     break;
+                case 'capture data':
+                    $log = new SnapshotPersiapanService();
+                    $log->SnapShot();
+                    return response()->json(["message"=>"tercatar di log"],200);
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
