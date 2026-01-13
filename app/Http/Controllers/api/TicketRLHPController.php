@@ -771,7 +771,7 @@ class TicketRLHPController extends Controller
 
             $data->save();
 
-            $message = 'Ticket R-LHP telah diapprove oleh ' . $this->karyawan . ' dan siap untuk diproses oleh tim IT';
+            $message = 'Ticket R-LHP telah diapprove oleh ' . $this->karyawan . ' dan siap untuk diproses oleh tim Teknis';
 
             $user_tc = MasterKaryawan::where('id_department', 17)
                 ->whereNotIn('id', [10, 15, 93, 123])
