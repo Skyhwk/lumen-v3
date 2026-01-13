@@ -89,6 +89,7 @@ class TicketRLHPController extends Controller
                     ->whereNotIn('status', ['DONE', 'REJECT', 'VOID'])
                     ->where(function ($q) {
                         $q->where('kategori', 'TANGGAL')
+                                ->where('status', '=', 'WAITING PROCESS')
                             ->orWhere(function ($q2) {
                                 $q2->where('kategori', 'DATA')
                                     ->where('status', '!=', 'WAITING PROCESS');
@@ -771,7 +772,7 @@ class TicketRLHPController extends Controller
 
             $data->save();
 
-            $message = 'Ticket R-LHP telah diapprove oleh ' . $this->karyawan . ' dan siap untuk diproses oleh tim IT';
+            $message = 'Ticket R-LHP telah diapprove oleh ' . $this->karyawan . ' dan siap untuk diproses oleh tim Teknis';
 
             $user_tc = MasterKaryawan::where('id_department', 17)
                 ->whereNotIn('id', [10, 15, 93, 123])
