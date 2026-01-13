@@ -45,9 +45,9 @@
                 </table>
 
                 {{-- Informasi Sampling --}}
-                   @php
-                         $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : [];
-                    @endphp
+                @php
+                    $methode_sampling = $header->metode_sampling ? json_decode($header->metode_sampling) : [];
+                @endphp
                 <table style="padding: 10px 0px 0px 0px;" width="100%">
                     <tr>
                         <td class="custom5" width="120"><span
