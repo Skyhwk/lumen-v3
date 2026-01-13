@@ -78,7 +78,7 @@ class ChangeJadwalJob extends Job
                     if(!empty($kategori)) {
                         $jadwal->kategori = json_encode(array_values($kategori));
                     } else {
-                        $jadwal->is_active = false;
+                        // $jadwal->is_active = false;
                     }
                     $jadwal->save();
                 });
@@ -120,7 +120,7 @@ class ChangeJadwalJob extends Job
                     if(!empty($kategori)) {
                         $jadwal->kategori = json_encode(array_values($kategori));
                     } else {
-                        $jadwal->is_active = false;
+                        // $jadwal->is_active = false;
                     }
                     $jadwal->save();
                 });
@@ -207,7 +207,7 @@ class ChangeJadwalJob extends Job
                         if(!empty($kategori)) {
                             $jadwal->kategori = json_encode(array_values($kategori));
                         } else {
-                            $jadwal->is_active = false;
+                            // $jadwal->is_active = false;
                         }
                         $jadwal->save();
                     });
@@ -252,7 +252,7 @@ class ChangeJadwalJob extends Job
                         if(!empty($kategori)) {
                             $jadwal->kategori = json_encode(array_values($kategori));
                         } else {
-                            $jadwal->is_active = false;
+                            // $jadwal->is_active = false;
                         }
                         $jadwal->save();
                     });
@@ -351,7 +351,7 @@ class ChangeJadwalJob extends Job
                         if(!empty($kategori)) {
                             $jadwal->kategori = json_encode(array_values($kategori));
                         } else {
-                            $jadwal->is_active = false;
+                            // $jadwal->is_active = false;
                         }
                         $jadwal->save();
                     });
@@ -392,7 +392,7 @@ class ChangeJadwalJob extends Job
                         if(!empty($kategori)) {
                             $jadwal->kategori = json_encode(array_values($kategori));
                         } else {
-                            $jadwal->is_active = false;
+                            // $jadwal->is_active = false;
                         }
                         $jadwal->save();
                     });
