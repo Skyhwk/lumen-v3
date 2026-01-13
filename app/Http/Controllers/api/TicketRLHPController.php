@@ -89,7 +89,6 @@ class TicketRLHPController extends Controller
                     ->whereNotIn('status', ['DONE', 'REJECT', 'VOID'])
                     ->where(function ($q) {
                         $q->where('kategori', 'TANGGAL')
-                                ->where('status', '=', 'WAITING PROCESS')
                             ->orWhere(function ($q2) {
                                 $q2->where('kategori', 'DATA')
                                     ->where('status', '!=', 'WAITING PROCESS');
