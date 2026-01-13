@@ -16,19 +16,19 @@
         <thead>
             <tr>
                 <th width="6%" rowspan="2" class="pd-5-solid-top-center">NO</th>
-                <th width="34%" rowspan="2" colspan="2" class="pd-5-solid-top-center">
+                <th width="30%" rowspan="2" colspan="2" class="pd-5-solid-top-center">
                     LOKASI / KETERANGAN SAMPEL</th>
 
                 {{-- HASIL UJI: total kolom = jumlah parameter * (1 atau 2) --}}
-                <th width="20%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
+                <th width="24%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
                     HASIL UJI
                 </th>
 
                 {{-- BAKU MUTU: 1 kolom per parameter --}}
-                <th width="20%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
+                <th width="24%" colspan="{{ $parameters->count() }}" class="pd-5-solid-top-center">
                     BAKU MUTU
                 </th>
-                <th width="20%" rowspan="2" class="pd-5-solid-top-center">
+                <th width="16%" rowspan="2" class="pd-5-solid-top-center">
                     TANGGAL SAMPLING </th>
             </tr>
             <tr>

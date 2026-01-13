@@ -57,12 +57,9 @@ $app->singleton(
 |
 */
 
-$app->configure('app');
-$app->configure('cache');
-$app->configure('logging');
-$app->configure('database');
-$app->configure('queue');
-$app->configure('harga_kategori');
+foreach (glob(__DIR__ . '/../config/*.php') as $file) {
+    $app->configure(basename($file, '.php'));
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -88,14 +85,6 @@ $app->routeMiddleware([
     'auth.customer.token' => App\Http\Middleware\CheckCustomerToken::class,
     'director.auth.token' => App\Http\Middleware\directorApp\ApiTokenAuth::class,
 ]);
-
-// $app->middleware([
-//     App\Http\Middleware\ExampleMiddleware::class
-// ]);
-
-// $app->routeMiddleware([
-//     'auth' => App\Http\Middleware\Authenticate::class,
-// ]);
 
 /*
 |--------------------------------------------------------------------------

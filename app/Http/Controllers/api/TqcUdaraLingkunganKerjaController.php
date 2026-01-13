@@ -21,6 +21,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DebuPersonalHeader;
 use App\Models\LhpsLingDetail;
 use App\Models\LhpsLingHeader;
+use App\Models\MdlUdara;
 use App\Models\WsValueUdara;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
@@ -123,6 +124,39 @@ class TqcUdaraLingkunganKerjaController extends Controller
         ], 200);
     }
 
+    public function approveData(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = OrderDetail::where('id', $request->id)->first();
+            if ($data) {
+                $data->status = 2;
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp' => $data->cfr,
+                    'no_sampel' => $data->no_sampel,
+                    'kategori_2' => $data->kategori_2,
+                    'kategori_3' => $data->kategori_3,
+                    'menu' => 'TQC Udara',
+                    'status' => 'approve',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
+                DB::commit();
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil diapprove'
+                ]);
+            }
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+            ]);
+        }
+    }
+
     public function handleRejectSelected(Request $request)
     {
         OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 0]);
@@ -193,6 +227,22 @@ class TqcUdaraLingkunganKerjaController extends Controller
 
             $id_regulasi = $request->regulasi;
             $getSatuan = new HelperSatuan;
+
+            $parameters = $processedData->map(fn($item) => ['id' => $item->id_parameter, 'parameter' => $item->parameter]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
+
             foreach ($processedData as $item) {
                 $dataLapangan = DetailLingkunganHidup::where('no_sampel', $item->no_sampel)
                     ->select('durasi_pengambilan')
@@ -284,7 +334,7 @@ class TqcUdaraLingkunganKerjaController extends Controller
                         }
                     }
 
-                    $item->nilai_uji = $nilai;
+                    $item->nilai_uji = $getHasilUji($index, $item->id_parameter, $nilai);
                 } else {
                     $item->nilai_uji = '-';
                 }

@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan};
+use App\Services\{Notification, GetAtasan, UseKuotaService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -29,6 +29,8 @@ use App\Http\Controllers\Controller;
 use App\Helpers\WorkerOperation;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
+use App\Models\HistoryKuotaPengujian;
+use App\Models\KuotaPengujian;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
 
@@ -1295,6 +1297,21 @@ class ReadyOrderController extends Controller
 
             DB::commit();
 
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
                 'status' => 200
@@ -1786,6 +1803,22 @@ class ReadyOrderController extends Controller
 
             // dd('stop');
             DB::commit();
+
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Re-Order Non Kontrak Success',
                 'status' => 200
@@ -1958,7 +1991,7 @@ class ReadyOrderController extends Controller
 
                                 $number_imaginer = sprintf("%03d", $noSampel);
                                 $periodeNew = $periode_kontrak;
-                                $statusSamplingNew = $dataQuotation->status_sampling;
+                                $statusSamplingNew = $t->status_sampling;
                                 $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                                 if($statusSamplingNew != 'SD'){
                                     $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
@@ -2141,6 +2174,22 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             DB::commit();
+
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
                 'status' => 200
@@ -2632,6 +2681,22 @@ class ReadyOrderController extends Controller
 
             // dd('stop');
             DB::commit();
+
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+            
             return response()->json([
                 'status' => 'success',
                 'message' => 'Re-Generate Order kontrak berhasil'

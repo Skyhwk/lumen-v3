@@ -40,6 +40,7 @@ use Yajra\Datatables\Datatables;
 
 //Helper
 use App\Helpers\EmailLhpRilisHelpers;
+use App\Models\MdlEmisi;
 use App\Models\OrderHeader;
 
 class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
@@ -465,6 +466,25 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     Subkontrak::class,
                 ];
 
+                $parameter    = OrderDetail::where('no_sampel', $request->no_sampel)
+                    ->where('is_active', true)
+                    ->first()->parameter;
+
+                $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+                $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+                
+                $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+                    if ($hasilUji && $hasilUji !== "-" && $hasilUji !== "##" && !str_contains($hasilUji, '<')) {
+                        $colToSearch = "C$index";
+                        $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                        if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                            $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                        }
+                    }
+
+                    return $hasilUji;
+                };
+
                 foreach ($models as $model) {
                     $approveField = $model === Subkontrak::class ? 'is_approve' : 'is_approved';
                     $data         = $model::with('ws_value_cerobong', 'parameter_emisi')
@@ -476,6 +496,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     foreach ($data as $val) {
                         if($model === IsokinetikHeader::class){
                             $hasilIsokinetik = json_decode($val->ws_value_cerobong->hasil_isokinetik, true);
+                            // dd($hasilIsokinetik);
 
                             // berat_molekul_kering
                             if (array_key_exists('berat_molekul_kering_method5', $hasilIsokinetik)) {
@@ -530,7 +551,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
 
                             $dataPage3 = array_merge($dataPage3, $this->buildPage3($hasilIsokinetik));
                         } else {
-                            $entry      = $this->formatEntry($val, $request->regulasi, $methodsUsed);
+                            $entry      = $this->formatEntry($val, $request->regulasi, $methodsUsed, $getHasilUji);
                             $mainData[] = $entry;
                         }
                     }
@@ -581,7 +602,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         }
     }
 
-    private function formatEntry($val, $regulasiId, &$methodsUsed = [])
+    private function formatEntry($val, $regulasiId, &$methodsUsed = [], $getHasilUji)
     {
         $param = $val->parameter_emisi;
 
@@ -596,7 +617,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             'no_sampel'     => $val->no_sampel,
             'parameter'     => $param->nama_lhp ?? $param->nama_regulasi,
             'parameter_lab' => $val->parameter,
-            'C'             => self::getHasilUji($val, $satuan),
+            'C'             => self::getHasilUji($val, $satuan, $getHasilUji),
             // 'C1' => $val->ws_value_cerobong->C1,
             // 'C2' => $val->ws_value_cerobong->C2,
             'terkoreksi'    => self::getKoreksi($val, $satuan),
@@ -745,7 +766,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
         return $satuanIndexMap[$satuan] ?? null;
     }
 
-    private function getHasilUji($val, $satuan)
+    private function getHasilUji($val, $satuan, $getHasilUji)
     {
 
         $cerobong = $val->ws_value_cerobong;
@@ -789,7 +810,8 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
             $fkoreksiKey = "f_koreksi_c$index";
             $nilai = $ws[$fkoreksiKey] ?? $ws[$hasilKey] ?? '-';
         }
-        return $nilai;
+        
+        return $getHasilUji($index, Parameter::where(['id_kategori' => 5, 'nama_lab' => $val->parameter, 'is_active' => true])->first()->id, $nilai);
 
     }
 

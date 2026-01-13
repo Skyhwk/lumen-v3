@@ -57,6 +57,7 @@ class InputBenthosController extends Controller
 
             $header = new Subkontrak();
             $header->no_sampel = $request->no_sampel;
+            $header->category_id = explode('-', $order_detail->kategori_2)[0];
             $header->parameter = 'Benthos';
             $header->jenis_pengujian = 'sample';
             $header->created_at = Carbon::now()->format('Y-m-d H:i:s');

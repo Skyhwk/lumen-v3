@@ -57,14 +57,6 @@ class OilMist
             $C1 = 0;
         }
 
-
-        if (floatval($C) < 1.39)
-            $C = '<1.39';
-        if (floatval($C1) < 0.0022)
-            $C1 = '<0.0022';
-        if (floatval($C2) < 0.0010)
-            $C2 = '<0.0010';
-
         $satuan = 'mg/m3';
 
         $processed = [

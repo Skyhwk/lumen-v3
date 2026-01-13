@@ -198,13 +198,17 @@ class InvoiceController extends Controller
 
                     DB::raw('MAX(order_header.konsultan) AS consultant'),
                     DB::raw('MAX(order_header.no_document) AS document'),
+                    DB::raw('MAX(order_header.sales_id) AS sales_id'),
+                    DB::raw('MAX(master_karyawan.nama_lengkap) AS sales_penanggung_jawab'),
 
                     DB::raw('MAX(invoice.created_at) AS created_at'),
                     DB::raw('MAX(invoice.emailed_at) AS emailed_at'),
                     DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
 
                     DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
-                    DB::raw('(MAX(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    // DB::raw('MAX(invoice.nilai_pelunasan) AS nilai_pelunasan' + 
+                    //     ' + COALESCE(MAX(w.total_pembayaran), 0) AS nilai_pelunasan'),
 
                     DB::raw('MAX(invoice.is_generate) AS is_generate'),
                     DB::raw('MAX(invoice.generated_by) AS generated_by'),
@@ -226,11 +230,11 @@ class InvoiceController extends Controller
                         CASE
                             WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
                             WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(MAX(invoice.nilai_pelunasan),0)
+                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
                                     + COALESCE(MAX(w.total_pembayaran),0))
                                 ) < 0 THEN 'Kelebihan Pembayaran'
                             WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(MAX(invoice.nilai_pelunasan),0)
+                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
                                     + COALESCE(MAX(w.total_pembayaran),0))
                                 ) > 0 THEN 'Belum Lunas'
                             ELSE 'Lunas'
@@ -241,6 +245,7 @@ class InvoiceController extends Controller
                 ->leftJoinSub($withdrawSub, 'w', function ($join) {
                     $join->on('invoice.no_invoice', '=', 'w.no_invoice');
                 })
+                ->leftJoin('master_karyawan', 'order_header.sales_id', '=', 'master_karyawan.id')
                 ->where([
                     ['invoice.is_active', true],
                     ['invoice.is_emailed', true],
@@ -322,6 +327,10 @@ class InvoiceController extends Controller
 
             if ($request->filled('consultant')) {
                 $data->where('order_header.konsultan', 'like', '%' . $request->consultant . '%');
+            }
+
+            if ($request->filled('sales_penanggung_jawab')) {
+                $data->where('master_karyawan.nama_lengkap', 'like', '%' . $request->sales_penanggung_jawab . '%');
             }
 
             $data->orderByDesc('invoice.no_invoice');

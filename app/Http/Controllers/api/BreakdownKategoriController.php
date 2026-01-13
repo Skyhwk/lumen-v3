@@ -9,87 +9,12 @@ use Illuminate\Support\Facades\DB;
 
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use App\Models\OrderHeader;
+use App\Models\OrderDetail;
+use App\Models\MasterPelanggan;
 
 class BreakdownKategoriController extends Controller
 {
-    private $categoryStr = [
-        'AIR LIMBAH' => [
-            'Air Limbah Domestik',
-            'Air Limbah Industri',
-            'Air Limbah',
-        ],
-        'AIR BERSIH' => [
-            'Air Bersih',
-        ],
-        'AIR MINUM' => [
-            'Air Minum',
-        ],
-        'AIR SUNGAI' => [
-            'Air Sungai',
-        ],
-        'AIR LAUT' => [
-            'Air Laut',
-        ],
-        'AIR LAINNYA' => [
-            'Air Tanah',
-            'Air Higiene Sanitasi',
-            'Air Khusus',
-            'Air Kolam Renang',
-            'Air Danau',
-            'Air Permukaan',
-            'Air Reverse Osmosis',
-            'Air Higiene Sanitasi',
-            'Air Lindi',
-        ],
-        'UDARA AMBIENT' => [
-            'Udara Ambient',
-        ],
-        'UDARA LINGKUNGAN KERJA' => [
-            'Udara Lingkungan Kerja',
-        ],
-        'KEBISINGAN' => [
-            'Kebisingan',
-            'Kebisingan (Indoor)',
-            'Kebisingan (24 Jam)',
-        ],
-        'PENCAHAYAAN' => [
-            'Pencahayaan',
-        ],
-        'GETARAN' => [
-            'Getaran',
-            'Getaran (Mesin)',
-            'Getaran (Seluruh Tubuh)',
-            'Getaran (Lengan & Tangan)',
-            'Getaran (Kejut Bangunan)',
-            'Getaran (Bangunan)',
-            'Getaran (Lingkungan)',
-        ],
-        'IKLIM KERJA' => [
-            'Iklim Kerja',
-        ],
-        'UDARA LAINNYA' => [
-            'Ergonomi',
-            'Udara Angka Kuman',
-            'Kebauan',
-            'Udara Swab Test',
-            'Udara Umum',
-            'Psikologi',
-            'Kualitas Udara Dalam Ruang',
-        ],
-        'EMISI SUMBER BERGERAK' => [
-            'Emisi Kendaraan',
-            'Emisi Kendaraan (Solar)',
-            'Emisi Kendaraan (Bensin)',
-            'Emisi Kendaraan (Gas)',
-        ],
-        'EMISI SUMBER TIDAK BERGERAK' => [
-            'Emisi Sumber Tidak Bergerak',
-        ],
-        'EMISI ISOKINETIK' => [
-            'Emisi Isokinetik',
-        ],
-    ];
-
     public function getQuotations(Request $request)
     {
         $search = $request->term ?? '';
@@ -155,76 +80,117 @@ class BreakdownKategoriController extends Controller
         ]);
     }
 
-    public function getDetailQuotation(Request $request){
-        $type = \explode('/', $request->no_qt)[1];
-        if($type == 'QTC'){
-            $data = QuotationKontrakH::with('sales')->where('no_document', $request->no_qt)->first();
-            $dataSampling = json_decode($data->data_pendukung_sampling);
+    public function getIdPelanggan(Request $request)
+    {
+        $search = $request->term ?? '';
+        $page = max(1, (int)($request->page ?? 1));
+        $perPage = 10; // default page size
 
-            $array = [];
-
-            foreach ($dataSampling as $item) {
-                $kategori = explode('-', $item->kategori_2)[1];
-                $jumlahTitik = $item->jumlah_titik * count($item->periode);
-
-                if (isset($array[$kategori])) {
-                    $array[$kategori] += $jumlahTitik;
-                } else {
-                    $array[$kategori] = $jumlahTitik;
-                }
-            }
-
-            $buildData = $this->buildCategoryTree($array, $this->categoryStr);
-
-        }else{
-            $data = QuotationNonKontrak::with('sales')->where('no_document', $request->no_qt)->first();
-            $dataSampling = json_decode($data->data_pendukung_sampling);
-
-            $array = [];
-
-            foreach ($dataSampling as $item) {
-                $kategori = explode('-', $item->kategori_2)[1];
-                $jumlahTitik = $item->jumlah_titik;
-
-                if (isset($array[$kategori])) {
-                    $array[$kategori] += $jumlahTitik;
-                } else {
-                    $array[$kategori] = $jumlahTitik;
-                }
-            }
-
-            $buildData = $this->buildCategoryTree($array, $this->categoryStr);
+        // Hanya pencarian jika minimal 3 karakter
+        if (mb_strlen($search) < 3) {
+            return response()->json([
+                'results' => [],
+                'pagination' => [
+                    'more' => false,
+                ],
+            ]);
         }
 
+        // Query unik berdasarkan id_pelanggan dan ada order aktif
+        $query = MasterPelanggan::query()
+            ->select('master_pelanggan.id_pelanggan', 'master_pelanggan.nama_pelanggan')
+            ->join('order_header', 'order_header.id_pelanggan', '=', 'master_pelanggan.id_pelanggan')
+            ->where('order_header.is_active', 1)
+            ->where('master_pelanggan.is_active', 1)
+            ->where('master_pelanggan.id_pelanggan', 'like', '%' . $search . '%')
+            ->groupBy('master_pelanggan.id_pelanggan', 'master_pelanggan.nama_pelanggan');
+
+        $totalCount = $query->count();
+
+        $data = $query
+            ->orderBy('master_pelanggan.id_pelanggan', 'desc')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        $results = [];
+        foreach ($data as $item) {
+            $results[] = [
+                'id' => $item->id_pelanggan,
+                'text' => $item->id_pelanggan . ' - ' . $item->nama_pelanggan,
+                'jenis' => $item->nama_pelanggan,
+            ];
+        }
+
+        $hasMore = ($page * $perPage) < $totalCount;
+
+        return response()->json([
+            'results' => $results,
+            'pagination' => [
+                'more' => $hasMore,
+            ],
+        ]);
+    }
+
+    public function getDetailQuotation(Request $request){
+        $masterPelanggan = MasterPelanggan::where('id_pelanggan', $request->id_pelanggan)->first();
+        $data = OrderHeader::with('orderDetail')
+        ->where('id_pelanggan', $request->id_pelanggan)
+        ->where('is_active', 1)
+        ->get();
+        // Ambil semua kategori_3 dari setiap order detail, ratakan ke satu array, hilangkan duplikat
+        $kategoriList = $data->flatMap(function($item) {
+            return $item->orderDetail->pluck('kategori_3');
+        })->values()->all();
+
+        $categoryTree = $this->buildCategoryTree($kategoriList, config('kategori.id'));
+        
         return response()->json([
             'message' => 'Data hasbeen retrieved successfully',
-            'customer_detail' => $data,
-            'breakdown_kategori' => $buildData,
+            'customer_detail' => $masterPelanggan,
+            'breakdown_kategori' => $categoryTree,
             'status' => 200,
         ]);
     }
 
-    private function buildCategoryTree(array $rawData, array $categoryStr): array
+    /**
+     * Build grouped category tree, counting occurrences of each child from raw input.
+     *
+     * @param array $flatRaw array of string values (e.g., ["2-Air Limbah Domestik", ...])
+     * @param array $categoryMap associative array: parent => array of child strings
+     * @return array grouped categories and their value counts
+     */
+    private function buildCategoryTree(array $flatRaw, array $categoryMap): array
     {
+        // Hitung jumlah kemunculan setiap child
+        $counts = [];
+        foreach ($flatRaw as $item) {
+            if (!isset($counts[$item])) {
+                $counts[$item] = 1;
+            } else {
+                $counts[$item]++;
+            }
+        }
+
+
         $result = [];
-    
-        foreach ($categoryStr as $parent => $childrenList) {
+
+        foreach ($categoryMap as $parent => $children) {
             $matchedChildren = [];
-    
-            foreach ($childrenList as $childName) {
-                if (isset($rawData[$childName])) {
+
+            foreach ($children as $child) {
+                if (isset($counts[$child])) {
                     $matchedChildren[] = [
-                        'label' => $childName,
-                        'value' => $rawData[$childName],
+                        'label' => explode('-', $child)[1],
+                        'value' => $counts[$child],
                     ];
                 }
             }
-    
+
             if (empty($matchedChildren)) {
                 continue;
             }
-    
-            // RULE: parent == child → no children
+            // RULE: jika hanya satu anak dan namanya sama dgn parent, tidak pakai 'children', langsung parent
             if (
                 count($matchedChildren) === 1 &&
                 strtoupper($matchedChildren[0]['label']) === strtoupper($parent)
@@ -240,8 +206,7 @@ class BreakdownKategoriController extends Controller
                 ];
             }
         }
-    
+
         return $result;
     }
-    
 }
