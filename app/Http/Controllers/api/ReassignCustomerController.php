@@ -30,7 +30,9 @@ class ReassignCustomerController extends Controller
             case 24: // Sales Staff
                 $query->where('id_sales_baru', $this->user_id);
                 break;
-
+            case 148: 
+                $query->where('id_sales_baru', $this->user_id);
+                break;
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
                 array_push($bawahan, $this->user_id);
