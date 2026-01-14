@@ -30,7 +30,9 @@ class ReassignCustomerController extends Controller
             case 24: // Sales Staff
                 $query->where('id_sales_baru', $this->user_id);
                 break;
-
+            case 148: 
+                $query->where('id_sales_baru', $this->user_id);
+                break;
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
                 array_push($bawahan, $this->user_id);
@@ -101,7 +103,7 @@ class ReassignCustomerController extends Controller
 
                 if (
                     $cekLog && $cekLog->nama_lengkap != $this->karyawan &&
-                    \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2
+                    \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 10
                 ) {
                     $time             = Carbon::parse($cekLog->created_at)->translatedFormat('d F Y H:i');
                     $sudahDihubungi[] = "<strong>{$item['nama_pelanggan']}</strong><br /> oleh: <strong>{$cekLog->nama_lengkap}</strong><br />pada: {$time}";
