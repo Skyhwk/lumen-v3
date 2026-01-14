@@ -528,42 +528,43 @@ class DokumenFdlController extends Controller
                             
                             // UPDATE QTCH
                             // dd(array_keys($groupedNamedPoints));
-                            if ($qtcHeader) {
-                                $data_pendukung_sampling = json_decode($qtcHeader->data_pendukung_sampling);
-                                foreach ($data_pendukung_sampling as &$dps) {
+                            // if ($qtcHeader) {
+                            //     $data_pendukung_sampling = json_decode($qtcHeader->data_pendukung_sampling);
+                            //     foreach ($data_pendukung_sampling as &$dps) {
 
-                                    $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
+                            //         $fullGroupKey = $dps->kategori_1 . ';' . $dps->kategori_2 . ';' . json_encode($dps->regulasi) . ';' . json_encode($dps->parameter);
 
-                                    // Filter penamaan titik
-                                    $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
-                                        if (!is_array($group))
-                                            return false;
-                                        foreach ($group as $item) {
-                                            if (is_array($item) || is_object($item)) {
-                                                foreach ($item as $value) {
-                                                    if (!empty($value))
-                                                        return true;
-                                                }
-                                            }
-                                        }
-                                        return false;
-                                    });
+                            //         // Filter penamaan titik
+                            //         dump( $groupedNamedPoints[$fullGroupKey]);
+                            //         $penamaan_sampling_all = array_filter($groupedNamedPoints[$fullGroupKey], function ($group) {
+                            //             if (!is_array($group))
+                            //                 return false;
+                            //             foreach ($group as $item) {
+                            //                 if (is_array($item) || is_object($item)) {
+                            //                     foreach ($item as $value) {
+                            //                         if (!empty($value))
+                            //                             return true;
+                            //                     }
+                            //                 }
+                            //             }
+                            //             return false;
+                            //         });
 
-                                    // Proses penamaan titik Header
-                                    if ($penamaan_sampling_all) {
-                                        $penamaan_sampling = array_map(function ($item) {
-                                            return array_values($item)[0] ?? "";
-                                        }, reset($penamaan_sampling_all));
-                                    } else {
-                                        $penamaan_sampling = array_fill(0, $dps->jumlah_titik, "");
-                                    }
+                            //         // Proses penamaan titik Header
+                            //         if ($penamaan_sampling_all) {
+                            //             $penamaan_sampling = array_map(function ($item) {
+                            //                 return array_values($item)[0] ?? "";
+                            //             }, reset($penamaan_sampling_all));
+                            //         } else {
+                            //             $penamaan_sampling = array_fill(0, $dps->jumlah_titik, "");
+                            //         }
 
-                                    $dps->penamaan_titik = $penamaan_sampling;
-                                }
+                            //         $dps->penamaan_titik = $penamaan_sampling;
+                            //     }
 
-                                $qtcHeader->data_pendukung_sampling = json_encode($data_pendukung_sampling);
-                                $qtcHeader->save();
-                            }
+                            //     $qtcHeader->data_pendukung_sampling = json_encode($data_pendukung_sampling);
+                            //     $qtcHeader->save();
+                            // }
                         }
                     }
 
