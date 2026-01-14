@@ -644,7 +644,6 @@ class BasOnlineController extends Controller
                             'info_sampling'      => $infoSampling,
                             'is_revisi'          => $orderHeader->is_revisi,
                             'nama_cabang'        => $namaCabang,
-                            'is_processed'       => $isProcessed,      // true jika sudah ada di tabel persiapan
                             'is_downloaded'      => (int)$statusRow['is_downloaded'], // 1 jika sudah download, 0 jika belum
                             'is_printed'      => (int)$statusRow['is_printed'], // 1 jika sudah download, 0 jika belum
                         ];
