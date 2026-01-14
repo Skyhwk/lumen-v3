@@ -38,6 +38,10 @@ class FollowUpController extends Controller
                 $pelanggan->where('sales_id', $this->user_id);
                 break;
 
+            case 148: 
+                $pelanggan->where('sales_id', $this->user_id);
+                break;
+
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
                 array_push($bawahan, $this->user_id);
