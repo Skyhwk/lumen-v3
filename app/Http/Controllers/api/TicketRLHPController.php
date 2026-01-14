@@ -91,7 +91,7 @@ class TicketRLHPController extends Controller
                         $q->where('kategori', 'TANGGAL')
                             ->orWhere(function ($q2) {
                                 $q2->where('kategori', 'DATA')
-                                    ->where('status', '!=', 'WAITING PROCESS');
+                                    ->whereNotNull('approved_by');
                             });
                     })
                     ->orderByDesc('id');
