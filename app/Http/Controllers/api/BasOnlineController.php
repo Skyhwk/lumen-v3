@@ -265,8 +265,14 @@ class BasOnlineController extends Controller
             $existingWork = DB::table('persiapan_sampel_header')
             ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
             ->where('is_active', true)
-            ->where('is_downloaded', false)
-            ->where('is_printed', false)
+            ->where(function($query) {
+                $query->where('is_downloaded', false)
+                    ->orWhereNull('is_downloaded');
+            })
+            ->where(function($query) {
+                $query->where('is_printed', false)
+                    ->orWhereNull('is_printed');
+            })
             ->whereNotNull('detail_bas_documents')
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
