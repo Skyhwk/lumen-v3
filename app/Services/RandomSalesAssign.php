@@ -198,6 +198,7 @@ class RandomSalesAssign
                             // } else {
                             //     $NotReAssign[] = $customer;
                             // }
+                            $NotReAssign[] = $customer;
 
                             continue;
                         }
