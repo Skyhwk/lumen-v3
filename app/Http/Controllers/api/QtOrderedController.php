@@ -106,11 +106,12 @@ class QtOrderedController extends Controller
                     });
                 })
                 ->filterColumn('no_po', function ($query, $keyword) {
-                $query->whereHas('konfirmasi', function ($q) use ($keyword) {
-                    $q->whereNotNull('no_purchaseorder')
-                        ->where('no_purchaseorder', '!=', '')
-                        ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
-                });
+                    $query->whereHas('konfirmasi', function ($q) use ($keyword) {
+                        $q->whereNotNull('no_purchaseorder')
+                            ->where('no_purchaseorder', '!=', '')
+                            ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
+                        $q->orWhere('keterangan_approval_order', 'like', '%' . $keyword . '%');
+                    });
                 })
                 ->make(true);
         } catch (\Exception $e) {
