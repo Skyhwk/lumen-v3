@@ -395,15 +395,6 @@ class GenerateWebinarSertificate
     }
 
     /**
-     * Method untuk mengubah lokasi background image
-     */
-    public function setBackgroundImage(string $bg_img_path): self
-    {
-        $this->bg_img_path = $bg_img_path;
-        return $this;
-    }
-
-    /**
      * Method untuk render Blade template untuk pemateri dan QR code
      */
     private function renderTemplate(string $full_name, string $webinar_date): string
@@ -467,7 +458,7 @@ class GenerateWebinarSertificate
         $qr->data = json_encode([
             'tipe_dokumen'          => 'E-certificate webinar',
             'penerima_sertifikat'   => $this->options['recipientName'],
-            'no._sertifikat'        => $this->options['noSertifikat'],
+            'no_sertifikat'         => $this->options['noSertifikat'],
             'judul_webinar'         => $this->options['webinarTitle'],
             'topik_webinar'         => $this->options['webinarTopic'],
             'tanggal_webinar'       => $this->options['webinarDate'],

@@ -22,23 +22,25 @@
             Pemateri
         </div>
 
-        <div width="70%" align="center" cellpadding="0" cellspacing="0">
-            <td width="50%" valign="top" style="text-align: center;">
-                <ul style="list-style: none; margin: 0; padding: 0;">
-                    @foreach($pemateriLeft as $item)
-                    <li style="margin-bottom: 10px;">{{ $item }}</li>
-                    @endforeach
-                </ul>
-            </td>
+        <table width="70%" align="center" cellpadding="0" cellspacing="0">
+            <tr>
+                <td width="50%" valign="top" style="text-align: center;">
+                    <ul style="list-style: none; margin: 0; padding: 0;">
+                        @foreach($pemateriLeft as $item)
+                        <li style="list-style: none; margin-bottom: 8px;">{!! $item !!}</li>
+                        @endforeach
+                    </ul>
+                </td>
 
-            <td width="50%" valign="top" style="text-align: center;">
-                <ul style="list-style: none; margin: 0; padding: 0;">
-                    @foreach($pemateriRight as $item)
-                    <li style="margin-bottom: 10px;">{{ $item }}</li>
-                    @endforeach
-                </ul>
-            </td>
-        </div>
+                <td width="50%" valign="top" style="text-align: center;">
+                    <ul style="list-style: none; margin: 0; padding: 0;">
+                        @foreach($pemateriRight as $item)
+                        <li style="list-style: none; margin-bottom: 8px;">{!! $item !!}</li>
+                        @endforeach
+                    </ul>
+                </td>
+            </tr>
+        </table>
     </div>
 </div>
 
