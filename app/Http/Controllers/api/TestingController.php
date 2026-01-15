@@ -81,6 +81,7 @@ use App\Services\{
     RenderInvoiceTitik,
     GeneratePraSampling,
     GenerateQrDocumentLhp,
+    GenerateWebinarSertificate,
     LhpTemplate,
     RandomSalesAssign,
     SendEmail,
@@ -220,6 +221,26 @@ class TestingController extends Controller
             //code...
             
             switch ($request->menu) {
+                case 'generateSertificate':
+                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
+                    ->options([
+                        'template' => 'bg-biru.png',
+                        'layout' => 'layout-1',
+                        'font' => [
+                            'fontName' => 'greatvibes',
+                            'filename' => 'GreatVibes-Regular.ttf'
+                        ],
+                        'recipientName' => 'Rangga Manggala Yudha',
+                        'id' => 14527,
+                        'webinarTitle' => 'Kelas Online',
+                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
+                        'webinarDate' => '2024-01-01',
+                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expert)', '<strong>Bima Ghafara</strong> (Technical Expert)'],
+                        'noSertifikat' => '123',
+                    ])
+                    ->generate();
+                    dd($path);
+                    break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
                     $token = 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS';
@@ -5517,5 +5538,40 @@ private function detectChangedPoints($oldPoints, $newPoints)
         }
 
         return response()->json([$result], 200);
+    }
+
+    public function testGenerateSertifWebinar(Request $request)
+    {
+        $bg_img_path = public_path('background-sertifikat/'.$request->bg_img_path) ?? public_path('background-template/certificate-bg.jpg.');
+        // dd($request->all());
+        // (new GenerateWebinarSertificate(
+        //     $request->fullname, 
+        //     $request->id_sertifikat, 
+        //     $request->no_sertifikat, 
+        //     $request->folder_name, 
+        //     $bg_img_path, 
+        //     $request->prefix_filename, 
+        //     $request->webinar_title, 
+        //     $request->webinar_topic, 
+        //     $request->webinar_date, 
+        //     $request->pemateri, 
+        //     $request->template, 
+        //     $request->font
+        // ))->generate();
+
+        (new GenerateWebinarSertificate($request->fullname))
+            ->setFullName($request->fullname)
+            ->setIdSertifikat($request->id_sertifikat)
+            ->setNoSertifikat($request->no_sertifikat)
+            ->setFolderName($request->folder_name)
+            ->setBackgroundImage($bg_img_path)
+            ->setPrefixFilename($request->prefix_filename)
+            ->setWebinarTitle($request->webinar_title)
+            ->setWebinarTopic($request->webinar_topic)
+            ->setWebinarDate($request->webinar_date)
+            ->setPemateri($request->pemateri)
+            ->setTemplate($request->template)
+            ->setFont($request->font)
+            ->generate();
     }
 }
