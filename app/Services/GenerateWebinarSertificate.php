@@ -154,16 +154,16 @@ class GenerateWebinarSertificate
                     'I' => 'DejaVuSans-Oblique.ttf',
                     'BI' => 'DejaVuSans-BoldOblique.ttf',
                 ],
-                // $this->options['font']['fontName'] => [
-                //     'R' => $this->options['font']['filename'],
-                // ]
+                $this->options['font']['fontName'] => [
+                    'R' => $this->options['font']['filename'],
+                ]
             ]
         ];
         
         // Check if font is available
         $fontPath = public_path('fonts/' . $this->options['font']['filename']);
         if (!file_exists($fontPath)) {
-            $this->downloadGreatVibesFont();
+            $this->downloadFont();
         }
 
         $this->mpdf = new Mpdf($config);
@@ -497,11 +497,11 @@ class GenerateWebinarSertificate
         return $unique;
     }
 
-    private function downloadGreatVibesFont(): void
+    private function downloadFont(): void
     {
-        $fontUrl = 'https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf';
+        $fontUrl = 'https://github.com/google/fonts/raw/main/ofl/'. $this->options['font']['fontName'] .'/'. $this->options['font']['filename'];
         $fontDir = public_path('fonts');
-        $fontPath = $fontDir . '/GreatVibes-Regular.ttf';
+        $fontPath = $fontDir . '/' . $this->options['font']['filename'];
         
         // Buat folder fonts jika belum ada
         if (!is_dir($fontDir)) {
@@ -514,7 +514,7 @@ class GenerateWebinarSertificate
             file_put_contents($fontPath, $fontContent);
         } else {
             // Fallback ke font default jika gagal download
-            throw new Exception("Font Great Vibes tidak ditemukan dan gagal didownload. Silakan upload font GreatVibes-Regular.ttf ke folder public/fonts/");
+            throw new Exception("Font ". $this->options['font']['fontName'] ." tidak ditemukan dan gagal didownload. Silakan upload font ". $this->options['font']['filename'] ." ke folder public/fonts/");
         }
     }
 
