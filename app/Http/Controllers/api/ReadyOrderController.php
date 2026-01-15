@@ -1445,14 +1445,18 @@ class ReadyOrderController extends Controller
                     // ->where('active', 0)
                     ->orderByDesc('no_sampel')
                     ->first();
-
-                $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
-                $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                if($cek_detail) {
+                    $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                    $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                } else {
+                    $no_urut_sample = 0;
+                    // $no_urut_cfr = 0;
+                }
                 $n = $no_urut_sample + 1;
                 $trigger = 0;
-                $kategori = $cek_detail->kategori_3;
-                $regulasi = json_decode($cek_detail->regulasi) ?? [];
-                $parameter = json_decode($cek_detail->parameter) ?? [];
+                $kategori = $cek_detail->kategori_3 ?? null;
+                $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
+                $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
 
                 foreach ($penambahan_data as $key => $changes) {
                     $value = (object) $detail_baru[$changes];
@@ -1541,7 +1545,6 @@ class ReadyOrderController extends Controller
                     // $number_imaginer = sprintf("%03d", $n);
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
-
                     if($value->status_sampling != 'SD'){
                         $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
