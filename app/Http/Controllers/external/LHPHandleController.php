@@ -2,318 +2,275 @@
 
 namespace App\Http\Controllers\external;
 
-use App\Helpers\HelperSatuan;
 use Laravel\Lumen\Routing\Controller as BaseController;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-
-//model
-use App\Models\HoldHp;
-use App\Models\OrderDetail;
-use App\Models\OrderHeader;
-use App\Models\Invoice;
-use App\Models\MasterBakumutu;
-use App\Models\MdlEmisi;
-use App\Models\MdlUdara;
+use App\Helpers\HelperSatuan;
 use App\Services\GroupedCfrByLhp;
-use Carbon\Carbon;
+
+use App\Models\{
+    GenerateLink,
+    HoldHp,
+    OrderHeader,
+    Invoice,
+    LinkLhp,
+    MasterBakumutu,
+    MdlEmisi,
+    MdlUdara
+};
 
 class LHPHandleController extends BaseController
 {
-    public function cekLHP(Request $request)
+    // =========================================================================
+    // CONSTANTS: Parameter ID
+    // =========================================================================
+    const PARAM_GETARAN = '242';
+    const PARAM_ERGONOMI = '230';
+    const PARAM_PSIKOLOGI = '318';
+    const PARAM_OPASITAS_SOLAR = '376';
+    const PARAM_OPASITAS_ESB = '2275';
+    const PARAM_CO_BENSIN = '392';
+    const PARAM_CO_GAS = '1201';
+    const PARAM_HC_BENSIN = '393';
+    const PARAM_HC_GAS = '1202';
+
+    // =========================================================================
+    // CONFIGURATIONS
+    // =========================================================================
+
+    // Config pencarian di data Lab (Worksheet Value)
+    const WS_CONFIG = [
+        'ws_value_air' => ['headers' => ['gravimetri', 'titrimetri', 'colorimetri', 'subkontrak'], 'type' => 'air'],
+        'ws_value_udara' => ['headers' => ['lingkungan', 'microbiologi', 'medanLm', 'sinaruv', 'iklim', 'getaran', 'kebisingan', 'direct_lain', 'partikulat', 'pencahayaan', 'swab', 'subkontrak', 'dustfall', 'debuPersonal'], 'type' => 'udara'],
+        'ws_value_emisi_cerobong' => ['headers' => ['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'], 'type' => 'emisi'],
+    ];
+
+    // Config pencarian di data Lapangan
+    const LAPANGAN_CONFIG = ['data_lapangan_ergonomi', 'data_lapangan_psikologi', 'data_lapangan_emisi_kendaraan',];
+
+    // Mapping Parameter ID ke nama field di tabel lapangan
+    const FIELD_MAP = [
+        self::PARAM_OPASITAS_SOLAR => 'opasitas',
+        self::PARAM_OPASITAS_ESB => 'opasitas',
+        self::PARAM_CO_BENSIN => 'co',
+        self::PARAM_CO_GAS => 'co',
+        self::PARAM_HC_BENSIN => 'hc',
+        self::PARAM_HC_GAS => 'hc',
+    ];
+
+    private $satuanHelper;
+
+    public function __construct()
     {
-        $token = str_replace(' ', '+', $request->token);
-        // $token = $request->token;
-
-        if ($token == null || $token == '') {
-            return response()->json(['message' => 'Token tidak boleh kosong'], 430);
-        } else {
-            $cekData = DB::table('generate_link_quotation')->where('token', $token)->first();
-            if ($cekData) {
-                $dataLhp = DB::table('link_lhp')->where('id_token', $cekData->id)->first();
-
-                if ($cekData) {
-                    $dataLhp = DB::table('link_lhp')->where('id_token', $cekData->id)->first();
-                    $checkHold = HoldHp::where('no_order', $dataLhp->no_order)->first();
-                    if ($checkHold && $checkHold->is_hold == 1) {
-                        // Sudah di-hold, jangan tampilkan
-                        return response()->json(['message' => 'Document On Hold'], 405);
-                    } else {
-                        if ($dataLhp && isset($dataLhp->filename) && $dataLhp->filename != null && $dataLhp->filename != '') {
-                            if (file_exists(public_path('laporan/hasil_pengujian/' . $dataLhp->filename))) {
-                                return response()
-                                    ->json(
-                                        [
-                                            'data' => $dataLhp,
-                                            'message' => 'data hasbenn show',
-                                            'qt_status' => $cekData->quotation_status,
-                                            'status' => '201',
-                                            'uri' => env('APP_URL') . '/public/laporan/hasil_pengujian/' . $dataLhp->filename
-                                        ],
-                                        200
-                                    );
-                                return response()->json(['message' => 'Document found', 'data' => env('APP_URL') . '/public/laporan/hasil_pengujian/' . $dataLhp->filename], 200);
-                            } else {
-                                return response()->json(['message' => 'Document found but file not exists'], 403);
-                            }
-                            // return response()->json(['message' => 'Document found', 'data' => $dataLhp->filename], 200);
-                        } else if ($dataLhp && $dataLhp->filename == null || $dataLhp->filename == '') {
-                            return response()->json(['message' => 'Document found but file not exists'], 403);
-                        } else {
-                            return response()->json(['message' => 'Document not found'], 404);
-                        }
-                    }
-                } else {
-                    return response()->json(['message' => 'Token not found'], 401);
-                }
-            } else {
-                return response()->json(['message' => 'Token not found'], 401);
-            }
-        }
+        $this->satuanHelper = new HelperSatuan;
     }
 
     public function newCheckLhp(Request $request)
     {
-        $getIndex = new HelperSatuan;
-
+        // 1. Sanitasi Token: Ganti spasi dengan plus (+) handle URL decoding issue.
         $token = str_replace(' ', '+', $request->token);
-        if ($token == null || $token == '') {
-            return response()->json(['message' => 'Token tidak boleh kosong'], 430);
-        } else {
-            $cekData = DB::table('generate_link_quotation')->where('token', $token)->first();
+        if (!$token) return response()->json(['message' => 'Token is required'], 430);
 
-            if ($cekData) {
-                $dataLhp = DB::table('link_lhp')->where('id_token', $cekData->id)->first();
-                $periode = $dataLhp->periode;
-                $noOrder = $dataLhp->no_order;
+        // 2. Rangkaian pengecekan data ke Database
+        $generateLink = GenerateLink::where('token', $token)->first();
+        if (!$generateLink) return response()->json(['message' => 'Token not found'], 401);
 
-                $fileName = $dataLhp->filename ?? null;
+        $linkLhp = LinkLhp::where('id_token', $generateLink->id)->first();
+        if (!$linkLhp) return response()->json(['message' => 'Link LHP not found'], 404);
 
-                $checkHold = HoldHp::where('no_order', $noOrder)->where('periode', $periode)->first();
+        $orderHeader = OrderHeader::where('no_order', $linkLhp->no_order)->where('is_active', true)->first();
+        if (!$orderHeader) return response()->json(['message' => 'Order Header not found'], 404);
 
-                $dataOrder = OrderHeader::where('no_order', $noOrder)->where('is_active', true)->first();
+        // 3. Ambil Invoice dengan Eager Loading (recordPembayaran, recordWithdraw) biar hemat query
+        $invoices = Invoice::with(['recordPembayaran', 'recordWithdraw'])
+            ->where('no_order', $linkLhp->no_order)
+            ->where('is_active', true)
+            ->get();
 
-                $cekInvoice = Invoice::with(['recordPembayaran', 'recordWithdraw'])->where('no_order', $noOrder);
-                $all = false;
-                foreach ($cekInvoice->get() as $invoice) {
-                    if ($invoice->periode == "all") $all = true;
-                    break;
-                }
-
-                if ($periode != null && $periode != '' && !$all) $cekInvoice = $cekInvoice->where('periode', $periode);
-                $cekInvoice = $cekInvoice->where('is_active', true)->get() ?? null;
-
-                if ($dataOrder) {
-                    $dataGrouped = (new GroupedCfrByLhp($dataOrder, $periode))->get()->toArray();
-                    foreach ($dataGrouped as &$item) {
-                        $rekapPengujian = [];
-                        foreach ($item['order_details'] as $od) {
-                            $parameters = json_decode($od['parameter'], true);
-                            foreach ($parameters as $parameter) {
-                                [$parameterId, $parameterName] = explode(';', $parameter);
-
-                                $hasResult = false;
-                                $isOnProcess = false;
-
-                                foreach (['ws_value_air', 'ws_value_udara', 'ws_value_emisi_cerobong'] as $ws) {
-                                    if ($od[$ws]) {
-                                        if ($ws == 'ws_value_air') {
-                                            foreach ($od[$ws] as $value) {
-                                                foreach (['gravimetri', 'titrimetri', 'colorimetri', 'subkontrak'] as $header) {
-                                                    if (
-                                                        isset($value[$header])
-                                                        && $value[$header]['parameter'] == $parameterName
-                                                    ) {
-                                                        $isOnProcess = true;
-
-                                                        if (isset($value[$header]['is_approved']) || isset($value[$header]['is_approve'])) {
-                                                            $rekapPengujian[] = [
-                                                                'no_sampel' => $od['no_sampel'],
-                                                                'parameter' => $parameterName,
-                                                                'hasil_uji' => $value['hasil'],
-                                                            ];
-                                                            $hasResult = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if ($ws == 'ws_value_udara') {
-                                            foreach ($od[$ws] as $value) {
-                                                foreach (['lingkungan', 'microbiologi', 'medanLm', 'sinaruv', 'iklim', 'getaran', 'kebisingan', 'direct_lain', 'partikulat', 'pencahayaan', 'swab', 'subkontrak', 'dustfall', 'debuPersonal'] as $header) {
-                                                    if (
-                                                        isset($value[$header])
-                                                        && $value[$header]['parameter'] == $parameterName
-                                                    ) {
-                                                        $isOnProcess = true;
-
-                                                        $satuan = $value['satuan'];
-                                                        if (!$satuan) {
-                                                            $regulasiIds = collect(json_decode($od['regulasi'], true))->map(fn($item) => explode('-', $item)[0])->unique()->toArray();
-                                                            $bakuMutu = MasterBakumutu::where(['id_parameter' => $parameterId, 'is_active' => true])->whereIn('id_regulasi', $regulasiIds)->first();
-                                                            if ($bakuMutu && $bakuMutu->satuan) $satuan = $bakuMutu->satuan;
-                                                        }
-
-                                                        $index = $satuan ? ($getIndex->udara($satuan) ?: 1) : 1;
-                                                        $column = "hasil$index";
-                                                        $hasil = $value[$column] ?: $value['hasil1'];
-
-                                                        $mdl = MdlUdara::where(['parameter_id' => $parameterId, 'is_active' => true])->latest()->first();
-                                                        if ($mdl) $hasil = $hasil < $mdl->$column ? ('<' . $mdl->$column) : $hasil;
-
-                                                        if ($parameterId == '242') { // Getaran
-                                                            $result = [];
-                                                            foreach (json_decode($hasil, true) as $key => $val) {
-                                                                $result[] = "$key: $val";
-                                                            }
-
-                                                            $hasil = implode('<br />', $result);
-                                                        }
-
-                                                        if (isset($value[$header]['is_approved']) || isset($value[$header]['is_approve'])) {
-                                                            $rekapPengujian[] = [
-                                                                'no_sampel' => $od['no_sampel'],
-                                                                'parameter' => $parameterName,
-                                                                'hasil_uji' => $hasil,
-                                                            ];
-                                                            $hasResult = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if ($ws == 'ws_value_emisi_cerobong') {
-                                            foreach ($od[$ws] as $value) {
-                                                foreach (['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'] as $header) {
-                                                    if (
-                                                        isset($value[$header])
-                                                        && $value[$header]['parameter'] == $parameterName
-                                                    ) {
-                                                        $isOnProcess = true;
-
-                                                        $satuan = $value['satuan'];
-                                                        if (!$satuan) {
-                                                            $regulasiIds = collect(json_decode($od['regulasi'], true))->map(fn($item) => explode('-', $item)[0])->unique()->toArray();
-                                                            $bakuMutu = MasterBakumutu::where(['id_parameter' => $parameterId, 'is_active' => true])->whereIn('id_regulasi', $regulasiIds)->first();
-                                                            if ($bakuMutu && $bakuMutu->satuan) $satuan = $bakuMutu->satuan;
-                                                        }
-
-                                                        $index = $satuan ? ($getIndex->emisi($satuan) ?: '') : '';
-                                                        $column = "C$index";
-                                                        $hasil = $value[$column] ?: $value['C'];
-
-                                                        $mdl = MdlEmisi::where(['parameter_id' => $parameterId, 'is_active' => true])->latest()->first();
-                                                        if ($mdl) $hasil = $hasil < $mdl->$column ? ('<' . $mdl->$column) : $hasil;
-
-                                                        if (isset($value[$header]['is_approved']) || isset($value[$header]['is_approve'])) {
-                                                            $rekapPengujian[] = [
-                                                                'no_sampel' => $od['no_sampel'],
-                                                                'parameter' => $parameterName,
-                                                                'hasil_uji' => $hasil,
-                                                            ];
-                                                            $hasResult = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                foreach (['data_lapangan_ergonomi', 'data_lapangan_psikologi', 'data_lapangan_emisi_kendaraan'] as $dataLapangan) {
-                                    if ($od[$dataLapangan]) {
-                                        if ($parameterId == '318') { // Psikologi
-                                            foreach ($od[$dataLapangan] as $dlPsikologi) {
-                                                $isOnProcess = true;
-                                                if (isset($dlPsikologi['is_approved']) || isset($dlPsikologi['is_approve'])) {
-                                                    $hasil = json_decode($dlPsikologi['hasil'], true);
-
-                                                    $result = [];
-                                                    foreach ($hasil['kesimpulan'] as $key => $val) {
-                                                        $titles = [
-                                                            'kp' => 'Konflik Peran',
-                                                            'pk' => 'Pengembangan Karir',
-                                                            'tp' => 'Ketaksaan Peran',
-                                                            'tjo' => 'Tanggung Jawab terhadap Orang Lain',
-                                                            'bbkual' => 'Beban Berlebih Kualitatif',
-                                                            'bbkuan' => 'Beban Berlebih Kuantitatif',
-                                                        ];
-                                                        $title = array_key_exists($key, $titles) ? $titles[$key] : '';
-
-                                                        $nilai = $val['nilai'];
-                                                        $kesimpulan = $val['kesimpulan'];
-                                                        $result[] = "$title: $nilai ($kesimpulan)";
-                                                    }
-
-                                                    $hasilUji = implode('<br />', $result);
-
-                                                    $rekapPengujian[] = [
-                                                        'no_sampel' => $od['no_sampel'] . '<br />' . $od['keterangan_1'],
-                                                        'parameter' => $parameterName,
-                                                        'hasil_uji' => $hasilUji,
-                                                    ];
-                                                    $hasResult = true;
-                                                }
-                                            }
-                                        }
-
-                                        $isOnProcess = true;
-                                        if (isset($dlPsikologi['is_approved']) || isset($dlPsikologi['is_approve'])) {
-                                            if ($parameterId == '376' || $parameterId == '2275') { // Opasitas (Solar) || Opasitas (ESB) ?? diesel keknya
-                                                $rekapPengujian[] = [
-                                                    'no_sampel' => $od['no_sampel'],
-                                                    'parameter' => $parameterName,
-                                                    'hasil_uji' => $od[$dataLapangan]['opasitas'],
-                                                ];
-                                                $hasResult = true;
-                                            }
-
-                                            if ($parameterId == '392' || $parameterId == '1201') { // CO (Bensin) || CO (Gas)
-                                                $rekapPengujian[] = [
-                                                    'no_sampel' => $od['no_sampel'],
-                                                    'parameter' => $parameterName,
-                                                    'hasil_uji' => $od[$dataLapangan]['co'],
-                                                ];
-                                                $hasResult = true;
-                                            }
-
-                                            if ($parameterId == '393' || $parameterId == '1202') { // HC (Bensin) || HC (Gas)
-                                                $rekapPengujian[] = [
-                                                    'no_sampel' => $od['no_sampel'],
-                                                    'parameter' => $parameterName,
-                                                    'hasil_uji' => $od[$dataLapangan]['hc'],
-                                                ];
-                                                $hasResult = true;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 3. PENENTUAN: Kalau setelah muter-muter flagnya masih false, berarti ZONK (belum ada hasil).
-                                if (!$hasResult) {
-                                    $statusText = $isOnProcess ? 'Sedang dilakukan analisa' : 'Belum dilakukan analisa';
-
-                                    $rekapPengujian[] = [
-                                        'no_sampel' => $od['no_sampel'],
-                                        'parameter' => $parameterName,
-                                        'hasil_uji' => $statusText
-                                    ];
-                                }
-                            }
-                        }
-                        $item['rekap_pengujian'] = $rekapPengujian;
-                        unset($item['order_details']);
-                    }
-
-                    return response()->json(['message' => 'Data LHP found', 'data' => $dataGrouped, 'order' => $dataOrder, 'periode' => $periode, 'invoice' => collect($cekInvoice)->toArray(), 'fileName' => $fileName, 'hold' => $checkHold], 200);
-                } else {
-                    return response()->json(['message' => 'Data Order not found'], 404);
-                }
-            } else {
-                return response()->json(['message' => 'Token not found'], 401);
-            }
+        // 4. Filter Invoice: Jika tidak ada invoice 'all', filter sesuai periode LHP
+        if ($linkLhp->periode && !$invoices->contains('periode', 'all')) {
+            $invoices = $invoices->where('periode', $linkLhp->periode)->values();
         }
+
+        // 5. Transformasi Data (Core Logic)
+        $dataGrouped = collect((new GroupedCfrByLhp($orderHeader, $linkLhp->periode))->get()->toArray())
+            ->map(function ($item) {
+                // Build rekap pengujian
+                $item['rekap_pengujian'] = $this->getRekapPengujian($item['order_details']);
+
+                // Hapus data mentah order_details agar response payload lebih ringan
+                unset($item['order_details']);
+
+                return $item;
+            });
+
+        return response()->json([
+            'message' => 'LHP data retrieved successfully',
+            'data' => $dataGrouped,
+            'order' => $orderHeader,
+            'periode' => $linkLhp->periode,
+            'invoice' => $invoices,
+            'fileName' => $linkLhp->filename,
+            'hold' => HoldHp::where('no_order', $linkLhp->no_order)->where('periode', $linkLhp->periode)->first()
+        ], 200);
+    }
+
+    /**
+     * Mencari hasil uji dari berbagai sumber (Lab & Lapangan).
+     */
+    private function getRekapPengujian($orderDetails)
+    {
+        return collect($orderDetails)->flatMap(function ($od) {
+            $parameters = collect(json_decode($od['parameter'], true));
+
+            return $parameters->flatMap(function ($paramString) use ($od) {
+                [$paramId, $paramName] = explode(';', $paramString);
+
+                // --- PRIORITY 1: Cari di Data Lab (Air, Udara, Emisi) ---
+                // Loop konfigurasi WS_CONFIG untuk mencari hasil
+                $result = collect(self::WS_CONFIG)->map(function ($config, $key) use ($od, $paramId, $paramName) {
+                    $values = collect($od[$key] ?? []);
+                    if ($values->isEmpty()) return null;
+
+                    // Cari value yang parameternya cocok DAN sudah di-approve
+                    $matchedValue = $values->first(function ($val) use ($config, $paramName) {
+                        return collect($config['headers'])->contains(function ($header) use ($val, $paramName) {
+                            $dataHeader = $val[$header] ?? [];
+
+                            return isset($dataHeader['parameter'])
+                                && $dataHeader['parameter'] == $paramName
+                                && (isset($dataHeader['is_approved']) || isset($dataHeader['is_approve']));
+                        });
+                    });
+
+                    if (!$matchedValue) return null;
+
+                    // Formatting Hasil berdasarkan tipe parameter (Air/Udara/Emisi)
+                    if ($config['type'] == 'air') {
+                        return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $matchedValue['hasil']];
+                    }
+                    if ($config['type'] == 'udara') {
+                        $satuan = $matchedValue['satuan'] ?? $this->getSatuanFromRegulasi($od, $paramId);
+                        $index = $satuan ? ($this->satuanHelper->udara($satuan) ?: 1) : 1;
+                        $column = "hasil$index"; // Dinamis pilih kolom hasil
+
+                        $hasil = $matchedValue[$column] ?: $matchedValue['hasil1'];
+
+                        // Cek MDL (Method Detection Limit)
+                        $mdl = MdlUdara::where(['parameter_id' => $paramId, 'is_active' => true])->latest()->first();
+                        if ($mdl && $mdl->$column && $hasil < $mdl->$column) $hasil = '<' . $mdl->$column;
+
+                        // Format khusus Getaran (JSON to String)
+                        if ($paramId == self::PARAM_GETARAN) {
+                            $hasil = collect(json_decode($hasil, true))->map(fn($v, $k) => "$k: $v")->join('<br />');
+                        }
+
+                        return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $hasil];
+                    }
+                    if ($config['type'] == 'emisi') {
+                        $satuan = $matchedValue['satuan'] ?? $this->getSatuanFromRegulasi($od, $paramId);
+                        $index = $satuan ? ($this->satuanHelper->emisi($satuan) ?: '') : '';
+                        $column = "C$index"; // Dinamis pilih kolom C
+
+                        $hasil = $matchedValue[$column] ?: $matchedValue['C'];
+
+                        // Cek MDL Emisi
+                        $mdl = MdlEmisi::where(['parameter_id' => $paramId, 'is_active' => true])->latest()->first();
+                        if ($mdl && $mdl->$column && $hasil < $mdl->$column) $hasil = '<' . $mdl->$column;
+
+                        return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $hasil];
+                    }
+                })->first(fn($res) => $res !== null); // Ambil hasil valid pertama yang ditemukan
+
+                // --- PRIORITY 2: Cari di Data Lapangan---
+                if (!$result) {
+                    $result = collect(self::LAPANGAN_CONFIG)->map(function ($key) use ($od, $paramId, $paramName) {
+                        $data = $od[$key] ?? null;
+                        if (!$data) return null;
+
+                        // Case Khusus: Psikologi (Return array, bukan single object)
+                        // Psikologi return-nya List of Objects (Array Numeric)
+                        if ($paramId == self::PARAM_PSIKOLOGI && is_array($data)) {
+                            $psikoResults = collect($data)->filter(fn($item) => isset($item['is_approved']) || isset($item['is_approve']))
+                                ->map(function ($item) use ($od, $paramName) {
+                                    $titles = [
+                                        'kp' => 'Konflik Peran',
+                                        'pk' => 'Pengembangan Karir',
+                                        'tp' => 'Ketaksaan Peran',
+                                        'tjo' => 'Tanggung Jawab terhadap Orang Lain',
+                                        'bbkual' => 'Beban Berlebih Kualitatif',
+                                        'bbkuan' => 'Beban Berlebih Kuantitatif',
+                                    ];
+
+                                    $hasilUji = collect(json_decode($item['hasil'], true)['kesimpulan'] ?? [])
+                                        ->map(fn($val, $key) => ($titles[$key] ?? '') . ": {$val['nilai']} ({$val['kesimpulan']})")
+                                        ->join('<br />');
+
+                                    return [
+                                        'no_sampel' => $od['no_sampel'] . '<br />' . ($od['keterangan_1'] ?? ''),
+                                        'parameter' => $paramName,
+                                        'hasil_uji' => $hasilUji
+                                    ];
+                                })
+                                ->values();
+
+                            return $psikoResults->isNotEmpty() ? $psikoResults->all() : null;
+                        }
+
+                        // Cek Approval Data Lapangan
+                        if (!isset($data['is_approved']) && !isset($data['is_approve'])) return null;
+
+                        // Case: Ergonomi
+                        if ($paramId == self::PARAM_ERGONOMI) {
+                            return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => 'Nilai sudah keluar'];
+                        }
+
+                        // Case: Kendaraan (Opasitas, CO, HC) pakai FIELD_MAP constant
+                        if (isset(self::FIELD_MAP[$paramId])) {
+                            return ['no_sampel' => $od['no_sampel'], 'parameter' => $paramName, 'hasil_uji' => $data[self::FIELD_MAP[$paramId]]];
+                        }
+
+                        return null;
+                    })->first(fn($res) => $res !== null);
+                }
+
+                // --- FALLBACK: Jika tidak ditemukan hasil ---
+                if (!$result) {
+                    // Cek apakah ada data mentah yang sedang diproses (exists tapi belum approved/final)
+                    $isOnProcess = collect($od)->only(array_merge(array_keys(self::WS_CONFIG), self::LAPANGAN_CONFIG))
+                        ->filter()
+                        ->isNotEmpty();
+
+                    $result = [
+                        'no_sampel' => $od['no_sampel'],
+                        'parameter' => $paramName,
+                        'hasil_uji' => $isOnProcess ? 'Sedang dilakukan analisa' : 'Belum dilakukan analisa'
+                    ];
+                }
+
+                // STANDARDISASI RETURN VALUE:
+                if (isset($result['no_sampel'])) {
+                    return [$result];
+                }
+
+                return $result ?: [];
+            });
+        })->values()->all();
+    }
+
+    /**
+     * Helper untuk mendapatkan satuan dari Regulasi/Baku Mutu.
+     * Digunakan jika satuan tidak ditemukan di record hasil uji.
+     */
+    private function getSatuanFromRegulasi($od, $paramId)
+    {
+        $regulasiIds = collect(json_decode($od['regulasi'], true) ?? [])
+            ->map(fn($item) => explode('-', $item)[0])
+            ->unique();
+
+        $bakuMutu = MasterBakumutu::where(['id_parameter' => $paramId, 'is_active' => true])
+            ->whereIn('id_regulasi', $regulasiIds->all())
+            ->first();
+
+        return $bakuMutu->satuan ?? null;
     }
 }
