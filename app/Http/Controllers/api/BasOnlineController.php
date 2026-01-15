@@ -63,216 +63,11 @@ class BasOnlineController extends Controller
 {
     public function index(Request $request)
     {
-        /* try {
-            $periode_awal = Carbon::parse($request->periode_awal); // format dari frontend YYYY-MM
-            $periode_akhir = Carbon::parse($request->periode_akhir)->endOfMonth(); // mengambil tanggal terakhir dari bulan terpilih
-
-            $data = OrderDetail::with([
-                'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
-                'orderHeader.samplingPlan',
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
-                    $q->select(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')])
-                        ->where('is_active', true)
-                        ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai']);
-                }
-            ])
-                ->leftJoin('persiapan_sampel_header', 'order_detail.no_order', '=', 'persiapan_sampel_header.no_order')
-                ->select(['id_order_header', 'order_detail.no_order', 'kategori_2', 'kategori_3', 'order_detail.periode', 'order_detail.tanggal_sampling', DB::raw('MAX(persiapan_sampel_header.detail_bas_documents) as detail_bas_documents')])
-                ->where('order_detail.is_active', true)
-                ->whereBetween('order_detail.tanggal_sampling', [
-                    $periode_awal->format('Y-m-01'),
-                    $periode_akhir->format('Y-m-t')
-                ])
-                ->whereNotNull('persiapan_sampel_header.detail_bas_documents')
-                ->groupBy(['id_order_header', 'order_detail.no_order', 'kategori_2', 'kategori_3', 'order_detail.periode', 'order_detail.tanggal_sampling']);
-
-            $data = $data->get()->toArray();
-            $formattedData = array_reduce($data, function ($carry, $item) {
-                if (empty($item['order_header']) || empty($item['order_header']['sampling']))
-                    return $carry;
-
-                $samplingPlan = $item['order_header']['sampling'];
-                $periode = $item['periode'] ?? '';
-
-                $targetPlan = $periode ?
-                    current(array_filter(
-                        $samplingPlan,
-                        fn($plan) =>
-                        isset($plan['periode_kontrak']) && $plan['periode_kontrak'] == $periode
-                    )) :
-
-                    current($samplingPlan);
-
-                if (!$targetPlan)
-                    return $carry;
-
-                $jadwal = $targetPlan['jadwal'] ?? [];
-                $results = [];
-
-                foreach ($jadwal as $schedule) {
-                    if ($schedule['tanggal'] == $item['tanggal_sampling']) {
-                        $results[] = [
-                            'nomor_quotation' => $item['order_header']['no_document'] ?? '',
-                            'nama_perusahaan' => $item['order_header']['nama_perusahaan'] ?? '',
-                            'status_sampling' => $item['kategori_1'] ?? '',
-                            'periode' => $periode,
-                            'jadwal' => $schedule['tanggal'],
-                            'jadwal_jam_mulai' => $schedule['jam_mulai'],
-                            'jadwal_jam_selesai' => $schedule['jam_selesai'],
-                            'kategori' => implode(',', json_decode($schedule['kategori'], true) ?? []),
-                            'sampler' => $schedule['sampler'] ?? '',
-                            'no_order' => $item['no_order'] ?? '',
-                            'alamat_sampling' => $item['order_header']['alamat_sampling'] ?? '',
-                            'konsultan' => $item['order_header']['konsultan'] ?? '',
-                            'info_pendukung' => json_encode([
-                                'nama_pic_order' => $item['order_header']['nama_pic_order'],
-                                'nama_pic_sampling' => $item['order_header']['nama_pic_sampling'],
-                                'no_tlp_pic_sampling' => $item['order_header']['no_tlp_pic_sampling'],
-                                'jabatan_pic_sampling' => $item['order_header']['jabatan_pic_sampling'],
-                                'jabatan_pic_order' => $item['order_header']['jabatan_pic_order']
-                            ]),
-                            'info_sampling' => json_encode([
-                                'id_request' => $targetPlan['quotation_id'],
-                                'status_quotation' => $targetPlan['status_quotation'],
-                                'id_sp' => $targetPlan['id'],
-
-                            ]),
-                            'is_revisi' => $item['order_header']['is_revisi']
-                        ];
-                    }
-                }
-
-                return array_merge($carry, $results);
-            }, []);
-
-            $groupedData = [];
-            foreach ($formattedData as $item) {
-                $key = implode('|', [
-                    $item['nomor_quotation'],
-                    $item['nama_perusahaan'],
-                    $item['status_sampling'],
-                    $item['periode'],
-                    $item['jadwal'],
-                    $item['no_order'],
-                    $item['alamat_sampling'],
-                    $item['konsultan'],
-                    $item['kategori'],
-                    $item['info_pendukung'],
-                    $item['jadwal_jam_mulai'],
-                    $item['jadwal_jam_selesai'],
-                    $item['info_sampling'],
-                ]);
-
-                if (!isset($groupedData[$key])) {
-                    $groupedData[$key] = [
-                        'nomor_quotation' => $item['nomor_quotation'],
-                        'nama_perusahaan' => $item['nama_perusahaan'],
-                        'status_sampling' => $item['status_sampling'],
-                        'periode' => $item['periode'],
-                        'jadwal' => $item['jadwal'],
-                        'kategori' => $item['kategori'],
-                        'sampler' => $item['sampler'],
-                        'no_order' => $item['no_order'],
-                        'alamat_sampling' => $item['alamat_sampling'],
-                        'konsultan' => $item['konsultan'],
-                        'info_pendukung' => $item['info_pendukung'],
-                        'jadwal_jam_mulai' => $item['jadwal_jam_mulai'],
-                        'jadwal_jam_selesai' => $item['jadwal_jam_selesai'],
-                        'info_sampling' => $item['info_sampling'],
-                        'is_revisi' => $item['is_revisi']
-                    ];
-                } else {
-                    $groupedData[$key]['sampler'] .= ',' . $item['sampler'];
-                }
-
-                $uniqueSampler = explode(',', $groupedData[$key]['sampler']);
-                $uniqueSampler = array_unique($uniqueSampler);
-                $groupedData[$key]['sampler'] = implode(',', $uniqueSampler);
-            }
-            $finalResult = array_values($groupedData);
-
-            return DataTables::of(collect($finalResult))
-                // Global search
-                ->filter(function ($item) use ($request) {
-                    $keyword = $request->input('search.value');
-
-                    if (!$keyword)
-                        return true;
-
-                    $fieldsToSearch = [
-                        'nomor_quotation',
-                        'nama_perusahaan',
-                        'periode',
-                        'jadwal'
-                    ];
-
-                    foreach ($fieldsToSearch as $field) {
-                        if (!empty($item->$field) && stripos($item->$field, $keyword) !== false) {
-                            return true;
-                        }
-                    }
-
-                    return false;
-                })
-                // Column search
-                ->filter(function ($item) use ($request) {
-                    $columns = $request->input('columns', []);
-
-                    foreach ($columns as $column) {
-                        $colName = $column['name'] ?? null;
-                        $colValue = trim($column['search']['value'] ?? '');
-
-                        if ($colName && $colValue) {
-                            $field = $item->$colName ?? '';
-
-                            if ($colName === 'periode') {
-                                try {
-                                    $parsed = Carbon::parse($field)->translatedFormat('F Y');
-                                    if (stripos($parsed, $colValue) === false) {
-                                        return false;
-                                    }
-                                } catch (\Exception $e) {
-                                    return false;
-                                }
-                            } elseif ($colName === 'jadwal') {
-                                try {
-                                    $parsed = Carbon::parse($field)->format('d/m/Y');
-                                    if (stripos($parsed, $colValue) === false) {
-                                        return false;
-                                    }
-                                } catch (\Exception $e) {
-                                    return false;
-                                }
-                            } else {
-                                if (stripos($field, $colValue) === false) {
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-
-                    return true;
-                }, true)
-                ->make(true);
-        } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-            ], 500);
-        } */
        try {
 
             $existingWork = DB::table('persiapan_sampel_header')
-            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
+            ->select('no_order', 'tanggal_sampling', 'sampler_jadwal', 'is_downloaded', 'is_printed')
             ->where('is_active', true)
-            ->where(function($query) {
-                $query->where('is_downloaded', false)
-                    ->orWhereNull('is_downloaded');
-            })
-            ->where(function($query) {
-                $query->where('is_printed', false)
-                    ->orWhereNull('is_printed');
-            })
             ->whereNotNull('detail_bas_documents')
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
             ->get();
@@ -290,7 +85,11 @@ class BasOnlineController extends Controller
                         trim($row->tanggal_sampling), 
                         $cleanName
                     );
-                    $doneList[$key] = true;
+                    $doneList[$key] =[
+                        'is_proccess' => true,
+                        'is_downloaded' => $row->is_downloaded,
+                        'is_printed' => $row->is_printed
+                    ];
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
@@ -376,6 +175,11 @@ class BasOnlineController extends Controller
                     // 2. Cek Satu Per Satu (ABSENSI)
                     $currentSamplers = explode(',', $schedule->sampler ?? '');
                     $pendingSamplers = [];
+                    $statusRow =[
+                        "is_process" =>0,
+                        "is_downloaded" =>0,
+                        'is_printed' =>0
+                    ];
                     foreach ($currentSamplers as $singleSampler) {
                         $cleanTargetName = strtolower(trim($singleSampler));
                         if (empty($cleanTargetName)) continue;
@@ -389,6 +193,9 @@ class BasOnlineController extends Controller
                         // Logic: Jika TIDAK ADA di doneList, berarti dia BELUM selesai -> Masukkan ke pending
                         if (isset($doneList[$checkKey])) {
                             $pendingSamplers[] = trim($singleSampler);
+                            $dataDb =$doneList[$checkKey];
+                            $statusRow['is_downloaded']    = $dataDb['is_downloaded']; 
+                            $statusRow['is_printed'] = $dataDb['is_printed'];
                         }
                     }
                     // 3. Keputusan Akhir untuk Row Ini
@@ -438,6 +245,8 @@ class BasOnlineController extends Controller
                             'info_sampling'      => $infoSampling,
                             'is_revisi'          => $orderHeader->is_revisi,
                             'nama_cabang'        => $namaCabang,
+                            'is_downloaded'      => (int)$statusRow['is_downloaded'],
+                            'is_printed'      => (int)$statusRow['is_printed'],
                         ];
                     }
                 }
@@ -484,9 +293,6 @@ class BasOnlineController extends Controller
                         trim($row->tanggal_sampling), 
                         $cleanName
                     );
-                    $doneList[$key] = true;
-                    $doneList[$key] = $row->is_downloaded;
-                    $doneList[$key] = $row->is_printed;
                     $doneList[$key] =[
                         'is_proccess' => true,
                         'is_downloaded' => $row->is_downloaded,
@@ -650,8 +456,8 @@ class BasOnlineController extends Controller
                             'info_sampling'      => $infoSampling,
                             'is_revisi'          => $orderHeader->is_revisi,
                             'nama_cabang'        => $namaCabang,
-                            'is_downloaded'      => (int)$statusRow['is_downloaded'], // 1 jika sudah download, 0 jika belum
-                            'is_printed'      => (int)$statusRow['is_printed'], // 1 jika sudah download, 0 jika belum
+                            'is_downloaded'      => (int)$statusRow['is_downloaded'],
+                            'is_printed'      => (int)$statusRow['is_printed'],
                         ];
                     }
                 }
