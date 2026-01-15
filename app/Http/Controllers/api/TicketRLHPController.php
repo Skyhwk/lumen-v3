@@ -40,7 +40,7 @@ class TicketRLHPController extends Controller
                     ->orderBy('id', 'desc');
                 return Datatables::of($data)
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
+                        $filePath = public_path('ticket_rlhp/' . $row->filename);
                         if (file_exists($filePath) && is_file($filePath)) {
                             return file_get_contents($filePath);
                         } else {
@@ -49,11 +49,11 @@ class TicketRLHPController extends Controller
                     })
                     ->make(true);
             } else {
-                $grade =$this->grade;
+                $grade = $this->grade;
                 if($grade == 'MANAGER') {
                     $getBawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
                 } else {
-                    $getBawahan = [];
+                    $getBawahan = [$this->karyawan];
                 }
                 $data = TicketRLHP::whereIn('request_by', $getBawahan)
                     ->where('is_active', true)
@@ -61,7 +61,7 @@ class TicketRLHPController extends Controller
 
                 return Datatables::of($data)
                     ->addColumn('reff', function ($row) {
-                        $filePath = public_path('ticket_programming/' . $row->filename);
+                        $filePath = public_path('ticket_rlhp/' . $row->filename);
                         if (file_exists($filePath) && is_file($filePath)) {
                             return file_get_contents($filePath);
                         } else {
