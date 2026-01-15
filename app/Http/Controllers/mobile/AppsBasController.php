@@ -2328,12 +2328,16 @@ class AppsBasController extends Controller
         $status = 'selesai';
         if (!empty($parameters)) {
             foreach ($parameters as $parameter) {
-                 if($parameter['category'] == '6-Padatan'){
+                if($parameter['category'] == '6-Padatan'){
                     continue; // Skip Padatan
                 }
                 // if($sample->no_sample == 'EIES012503/005') var_dump($parameter);
                 if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)') {
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
+                }
+
+                if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)'){
+                    continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
                 }
 
                 $verified = $this->verifyStatus($sample->no_sample, $parameter);
