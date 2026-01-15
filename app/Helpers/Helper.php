@@ -62,13 +62,13 @@ class Helper
     public static function waktuPemaparan($waktu)
     {
         if (!is_numeric($waktu)) {
-            return '0 jam';
+            return '0';
         }
 
         $waktu = (float) $waktu;
 
         if ($waktu <= 0) {
-            return '0 jam';
+            return '0';
         }
 
         // menit ke jam
@@ -77,7 +77,7 @@ class Helper
         // bulatkan 2 desimal (opsional)
         $jam = round($jam, 2);
 
-        return $jam . ' jam';
+        return $jam;
     }
 
     public static function generateUniqueCode($table, $column = 'kode_uniq', $length = 5)
