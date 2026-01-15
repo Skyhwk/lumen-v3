@@ -12,9 +12,9 @@
     <!-- Template Content (Pemateri & QR Code) -->
     <div class="pemateri-container" style="margin-top: 20px; text-align: center;">
         <div style="font-weight: bold; margin-bottom: 10px; font-size: 12pt;">Pemateri</div>
-        <ul>
+        <ul style="margin-top: 20px;">
             @foreach($pemateri as $item)
-            <li>{{ $item }}</li>
+            <li>{!! $item !!}</li>
             @endforeach
         </ul>
     </div>

@@ -39,8 +39,8 @@ class GenerateWebinarSertificate
             'template' => 'bg-biru.png',
             'layout' => 'layout-1',
             'font' => [
-                'fontName' => 'greatvibes',
-                'filename' => 'GreatVibes-Regular.ttf'
+                'fontName' => 'roboto',
+                'filename' => 'Roboto-Regular.ttf'
             ]
         ], $options);
 
@@ -129,9 +129,17 @@ class GenerateWebinarSertificate
 
     private function initializeMpdf(): void
     {
-         $fontData = [
-            'R' => public_path('fonts/' . $this->options['font']['filename']),
-        ];
+        if($this->options['font']['fontName'] !== 'roboto') {
+            $fontPath = public_path('fonts/' . $this->options['font']['filename']);
+            if (!file_exists($fontPath)) {
+                $this->downloadFont();
+            }
+        }
+        
+        $defaultFont =  public_path('fonts/Roboto-Regular.ttf');
+        if(!file_exists($defaultFont)) {
+            $this->downloadDefaultFont();
+        }
 
         // Configure MPDF
         $config = [
@@ -147,27 +155,24 @@ class GenerateWebinarSertificate
             'default_font_size' => 0,
             'tempDir' => storage_path('tmp/mpdf'),
             'default_font' => 'dejavusans',
-            'fontdata' => [
-                'dejavusans' => [
-                    'R' => 'DejaVuSans.ttf',
-                    'B' => 'DejaVuSans-Bold.ttf',
-                    'I' => 'DejaVuSans-Oblique.ttf',
-                    'BI' => 'DejaVuSans-BoldOblique.ttf',
-                ],
-                $this->options['font']['fontName'] => [
-                    'R' => $this->options['font']['filename'],
-                ]
-            ]
+            'fontDir' => array_merge(
+                (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'],
+                [public_path('fonts')]
+            ),
+            'fontdata' => array_merge(
+                (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'],
+                []
+            )
         ];
-        
-        // Check if font is available
-        $fontPath = public_path('fonts/' . $this->options['font']['filename']);
-        if (!file_exists($fontPath)) {
-            $this->downloadFont();
+
+        if($this->options['font']['fontName'] !== 'roboto') {
+            $config['fontdata'][$this->options['font']['fontName']] = [
+                'R' => $this->options['font']['filename'],
+            ];
         }
-
+        
         $this->mpdf = new Mpdf($config);
-
+        
         $this->mpdf->SetDisplayMode('fullpage');
         $this->mpdf->SetAutoPageBreak(false);
         
@@ -270,7 +275,7 @@ class GenerateWebinarSertificate
                     }
 
                     .webinar-topic {
-                        font-size: 13pt;
+                        font-size: 17pt;
                         font-weight: bold;
                         text-align: center;
                         line-height: 1.2;
@@ -283,13 +288,14 @@ class GenerateWebinarSertificate
                     
                     .certificate-name {
                         font-family: "'. $this->options['font']['fontName'] .'", serif;
-                        font-size: ' . $fontSize . 'pt;
-                        color: #2c3e50;
+                        // font-size: ' . $fontSize . 'pt;
+                        font-size: 50pt;
+                        color: #0202EA;
                         text-align: center;
                         line-height: 1.2;
                         margin: 0;
                         padding: 0;
-                        font-weight: normal;
+                        font-weight: bold;
                         font-style: normal;
                         letter-spacing: 1px;
                         word-spacing: 3px;
@@ -326,7 +332,7 @@ class GenerateWebinarSertificate
                 '. $templateContent .'
             </body>
             </html>';
-
+            
             $this->mpdf->WriteHTML($html);
         } catch (Exception $e) {
             throw new Exception("Gagal membuat sertifikat: " . $e->getMessage());
@@ -474,7 +480,7 @@ class GenerateWebinarSertificate
         $qr->save();
 
         // QR Image Render
-        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="80px" height="80px" style="padding : 5px;border : 2px solid #ffffff; border-radius: 2px;">';
+        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="80px" height="80px" >';
 
         return $qr_img;
     }
@@ -495,6 +501,40 @@ class GenerateWebinarSertificate
                 ->generate($link . $unique, $path);
 
         return $unique;
+    }
+
+    private function downloadDefaultFont(): void
+    {
+        $fontDir = public_path('fonts');
+        
+        // Buat folder fonts jika belum ada
+        if (!is_dir($fontDir)) {
+            mkdir($fontDir, 0755, true);
+        }
+        
+        $robotoFonts = [
+            'Roboto-Regular.ttf',
+            'Roboto-Italic.ttf',
+            'Roboto-Light.ttf',
+            'Roboto-Medium.ttf',
+            'Roboto-Bold.ttf'
+        ];
+        
+        foreach ($robotoFonts as $fontFile) {
+            $fontPath = $fontDir . '/' . $fontFile;
+            
+            if (!file_exists($fontPath)) {
+                $fontUrl = 'https://github.com/Skyhwk/fonts/blob/main/' . $fontFile;
+                
+                // Download font dari repository
+                $fontContent = @file_get_contents($fontUrl);
+                if ($fontContent !== false) {
+                    file_put_contents($fontPath, $fontContent);
+                } else {
+                    throw new Exception("Font {$fontFile} tidak ditemukan dan gagal didownload. Silakan upload font {$fontFile} ke folder public/fonts/");
+                }
+            }
+        }
     }
 
     private function downloadFont(): void

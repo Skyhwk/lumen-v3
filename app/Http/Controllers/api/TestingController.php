@@ -224,15 +224,18 @@ class TestingController extends Controller
                 case 'generateSertificate':
                     $path = GenerateWebinarSertificate::make('dedi-test.pdf')
                     ->options([
-                        // 'template' => $request->template, //--> background image
-                        // 'layout' => $request->layout, //--> layout blade
-                        // 'font' => $request->font, //--> font fullname recipient certificate
-                        'recipientName' => 'Dedi',
+                        'template' => 'bg-biru.png',
+                        'layout' => 'layout-1',
+                        'font' => [
+                            'fontName' => 'greatvibes',
+                            'filename' => 'GreatVibes-Regular.ttf'
+                        ],
+                        'recipientName' => 'Rangga Manggala Yudha',
                         'id' => 14527,
-                        'webinarTitle' => 'Webinar Title',
-                        'webinarTopic' => 'Webinar Topic',
+                        'webinarTitle' => 'Kelas Online',
+                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
                         'webinarDate' => '2024-01-01',
-                        'panelis' => (array)['Dedi', 'Dedi', 'Dedi'],
+                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expert)', '<strong>Bima Ghafara</strong> (Technical Expert)'],
                         'noSertifikat' => '123',
                     ])
                     ->generate();
