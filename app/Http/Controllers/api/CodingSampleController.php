@@ -1041,7 +1041,6 @@ class CodingSampleController extends Controller
                 $labelList = $rowLabel ? json_decode($rowLabel->label, true) : [];
 
                 if (isset($labelList[$i])) {
-    
                         $textLabel = $labelList[$i]; // Ambil teks labelnya
 
                         $pdf->WriteHTML('
