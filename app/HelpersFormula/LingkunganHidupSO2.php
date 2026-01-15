@@ -11,14 +11,14 @@ class LingkunganHidupSO2
         $ks = null;
         // dd(count($data->ks));
         if (is_array($data->ks)) {
-            $ks = number_format(array_sum($data->ks) / count($data->ks), 4);
-        } else {
+            $ks = $this->normalizeAverage($data->ks);
+        }else {
             $ks = $data->ks;
         }
         $kb = null;
         if (is_array($data->kb)) {
-            $kb = number_format(array_sum($data->kb) / count($data->kb), 4);
-        } else {
+            $kb = $this->normalizeAverage($data->kb);
+        }else {
             $kb = $data->kb;
         }
 
@@ -40,7 +40,7 @@ class LingkunganHidupSO2
 
         $C_value = $C1_value = $C2_value = $C14_value = $C15_value = $C16_value = [];
 
-        foreach ($data->ks as $key => $value) {
+        foreach ($ks as $key => $value) {
             $Ta = floatval($data->suhu_array[$key]) + 273;
             $Vu = \str_replace(",", "", number_format($data->average_flow * $data->durasi * (floatval($data->tekanan_array[$key]) / $Ta) * (298 / 760), 4));
             if ($Vu != 0.0) {
@@ -80,19 +80,6 @@ class LingkunganHidupSO2
         $C15 = number_format(array_sum($C15_value) / count($C15_value), 4);
         $C16 = number_format(array_sum($C16_value) / count($C16_value), 4);
 
-        if (floatval($C) < 25.91)
-            $C = '<25.91';
-        if (floatval($C1) < 0.0259)
-            $C1 = '<0.0259';
-        if (floatval($C2) < 0.00082)
-            $C2 = '<0.00082';
-        if (floatval($C15) < 25.91)
-            $C15 = '<25.91';
-        if (floatval($C16) < 0.0259)
-            $C16 = '<0.0259';
-        if (floatval($C14) < 0.00082)
-            $C14 = '<0.00082';
-
         $data_pershift = null;
         if (count($C_value) > 1) {
             if (count($C_value) == 3) {
@@ -118,8 +105,8 @@ class LingkunganHidupSO2
             // 'durasi' => $waktu,
             'tekanan_u' => $data->tekanan,
             'suhu' => $data->suhu,
-            'k_sample' => $ks,
-            'k_blanko' => $kb,
+            'k_sample' => round(array_sum($ks) / count($ks), 4),
+            'k_blanko' => round(array_sum($kb) / count($kb), 4),
             'Qs' => $Qs,
             'w1' => $w1,
             'w2' => $w2,
@@ -144,5 +131,37 @@ class LingkunganHidupSO2
         ];
 
         return $data;
+    }
+
+    private function normalizeAverage($data)
+    {
+        // jika bukan array, langsung kembalikan
+        if (!is_array($data)) {
+            return [number_format($data, 4)];
+        }
+
+        $count = count($data);
+
+        // jika panjang 6 → average per 2
+        if ($count === 6) {
+            $result = [];
+            for ($i = 0; $i < 6; $i += 2) {
+                $result[] = number_format(
+                    ($data[$i] + $data[$i + 1]) / 2,
+                    4
+                );
+            }
+            return $result;
+        }
+
+        // jika panjang 3 → biarkan (atau format saja)
+        if ($count === 3) {
+            return array_map(function ($v) {
+                return number_format($v, 4);
+            }, $data);
+        }
+
+        // fallback: average seluruh data
+        return [number_format(array_sum($data) / $count, 4)];
     }
 }

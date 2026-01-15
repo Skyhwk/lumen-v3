@@ -56,7 +56,7 @@ class MedanMagnetStatis
         // Menghitung rata-rata
         $rataRataMagnet = $totalNilaiMagnet / $jumlahNilai;
 
-        $rataRataMagnet = $rataRataMagnet < 0.00000001 ? "<0.00000001" : number_format($rataRataMagnet, 4);
+        $rataRataMagnet = number_format($rataRataMagnet, 4);
 
         // $hasil = json_encode(["Magnet_3" => $nilmagnet_3_, "Magnet_30" => $nilmagnet_30_, "Magnet_100" =>$nilmagnet_100_]);
         return [

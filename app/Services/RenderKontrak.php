@@ -533,7 +533,7 @@ class RenderKontrak
             if (!is_null($syarat_ketentuan)) {
                 // if ($syarat_ketentuan->pembayaran != null) { Update by Afryan at 2025-02-04 to handle pembayaran
                 if (isset($syarat_ketentuan->pembayaran) && $syarat_ketentuan->pembayaran != null) {
-                    if ($data->cash_discount_persen != null) {
+                    if ($data->cash_discount_persen != null || $data->cash_discount_persen > 0) {
                         $pdf->WriteHTML(
                             ' <br>
                             <span style="font-size: 10px !important;">' . __('QTC.terms_conditions.payment.cash_discount') . '</span>'

@@ -48,14 +48,6 @@ class LingkunganHidupPM
                 $Qs = $data->nilQs;
                 $C1 = \str_replace(",", "", number_format(floatval($C) / 1000, 6));
             }
-        if ($id_parameter == 310 || $id_parameter == 311 || $id_parameter == 312) { // PM.10
-            // dd($C,$C1);
-            if (floatval($C) < 0.0631)
-                $C = '<0.0631';
-        } else if ($id_parameter == 313 || $id_parameter == 314 || $id_parameter == 315) { // PM 2.5
-            if (floatval($C) < 0.0631)
-                $C = '<0.0631';
-        }
 
         $satuan = 'ug/Nm3';
         // dd($data);

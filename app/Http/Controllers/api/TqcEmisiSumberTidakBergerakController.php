@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\DataTables;
 use App\Helpers\HelperSatuan;
+use App\Models\MdlEmisi;
 
 class TqcEmisiSumberTidakBergerakController extends Controller
 {
@@ -72,8 +73,23 @@ class TqcEmisiSumberTidakBergerakController extends Controller
             // $id_regulasi = explode("-", json_decode($request->regulasi)[0])[0];
             $id_regulasi = $request->regulasi;
             $getSatuan   = new HelperSatuan;
-            foreach ($cerobong as $item) {
 
+            $parameters = collect(json_decode($parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlEmisi = MdlEmisi::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlEmisi) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "C$index";
+                    $mdlEmisi = $mdlEmisi->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlEmisi && (float) $mdlEmisi->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlEmisi->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
+
+            foreach ($cerobong as $item) {
                 $dataLapangan = DataLapanganEmisiCerobong::where('no_sampel', $item->no_sampel)
                     ->select('waktu_pengambilan')
                     ->first();
@@ -90,9 +106,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
 
                 $index = $getSatuan->emisi($item->satuan);
                 $ws    = $item->ws_value_cerobong ?? null;
-                if (! $ws) {
-                    return "noWs";
-                }
+                if (!$ws) return "noWs";
 
                 $ws    = $ws->toArray();
                 $nilai = null;
@@ -134,7 +148,7 @@ class TqcEmisiSumberTidakBergerakController extends Controller
                     $nilai = $ws[$fKoreksiKey] ?? $ws[$hasilKey] ?? '-';
                 }
 
-                $item->nilai_uji = $nilai;
+                $item->nilai_uji = $getHasilUji($index, $item->id_parameter, $nilai);
             }
 
             return Datatables::of($cerobong)

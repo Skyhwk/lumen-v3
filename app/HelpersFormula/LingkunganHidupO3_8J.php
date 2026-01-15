@@ -106,19 +106,6 @@ class LingkunganHidupO3_8J
 
         $satuan = 'mg/Nm3';
 
-        if (floatval($C) < 0.1419)
-            $C = '<0.1419';
-        if (floatval($C1) < 0.00014)
-            $C1 = '<0.00014';
-        if (floatval($C2) < 0.00007)
-            $C2 = '<0.00007';
-        if (floatval($C14) < 0.00007)
-            $C14 = '<0.00007';
-        if (floatval($C15) < 0.1419)
-            $C15 = '<0.1419';
-        if (floatval($C16) < 0.00014)
-            $C16 = '<0.00014';
-
 
         // dd($avg_pershift);
         $processed = [

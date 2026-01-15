@@ -204,7 +204,9 @@ class InvoiceController extends Controller
                     DB::raw('MAX(invoice.emailed_by) AS emailed_by'),
 
                     DB::raw('MAX(invoice.tgl_pelunasan) AS tgl_pelunasan'),
-                    DB::raw('(MAX(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    DB::raw('(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) AS nilai_pelunasan'),
+                    // DB::raw('MAX(invoice.nilai_pelunasan) AS nilai_pelunasan' + 
+                    //     ' + COALESCE(MAX(w.total_pembayaran), 0) AS nilai_pelunasan'),
 
                     DB::raw('MAX(invoice.is_generate) AS is_generate'),
                     DB::raw('MAX(invoice.generated_by) AS generated_by'),
@@ -226,11 +228,11 @@ class InvoiceController extends Controller
                         CASE
                             WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
                             WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(MAX(invoice.nilai_pelunasan),0)
+                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
                                     + COALESCE(MAX(w.total_pembayaran),0))
                                 ) < 0 THEN 'Kelebihan Pembayaran'
                             WHEN (SUM(invoice.nilai_tagihan)
-                                - (COALESCE(MAX(invoice.nilai_pelunasan),0)
+                                - (COALESCE(SUM(invoice.nilai_pelunasan),0)
                                     + COALESCE(MAX(w.total_pembayaran),0))
                                 ) > 0 THEN 'Belum Lunas'
                             ELSE 'Lunas'
@@ -255,7 +257,7 @@ class InvoiceController extends Controller
                 
                 $data->havingRaw("
                     CASE
-                        WHEN SUM(invoice.nilai_tagihan) = 0 THEN 'Belum Ada Pembayaran'
+                        WHEN SUM(invoice.nilai_pelunasan) = 0 THEN 'Belum Ada Pembayaran'
                         WHEN (SUM(invoice.nilai_tagihan)
                             - (COALESCE(MAX(invoice.nilai_pelunasan),0)
                                 + COALESCE(MAX(w.total_pembayaran),0))

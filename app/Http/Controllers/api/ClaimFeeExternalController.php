@@ -188,5 +188,24 @@ class ClaimFeeExternalController extends Controller
         return response()->json(['message' => 'Claim Fee External Berhasil Dihapus']);
     }
 
+    public function indexManager(Request $request)
+    {
+        $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
+
+        $query = ClaimFeeExternal::query()->where('status_pembayaran', 'WAITING PROCESS')
+            ->where('is_active', true)->where('is_approved_manajer', false);
+
+        if (in_array($jabatan, [15, 157])) {
+            $bawahan = GetBawahan::where('id', $this->user_id)
+                ->pluck('id')
+                ->toArray();
+            $bawahan[] = $this->user_id;
+
+            $query->whereIn('sales_id', $bawahan);
+        }
+
+        return DataTables::of($query)->make(true);
+    }
+
 
 }

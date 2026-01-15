@@ -70,9 +70,6 @@ class DebuPersonal
 					$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
 		
 					$C16 = number_format($C16, 4, '.', ''); // C (mg/m3)
-					if($C16 < 0.0041){
-						$C16 = "<0.0041";
-					}
 				}else{
 					$C15 = number_format($C16 * 1000, 4, '.', ''); // C (ug/m3)
 		

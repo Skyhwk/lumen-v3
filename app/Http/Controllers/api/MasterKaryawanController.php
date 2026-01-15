@@ -650,7 +650,7 @@ class MasterKaryawanController extends Controller
         DB::beginTransaction();
         try {
             $karyawan = MasterKaryawan::find($request->id);
-    
+
             $karyawan->effective_date = $request->effective_date;
             $karyawan->reason_non_active = $request->reason_non_active;
             $karyawan->notes = $request->notes;
@@ -658,12 +658,12 @@ class MasterKaryawanController extends Controller
             $karyawan->updated_at = Carbon::now()->format('Y-m-d H:i:s');
             $karyawan->active = false;
             $karyawan->is_active = false;
-    
+
             $karyawan->save();
-    
+
             $job = new NonaktifKaryawanJob($karyawan);
             $this->dispatch($job);
-    
+
             DB::commit();
             return response()->json(['message' => 'Berhasil menonaktifkan karyawan, silahkan tunggu beberapa saat'], 200);
         } catch (\Throwable $th) {
@@ -671,5 +671,13 @@ class MasterKaryawanController extends Controller
             return response()->json(['message' => 'Gagal menonaktifkan karyawan: ' . $th->getMessage()], 500);
             //throw $th;
         }
+    }
+
+    public function retry(Request $request)
+    {
+        $karyawan = MasterKaryawan::find($request->id);
+
+        $job = new NonaktifKaryawanJob($karyawan);
+        $this->dispatch($job);
     }
 }

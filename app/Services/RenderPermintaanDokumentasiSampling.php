@@ -267,6 +267,9 @@ class RenderPermintaanDokumentasiSampling
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
+
+            $permintaanDokumentasiSampling->update(['status' => 'Tidak ada sampling']);
+
             Log::error($e->getMessage() . ' on line: ' . $e->getLine());
             return response()->json(['message' => $e->getMessage(), 'line' => $e->getLine()], 500);
         }

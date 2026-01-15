@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, RenderInvoice};
+use App\Services\{Notification, GetAtasan, RenderInvoice, UseKuotaService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -30,6 +30,9 @@ use App\Helpers\WorkerOperation;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\AlasanVoidQt;
 use App\Models\Invoice;
+use App\Models\HistoryKuotaPengujian;
+use App\Models\KuotaPengujian;
+use App\Models\MasterPelanggan;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
 
@@ -653,7 +656,7 @@ class ReadyOrderController extends Controller
                             Jika data lama ada dan no order ada maka re-generate order
                         */
                         $no_order = $data_lama->no_order;
-                        return self::reOrderNonKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama);
+                        return self::reOrderNonKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request);
                     } else {
                         /*
                             Jika data lama tidak ada atau no order tidak ada maka generate order
@@ -677,7 +680,7 @@ class ReadyOrderController extends Controller
                 ], 401);
             }
 
-            $dataQuotation = QuotationKontrakH::with(['sales', 'sampling', 'pelanggan'])
+            $dataQuotation = QuotationKontrakH::with(['sales', 'sampling', 'pelanggan', 'detail'])
                 ->where('id', $request->id)
                 ->first();
 
@@ -821,7 +824,7 @@ class ReadyOrderController extends Controller
                         Jika data lama ada dan no order ada maka re-generate order
                     */
                     $no_order = $data_lama->no_order;
-                    return self::reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama);
+                    return self::reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request);
                 } else {
                     /*
                         Jika data lama tidak ada atau no order tidak ada maka generate order
@@ -838,6 +841,7 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
+            self::updateCustomer($request);
             $data_lama = null;
             if ($dataQuotation->data_lama != null) {
                 $data_lama = json_decode($dataQuotation->data_lama);
@@ -966,6 +970,7 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
+            self::updateCustomer($request);
             $cek_no_qt = OrderHeader::where('no_document', $dataQuotation->no_document)->where('is_active', 1)->first();
             if ($cek_no_qt != null) {
                 throw new Exception("No Quotation already Ordered.!", 401);
@@ -1239,10 +1244,6 @@ class ReadyOrderController extends Controller
 
                         $DataOrderDetail->persiapan = json_encode($botol);
                     } else {
-                        /*
-                         * Jika kategori bukan air maka tidak perlu membuat botol
-                         * cek jika udara dan emisi maka harus di siapkan kertas penjerap
-                         */
                         if ($value->kategori_1 == '4-Udara' || $value->kategori_1 == '5-Emisi') {
                             $cek_ketentuan_parameter = DB::table('konfigurasi_pra_sampling')
                                 ->whereIn('parameter', $value->parameter)
@@ -1301,10 +1302,25 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
             self::createInvoice($dataOrderHeader, $dataQuotation, $request);
 
-            if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
+            if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
             DB::commit();
+
+            if ($dataQuotation->use_kuota == 1) {
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            } else {
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if ($kuotaExist) {
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if ($history) {
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+                        $history->delete();
+                        DB::commit();
+                    }
+                }
+            }
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -1316,10 +1332,11 @@ class ReadyOrderController extends Controller
         }
     }
 
-    public function reOrderNonKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama)
+    public function reOrderNonKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {
         DB::beginTransaction();
         try {
+            self::updateCustomer($request);
             $generator = new Barcode();
             $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->get();
 
@@ -1795,6 +1812,22 @@ class ReadyOrderController extends Controller
 
             // dd('stop');
             DB::commit();
+
+            if ($dataQuotation->use_kuota == 1) {
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
+            } else {
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if ($kuotaExist) {
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if ($history) {
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Re-Order Non Kontrak Success',
                 'status' => 200
@@ -1810,6 +1843,7 @@ class ReadyOrderController extends Controller
         $generator = new Barcode();
         DB::beginTransaction();
         try {
+            self::updateCustomer($request);
             $cek_no_qt = OrderHeader::where('no_document', $dataQuotation->no_document)->where('is_active', true)->first();
             if ($cek_no_qt != null) {
                 return response()->json([
@@ -2148,8 +2182,38 @@ class ReadyOrderController extends Controller
 
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
-            self::createInvoice($dataOrderHeader, $dataQuotation, $request);
+            if ($request->jenis_tagihan == 'periode') {
+                $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
+                foreach ($periode as $key => $value) {
+                    self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
+                    if((float)$key == 0 && $dataQuotation->detail[0]->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)){
+                        self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
+                    }
+                }
+            } else {
+                self::createInvoice($dataOrderHeader, $dataQuotation, $request);
+                if ((float)$dataQuotation->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)) {
+                    self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
+                }
+            }
+
             DB::commit();
+
+            if ($dataQuotation->use_kuota == 1) {
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            } else {
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if ($kuotaExist) {
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if ($history) {
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
                 'status' => 200
@@ -2164,7 +2228,7 @@ class ReadyOrderController extends Controller
     {
         $rekening = ($dataQuotation->total_ppn != null || $dataQuotation->total_ppn != 0) ? 'ppn' : 'non-ppn';
         $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->orderBy('tanggal', 'asc')->first();
-        if(empty($jadwal)){
+        if (empty($jadwal)) {
             $jadwal = Carbon::now()->format('Y-m-d');
         } else {
             $jadwal = $jadwal->tanggal;
@@ -2197,11 +2261,11 @@ class ReadyOrderController extends Controller
         $noDoc = \explode("/", $dataOrderHeader->no_document);
 
         if ($noDoc[1] == 'QTC') {
-            $periode = QuotationKontrakD::where('id_request_quotation_kontrak_h', $dataQuotation->id)->first()->periode_kontrak;
+            $periode = 'all';
         } else {
             $periode = null;
-            $total_diskon = $dataQuotation->total_diskon;
         }
+        $total_diskon = $dataQuotation->total_diskon;
         $nilai_tagihan = str_replace(',', '', $request->tagihan_awal);
         $insert[] = [
             'no_quotation' => $dataOrderHeader->no_document,
@@ -2245,7 +2309,88 @@ class ReadyOrderController extends Controller
         self::generatePDF($noInvoice);
     }
 
-    private static function generatePDF($noInvoice){
+    public function createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $periode, $first = true, $firstPeriode = false)
+    {
+        $detail = $dataQuotation->detail()->where('periode_kontrak', $periode)->first();
+        $rekening = ($detail->total_ppn != null || $detail->total_ppn != 0) ? 'ppn' : 'non-ppn';
+        $jadwal = Jadwal::where('no_quotation', $dataQuotation->no_document)->where('periode', $periode)->orderBy('tanggal', 'asc')->first();
+        if (empty($jadwal)) {
+            $jadwal = Carbon::now()->format('Y-m-d');
+        } else {
+            $jadwal = $jadwal->tanggal;
+        }
+
+        $tanggal_jatuh_tempo = Carbon::parse($jadwal)->addDays(30)->format('Y-m-d');
+        $cek_rekening = $rekening == 'ppn' ? '4976688988' : '4978881988';
+
+        $invoiceYear = Carbon::now()->format('Y');
+        $shortYear = substr($invoiceYear, -2);
+
+        $lastInvoice = Invoice::where('rekening', $cek_rekening)
+            ->whereYear('tgl_invoice', $invoiceYear)
+            ->where('no_invoice', 'like', '%' . $shortYear . '%')
+            ->orderBy('no_invoice', 'desc')
+            ->value('no_invoice');
+
+        $prefix = $rekening == 'ppn' ? 'INV' : 'IV';
+
+        if ($invoiceYear == '2024') {
+            $defaultNo = $rekening == 'ppn' ? '06767' : '00531';
+        } else {
+            $defaultNo = '00001';
+        }
+
+        $no = $lastInvoice ? str_pad(intval(substr($lastInvoice, -5)) + 1, 5, "0", STR_PAD_LEFT) : $defaultNo;
+        $noInvoice = "ISL/{$prefix}/{$shortYear}{$no}";
+
+        $expired = date('Y-m-d', strtotime($tanggal_jatuh_tempo . ' + 2 years'));
+
+        $total_diskon = $detail->total_diskon;
+        $tagihan_awal = $firstPeriode ? str_replace(',', '', $request->tagihan_awal) : $detail->biaya_akhir;
+        $insert[] = [
+            'no_quotation' => $dataOrderHeader->no_document,
+            'periode' => $periode,
+            'no_order' => $dataOrderHeader->no_order,
+            'nama_perusahaan' => $dataQuotation->nama_perusahaan,
+            'pelanggan_id' => $dataQuotation->pelanggan_ID,
+            'no_invoice' => $noInvoice,
+            'faktur_pajak' => null,
+            'no_faktur' => null,
+            'no_spk' => null,
+            'no_po' => null,
+            'tgl_jatuh_tempo' => $tanggal_jatuh_tempo,
+            'keterangan_tambahan' => null,
+            'tgl_faktur' => DATE('Y-m-d H:i:s'),
+            'tgl_invoice' => Carbon::now()->format('Y-m-d H:i:s'),
+            'nilai_tagihan' => $first ? $tagihan_awal : $detail->biaya_akhir - $tagihan_awal,
+            'total_tagihan' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
+            'rekening' => $cek_rekening,
+            'nama_pj' => 'Yulia Agustina',
+            'jabatan_pj' => 'Account Receivable Adm. Supervisor',
+            'keterangan' => $request->keterangan_tagihan,
+            'alamat_penagihan' => $dataOrderHeader->alamat_kantor,
+            'nama_pic' => $dataOrderHeader->nama_pic_order,
+            'no_pic' => $dataOrderHeader->no_pic_order,
+            'email_pic' => $dataOrderHeader->email_pic_order,
+            'jabatan_pic' => $dataOrderHeader->jabatan_pic_order,
+            'ppnbm' => $total_diskon,
+            'ppn' => $detail->total_ppn,
+            'piutang' => $first ? $detail->biaya_akhir : $detail->biaya_akhir - $tagihan_awal,
+            'created_by' => 'System',
+            'created_at' => DATE('Y-m-d H:i:s'),
+            'is_emailed' => 0,
+            'is_generate' => 0,
+            'expired' => $expired,
+        ];
+        Invoice::insert($insert);
+
+        // dd($insert);
+
+        self::generatePDF($noInvoice);
+    }
+
+    private static function generatePDF($noInvoice)
+    {
         try {
             $render = new RenderInvoice();
             $render->renderInvoice($noInvoice);
@@ -2258,10 +2403,11 @@ class ReadyOrderController extends Controller
         }
     }
 
-    public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama)
+    public function reOrderKontrak($dataQuotation, $no_order, $dataJadwal, $data_lama, $request)
     {
         DB::beginTransaction();
         try {
+            self::updateCustomer($request);
             $generator = new Barcode();
             $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->where('is_active', 1)->get();
 
@@ -2739,6 +2885,22 @@ class ReadyOrderController extends Controller
 
             // dd('stop');
             DB::commit();
+
+            if ($dataQuotation->use_kuota == 1) {
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $data_lama->no_order))->useKuota();
+            } else {
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if ($kuotaExist) {
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if ($history) {
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Re-Generate Order kontrak berhasil'
@@ -2833,5 +2995,14 @@ class ReadyOrderController extends Controller
         ];
 
         return in_array($value, $array);
+    }
+
+    private function updateCustomer($data){
+        $customer = MasterPelanggan::where('id_pelanggan', $data->id_pelanggan)->where('is_active', true)->first();
+        $customer->kategori_pelanggan = $data->kategori_pelanggan;
+        $customer->sub_kategori = $data->sub_kategori;
+        $customer->bahan_pelanggan = $data->bahan_pelanggan ?? null;
+        $customer->merk_pelanggan = $data->merk_pelanggan ?? null;
+        $customer->save();
     }
 }

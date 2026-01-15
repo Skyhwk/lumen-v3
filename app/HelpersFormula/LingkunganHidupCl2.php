@@ -73,12 +73,6 @@ class LingkunganHidupCl2
 
             $C16 = \str_replace(",", "", number_format($C15 / 1000 , 3));
         }
-        if (floatval($C) < 4.000)
-            $C = '<4.000';
-        if (floatval($C1) < 0.004)
-            $C1 = '<0.004';
-        if (floatval($C2) < 0.0013)
-            $C2 = '<0.0013';
 
         $satuan = 'ug/Nm3';
 

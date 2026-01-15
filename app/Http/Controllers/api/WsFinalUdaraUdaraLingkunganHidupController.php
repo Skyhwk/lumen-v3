@@ -34,6 +34,7 @@ use App\Models\SinarUvHeader;
 use App\Models\MedanLmHeader;
 use App\Models\DebuPersonalHeader;
 use App\Models\DustFallHeader;
+use App\Models\MdlUdara;
 
 class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 {
@@ -173,13 +174,26 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 				$item->nama_header = $bakuMutu->nama_header ?? null;
 				// dd($bakuMutu);
 			}
-			// dd($processedData);
 
+            $getSatuan = new HelperSatuan;
 
-			$getSatuan = new HelperSatuan;
+            $parameters = collect(json_decode($request->parameter))->map(fn($item) => ['id' => explode(";", $item)[0], 'parameter' => explode(";", $item)[1]]);
+            $mdlUdara = MdlUdara::whereIn('parameter_id', $parameters->pluck('id'))->get();
+            
+            $getHasilUji = function ($index, $parameterId, $hasilUji) use ($mdlUdara) {
+                if ($hasilUji && $hasilUji !== "-" && !str_contains($hasilUji, '<')) {
+                    $colToSearch = "hasil" . ($index ?: 1);
+                    $mdlUdara = $mdlUdara->where('parameter_id', $parameterId)->whereNotNull($colToSearch)->first();
+                    if ($mdlUdara && (float) $mdlUdara->$colToSearch > (float) $hasilUji) {
+                        $hasilUji = "<" . $mdlUdara->$colToSearch;
+                    }
+                }
+
+                return $hasilUji;
+            };
 
 			return Datatables::of($processedData)
-				->addColumn('nilai_uji', function ($item) use ($getSatuan) {
+				->addColumn('nilai_uji', function ($item) use ($getSatuan, $getHasilUji) {
 					// ambil satuan dan index (boleh null)
 					$satuan = $item->satuan ?? null;
 					$index  = $getSatuan->udara($satuan);
@@ -198,10 +212,11 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 					// jika index tidak diketahui, coba serangkaian fallback (dari paling prioritas ke paling umum)
 					if ($index === null) {
 						// 1) f_koreksi_c (tanpa nomor) lalu f_koreksi_c1..f_koreksi_c16
-						if ($has('f_koreksi_c')) return $hasil['f_koreksi_c'];
+						if ($has('f_koreksi_c')) return $getHasilUji(1, $item->id_parameter, $hasil['f_koreksi_c']);
+
 						for ($i = 1; $i <= 16; $i++) {
 							$k = "f_koreksi_c{$i}";
-							if ($has($k)) return $hasil[$k];
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 
@@ -209,19 +224,19 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 						if ($has('C')) return $hasil['C'];
 						for ($i = 1; $i <= 16; $i++) {
 							$k = "C{$i}";
-							if ($has($k)) return $hasil[$k];
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 3) f_koreksi_1..f_koreksi_17
 						for ($i = 1; $i <= 17; $i++) {
 							$k = "f_koreksi_{$i}";
-							if ($has($k)) return $hasil[$k];
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// 4) hasil1..hasil17
 						for ($i = 1; $i <= 17; $i++) {
 							$k = "hasil{$i}";
-							if ($has($k)) return $hasil[$k];
+							if ($has($k)) return $getHasilUji(1, $item->id_parameter, $hasil[$k]);
 						}
 
 						// kalau semua gagal
@@ -238,63 +253,31 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 
 					if ($index == 17) {
 						foreach ($keysToTry as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c2', 'C2', 'f_koreksi_2', 'hasil2'] as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					} if ($index == 15) {
 						foreach ($keysToTry as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c3', 'C3', 'f_koreksi_3', 'hasil3'] as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					} if ($index == 16) {
 						foreach ($keysToTry as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					} else {
 						foreach ($keysToTry as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 						foreach (['f_koreksi_c1', 'C1', 'f_koreksi_1', 'hasil1'] as $k) {
-							if ($has($k)) {
-								if($hasil[$k] != null) {
-									return $hasil[$k];
-								}
-							}
+							if ($has($k) && $hasil[$k]) return $getHasilUji($index, $item->id_parameter, $hasil[$k]);
 						}
 					}
 
@@ -1166,4 +1149,122 @@ class WsFinalUdaraUdaraLingkunganHidupController extends Controller
 			throw $th;
 		}
 	}
+
+	public function updateNilaiUji(Request $request)
+	{
+		DB::beginTransaction();
+		try {
+			$wsList = WsValueUdara::where('no_sampel', $request->no_sampel)->get();
+
+			if ($wsList->isEmpty()) {
+				return response()->json([
+					'message' => 'Data WsValueUdara tidak ditemukan.'
+				], 404);
+			}
+
+			$headerMap = [
+				'id_direct_lain_header'   => DirectLainHeader::class,
+				'id_lingkungan_header'    => LingkunganHeader::class,
+				'id_partikulat_header'    => PartikulatHeader::class,
+				'id_debu_personal_header' => DebuPersonalHeader::class,
+				'id_dustfall_header'      => DustfallHeader::class,
+			];
+
+			/**
+			 * =====================================================
+			 * 1️⃣ LOOP SEMUA WS UDARA
+			 * =====================================================
+			 */
+			foreach ($wsList as $wsUdara) {
+
+				// 🔹 CEK SUBKONTRAK
+				if ($wsUdara->id_subkontrak) {
+					$valid = Subkontrak::where('id', $wsUdara->id_subkontrak)
+						->where('parameter', $request->parameter)
+						->exists();
+
+					if ($valid) {
+						for ($i = 1; $i <= 19; $i++) {
+							$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+						}
+						$wsUdara->save();
+
+						DB::commit();
+						return response()->json([
+							'success' => true,
+							'message' => 'Hasil berhasil direplace'
+						]);
+					}
+				}
+
+				// 🔹 CEK HEADER
+				foreach ($headerMap as $field => $model) {
+					if ($wsUdara->$field) {
+						$valid = $model::where('id', $wsUdara->$field)
+							->where('parameter', $request->parameter)
+							->exists();
+
+						if ($valid) {
+							for ($i = 1; $i <= 19; $i++) {
+								$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+							}
+							$wsUdara->save();
+
+							DB::commit();
+							return response()->json([
+								'success' => true,
+								'message' => 'Hasil berhasil direplace'
+							]);
+						}
+					}
+				}
+			}
+
+			/**
+			 * =====================================================
+			 * 2️⃣ JIKA TIDAK ADA YANG MATCH → BUAT SUBKONTRAK BARU
+			 * =====================================================
+			 */
+			$subkontrak = Subkontrak::create([
+				'no_sampel'   => $request->no_sampel,
+				'parameter'   => $request->parameter,
+				'created_by'  => $this->karyawan,
+				'category_id' => 4,
+				'is_approve'  => 1,
+				'approved_by' => $this->karyawan,
+				'approved_at' => now(),
+			]);
+
+			// pakai WS pertama sebagai target
+			$wsUdara = $wsList->first();
+
+			foreach ($headerMap as $field => $model) {
+				$wsUdara->$field = null;
+			}
+
+			$wsUdara->id_subkontrak = $subkontrak->id;
+
+			for ($i = 1; $i <= 19; $i++) {
+				$wsUdara->{"f_koreksi_$i"} = $request->nilai_uji;
+			}
+
+			$wsUdara->save();
+
+			DB::commit();
+			return response()->json([
+				'success' => true,
+				'message' => 'Hasil berhasil disimpan ke subkontrak baru'
+			]);
+
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			\Log::error($e);
+
+			return response()->json([
+				'success' => false,
+				'message' => 'Terjadi kesalahan'
+			], 500);
+		}
+	}
+
 }

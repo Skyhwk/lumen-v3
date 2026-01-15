@@ -109,7 +109,7 @@ class SaldoFeeSalesController extends Controller
             ->sum('amount');
         $limit = $limitWithdraw->limit - $usedLimit;
 
-        if ($request->amount > $limit) return response()->json(['message' => 'Anda tidak memiliki limit untuk melakukan penarikan'], 400);
+        if ($request->amount > $limit) return response()->json(['message' => 'Permintaan anda melebihi batas penarikan pada periode ini'], 400);
 
         $withdrawalFeeSales = new WithdrawalFeeSales();
 

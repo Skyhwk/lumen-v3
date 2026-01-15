@@ -1318,8 +1318,34 @@ class JadwalServices
             $jadw5 = Jadwal::where('id', $dataParsial->id)->whereNotNull('parsial')->where('is_active', true)->first();
             if ($jadw) {
                 if (!$jadw4->isEmpty()) {
-                    $datcek = count($jadw4) + 1;
-                    if ((int) $dataParsial->totkateg == $datcek) {
+                    // $datcek = count($jadw4) + 1;
+                    // if ((int) $dataParsial->totkateg == $datcek) {
+                    //     DB::rollBack();
+                        
+                    //     throw new Exception("Kategori sudah terinput semua.!", 401);
+                    // }
+                    $kategoriTerpakai =[];
+                    // step 1 ambil dari induk
+                    if (!empty($jadw->kategori)) {
+                        $catIndukDB = is_string($jadw->kategori) ? json_decode($jadw->kategori, true) : $jadw->kategori;
+                        if (is_array($catIndukDB)) {
+                            $kategoriTerpakai = array_merge($kategoriTerpakai, $catIndukDB);
+                        }
+                        
+                    }
+                    //step2 Ambil kategori dari Anak-anak yang sudah ada
+                    foreach ($jadw4 as $anak) {
+                        if (!empty($anak->kategori)) {
+                            $catAnak = is_string($anak->kategori) ? json_decode($anak->kategori, true) : $anak->kategori;
+                            if(is_array($catAnak)) {
+                                $kategoriTerpakai = array_merge($kategoriTerpakai, $catAnak);
+                            }
+                        }
+                    }
+                    // Hitung jumlah kategori unik yang sudah tercover
+                    $jumlahTerpakai = count(array_unique($kategoriTerpakai));
+                    $totalHarus = (int) $dataParsial->totkateg;
+                    if ($jumlahTerpakai === $totalHarus) {
                         DB::rollBack();
                         throw new Exception("Kategori sudah terinput semua.!", 401);
                     }
@@ -1329,9 +1355,11 @@ class JadwalServices
                 $datcek = count($jadw6) + 1;
                 if ((int) $dataParsial->totkateg == $datcek) {
                     DB::rollBack();
+                    
                     throw new Exception("Kategori sudah terinput semua.!", 401);
                 }
             }
+            
             if (!$jadw2->isEmpty()) {
                 if (!empty($jadw)) {
                     foreach ($jadw2 as $key => $val) {

@@ -649,8 +649,9 @@ class FdlKebisinganController extends Controller
             $dataParsing = (object) $request->all();
             $dataParsing->total = $total;
             $approvedCount = DataLapanganKebisingan::where('no_sampel', $no_sample)
-            ->where('is_approve', true)
-            ->count();
+                ->where('is_approve', true)
+                ->count();
+
             $function = null;
             
             if ($jenis_durasi === "24 Jam") {

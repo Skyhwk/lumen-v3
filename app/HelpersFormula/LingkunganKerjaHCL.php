@@ -95,11 +95,6 @@ class LingkunganKerjaHCL
             $C14 = round(array_sum($C14_value) / count($C14_value), 4);
             $C15 = round(array_sum($C15_value) / count($C15_value), 4);
             $C16 = round(array_sum($C16_value) / count($C16_value), 4);
-
-            // if (floatval($C) < 138.4)
-            //     $C = '<138.4';
-            // if (floatval($C1) < 0.1384)
-            //     $C1 = '<0.1384';
         }else{
             $C1 = round(array_sum($C1_value) / count($C1_value), 4);
 

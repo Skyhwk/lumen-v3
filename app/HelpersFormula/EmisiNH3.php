@@ -44,11 +44,6 @@ class EmisiNH3
         $C3 = $C;
         $C4 = $C1;
 
-        if (floatval($C1) < 0.0257)
-            $C1 = '<0.0257';
-        if (floatval($C2) < 0.037)
-            $C2 = '<0.037';
-
         $satuan = "ppm";
         $data = [
             'tanggal_terima' => $data->tanggal_terima,

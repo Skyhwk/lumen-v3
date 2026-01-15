@@ -20,7 +20,7 @@ class BenthosController extends Controller
             ->where('subkontrak.is_active', true)
             ->where('subkontrak.is_total', false)
             ->orderBy('subkontrak.created_at', 'desc')
-            ->select('subkontrak.*', 'order_detail.tanggal_terima', 'order_detail.no_sampel','order_detail.kategori_3');
+            ->select('subkontrak.*');
         return Datatables::of($data)
             ->editColumn('hasil_json', function ($item) {
                 $hasil = json_decode($item->ws_value->hasil_json ?? '{}', true);
