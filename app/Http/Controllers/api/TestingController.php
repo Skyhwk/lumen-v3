@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\{
     QuotationKontrakH,
+    QuotationKontrakD,
     SamplingPlan,
     QuotationNonKontrak,
     Jadwal,
@@ -80,10 +81,12 @@ use App\Services\{
     RenderInvoiceTitik,
     GeneratePraSampling,
     GenerateQrDocumentLhp,
+    GenerateWebinarSertificate,
     LhpTemplate,
     RandomSalesAssign,
     SendEmail,
-    GetBawahan
+    GetBawahan,
+    SnapshotPersiapanService
 };
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -216,8 +219,28 @@ class TestingController extends Controller
         
         try {
             //code...
-
+            
             switch ($request->menu) {
+                case 'generateSertificate':
+                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
+                    ->options([
+                        'template' => 'bg-biru.png',
+                        'layout' => 'layout-1',
+                        'font' => [
+                            'fontName' => 'greatvibes',
+                            'filename' => 'GreatVibes-Regular.ttf'
+                        ],
+                        'recipientName' => 'Rangga Manggala Yudha',
+                        'id' => 14527,
+                        'webinarTitle' => 'Kelas Online',
+                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
+                        'webinarDate' => '2024-01-01',
+                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expert)', '<strong>Bima Ghafara</strong> (Technical Expert)'],
+                        'noSertifikat' => '123',
+                    ])
+                    ->generate();
+                    dd($path);
+                    break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
                     $token = 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS';
@@ -2174,14 +2197,294 @@ class TestingController extends Controller
                         return response()->json(['status' => false, 'message' => $th->getMessage()], 500);
                     }
                     break;
+                case 'capture data':
+                    $log = new SnapshotPersiapanService();
+                    $log->SnapShot();
+                    return response()->json(["message"=>"tercatar di log"],200);
+                case 'compare':
+                    $quotationsA = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->idcompareOld)->get();
+                    $quotationsB = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->idcompareNew)->get();
+                    
+                    // Merge semua data_pendukung_sampling dari multiple records
+                    $oldData = $this->mergeDataPendukung($quotationsA);
+                    $newData = $this->mergeDataPendukung($quotationsB);
+                    
+                    $result = $this->compare($oldData, $newData);
+                    
+                    return response()->json([
+                        'diff_summary' => $result
+                    ]);
                 default:
                     return response()->json("Menu tidak ditemukanXw", 404);
             }
         } catch (\Throwable $th) {
             //throw $th;
-            dd($th);
+            return response()->json(["message" =>$th->getMessage(),"line"=>$th->getLine()],500);
         }
     }
+    /*=== logic compare === */
+   // CONTROLLER CODE - Ambil semua records, bukan first()
+
+// Helper: Merge data_pendukung_sampling dari multiple records
+private function mergeDataPendukung($quotations)
+{
+    $merged = [];
+    
+    foreach ($quotations as $quotation) {
+        $data = is_string($quotation->data_pendukung_sampling) 
+            ? json_decode($quotation->data_pendukung_sampling, true) 
+            : $quotation->data_pendukung_sampling;
+        
+        if ($data) {
+            $merged = array_merge($merged, $data);
+        }
+    }
+    
+    return $merged;
+}
+
+private function compare($oldDataJson, $newDataJson)
+{
+    // 1. Decode JSON menjadi Array (jika masih string)
+    $oldRaw = is_string($oldDataJson) ? json_decode($oldDataJson, true) : $oldDataJson;
+    $newRaw = is_string($newDataJson) ? json_decode($newDataJson, true) : $newDataJson;
+
+    $oldData = $this->rekeyByPeriod($oldRaw);
+    $newData = $this->rekeyByPeriod($newRaw);
+
+    $diffs = [];
+    
+    // Gabungkan semua key periode
+    $allPeriods = array_unique(array_merge(array_keys($oldData), array_keys($newData)));
+    sort($allPeriods);
+
+    foreach ($allPeriods as $period) {
+        $oldItem = $oldData[$period] ?? null;
+        $newItem = $newData[$period] ?? null;
+
+        // Deteksi Periode BARU (Added)
+        if (!$oldItem && $newItem) {
+            $diffs[$period] = [
+                'status' => 'ADDED',
+                'data' => $newItem
+            ];
+            continue;
+        }
+
+        // Deteksi Periode DIHAPUS (Removed)
+        if ($oldItem && !$newItem) {
+            $diffs[$period] = [
+                'status' => 'REMOVED',
+                'data' => $oldItem
+            ];
+            continue;
+        }
+
+        // Bandingkan Detail jika kedua ada
+        $changes = $this->compareItemDetails($oldItem, $newItem);
+        
+        if (!empty($changes)) {
+            $diffs[$period] = [
+                'status' => 'MODIFIED',
+                'changes' => $changes
+            ];
+        }
+    }
+
+    // TAMBAHAN: Summary perubahan jumlah periode
+    $periodSummary = [
+        'old_period_count' => count($oldData),
+        'new_period_count' => count($newData),
+        'period_changed' => count($oldData) !== count($newData)
+    ];
+
+    return [
+        'period_summary' => $periodSummary,
+        'details' => $diffs
+    ];
+}
+
+private function rekeyByPeriod($data)
+{
+    $result = [];
+    if (!$data) return $result;
+    
+    foreach ($data as $item) {
+        $periode = isset($item['periode_kontrak']) ? trim($item['periode_kontrak']) : null;
+        if ($periode) {
+            $result[$periode] = $item;
+        }
+    }
+    return $result;
+}
+
+private function compareItemDetails($old, $new)
+{
+    if (!$old || !$new) {
+        return ['error' => 'Data tidak valid'];
+    }
+
+    $changes = [];
+
+    // Ambil data sampling pertama (index 0)
+    $oldSamp = $old['data_sampling'][0] ?? [];
+    $newSamp = $new['data_sampling'][0] ?? [];
+
+    // === 1. CEK KATEGORI ===
+    $oldKat1 = trim($oldSamp['kategori_1'] ?? '');
+    $newKat1 = trim($newSamp['kategori_1'] ?? '');
+    $oldKat2 = trim($oldSamp['kategori_2'] ?? '');
+    $newKat2 = trim($newSamp['kategori_2'] ?? '');
+
+    if ($oldKat1 !== $newKat1 || $oldKat2 !== $newKat2) {
+        $changes['kategori'] = [
+            'kategori_1' => [
+                'from' => $oldKat1,
+                'to' => $newKat1,
+                'changed' => $oldKat1 !== $newKat1
+            ],
+            'kategori_2' => [
+                'from' => $oldKat2,
+                'to' => $newKat2,
+                'changed' => $oldKat2 !== $newKat2
+            ]
+        ];
+    }
+
+    // === 2. CEK REGULASI ===
+    $oldReg = array_map('trim', $oldSamp['regulasi'] ?? []);
+    $newReg = array_map('trim', $newSamp['regulasi'] ?? []);
+
+    sort($oldReg);
+    sort($newReg);
+
+    if ($oldReg !== $newReg) {
+        $addedReg = array_values(array_diff($newReg, $oldReg));
+        $removedReg = array_values(array_diff($oldReg, $newReg));
+
+        $changes['regulasi'] = [
+            'added' => $addedReg,
+            'removed' => $removedReg,
+            'old_count' => count($oldReg),
+            'new_count' => count($newReg),
+            'snapshot_old' => $oldReg,
+            'snapshot_new' => $newReg
+        ];
+    }
+
+    // === 3. CEK PARAMETER ===
+    $oldParams = array_map('trim', array_values($oldSamp['parameter'] ?? []));
+    $newParams = array_map('trim', array_values($newSamp['parameter'] ?? []));
+
+    sort($oldParams);
+    sort($newParams);
+
+    if ($oldParams !== $newParams) {
+        $addedParams = array_values(array_diff($newParams, $oldParams));
+        $removedParams = array_values(array_diff($oldParams, $newParams));
+
+        $changes['parameter'] = [
+            'added' => $addedParams,
+            'removed' => $removedParams,
+            'old_count' => count($oldParams),
+            'new_count' => count($newParams),
+            'snapshot_old' => $oldParams,
+            'snapshot_new' => $newParams
+        ];
+    }
+
+    // === 4. CEK JUMLAH TITIK ===
+    $oldTitik = intval($oldSamp['jumlah_titik'] ?? 0);
+    $newTitik = intval($newSamp['jumlah_titik'] ?? 0);
+    
+    if ($oldTitik !== $newTitik) {
+        $changes['jumlah_titik'] = [
+            'from' => $oldTitik,
+            'to' => $newTitik,
+            'diff' => $newTitik - $oldTitik
+        ];
+    }
+
+    // === 5. CEK PENAMAAN TITIK ===
+    $oldNames = $oldSamp['penamaan_titik'] ?? [];
+    $newNames = $newSamp['penamaan_titik'] ?? [];
+    
+    // Sort untuk memastikan urutan tidak mempengaruhi
+    ksort($oldNames);
+    ksort($newNames);
+    
+    if (json_encode($oldNames) !== json_encode($newNames)) {
+        $changes['penamaan_titik'] = [
+            'old' => $oldNames,
+            'new' => $newNames,
+            'changed_points' => $this->detectChangedPoints($oldNames, $newNames)
+        ];
+    }
+
+    // === 6. CEK HARGA ===
+    $oldHarga = intval($oldSamp['harga_total'] ?? 0);
+    $newHarga = intval($newSamp['harga_total'] ?? 0);
+    
+    if ($oldHarga !== $newHarga) {
+        $changes['harga'] = [
+            'from' => $oldHarga,
+            'to' => $newHarga,
+            'diff' => $newHarga - $oldHarga,
+            'diff_percentage' => $oldHarga > 0 ? round((($newHarga - $oldHarga) / $oldHarga) * 100, 2) : 0
+        ];
+    }
+
+    // === 7. CEK TOTAL PARAMETER ===
+    $oldTotal = intval($oldSamp['total_parameter'] ?? 0);
+    $newTotal = intval($newSamp['total_parameter'] ?? 0);
+    
+    if ($oldTotal !== $newTotal) {
+        $changes['total_parameter'] = [
+            'from' => $oldTotal,
+            'to' => $newTotal,
+            'diff' => $newTotal - $oldTotal
+        ];
+    }
+
+    return $changes;
+}
+
+private function detectChangedPoints($oldPoints, $newPoints)
+{
+    $changed = [];
+    
+    // Deteksi titik yang ditambah atau diubah
+    foreach ($newPoints as $key => $newPoint) {
+        if (!isset($oldPoints[$key])) {
+            $changed[] = [
+                'type' => 'added',
+                'key' => $key,
+                'value' => $newPoint
+            ];
+        } elseif ($oldPoints[$key] !== $newPoint) {
+            $changed[] = [
+                'type' => 'modified',
+                'key' => $key,
+                'from' => $oldPoints[$key],
+                'to' => $newPoint
+            ];
+        }
+    }
+    
+    // Deteksi titik yang dihapus
+    foreach ($oldPoints as $key => $oldPoint) {
+        if (!isset($newPoints[$key])) {
+            $changed[] = [
+                'type' => 'removed',
+                'key' => $key,
+                'value' => $oldPoint
+            ];
+        }
+    }
+    
+    return $changed;
+}
+    /* compare close */
 
     public function bulkRenderInvoice(Request $request)
     {
@@ -5235,5 +5538,40 @@ class TestingController extends Controller
         }
 
         return response()->json([$result], 200);
+    }
+
+    public function testGenerateSertifWebinar(Request $request)
+    {
+        $bg_img_path = public_path('background-sertifikat/'.$request->bg_img_path) ?? public_path('background-template/certificate-bg.jpg.');
+        // dd($request->all());
+        // (new GenerateWebinarSertificate(
+        //     $request->fullname, 
+        //     $request->id_sertifikat, 
+        //     $request->no_sertifikat, 
+        //     $request->folder_name, 
+        //     $bg_img_path, 
+        //     $request->prefix_filename, 
+        //     $request->webinar_title, 
+        //     $request->webinar_topic, 
+        //     $request->webinar_date, 
+        //     $request->pemateri, 
+        //     $request->template, 
+        //     $request->font
+        // ))->generate();
+
+        (new GenerateWebinarSertificate($request->fullname))
+            ->setFullName($request->fullname)
+            ->setIdSertifikat($request->id_sertifikat)
+            ->setNoSertifikat($request->no_sertifikat)
+            ->setFolderName($request->folder_name)
+            ->setBackgroundImage($bg_img_path)
+            ->setPrefixFilename($request->prefix_filename)
+            ->setWebinarTitle($request->webinar_title)
+            ->setWebinarTopic($request->webinar_topic)
+            ->setWebinarDate($request->webinar_date)
+            ->setPemateri($request->pemateri)
+            ->setTemplate($request->template)
+            ->setFont($request->font)
+            ->generate();
     }
 }

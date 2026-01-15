@@ -393,9 +393,8 @@ class DraftUdaraPencahayaanController extends Controller
                     // Mapping regulasi id
                     if (!empty($cek_regulasi)) {
                         $mapRegulasi = collect($cek_regulasi)->pluck('id', 'regulasi')->toArray();
-
                         $regulasi_custom = array_map(function ($item) use (&$mapRegulasi) {
-                            $regulasi_clean = preg_replace('/\*+/', '', $item['regulasi']);
+                            $regulasi_clean = preg_replace('/\*+/', '', $item);
                             if (isset($mapRegulasi[$regulasi_clean])) {
                                 $item['id'] = $mapRegulasi[$regulasi_clean];
                             } else {

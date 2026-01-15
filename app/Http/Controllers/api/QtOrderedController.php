@@ -77,16 +77,44 @@ class QtOrderedController extends Controller
                 ->addColumn('count_detail', function ($row) {
                     return $row->detail ? $row->detail->count() : 0;
                 })
-                ->filterColumn('konfirmasi', function ($query, $keyword) {
-                    // dd($query, $keyword);
+                ->addColumn('no_po', function ($row) {
+                    if (is_null($row->konfirmasi)) {
+                        return '-';
+                    }
+                    
+                    if (is_iterable($row->konfirmasi)) {
+                        // konfirmasi is a collection or array
+                        $poList = collect($row->konfirmasi)
+                            ->pluck('no_purchaseorder')
+                            ->filter(fn ($po) => !is_null($po) && trim($po) !== '')
+                            ->unique()
+                            ->implode(', ');
+                        return $poList ?: '-';
+                    } elseif ($row->konfirmasi && !empty($row->konfirmasi->no_purchaseorder)) {
+                        // single object
+                        $po = $row->konfirmasi->no_purchaseorder;
+                        return (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else if ($row->konfirmasi && empty($row->konfirmasi->no_purchaseorder)) {
+                        return $row->konfirmasi->keterangan_approval_order;
+                    } else {
+                        return '-';
+                    }
                 })
                 ->filterColumn('order.no_order', function ($query, $keyword) {
                     $query->whereHas('order', function ($query) use ($keyword) {
                         $query->where('no_order', 'like', '%' . $keyword . '%');
                     });
                 })
+                ->filterColumn('no_po', function ($query, $keyword) {
+                    $query->whereHas('konfirmasi', function ($q) use ($keyword) {
+                        $q->whereNotNull('no_purchaseorder')
+                            ->where('no_purchaseorder', '!=', '')
+                            ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
+                        $q->orWhere('keterangan_approval_order', 'like', '%' . $keyword . '%');
+                    });
+                })
                 ->make(true);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
             ], 500);

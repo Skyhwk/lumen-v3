@@ -1346,7 +1346,7 @@ class ReadyOrderController extends Controller
                 'no_quotation' => $dataQuotation->no_document
             ]);
 
-            $id_order_header = $data_detail_lama->first()->id_order_header;
+            $id_order_header = $data_lama->id_order ?? $data_detail_lama->first()->id_order_header;
 
             $sampel_order_lama = $data_detail_lama->pluck('no_sampel')->toArray();
             $dps_details = json_decode($dataQuotation->data_pendukung_sampling, true);
@@ -1456,14 +1456,18 @@ class ReadyOrderController extends Controller
                     // ->where('active', 0)
                     ->orderByDesc('no_sampel')
                     ->first();
-
-                $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
-                $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                if($cek_detail) {
+                    $no_urut_sample = (int) \explode("/", $cek_detail->no_sampel)[1];
+                    $no_urut_cfr = (int) \explode("/", $cek_detail->cfr)[1];
+                } else {
+                    $no_urut_sample = 0;
+                    // $no_urut_cfr = 0;
+                }
                 $n = $no_urut_sample + 1;
                 $trigger = 0;
-                $kategori = $cek_detail->kategori_3;
-                $regulasi = json_decode($cek_detail->regulasi) ?? [];
-                $parameter = json_decode($cek_detail->parameter) ?? [];
+                $kategori = ($cek_detail) ? $cek_detail->kategori_3 : '';
+                $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
+                $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
 
                 foreach ($penambahan_data as $key => $changes) {
                     $value = (object) $detail_baru[$changes];
@@ -1514,9 +1518,9 @@ class ReadyOrderController extends Controller
                         if (count($value->parameter) == 1) {
                             if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 if (
-                                    $cek_detail->kategori_3 != $value->kategori_2 ||
-                                    $cek_detail->regulasi != json_encode($value->regulasi) ||
-                                    $cek_detail->parameter != json_encode($value->parameter)
+                                    $kategori != $value->kategori_2 ||
+                                    json_encode($regulasi) != json_encode($value->regulasi) ||
+                                    json_encode($parameter) != json_encode($value->parameter)
                                 ) {
                                     $no_urut_cfr++;
                                 }
@@ -1553,7 +1557,7 @@ class ReadyOrderController extends Controller
                     $number_imaginer = sprintf("%03d", explode("/", $no_sample)[1]);
                     $tanggal_sampling = Carbon::now()->format('Y-m-d');
 
-                    if ($value->status_sampling != 'SD') {
+                    if($value->status_sampling != 'SD'){
                         $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                         $tanggal_sampling = $dataJadwal[$search_kategori] ?? null;
                         if (!$tanggal_sampling) {
@@ -2001,7 +2005,7 @@ class ReadyOrderController extends Controller
 
                                 $number_imaginer = sprintf("%03d", $noSampel);
                                 $periodeNew = $periode_kontrak;
-                                $statusSamplingNew = $dataQuotation->status_sampling;
+                                $statusSamplingNew = $t->status_sampling;
                                 $search_kategori = \explode('-', $value->kategori_2)[1] . ' - ' . $number_imaginer;
                                 if ($statusSamplingNew != 'SD') {
                                     $tanggal_sampling = $dataJadwal[$periodeNew][$search_kategori] ?? null;
