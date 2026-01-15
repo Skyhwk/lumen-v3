@@ -12,39 +12,39 @@ use Illuminate\Support\Facades\View;
 
 class GenerateWebinarSertificate
 {
-    private $full_name;
-    private $id_sertifikat;
-    private $no_sertifikat;
-    private $folder_name;
-    private $bg_img_path;
-    private $prefix_filename;
-    private $webinar_title;
-    private $webinar_topic;
-    private $webinar_date;
-    private $top_distance = 30;
-    private $pemateri;
+    private $filename;
+    private $options = [];
     private $mpdf;
-    private $template;
-    private $font;
     private $qr_code;
+    private $top_distance = 30;
+    private $outputDir = 'certificates';
 
     /**
-     * Konstruktor untuk inisialisasi objek GenerateWebinarSertificate
+     * Constructor for GenerateWebinarSertificate object
      * 
-     * @param string $full_name ex: "John Doe"
-     * @param string $folder_name ex: "sertifikat_webinar"
-     * @param string $bg_img_path ex: "sertifikat-bg.jpg"
-     * @param string $prefix_filename ex: "sertifikat-"
-     * @param string $webinar_title ex: "Webinar"
-     * @param string $webinar_topic ex: "Bahasa Inggris"
-     * @param string $webinar_date ex: "2023-06-01"
-     * @param array $pemateri required ex: ["Pemateri 1", "Pemateri 2", "Pemateri 3"]
-     * @param string $template ex: "default"
+     * @param string $filename ex: "sertifikat-123.pdf"
      * 
      * @return void
      */
-    public function __construct(string $full_name){
-        $this->full_name = $full_name;
+    private function __construct(string $filename) {
+        $this->filename = $filename;
+    }
+
+    public static function make(string $filename): self {
+        return new self($filename);
+    }
+
+    public function options(array $options): self {
+        $this->options = array_merge([
+            'template' => 'bg-biru.png',
+            'layout' => 'layout-1',
+            'font' => [
+                'fontName' => 'greatvibes',
+                'filename' => 'GreatVibes-Regular.ttf'
+            ]
+        ], $options);
+
+        return $this;
     }
 
     /**
@@ -61,19 +61,13 @@ class GenerateWebinarSertificate
             // Inisialisasi MPDF dengan font Great Vibes
             $this->initializeMpdf();
             
-            // dd('masuk');
             // Generate sertifikat
             $this->createCertificate();
-            
-            // Buat nama file
-            $filename = $this->generateFilename();
-            $fullPath = $this->getFullPath($filename);
-            
             // Simpan file
-            $this->saveCertificate($fullPath);
+            $this->saveCertificate($this->options['output']);
             
             $this->resetParams();
-            return $fullPath;
+            return $this->filename;
         } catch (Exception $e) {
             $this->resetParams();
             return response()->json([
@@ -87,56 +81,70 @@ class GenerateWebinarSertificate
 
     private function validateInputs(): void
     {
-        if (empty($this->full_name)) {
-            throw new Exception("Nama lengkap tidak boleh kosong");
+        // Validate required options
+        $requiredOptions = ['recipientName', 'webinarTitle', 'webinarTopic', 'webinarDate', 'panelis', 'noSertifikat'];
+        foreach ($requiredOptions as $option) {
+            if (empty($this->options[$option])) {
+                throw new Exception("Option '{$option}' is required");
+            }
         }
 
-        // Cek file background di public/background-sertifikat
-        if (!file_exists($this->bg_img_path)) {
-            // Coba cari file gambar di folder background-sertifikat
+        // Ensure template directory exists
+        $templateDir = dirname(public_path('background-sertifikat/'));
+        if (!is_dir($templateDir)) {
+            if (!mkdir($templateDir, 02775, true)) {
+                throw new Exception("Failed to create template directory: {$templateDir}");
+            }
+        }
+
+        // Validate template file
+        $templatePath = public_path('background-sertifikat/' . $this->options['template']);
+        if (!file_exists($templatePath)) {
             $bgFiles = glob(public_path('background-sertifikat/*.{jpg,jpeg,png,gif,bmp,webp}'), GLOB_BRACE);
-            
             if (empty($bgFiles)) {
-                throw new Exception("File background tidak ditemukan di: " . public_path('background-sertifikat'));
+                throw new Exception("Template file not found in: " . public_path('background-sertifikat'));
             }
-            
-            // Gunakan file pertama yang ditemukan
-            $this->bg_img_path = $bgFiles[0];
+            $templatePath = $bgFiles[0];
         }
 
-        // Validasi ekstensi file
+        // Validate template extension
         $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-        $extension = strtolower(pathinfo($this->bg_img_path, PATHINFO_EXTENSION));
-        
+        $extension = strtolower(pathinfo($templatePath, PATHINFO_EXTENSION));
         if (!in_array($extension, $allowedExtensions)) {
-            throw new Exception("Format file background tidak didukung. Gunakan: " . implode(', ', $allowedExtensions));
+            throw new Exception("Unsupported template format. Use: " . implode(', ', $allowedExtensions));
         }
 
-        // Buat folder penyimpanan jika belum ada
-        if (!is_dir($this->folder_name)) {
-            if (!mkdir($this->folder_name, 0755, true)) {
-                throw new Exception("Gagal membuat folder: {$this->folder_name}");
+        // Validate storage output sertificate on public path
+        $outputDir = public_path($this->outputDir);
+        if (!is_dir($outputDir)) {
+            if (!mkdir($outputDir, 02775, true)) {
+                throw new Exception("Failed to create template directory: {$outputDir}");
             }
         }
-        
-        // Pastikan folder writable
-        if (!is_writable($this->folder_name)) {
-            throw new Exception("Folder tidak dapat ditulisi: {$this->folder_name}");
-        }
+
+        // Store validated paths
+        $this->options['templatePath'] = $templatePath;
+        $this->options['output'] = $outputDir . '/' . $this->filename;
     }
 
     private function initializeMpdf(): void
     {
-        // Definisikan font Great Vibes
+        $fontDir = public_path('fonts');
+        $fontPath = $fontDir . '/' . $this->options['font']['filename'];
+        
+        if (!is_dir($fontDir)) {
+            mkdir($fontDir, 0755, true);
+        }
+
         $fontData = [
-            'R' => public_path('fonts/GreatVibes-Regular.ttf'),
+            'R' => $fontPath,
         ];
 
-        // Konfigurasi MPDF dengan font Great Vibes
+        // Configure MPDF
         $config = [
             'mode' => 'utf-8',
             'format' => 'A4',
-            'orientation' => 'L', // Landscape untuk sertifikat
+            'orientation' => 'L', // Landscape for certificate
             'margin_left' => 0,
             'margin_right' => 0,
             'margin_top' => 0,
@@ -146,23 +154,17 @@ class GenerateWebinarSertificate
             'default_font_size' => 0,
             'tempDir' => storage_path('tmp/mpdf'),
             'default_font' => 'dejavusans',
+            'fontDir' => [$fontDir],
             'fontdata' => [
-                'dejavusans' => [
-                    'R' => 'DejaVuSans.ttf',
-                    'B' => 'DejaVuSans-Bold.ttf',
-                    'I' => 'DejaVuSans-Oblique.ttf',
-                    'BI' => 'DejaVuSans-BoldOblique.ttf',
-                ],
-                'greatvibes' => [
-                    'R' => 'GreatVibes-Regular.ttf',
+                $this->options['font']['fontName'] => [
+                    'R' => $this->options['font']['filename'],
                 ]
             ]
         ];
-
-        // Cek apakah font Great Vibes tersedia
-        $fontPath = public_path('fonts/GreatVibes-Regular.ttf');
+        
+        // Check if font is available
+        $fontPath = public_path('fonts/' . $this->options['font']['filename']);
         if (!file_exists($fontPath)) {
-            // Jika font tidak ditemukan, download secara otomatis
             $this->downloadGreatVibesFont();
         }
 
@@ -171,31 +173,12 @@ class GenerateWebinarSertificate
         $this->mpdf->SetDisplayMode('fullpage');
         $this->mpdf->SetAutoPageBreak(false);
         
-        // Set metadata PDF
-        $this->mpdf->SetTitle("Sertifikat - " . $this->full_name);
+        // Set PDF metadata
+
+        $this->mpdf->SetProtection(array('print'), '', 'skyhwk12');
+        $this->mpdf->SetTitle("Certificate - " . $this->options['recipientName']);
         $this->mpdf->SetAuthor("Inti Surya Laboratorium");
         $this->mpdf->SetCreator("Inti Surya Laboratorium");
-    }
-
-    private function downloadGreatVibesFont(): void
-    {
-        $fontUrl = 'https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf';
-        $fontDir = public_path('fonts');
-        $fontPath = $fontDir . '/GreatVibes-Regular.ttf';
-        
-        // Buat folder fonts jika belum ada
-        if (!is_dir($fontDir)) {
-            mkdir($fontDir, 0755, true);
-        }
-        
-        // Download font dari Google Fonts
-        $fontContent = @file_get_contents($fontUrl);
-        if ($fontContent !== false) {
-            file_put_contents($fontPath, $fontContent);
-        } else {
-            // Fallback ke font default jika gagal download
-            throw new Exception("Font Great Vibes tidak ditemukan dan gagal didownload. Silakan upload font GreatVibes-Regular.ttf ke folder public/fonts/");
-        }
     }
 
     private function createCertificate(): void
@@ -208,27 +191,23 @@ class GenerateWebinarSertificate
             $pageWidth = $this->mpdf->w;
             $pageHeight = $this->mpdf->h;
 
-            // Konversi nama ke format yang tepat
-            $convertedName = $this->formatName($this->full_name);
-            // Hitung ukuran font berdasarkan panjang nama
+            // Konversi nama ke format yang sesuai
+            $convertedName = $this->formatName($this->options['recipientName']);
             $fontSize = $this->calculateFontSize(strlen($convertedName));
             
-            // Get image data
-            $imageData = file_get_contents($this->bg_img_path);
+            // Get template image data
+            $imageData = file_get_contents($this->options['templatePath']);
             if ($imageData === false) {
-                throw new Exception("Gagal membaca file background: {$this->bg_img_path}");
+                throw new Exception("Failed to read template file: {$this->options['templatePath']}");
             }
-            
-            $base64 = base64_encode($imageData);
-            $mimeType = mime_content_type($this->bg_img_path) ?: 'image/jpeg';
-            $imageSrc = 'data:' . $mimeType . ';base64,' . $base64;
 
             // Generate QR Code
             $this->qr_code = $this->generateQrCode();
 
-            $tanggalWebinar = !is_null($this->webinar_date) ? '<div>Tanggal ' . $this->webinar_date . '</div>' : '';
+            $tanggalWebinar = !empty($this->options['webinarDate']) ? 
+                '<div>Tanggal ' . Helper::tanggal_indonesia($this->options['webinarDate']) . '</div>' : '';
 
-            // Render Blade template untuk konten pemateri dan QR code
+            // Render template content
             $templateContent = $this->renderTemplate($convertedName, $tanggalWebinar);
 
             // HTML dan CSS untuk sertifikat dengan posisi tepat di tengah
@@ -305,7 +284,7 @@ class GenerateWebinarSertificate
                     }
                     
                     .certificate-name {
-                        font-family: "'. $this->font .'", serif;
+                        font-family: "'. $this->options['font']['fontName'] .'", serif;
                         font-size: ' . $fontSize . 'pt;
                         color: #2c3e50;
                         text-align: center;
@@ -343,7 +322,7 @@ class GenerateWebinarSertificate
             <body>
                 <!-- Background Layer -->
                 <div class="background-layer">
-                    <img src="' . $imageSrc . '" class="background-image" alt="Certificate Background" />
+                    <img src="' . $this->options['templatePath'] . '" class="background-image" alt="Certificate Background" />
                 </div>
                 
                 '. $templateContent .'
@@ -378,7 +357,7 @@ class GenerateWebinarSertificate
         $maxCharacters = 22;
         $minFontSize = 32;
         
-        // Jika jumlah karakter <= 22, gunakan ukuran font default
+        // Jika jumlah karakter ≤ 22, gunakan ukuran font default
         if ($nameLength <= $maxCharacters) {
             return $defaultFontSize;
         }
@@ -395,86 +374,20 @@ class GenerateWebinarSertificate
         return max($calculatedSize, $minFontSize);
     }
 
-    private function generateFilename(): string
-    {
-        // Buat nama file yang aman
-        $safeName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $this->full_name);
-        $safeName = substr($safeName, 0, 50);
-        
-        return $this->prefix_filename . $safeName . '.pdf';
-    }
-
-    private function getFullPath(string $filename): string
-    {
-        // Pastikan folder_name menggunakan DIRECTORY_SEPARATOR
-        $folder = rtrim($this->folder_name, '/\\') . DIRECTORY_SEPARATOR;
-        return $folder . $filename;
-    }
-
-
     private function saveCertificate(string $fullPath): void
     {
-        // Output ke file
-        dd($fullPath);
+        // Output to file
         $this->mpdf->Output($fullPath, 'F');
         
-        // Verifikasi file berhasil dibuat
+        // Verify file was created
         if (!file_exists($fullPath)) {
-            throw new Exception("Gagal menyimpan file sertifikat: {$fullPath}");
+            throw new Exception("Failed to save certificate: {$fullPath}");
         }
         
-        // Verifikasi file tidak kosong
+        // Verify file is not empty
         if (filesize($fullPath) === 0) {
-            throw new Exception("File sertifikat kosong: {$fullPath}");
+            throw new Exception("Certificate file is empty: {$fullPath}");
         }
-    }
-
-    /**
-     * Getter untuk informasi sertifikat
-     */
-    public function getCertificateInfo(): array
-    {
-        return [
-            'full_name' => $this->full_name,
-            'folder_name' => $this->folder_name,
-            'bg_img_path' => $this->bg_img_path,
-            'prefix_filename' => $this->prefix_filename,
-            'background_exists' => file_exists($this->bg_img_path),
-            'background_size' => file_exists($this->bg_img_path) ? filesize($this->bg_img_path) : 0,
-            'font_exists' => file_exists(public_path('fonts/GreatVibes-Regular.ttf'))
-        ];
-    }
-
-    /**
-     * Method untuk output langsung ke browser
-     */
-    public function outputToBrowser(string $downloadName = null): void
-    {
-        if (!$this->mpdf) {
-            $this->initializeMpdf();
-            $this->createCertificate();
-        }
-        
-        $filename = $downloadName ?: $this->prefix_filename . preg_replace('/[^a-zA-Z0-9]/', '_', $this->full_name) . '.pdf';
-        
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . $filename . '"');
-        
-        echo $this->mpdf->Output('', 'S');
-        exit;
-    }
-
-    /**
-     * Method untuk mendapatkan konten PDF sebagai string
-     */
-    public function getPdfContent(): string
-    {
-        if (!$this->mpdf) {
-            $this->initializeMpdf();
-            $this->createCertificate();
-        }
-        
-        return $this->mpdf->Output('', 'S');
     }
 
     /**
@@ -492,57 +405,28 @@ class GenerateWebinarSertificate
     private function renderTemplate(string $full_name, string $webinar_date): string
     {
         try {
-            // Validasi template file exists
-            $templatePath = 'sertifikat-templates.' . $this->template;
+            // Validate template file exists
+            $templatePath = 'sertifikat-templates.' . $this->options['layout'];
             
             if (!View::exists($templatePath)) {
-                throw new Exception("Template tidak ditemukan: resources/views/sertifikat-templates/{$this->template}.blade.php");
+                throw new Exception("Template not found: resources/views/sertifikat-templates/{$this->options['layout']}.blade.php");
             }
             
-            // dd($templatePath);
-            // Data yang akan dikirim ke template
+            // Data to be passed to template
             $data = [
                 'full_name' => $full_name,
-                'pemateri' => $this->pemateri,
-                'webinar_title' => $this->webinar_title,
-                'webinar_topic' => $this->webinar_topic,
+                'pemateri' => $this->options['panelis'],
+                'webinar_title' => $this->options['webinarTitle'],
+                'webinar_topic' => $this->options['webinarTopic'],
                 'webinar_date' => $webinar_date,
-                'qr_code' => $this->qr_code, // Untuk QR code
+                'qr_code' => $this->qr_code
             ];
 
             // Render template
             return View::make($templatePath, $data)->render();
         } catch (Exception $e) {
-            throw new Exception("Gagal render template: " . $e->getMessage());
+            throw new Exception("Failed to render template: " . $e->getMessage());
         }
-    }
-
-    /**
-     * Method untuk mengubah lokasi folder penyimpanan
-     */
-    public function setStorageFolder(string $folder_name): self
-    {
-        $this->folder_name = $folder_name;
-        return $this;
-    }
-
-    /**
-     * Method untuk mendapatkan relative URL dari file yang disimpan
-     */
-    public function getRelativeUrl(string $fullPath = null): string
-    {
-        if (!$fullPath) {
-            $filename = $this->generateFilename();
-            $fullPath = $this->getFullPath($filename);
-        }
-        
-        // Konversi absolute path ke relative URL
-        $basePath = public_path();
-        if (strpos($fullPath, $basePath) === 0) {
-            return str_replace($basePath, '', $fullPath);
-        }
-        
-        return '/' . ltrim($fullPath, '/');
     }
 
     /**
@@ -562,26 +446,28 @@ class GenerateWebinarSertificate
      */
     private function generateQrCode(): string
     {
-        $qr = QrDocument::where('id_document', $this->id_sertifikat)
-                ->where('type_document', 'e_certificate_webinar')
-                ->where('is_active', 1)
-                ->first();
+        if($this->options['id']){
+            $qr = QrDocument::where('id_document', $this->options['id'])
+                    ->where('type_document', 'e_certificate_webinar')
+                    ->where('is_active', 1)
+                    ->first();
+        }
 
         if (!$qr) $qr = new QrDocument();
 
-        $qr->id_document = $this->id_sertifikat;
+        $qr->id_document = $this->options['id'] ?? null;
         $qr->type_document = 'e_certificate_webinar';
-        $qr->kode_qr = $this->generateQr($this->no_sertifikat);
-        $qr->file = str_replace("/", "_", $this->no_sertifikat);
+        $qr->kode_qr = $this->generateQr($this->options['noSertifikat']);
+        $qr->file = str_replace("/", "_", $this->options['noSertifikat']);
 
         $qr->data = json_encode([
-            'tipe_dokumen'          => 'e-certificate webinar',
-            'penerima_sertifikat'   => $this->full_name,
-            'no_sertifikat'         => $this->no_sertifikat,
-            'judul_webinar'         => $this->webinar_title,
-            'topik_webinar'         => $this->webinar_topic,
-            'tanggal_webinar'       => $this->webinar_date,
-            'panelis'               => $this->pemateri
+            'tipe_dokumen'          => 'E-certificate webinar',
+            'penerima_sertifikat'   => $this->options['recipientName'],
+            'no._sertifikat'        => $this->options['noSertifikat'],
+            'judul_webinar'         => $this->options['webinarTitle'],
+            'topik_webinar'         => $this->options['webinarTopic'],
+            'tanggal_webinar'       => $this->options['webinarDate'],
+            'panelis'               => $this->options['panelis']
         ]);
 
         $qr->created_by = 'SYSTEM';
@@ -589,7 +475,7 @@ class GenerateWebinarSertificate
 
         $qr->save();
 
-        // Qr Image Render
+        // QR Image Render
         $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="80px" height="80px" style="padding : 5px;border : 2px solid #ffffff; border-radius: 2px;">';
 
         return $qr_img;
@@ -613,171 +499,30 @@ class GenerateWebinarSertificate
         return $unique;
     }
 
-    /**
-     * Setter untuk full_name
-     * 
-     * @param string $full_name
-     * @return self
-     */
-    public function setFullName(string $full_name): self
+    private function downloadGreatVibesFont(): void
     {
-        $this->full_name = $full_name;
-        return $this;
-    }
-
-    /**
-     * Setter untuk id_sertifikat
-     * 
-     * @param string $id_sertifikat
-     * @return self
-     */
-    public function setIdSertifikat(string $id_sertifikat): self
-    {
-        $this->id_sertifikat = $id_sertifikat;
-        return $this;
-    }
-
-    /**
-     * Setter untuk no_sertifikat
-     * 
-     * @param string $no_sertifikat
-     * @return self
-     */
-    public function setNoSertifikat(string $no_sertifikat): self
-    {
-        $this->no_sertifikat = $no_sertifikat;
-        return $this;
-    }
-
-    /**
-     * Setter untuk folder_name
-     * 
-     * @param string $folder_name
-     * @return self
-     */
-    public function setFolderName(string $folder_name): self
-    {
-        $this->folder_name = $folder_name;
-        return $this;
-    }
-
-    /**
-     * Setter untuk bg_img_path
-     * 
-     * @param string|null $bg_img_path
-     * @return self
-     */
-    public function setBgImgPath(string $bg_img_path = null): self
-    {
-        $this->bg_img_path = $bg_img_path ?? public_path('background-sertifikat/certificate-bg.jpg');
-        return $this;
-    }
-
-    /**
-     * Setter untuk prefix_filename
-     * 
-     * @param string $prefix_filename
-     * @return self
-     */
-    public function setPrefixFilename(string $prefix_filename): self
-    {
-        $this->prefix_filename = $prefix_filename;
-        return $this;
-    }
-
-    /**
-     * Setter untuk webinar_title
-     * 
-     * @param string $webinar_title
-     * @return self
-     */
-    public function setWebinarTitle(string $webinar_title): self
-    {
-        $this->webinar_title = $webinar_title;
-        return $this;
-    }
-
-    /**
-     * Setter untuk webinar_topic
-     * 
-     * @param string $webinar_topic
-     * @return self
-     */
-    public function setWebinarTopic(string $webinar_topic): self
-    {
-        $this->webinar_topic = strtoupper($webinar_topic);
-        return $this;
-    }
-
-    /**
-     * Setter untuk webinar_date
-     * 
-     * @param string|null $webinar_date
-     * @return self
-     */
-    public function setWebinarDate(string $webinar_date = null): self
-    {
-        $this->webinar_date = $webinar_date ? Helper::tanggal_indonesia($webinar_date) : null;
-        return $this;
-    }
-
-    /**
-     * Setter untuk top_distance
-     * 
-     * @param int $top_distance
-     * @return self
-     */
-    public function setTopDistance(int $top_distance): self
-    {
-        $this->top_distance = $top_distance;
-        return $this;
-    }
-
-    /**
-     * Setter untuk pemateri
-     * 
-     * @param array $pemateri
-     * @return self
-     */
-    public function setPemateri(array $pemateri): self
-    {
-        $this->pemateri = $pemateri;
-        return $this;
-    }
-
-    /**
-     * Setter untuk template
-     * 
-     * @param string $template
-     * @return self
-     */
-    public function setTemplate(string $template): self
-    {
-        $this->template = $template;
-        return $this;
-    }
-
-    /**
-     * Setter untuk font
-     * 
-     * @param string $font
-     * @return self
-     */
-    public function setFont(string $font): self
-    {
-        $this->font = strtolower(str_replace(' ', '', $font));
-        return $this;
+        $fontUrl = 'https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf';
+        $fontDir = public_path('fonts');
+        $fontPath = $fontDir . '/GreatVibes-Regular.ttf';
+        
+        // Buat folder fonts jika belum ada
+        if (!is_dir($fontDir)) {
+            mkdir($fontDir, 0755, true);
+        }
+        
+        // Download font dari Google Fonts
+        $fontContent = @file_get_contents($fontUrl);
+        if ($fontContent !== false) {
+            file_put_contents($fontPath, $fontContent);
+        } else {
+            // Fallback ke font default jika gagal download
+            throw new Exception("Font Great Vibes tidak ditemukan dan gagal didownload. Silakan upload font GreatVibes-Regular.ttf ke folder public/fonts/");
+        }
     }
 
     private function resetParams()
     {
-        $this->id_sertifikat = null;
-        $this->full_name = null;
-        $this->no_sertifikat = null;
-        $this->webinar_title = null;
-        $this->webinar_topic = null;
-        $this->webinar_date = null;
-        $this->pemateri = null;
+        $this->options = [];
         $this->qr_code = null;
     }
 }

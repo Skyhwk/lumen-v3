@@ -221,6 +221,23 @@ class TestingController extends Controller
             //code...
             
             switch ($request->menu) {
+                case 'generateSertificate':
+                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
+                    ->options([
+                        // 'template' => $request->template, //--> background image
+                        // 'layout' => $request->layout, //--> layout blade
+                        // 'font' => $request->font, //--> font fullname recipient certificate
+                        'recipientName' => 'Dedi',
+                        'id' => 14527,
+                        'webinarTitle' => 'Webinar Title',
+                        'webinarTopic' => 'Webinar Topic',
+                        'webinarDate' => '2024-01-01',
+                        'panelis' => (array)['Dedi', 'Dedi', 'Dedi'],
+                        'noSertifikat' => '123',
+                    ])
+                    ->generate();
+                    dd($path);
+                    break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
                     $token = 'lC16g5AzgC7M2ODh7lWedWGSL3rYPS';
