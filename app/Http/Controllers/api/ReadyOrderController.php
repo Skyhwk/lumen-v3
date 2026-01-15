@@ -1335,7 +1335,7 @@ class ReadyOrderController extends Controller
                 'no_quotation' => $dataQuotation->no_document
             ]);
 
-            $id_order_header = $data_detail_lama->first()->id_order_header;
+            $id_order_header = $data_lama->id_order ?? $data_detail_lama->first()->id_order_header;
 
             $sampel_order_lama = $data_detail_lama->pluck('no_sampel')->toArray();
             $dps_details = json_decode($dataQuotation->data_pendukung_sampling, true);
