@@ -1507,9 +1507,9 @@ class ReadyOrderController extends Controller
                         if (count($value->parameter) == 1) {
                             if ($kategori != $value->kategori_2 || json_encode($regulasi) != json_encode($value->regulasi) || $this->directParamExclude($value->parameter)) {
                                 if (
-                                    $cek_detail->kategori_3 != $value->kategori_2 ||
-                                    $cek_detail->regulasi != json_encode($value->regulasi) ||
-                                    $cek_detail->parameter != json_encode($value->parameter)
+                                    $kategori != $value->kategori_2 ||
+                                    json_encode($regulasi) != json_encode($value->regulasi) ||
+                                    json_encode($parameter) != json_encode($value->parameter)
                                 ) {
                                     $no_urut_cfr++;
                                 }
