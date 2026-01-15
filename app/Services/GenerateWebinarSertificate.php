@@ -129,15 +129,8 @@ class GenerateWebinarSertificate
 
     private function initializeMpdf(): void
     {
-        $fontDir = public_path('fonts');
-        $fontPath = $fontDir . '/' . $this->options['font']['filename'];
-        
-        if (!is_dir($fontDir)) {
-            mkdir($fontDir, 0755, true);
-        }
-
-        $fontData = [
-            'R' => $fontPath,
+         $fontData = [
+            'R' => public_path('fonts/' . $this->options['font']['filename']),
         ];
 
         // Configure MPDF
@@ -154,11 +147,16 @@ class GenerateWebinarSertificate
             'default_font_size' => 0,
             'tempDir' => storage_path('tmp/mpdf'),
             'default_font' => 'dejavusans',
-            'fontDir' => [$fontDir],
             'fontdata' => [
-                $this->options['font']['fontName'] => [
-                    'R' => $this->options['font']['filename'],
-                ]
+                'dejavusans' => [
+                    'R' => 'DejaVuSans.ttf',
+                    'B' => 'DejaVuSans-Bold.ttf',
+                    'I' => 'DejaVuSans-Oblique.ttf',
+                    'BI' => 'DejaVuSans-BoldOblique.ttf',
+                ],
+                // $this->options['font']['fontName'] => [
+                //     'R' => $this->options['font']['filename'],
+                // ]
             ]
         ];
         
