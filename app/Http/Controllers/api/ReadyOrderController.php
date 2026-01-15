@@ -1454,7 +1454,7 @@ class ReadyOrderController extends Controller
                 }
                 $n = $no_urut_sample + 1;
                 $trigger = 0;
-                $kategori = $cek_detail->kategori_3 ?? null;
+                $kategori = ($cek_detail) ? $cek_detail->kategori_3 : '';
                 $regulasi = ($cek_detail && $cek_detail->regulasi != null) ? json_decode($cek_detail->regulasi) : [];
                 $parameter = ($cek_detail && $cek_detail->parameter != null) ? json_decode($cek_detail->parameter) : [];
 
