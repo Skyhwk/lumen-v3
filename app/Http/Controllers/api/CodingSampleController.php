@@ -187,10 +187,15 @@ class CodingSampleController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
+                    $samplerArray = explode(',', $schedule->sampler ?? '');
+                    $samplerArray = array_map('trim', $samplerArray);
+                    sort($samplerArray); // Wajib sort agar urutan selalu sama
+                    $samplerKey = implode(',', $samplerArray);
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->tanggal . '|' .
+                        $schedule->jam_mulai . '|' . 
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja
