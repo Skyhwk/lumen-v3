@@ -94,6 +94,8 @@ class QtOrderedController extends Controller
                         // single object
                         $po = $row->konfirmasi->no_purchaseorder;
                         return (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else if ($row->konfirmasi && empty($row->konfirmasi->no_purchaseorder)) {
+                        return $row->konfirmasi->keterangan_approval_order;
                     } else {
                         return '-';
                     }
