@@ -16,7 +16,7 @@ class GenerateWebinarSertificate
     private $options = [];
     private $mpdf;
     private $qr_code;
-    private $top_distance = 30;
+    private $top_distance = 27;
     private $outputDir = 'certificates';
 
     /**
@@ -196,6 +196,7 @@ class GenerateWebinarSertificate
 
             // Konversi nama ke format yang sesuai
             $convertedName = $this->formatName($this->options['recipientName']);
+            
             $fontSize = $this->calculateFontSize(strlen($convertedName));
             
             // Get template image data
@@ -208,11 +209,11 @@ class GenerateWebinarSertificate
             $this->qr_code = $this->generateQrCode();
 
             $tanggalWebinar = !empty($this->options['webinarDate']) ? 
-                '<div>Tanggal ' . Helper::tanggal_indonesia($this->options['webinarDate']) . '</div>' : '';
+                '<div class="webinar-date">Tanggal ' . Helper::tanggal_indonesia($this->options['webinarDate']) . '</div>' : '';
 
             // Render template content
             $templateContent = $this->renderTemplate($convertedName, $tanggalWebinar);
-
+            
             // HTML dan CSS untuk sertifikat dengan posisi tepat di tengah
             $html = '
             <!DOCTYPE html>
@@ -255,6 +256,15 @@ class GenerateWebinarSertificate
                         object-fit: cover;
                     }
                     
+                    .text-title {
+                        position: absolute;
+                        top: ' . $this->top_distance - 14 . '%;
+                        left: 10%;
+                        z-index: 1;
+                        width: 80%;
+                        text-align: center;
+                    }
+
                     .text-container {
                         position: absolute;
                         top: ' . $this->top_distance . '%;
@@ -274,8 +284,29 @@ class GenerateWebinarSertificate
                         margin-bottom: 20px;
                     }
 
+                    .certificate-title {
+                        position: absolute;
+                        top: 10%;
+                        font-size: 35pt;
+                        color: #0202EA;
+                        text-align: center;
+                        line-height: 1.2;
+                        margin: 0;
+                        padding: 0;
+                        font-style: normal;
+                        letter-spacing: 1px;
+                        word-spacing: 3px;
+                    }
+
+                    .certificate-number {
+                        font-weight: bold;
+                        font-style: normal;
+                        letter-spacing: 1px;
+                        word-spacing: 3px;
+                    }
+
                     .webinar-topic {
-                        font-size: 17pt;
+                        font-size: 20pt;
                         font-weight: bold;
                         text-align: center;
                         line-height: 1.2;
@@ -285,11 +316,18 @@ class GenerateWebinarSertificate
                         letter-spacing: 1px;
                         word-spacing: 3px;
                     }
+
+                    .webinar-date {
+                        font-size : 14pt;
+                    }
+
+                    .pemateri-container {
+                        font-size: 14pt;
+                    }
                     
                     .certificate-name {
                         font-family: "'. $this->options['font']['fontName'] .'", serif;
-                        // font-size: ' . $fontSize . 'pt;
-                        font-size: 50pt;
+                        font-size: ' . $fontSize . 'pt;
                         color: #0202EA;
                         text-align: center;
                         line-height: 1.2;
@@ -299,6 +337,10 @@ class GenerateWebinarSertificate
                         font-style: normal;
                         letter-spacing: 1px;
                         word-spacing: 3px;
+                    }
+                    
+                    .webinar-title {
+                        font-size: 14pt;
                     }
 
                     .webinar-detail-container {
@@ -356,8 +398,8 @@ class GenerateWebinarSertificate
 
     private function calculateFontSize(int $nameLength): int
     {
-        // Ukuran font default untuk nama pendek (≤ 22 karakter)
-        $defaultFontSize = 64;
+        // Ukuran font default untuk nama pendek (≤ 20 karakter)
+        $defaultFontSize = 50;
         $maxCharacters = 22;
         $minFontSize = 32;
         
@@ -414,6 +456,7 @@ class GenerateWebinarSertificate
                 'webinar_title' => $this->options['webinarTitle'],
                 'webinar_topic' => $this->options['webinarTopic'],
                 'webinar_date' => $webinar_date,
+                'no_sertifikat' => $this->options['noSertifikat'],
                 'qr_code' => $this->qr_code
             ];
 
@@ -471,7 +514,7 @@ class GenerateWebinarSertificate
         $qr->save();
 
         // QR Image Render
-        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="80px" height="80px" >';
+        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="90px" height="90px" >';
 
         return $qr_img;
     }
