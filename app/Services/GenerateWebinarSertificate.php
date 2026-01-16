@@ -37,7 +37,7 @@ class GenerateWebinarSertificate
     public function options(array $options): self {
         $this->options = array_merge([
             'template' => 'bg-biru.png',
-            'layout' => 'layout-1',
+            'layout' => 'test',
             'font' => [
                 'fontName' => 'roboto',
                 'filename' => 'Roboto-Regular.ttf'
