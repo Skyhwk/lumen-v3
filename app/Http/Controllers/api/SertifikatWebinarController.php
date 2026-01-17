@@ -38,42 +38,37 @@ class SertifikatWebinarController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-    private function generateWebinarCode(string $topic, $existingCodes): string
+    private function generateWebinarCode(string $date, $existingCodes): string
     {
-        $topic = preg_replace('/[^A-Za-z]/', '', strtoupper($topic));
-        $dateDigits = Carbon::now()->format('d'); // 2 digit hari
-
-        if (strlen($topic) < 2) {
-            throw new \Exception('Topic harus punya minimal 2 huruf');
-        }
-
-        while (true) {
-            // 🔹 Ambil 2 huruf BERBEDA
-            $letters = array_unique(str_split($topic));
-            shuffle($letters);
-
-            if (count($letters) < 2) {
-                continue;
-            }
-
-            $picked = array_slice($letters, 0, 2);
-            $base = array_merge($picked, str_split($dateDigits));
-
-            // 🔹 Random posisi max 4x
-            for ($i = 0; $i < 4; $i++) {
-                shuffle($base);
-                $code = implode('', $base);
-
-                if (!isset($existingCodes[$code])) {
-                    // simpan ke memory biar request ini aman
-                    $existingCodes[$code] = true;
-                    return $code;
+        /**
+         * $existingCodes = ISL012601 -> no urut webinar adalah 01 setelah webinar jadi kombinasi terdiri dari
+         *  ISL -> kode perusahaan
+         *  01 -> urutan webinar di adakan (reset setiap tahun baru)
+         *  26 -> tahun webinar di adakan
+         *  01 -> bulan webinar di adakan
+         */ 
+        $companyCode = 'ISL';
+        $year = date('y', strtotime($date)); // 2 digit tahun
+        $month = date('m', strtotime($date)); // 2 digit bulan
+        $sequence = 1;
+        
+        foreach ($existingCodes as $code => $value) {
+            if (strlen($code) === 9 && substr($code, 0, 3) === $companyCode) {
+                $codeYear = substr($code, 5, 2);
+                if ($codeYear === $year) {
+                    $codeSequence = (int) substr($code, 3, 2);
+                    if ($codeSequence >= $sequence) {
+                        $sequence = $codeSequence + 1;
+                    }
                 }
             }
-            // kalau bentrok semua → ulang ambil huruf
         }
+        
+        $sequenceStr = str_pad($sequence, 2, '0', STR_PAD_LEFT);
+        $webinarCode = $companyCode . $sequenceStr . $year . $month;
+        
+        return $webinarCode;
     }
-
 
     public function storeHeader(Request $request)
     {
@@ -82,18 +77,22 @@ class SertifikatWebinarController extends Controller
             $existingCodes = SertifikatWebinarHeader::pluck('webinar_code')
                 ->map(fn($v) => strtoupper($v))
                 ->flip();
-
+            
             $webinarCode = $this->generateWebinarCode(
-                $request->topic,
+                $request->date,
                 $existingCodes
             );
-
+            
             SertifikatWebinarHeader::create([
                 'webinar_code' => strtoupper($webinarCode),
                 'title' => $request->title,
                 'topic' => $request->topic,
+                'sub_topic' => $request->sub_topic,
                 'speakers' => json_decode($request->speakers, true),
                 'date' => $request->date,
+                'id_template' => $request->template_id,
+                'id_layout' => $request->layout_id,
+                'id_font' => $request->font_id,
                 'created_at' => Carbon::now(),
                 'created_by' => $this->karyawan
             ]);
@@ -416,9 +415,9 @@ class SertifikatWebinarController extends Controller
 
     public function getTemplate()
     {
-        $jenis_font = JenisFont::all();
-        $template = TemplateBackground::all();
-        $layout = LayoutCertificate::all();
+        $jenis_font = JenisFont::select('id', 'jenis_font')->where('is_active', true)->get();
+        $template = TemplateBackground::select('id', 'nama_template')->where('is_active', true)->get();
+        $layout = LayoutCertificate::select('id', 'id_template', 'nama_file')->get();
 
         return response()->json([
             'message' => 'Data hasbeen show',

@@ -19,29 +19,14 @@ class LayoutCertificateController extends Controller
     {
         $data = LayoutCertificate::all();
 
-        return Datatables::of($data)
-            ->addColumn('details', function ($row) {
-                $namaFileBlade = strtolower(str_replace(' ', '_', $row->nama_blade));
-
-                if (! str_ends_with($namaFileBlade, '.blade.php')) {
-                    $namaFileBlade .= '.blade.php';
-                }
-
-                $pathBlade = resource_path('views/sertifikat-templates/' . $namaFileBlade);
-
-                if (file_exists($pathBlade)) {
-                    return file_get_contents($pathBlade);
-                }
-
-                return null;
-            })
-            ->make(true);
+        return Datatables::of($data)->make(true);
     }
 
     public function getTemplate()
     {
         $data = DB::table('template_background')
             ->select('id', 'nama_template')
+            ->where('is_active', 1)
             ->get();
 
         return response()->json(['data' => $data]);
@@ -52,7 +37,6 @@ class LayoutCertificateController extends Controller
         $validated = Validator::make($request->all(), [
             'id_template' => 'required',
             'nama_file'   => 'required|string|max:255',
-            'nama_blade'  => 'required|string|max:255',
             'details'     => 'required|string',
         ])->validate();
 
@@ -62,18 +46,9 @@ class LayoutCertificateController extends Controller
             $layout              = new LayoutCertificate();
             $layout->id_template = $validated['id_template'];
             $layout->nama_file   = $validated['nama_file'];
-            $layout->nama_blade  = $validated['nama_blade'];
+            $layout->code  = $validated['details'];
+            $layout->created_by  = $this->karyawan;
             $layout->save();
-
-            $namaFileBlade = strtolower(str_replace(' ', '_', $validated['nama_blade'])) . '.blade.php';
-            $folderPath    = resource_path('views/sertifikat-templates');
-
-            if (! file_exists($folderPath)) {
-                mkdir($folderPath, 0755, true);
-            }
-
-            $pathBlade = $folderPath . '/' . $namaFileBlade;
-            file_put_contents($pathBlade, $validated['details']);
 
             DB::commit();
 
@@ -100,7 +75,6 @@ class LayoutCertificateController extends Controller
             'id'          => 'required|exists:layout_certificates,id',
             'id_template' => 'required',
             'nama_file'   => 'required|string|max:255',
-            'nama_blade'  => 'required|string|max:255',
             'details'     => 'required|string',
         ])->validate();
 
@@ -114,21 +88,9 @@ class LayoutCertificateController extends Controller
 
             $layout->id_template = $validated['id_template'];
             $layout->nama_file   = $validated['nama_file'];
-            $layout->nama_blade  = $validated['nama_blade'];
+            $layout->code        = $validated['details'];
+            $layout->updated_by  = $this->karyawan;
             $layout->save();
-
-            $namaFileBlade = strtolower(str_replace(' ', '_', $validated['nama_blade'])) . '.blade.php';
-            if ($oldNamaBlade !== $namaFileBlade && file_exists($oldPathBlade)) {
-                unlink($oldPathBlade);
-            }
-
-            $folderPath = resource_path('views/sertifikat-templates');
-            if (! file_exists($folderPath)) {
-                mkdir($folderPath, 0755, true);
-            }
-
-            $pathBlade = $folderPath . '/' . $namaFileBlade;
-            file_put_contents($pathBlade, $validated['details']);
 
             DB::commit();
 

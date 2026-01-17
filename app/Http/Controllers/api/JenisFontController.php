@@ -20,43 +20,59 @@ class JenisFontController extends Controller
     public function store(Request $request)
     {
         DB::beginTransaction();
+
         try {
-            $file = $request->file('font_file');
-
-            // Generate nama aman
-            $fileName =  $file->getClientOriginalName();
-
-            // Folder tujuan
-            $destinationPath = public_path('fonts');
-
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0755, true);
+            // Validasi minimal
+            if (!$request->has('jenis_font') || !$request->hasFile('font_files')) {
+                return response()->json([
+                    'message' => 'Jenis font dan file font wajib diisi'
+                ], 422);
             }
 
-            // Simpan file
-            $file->move($destinationPath, $fileName);
+            $fontFiles = $request->file('font_files');
 
-            // Simpan ke DB (HANYA STRING)
-            $data = JenisFont::create([
-                'jenis_font' => $request->nama_font,
-                'filename' => $fileName,
-                'is_active' => true,
-                'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
-                'created_by' => $this->karyawan,    
-            ]);
+            // Mapping standar mPDF
+            $map = ['R', 'B', 'I', 'BI'];
+
+            $insert = [
+                'jenis_font' => $request->jenis_font,
+                'font_data'  => json_encode(
+                    collect($fontFiles)->mapWithKeys(function ($file, $key) {
+                        return [$key => $file->getClientOriginalName()];
+                    })
+                ),
+                'is_active'  => true,
+                'created_at'=> Carbon::now(),
+                'created_by'=> $this->karyawan,
+            ];
+
+            foreach ($map as $key) {
+                if (isset($fontFiles[$key])) {
+                    $insert['assets_' . strtolower($key)] =
+                        file_get_contents($fontFiles[$key]->getRealPath());
+
+                    $insert['mime_' . strtolower($key)] =
+                        $fontFiles[$key]->getMimeType();
+                }
+            }
+
+            $data = JenisFont::create($insert);
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Font berhasil ditambahkan',
-                'data' => $data
+                'message' => 'Font berhasil disimpan ke database',
             ], 200);
+
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
+                'success' => false,
                 'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
             ], 500);
         }
     }
