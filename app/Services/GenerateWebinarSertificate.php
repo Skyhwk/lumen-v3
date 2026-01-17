@@ -10,13 +10,16 @@ use Carbon\Carbon;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\View;
 
+use App\Models\TemplateBackground;
+use App\Models\LayoutCertificate;
+use App\Models\JenisFont;
 class GenerateWebinarSertificate
 {
     private $filename;
     private $options = [];
     private $mpdf;
     private $qr_code;
-    private $top_distance = 30;
+    private $top_distance = 27;
     private $outputDir = 'certificates';
 
     /**
@@ -67,7 +70,8 @@ class GenerateWebinarSertificate
             $this->saveCertificate($this->options['output']);
             
             $this->resetParams();
-            return $this->filename;
+            
+            return true;
         } catch (Exception $e) {
             $this->resetParams();
             return response()->json([
@@ -88,30 +92,62 @@ class GenerateWebinarSertificate
                 throw new Exception("Option '{$option}' is required");
             }
         }
-
-        // Ensure template directory exists
-        $templateDir = dirname(public_path('background-sertifikat/'));
-        if (!is_dir($templateDir)) {
-            if (!mkdir($templateDir, 02775, true)) {
-                throw new Exception("Failed to create template directory: {$templateDir}");
+        
+        if(!empty($this->options['template'])) {
+            $getTemplate = TemplateBackground::where('nama_template', $this->options['template'])->first();
+            if($getTemplate && $getTemplate->file) {
+                $tempDir = storage_path('tmp/mpdf-templates');
+                if (!is_dir($tempDir)) {
+                    mkdir($tempDir, 02775, true);
+                }
+                
+                $tempFile = $tempDir . '/' . md5($this->options['template']) . '.webp';
+                
+                if (!file_exists($tempFile)) {
+                    file_put_contents($tempFile, $getTemplate->file);
+                }
+                
+                $this->options['templatePath'] = $tempFile;
             }
+        } else {
+            $this->options['templatePath'] = "";
         }
 
-        // Validate template file
-        $templatePath = public_path('background-sertifikat/' . $this->options['template']);
-        if (!file_exists($templatePath)) {
-            $bgFiles = glob(public_path('background-sertifikat/*.{jpg,jpeg,png,gif,bmp,webp}'), GLOB_BRACE);
-            if (empty($bgFiles)) {
-                throw new Exception("Template file not found in: " . public_path('background-sertifikat'));
+        if(!empty($this->options['font'])) {
+            $getFont = JenisFont::where('jenis_font', $this->options['font'])->first();
+
+            $fontDir = storage_path('tmp/mpdf-fonts/' . $getFont->jenis_font);
+
+            if (!is_dir($fontDir)) {
+                mkdir($fontDir, 02775, true);
             }
-            $templatePath = $bgFiles[0];
+
+            $fontData = json_decode($getFont->font_data, true);
+
+            foreach ($fontData as $key => $value) {
+                //$key == R, I, B, BI ubah ke kecil agar r, i, b, bi
+                $key = strtolower($key);
+                $column_name = 'assets_' . $key;
+                $column_mime = 'mime_' . $key;
+                
+                if($getFont->$column_name) {
+                    $fontFile = $fontDir . '/' . $value;
+                    if (!file_exists($fontFile)) {
+                        file_put_contents($fontFile, $getFont->$column_name);
+                    }
+                }
+            }
+
+            $this->options['fontData'] = $fontData;
+        } else {
+            $this->options['fontData'] = [];
         }
 
-        // Validate template extension
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-        $extension = strtolower(pathinfo($templatePath, PATHINFO_EXTENSION));
-        if (!in_array($extension, $allowedExtensions)) {
-            throw new Exception("Unsupported template format. Use: " . implode(', ', $allowedExtensions));
+        if(!empty($this->options['layout'])) {
+            $getLayout = LayoutCertificate::where('nama_file', $this->options['layout'])->first();
+            $this->options['code'] = $getLayout->code;
+        } else {
+            $this->options['code'] = '';
         }
 
         // Validate storage output sertificate on public path
@@ -122,25 +158,11 @@ class GenerateWebinarSertificate
             }
         }
 
-        // Store validated paths
-        $this->options['templatePath'] = $templatePath;
         $this->options['output'] = $outputDir . '/' . $this->filename;
     }
 
     private function initializeMpdf(): void
     {
-        if($this->options['font']['fontName'] !== 'roboto') {
-            $fontPath = public_path('fonts/' . $this->options['font']['filename']);
-            if (!file_exists($fontPath)) {
-                $this->downloadFont();
-            }
-        }
-        
-        $defaultFont =  public_path('fonts/Roboto-Regular.ttf');
-        if(!file_exists($defaultFont)) {
-            $this->downloadDefaultFont();
-        }
-
         // Configure MPDF
         $config = [
             'mode' => 'utf-8',
@@ -157,19 +179,13 @@ class GenerateWebinarSertificate
             'default_font' => 'dejavusans',
             'fontDir' => array_merge(
                 (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'],
-                [public_path('fonts')]
+                [storage_path('tmp/mpdf-fonts')]
             ),
             'fontdata' => array_merge(
                 (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'],
-                []
+                $this->options['fontData']
             )
         ];
-
-        if($this->options['font']['fontName'] !== 'roboto') {
-            $config['fontdata'][$this->options['font']['fontName']] = [
-                'R' => $this->options['font']['filename'],
-            ];
-        }
         
         $this->mpdf = new Mpdf($config);
         
@@ -196,6 +212,7 @@ class GenerateWebinarSertificate
 
             // Konversi nama ke format yang sesuai
             $convertedName = $this->formatName($this->options['recipientName']);
+            
             $fontSize = $this->calculateFontSize(strlen($convertedName));
             
             // Get template image data
@@ -208,130 +225,206 @@ class GenerateWebinarSertificate
             $this->qr_code = $this->generateQrCode();
 
             $tanggalWebinar = !empty($this->options['webinarDate']) ? 
-                '<div>Tanggal ' . Helper::tanggal_indonesia($this->options['webinarDate']) . '</div>' : '';
-
-            // Render template content
-            $templateContent = $this->renderTemplate($convertedName, $tanggalWebinar);
-
-            // HTML dan CSS untuk sertifikat dengan posisi tepat di tengah
-            $html = '
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    * {
-                        margin: 0;
-                        padding: 0;
-                        box-sizing: border-box;
-                    }
-                    
-                    @page {
-                        margin: 0;
-                        padding: 0;
-                    }
-                    
-                    body {
-                        width: ' . $pageWidth . 'mm;
-                        height: ' . $pageHeight . 'mm;
-                        position: relative;
-                        overflow: hidden;
-                        margin: 0;
-                        padding: 0;
-                    }
-                    
-                    .background-layer {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        z-index: 0;
-                    }
-                    
-                    .background-image {
-                        width: 100%;
-                        height: 100%;
-                        object-fit: cover;
-                    }
-                    
-                    .text-container {
-                        position: absolute;
-                        top: ' . $this->top_distance . '%;
-                        left: 10%;
-                        z-index: 1;
-                        width: 80%;
-                        text-align: center;
-                    }
-                    
-                    ul {
-                        list-style: none;
-                        margin: 0;
-                        padding: 0;
-                    }
-
-                    ul li {
-                        margin-bottom: 20px;
-                    }
-
-                    .webinar-topic {
-                        font-size: 17pt;
-                        font-weight: bold;
-                        text-align: center;
-                        line-height: 1.2;
-                        margin: 0;
-                        padding: 0;
-                        font-style: normal;
-                        letter-spacing: 1px;
-                        word-spacing: 3px;
-                    }
-                    
-                    .certificate-name {
-                        font-family: "'. $this->options['font']['fontName'] .'", serif;
-                        // font-size: ' . $fontSize . 'pt;
-                        font-size: 50pt;
-                        color: #0202EA;
-                        text-align: center;
-                        line-height: 1.2;
-                        margin: 0;
-                        padding: 0;
-                        font-weight: bold;
-                        font-style: normal;
-                        letter-spacing: 1px;
-                        word-spacing: 3px;
-                    }
-
-                    .webinar-detail-container {
-                        font-family: "dejavusans", serif;
-                    }
-
-                    .layout-webinar-detail {
-                        position: relative;
-                        width: 100%;
-                        height: 100%;
-                    }
-
-                    .qr-code-container {
-                        position: absolute;
-                        left: 10%;
-                        z-index: 1;
-                        width: 80%;
-                    }
-
-                    .qr-code-container img {
-                        padding-top: 100px;
-                    }
-                </style>
-            </head>
-            <body>
-                <!-- Background Layer -->
-                <div class="background-layer">
-                    <img src="' . $this->options['templatePath'] . '" class="background-image" alt="Certificate Background" />
-                </div>
+                '<div class="webinar-date">Tanggal ' . Carbon::parse($this->options['webinarDate'])->locale('id')->isoFormat('DD MMMM YYYY') . '</div>' : '';
+            $codeLayout = '';
+            if(!empty($this->options['code'])) {
+                $codeLayout = $this->options['code'];
                 
-                '. $templateContent .'
-            </body>
-            </html>';
+                $dataPlaceholder = [
+                    'page_width'        => $pageWidth,
+                    'page_height'       => $pageHeight,
+                    'title_top'         => $this->top_distance - 12,
+                    'content_top'       => $this->top_distance,
+                    'font'              => $this->options['font'],
+                    'font_size'         => $fontSize,
+                    'full_name'         => $convertedName,
+                    'webinar_title'     => $this->options['webinarTitle'],
+                    'webinar_topic'     => $this->options['webinarTopic'],
+                    'webinar_sub_topic' => $this->options['webinarSubTopic'],
+                    'webinar_date'      => $tanggalWebinar,
+                    'pemateri_list'     => collect($this->options['panelis'])
+                                            ->map(function ($p) {
+                                                $nama = $p['nama'];
+                                                $jabatan = $p['jabatan'];
+                                                return "<li><strong>{$nama}</strong> ({$jabatan})</li>";
+                                            })
+                                            ->implode(''),
+                    'certificate_number'=> $this->options['noSertifikat'],
+                    'qr_code'           => $this->qr_code ?? '',
+                    'background_image'  => $this->options['templatePath'],
+                    'title_image'       => public_path('background-sertifikat/elemen-biru.png'),
+                ];
+                
+                foreach($dataPlaceholder as $key => $value) {
+                    $codeLayout = str_replace('{{'.$key.'}}', $value, $codeLayout);
+                }
+                $html = $codeLayout;
+            } else {
+                // default layout
+                // Render template content
+                $templateContent = $this->renderTemplate($convertedName, $tanggalWebinar);
+                
+                // HTML dan CSS untuk sertifikat dengan posisi tepat di tengah
+                $html = '
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        * {
+                            margin: 0;
+                            padding: 0;
+                            box-sizing: border-box;
+                        }
+                        
+                        @page {
+                            margin: 0;
+                            padding: 0;
+                        }
+                        
+                        body {
+                            width: ' . $pageWidth . 'mm;
+                            height: ' . $pageHeight . 'mm;
+                            position: relative;
+                            overflow: hidden;
+                            margin: 0;
+                            padding: 0;
+                        }
+                        
+                        .background-layer {
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            z-index: 0;
+                        }
+                        
+                        .background-image {
+                            width: 100%;
+                            height: 100%;
+                            object-fit: cover;
+                        }
+                        
+                        .text-title {
+                            position: absolute;
+                            top: ' . $this->top_distance - 14 . '%;
+                            left: 10%;
+                            z-index: 1;
+                            width: 80%;
+                            text-align: center;
+                        }
+
+                        .text-container {
+                            position: absolute;
+                            top: ' . $this->top_distance . '%;
+                            left: 10%;
+                            z-index: 1;
+                            width: 80%;
+                            text-align: center;
+                        }
+                        
+                        ul {
+                            list-style: none;
+                            margin: 0;
+                            padding: 0;
+                        }
+
+                        ul li {
+                            margin-bottom: 20px;
+                        }
+
+                        .certificate-title {
+                            position: absolute;
+                            top: 10%;
+                            font-size: 35pt;
+                            color: #0202EA;
+                            text-align: center;
+                            line-height: 1.2;
+                            margin: 0;
+                            padding: 0;
+                            font-style: normal;
+                            letter-spacing: 1px;
+                            word-spacing: 3px;
+                        }
+
+                        .certificate-number {
+                            font-weight: bold;
+                            font-style: normal;
+                            letter-spacing: 1px;
+                            word-spacing: 3px;
+                        }
+
+                        .webinar-topic {
+                            font-size: 20pt;
+                            font-weight: bold;
+                            text-align: center;
+                            line-height: 1.2;
+                            margin: 0;
+                            padding: 0;
+                            font-style: normal;
+                            letter-spacing: 1px;
+                            word-spacing: 3px;
+                        }
+
+                        .webinar-date {
+                            font-size : 14pt;
+                        }
+
+                        .pemateri-container {
+                            font-size: 14pt;
+                        }
+                        
+                        .certificate-name {
+                            font-family: "'. $this->options['font'] .'", serif;
+                            font-size: ' . $fontSize . 'pt;
+                            color: #0202EA;
+                            text-align: center;
+                            line-height: 1.2;
+                            margin: 0;
+                            padding: 0;
+                            font-weight: bold;
+                            font-style: normal;
+                            letter-spacing: 1px;
+                            word-spacing: 3px;
+                        }
+                        
+                        .webinar-title {
+                            font-size: 14pt;
+                        }
+
+                        .webinar-detail-container {
+                            font-family: "dejavusans", serif;
+                        }
+
+                        .layout-webinar-detail {
+                            position: relative;
+                            width: 100%;
+                            height: 100%;
+                        }
+
+                        .qr-code-container {
+                            position: absolute;
+                            left: 10%;
+                            z-index: 1;
+                            width: 80%;
+                        }
+
+                        .qr-code-container img {
+                            padding-top: 100px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <!-- Background Layer -->
+                    <div class="background-layer">
+                        <img src="' . $this->options['templatePath'] . '" class="background-image" alt="Certificate Background" />
+                    </div>
+                    
+                    '. $templateContent .'
+                </body>
+                </html>';
+            }
             
             $this->mpdf->WriteHTML($html);
         } catch (Exception $e) {
@@ -347,17 +440,81 @@ class GenerateWebinarSertificate
         // Hapus karakter khusus dan extra spaces
         $name = preg_replace('/\s+/', ' ', $name);
         
-        // Konversi ke Title Case (huruf pertama setiap kata besar, lainnya kecil)
-        $name = ucwords(strtolower($name));
+        // Pisahkan nama dan gelar (jika ada)
+        $parts = explode(' ', $name);
+        $formattedParts = [];
         
-        // Untuk font Great Vibes, kita bisa biarkan natural tanpa uppercase
-        return $name;
+        // Daftar gelar yang umum digunakan
+        $commonDegrees = ['SKM', 'SH', 'MM', 'SE', 'ST', 'MT', 'DR', 'IR', 'HJ', 'DRS', 'DRA', 'SST', 'AMD', 'SPD', 'MPD', 'MKM', 'MPH', 'MBA', 'MSI', 'MSC', 'PHD'];
+        
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if (empty($part)) continue;
+            
+            // Cek apakah ini singkatan (misal: A. atau S.Pd atau SKM)
+            if (preg_match('/^[A-Z]\.$/i', $part)) {
+                // Singkatan nama seperti "A." - uppercase
+                $formattedParts[] = strtoupper($part);
+            } elseif (preg_match('/^[A-Z]+$/i', $part) && strlen($part) <= 4 && in_array(strtoupper($part), $commonDegrees)) {
+                // Gelar tanpa titik seperti "SKM", "SH", "MM" - uppercase (hanya jika ada di daftar gelar)
+                $formattedParts[] = strtoupper($part);
+            } elseif (preg_match('/^[A-Za-z]+\.[A-Za-z]*\.?$/i', $part)) {
+                // Gelar dengan titik seperti "S.Pd", "S.Kom", "M.Sc" - uppercase
+                $formattedParts[] = strtoupper($part);
+            } elseif (preg_match('/^\.[A-Za-z]+$/i', $part)) {
+                // Gelar yang dimulai dengan titik seperti ".SKM" - uppercase tanpa titik di depan
+                $formattedParts[] = strtoupper(ltrim($part, '.'));
+            } elseif (strpos($part, '.') !== false && strlen($part) <= 6) {
+                // Kemungkinan gelar lain dengan titik - uppercase
+                $formattedParts[] = strtoupper($part);
+            } elseif (strpos($part, ',') !== false) {
+                // Handle koma sebelum gelar (misal: "Octapiani,")
+                $subParts = explode(',', $part);
+                $formattedSubParts = [];
+                foreach ($subParts as $subPart) {
+                    $subPart = trim($subPart);
+                    if (!empty($subPart)) {
+                        if (in_array(strtoupper($subPart), $commonDegrees)) {
+                            $formattedSubParts[] = strtoupper($subPart);
+                        } else {
+                            $formattedSubParts[] = ucfirst(strtolower($subPart));
+                        }
+                    }
+                }
+                $formattedParts[] = implode(', ', $formattedSubParts);
+            } else {
+                // Nama biasa - Title Case (termasuk nama 3 huruf seperti DWI, EKO, dll)
+                $formattedParts[] = ucfirst(strtolower($part));
+            }
+        }
+        
+        // Gabungkan kembali dengan handling khusus untuk gelar
+        $result = '';
+        $prevWasInitial = false;
+        
+        foreach ($formattedParts as $index => $part) {
+            if ($index === 0) {
+                $result = $part;
+            } else {
+                // Cek apakah part sebelumnya adalah singkatan nama (misal "A.")
+                if ($prevWasInitial) {
+                    $result .= ' ' . $part;
+                } else {
+                    $result .= ' ' . $part;
+                }
+            }
+            
+            // Cek apakah part saat ini adalah singkatan nama
+            $prevWasInitial = preg_match('/^[A-Z]\.$/i', $part);
+        }
+        
+        return $result;
     }
 
     private function calculateFontSize(int $nameLength): int
     {
-        // Ukuran font default untuk nama pendek (≤ 22 karakter)
-        $defaultFontSize = 64;
+        // Ukuran font default untuk nama pendek (≤ 20 karakter)
+        $defaultFontSize = 50;
         $maxCharacters = 22;
         $minFontSize = 32;
         
@@ -414,6 +571,7 @@ class GenerateWebinarSertificate
                 'webinar_title' => $this->options['webinarTitle'],
                 'webinar_topic' => $this->options['webinarTopic'],
                 'webinar_date' => $webinar_date,
+                'no_sertifikat' => $this->options['noSertifikat'],
                 'qr_code' => $this->qr_code
             ];
 
@@ -471,7 +629,7 @@ class GenerateWebinarSertificate
         $qr->save();
 
         // QR Image Render
-        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="80px" height="80px" >';
+        $qr_img = '<img class="qr-code" src="' . public_path() . '/qr_documents/' . $qr->file . '.svg" width="90px" height="90px" >';
 
         return $qr_img;
     }

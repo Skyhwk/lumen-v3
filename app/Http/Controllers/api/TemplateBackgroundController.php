@@ -14,7 +14,18 @@ class TemplateBackgroundController extends Controller
     public function index(Request $request)
     {
         $template = TemplateBackground::where('is_active', true)->get();
-        return Datatables::of($template)->make(true);
+        
+        // Transform thumbnail blob to base64 for frontend display
+        $template->transform(function ($item) {
+            if ($item->thumbnail) {
+                $item->thumbnail_base64 = 'data:image/webp;base64,' . base64_encode($item->thumbnail);
+            } else {
+                $item->thumbnail_base64 = null;
+            }
+            return $item;
+        });
+        
+        return DataTables::of($template)->make(true);
     }
 
     /**
@@ -32,20 +43,62 @@ class TemplateBackgroundController extends Controller
 
             $file = $request->file('input_file');
             
-            // Generate nama file aman
-            $fileName = strtolower(str_replace(' ', '_', $request->nama_template));
+            // Baca file sebagai binary
+            $binary = file_get_contents($file->getRealPath());
+            $image = imagecreatefromstring($binary);
+            
+            if ($image === false) {
+                return response()->json([
+                    'message' => 'File bukan image valid'
+                ], 400);
+            }
 
-            // Simpan file original
-            $originalFilename = $this->saveOriginalFile($file, $fileName);
+            // Preserve transparency
+            imagepalettetotruecolor($image);
+            imagealphablending($image, true);
+            imagesavealpha($image, true);
 
-            // Convert dan simpan webp thumbnail
-            $webpFilename = $this->convertToWebPFile($fileName, '_thumbnail');
+            // Konversi file original ke WebP (full size)
+            ob_start();
+            imagewebp($image, null, 85);
+            $originalWebp = ob_get_clean();
 
-            // Simpan ke database
+            // Buat thumbnail (resize)
+            $originalWidth = imagesx($image);
+            $originalHeight = imagesy($image);
+            $thumbnailWidth = 300; // Lebar thumbnail
+            $thumbnailHeight = (int) ($originalHeight * ($thumbnailWidth / $originalWidth));
+
+            $thumbnail = imagecreatetruecolor($thumbnailWidth, $thumbnailHeight);
+            
+            // Preserve transparency untuk thumbnail
+            imagealphablending($thumbnail, false);
+            imagesavealpha($thumbnail, true);
+            $transparent = imagecolorallocatealpha($thumbnail, 0, 0, 0, 127);
+            imagefill($thumbnail, 0, 0, $transparent);
+            
+            // Resize image
+            imagecopyresampled(
+                $thumbnail, $image,
+                0, 0, 0, 0,
+                $thumbnailWidth, $thumbnailHeight,
+                $originalWidth, $originalHeight
+            );
+
+            // Konversi thumbnail ke WebP
+            ob_start();
+            imagewebp($thumbnail, null, 80);
+            $thumbnailWebp = ob_get_clean();
+
+            // Bersihkan memory
+            imagedestroy($image);
+            imagedestroy($thumbnail);
+
+            // Simpan ke database sebagai blob
             $template = TemplateBackground::create([
                 'nama_template' => $request->nama_template,
-                'thumbnail' => $webpFilename,
-                'file' => $originalFilename,
+                'thumbnail' => $thumbnailWebp,
+                'file' => $originalWebp,
                 'is_active' => 1,
                 'created_by' => $this->karyawan,
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s')
@@ -53,7 +106,10 @@ class TemplateBackgroundController extends Controller
 
             return response()->json([
                 'message' => 'Template berhasil ditambahkan',
-                'data' => $template
+                'data' => [
+                    'id' => $template->id,
+                    'nama_template' => $template->nama_template
+                ]
             ], 201);
 
         } catch (Exception $e) {
@@ -65,67 +121,6 @@ class TemplateBackgroundController extends Controller
         }
     }
 
-/**
- * Simpan file original menggunakan move()
- */
-    private function saveOriginalFile($file, $fileName)
-    {
-        $extension = $file->getClientOriginalExtension();
-        $safeName = $fileName . '.' . $extension;
-        
-        $destinationPath = public_path('background-sertifikat');
-        
-        // Buat folder jika belum ada
-        if (!file_exists($destinationPath)) {
-            mkdir($destinationPath, 0755, true);
-        }
-        
-        // Move file ke destination
-        $file->move($destinationPath, $safeName);
-        
-        return $safeName;
-    }
-
-    /**
-     * Convert file yang sudah tersimpan ke WebP
-     * Dipanggil SETELAH saveOriginalFile()
-     */
-    private function convertToWebPFile($fileName, $type = '_thumbnail')
-    {
-        $destinationPath = public_path('background-sertifikat');
-        
-        // Baca file original yang sudah tersimpan
-        $originalFile = $destinationPath . '/' . $fileName . '.*'; // Cari file dengan nama ini
-        $files = glob($originalFile);
-        
-        if (empty($files)) {
-            throw new \Exception('File original tidak ditemukan untuk konversi');
-        }
-        
-        $originalFilePath = $files[0]; // Ambil file pertama yang match
-        
-        // Generate nama file WebP
-        $webpName = pathinfo($originalFilePath, PATHINFO_FILENAME) . $type . '.webp';
-        
-        // Baca binary file
-        $binary = file_get_contents($originalFilePath);
-        $image = imagecreatefromstring($binary);
-        
-        if ($image === false) {
-            throw new \Exception('File bukan image valid');
-        }
-        
-        // Preserve transparency
-        imagepalettetotruecolor($image);
-        imagealphablending($image, true);
-        imagesavealpha($image, true);
-        
-        // Convert dan simpan sebagai WebP
-        imagewebp($image, $destinationPath . '/' . $webpName, 80);
-        imagedestroy($image);
-        
-        return $webpName;
-    }
 
     public function delete(Request $request)
     {

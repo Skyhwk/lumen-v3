@@ -224,19 +224,20 @@ class TestingController extends Controller
                 case 'generateSertificate':
                     $path = GenerateWebinarSertificate::make('dedi-test.pdf')
                     ->options([
-                        'template' => 'bg-biru.png',
+                        // 'template' => 'bg-biru.png',
+                        'template' => 'bg-biru-v1.webp',
                         'layout' => 'layout-1',
-                        'font' => [
-                            'fontName' => 'greatvibes',
-                            'filename' => 'GreatVibes-Regular.ttf'
-                        ],
-                        'recipientName' => 'Rangga Manggala Yudha',
+                        // 'font' => [
+                        //     'fontName' => 'greatvibes',
+                        //     'filename' => 'GreatVibes-Regular.ttf'
+                        // ],
+                        'recipientName' => 'Rangga Manggala Yudha Bahtiayar',
                         'id' => 14527,
                         'webinarTitle' => 'Kelas Online',
                         'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
-                        'webinarDate' => '2024-01-01',
-                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expert)', '<strong>Bima Ghafara</strong> (Technical Expert)'],
-                        'noSertifikat' => '123',
+                        'webinarDate' => '2026-01-14',
+                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expertise)', '<strong>Bima Ghafara</strong> (Technical Expertise)'],
+                        'noSertifikat' => 'ISL012601-0001',
                     ])
                     ->generate();
                     dd($path);
