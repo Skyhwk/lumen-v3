@@ -661,44 +661,61 @@ class SertifikatWebinarController extends Controller
             foreach ($detail as $value) {
 
             
-            $qna = DB::table('webinar_qna')
-                ->where('webinar_id', $request->id)
-                ->where('asker_name', $value->name)
-                ->where('asker_email', $value->email)
-                ->get();
+                $qna = DB::table('webinar_qna')
+                    ->where('webinar_id', $request->id)
+                    ->where('asker_name', $value->name)
+                    ->where('asker_email', $value->email)
+                    ->get();
 
-            $qnaHtml = '';
+                $qnaHtml = '';
 
-            if ($qna->isNotEmpty()) {
+                if ($qna->isNotEmpty()) {
 
-                $qnaHtml .= '
-                    <table border="1" cellpadding="6" cellspacing="0" width="100%" style="border-collapse: collapse;">
-                        <thead>
+                    $questions = [];
+                    $answers = [];
+                    
+                    foreach ($qna as $item) {
+                        if (!empty($item->question)) {
+                            $questions[] = e($item->question);
+                        }
+                        if (!empty($item->answer)) {
+                            $answers[] = e($item->answer);
+                        }
+                    }
+                    
+                    $answers = array_unique($answers);
+                    
+                    $qnaHtml .= '<table width="100%" cellpadding="10" cellspacing="0" style="border: none;">
                             <tr>
-                                <th width="5%">No</th>
-                                <th width="45%">Pertanyaan</th>
-                                <th width="50%">Jawaban</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                ';
-
-                foreach ($qna as $index => $item) {
+                                <td width="50%" valign="top" style="border: none;">
+                                    <strong>Pertanyaan:</strong>
+                                    <ul style="margin: 5px 0; padding-left: 20px;">';
+                    
+                    foreach ($questions as $question) {
+                        $qnaHtml .= '<li style="margin-bottom: 5px;">' . $question . '</li>';
+                    }
+                    
+                    $qnaHtml .= '</ul>
+                                </td>
+                                <td width="50%" valign="top" style="border: none;">
+                                    <strong>Jawaban:</strong>
+                                    <ul style="margin: 5px 0; padding-left: 20px;">';
+                    
+                    if (!empty($answers)) {
+                        foreach ($answers as $answer) {
+                            $qnaHtml .= '<li style="margin-bottom: 5px;">' . $answer . '</li>';
+                        }
+                    } else {
+                        $qnaHtml .= '<li style="margin-bottom: 5px;"><em>Belum dijawab</em></li>';
+                    }
+                    
                     $qnaHtml .= '
-                        <tr>
-                            <td>'. ($index + 1) .'</td>
-                            <td>'. e($item->question) .'</td>
-                            <td>'. ($item->answer ? e($item->answer) : '<em>Belum dijawab</em>') .'</td>
-                        </tr>
+                                    </ul>
+                                </td>
+                            </tr>
+                        </table>
                     ';
-                }
-
-                $qnaHtml .= '
-                        </tbody>
-                    </table>
-                ';
-
-            } 
+                } 
 
                 $replace = [
                     '{{name}}'  => $value->name,
@@ -715,11 +732,16 @@ class SertifikatWebinarController extends Controller
                     $body
                 );
 
+                /**
+                 * attachement dari template body email belum ada
+                 * kemungkinan yang akan di letakan di template adalah :
+                 * materi webinar
+                 * Q&A global
+                 */
+
                 $validAttachments = [];
 
-               
                 array_push($validAttachments, public_path() . '/certificates/' . $value->filename);
-
 
                 $mail = SendEmail::where('to', 'restunugroho@intilab.com')
                     ->where('subject', 'E-Sertifikat ' . $header->title)
