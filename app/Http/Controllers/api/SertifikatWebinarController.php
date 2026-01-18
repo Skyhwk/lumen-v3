@@ -743,7 +743,7 @@ class SertifikatWebinarController extends Controller
 
                 array_push($validAttachments, public_path() . '/certificates/' . $value->filename);
 
-                $mail = SendEmail::where('to', 'restunugroho@intilab.com')
+                $mail = SendEmail::where('to', $value->email)
                     ->where('subject', 'E-Sertifikat ' . $header->title)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
@@ -752,6 +752,7 @@ class SertifikatWebinarController extends Controller
                 if (!empty($validAttachments)) {
                     $mail = $mail->where('attachment', $validAttachments);
                 }
+                
                 $mail->send();
             }
 
