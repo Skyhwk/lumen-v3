@@ -134,9 +134,9 @@ class GroupedCfrByLhp
                         if ($tglAnalisa) $steps['analisa']['date'] = $tglAnalisa;
                     }
 
-                    $steps['drafting']['date'] = $lhps->created_at ?? null;
+                    $steps['drafting']['date'] = $tglSampling ? ($lhps->created_at ?? null) : null;
 
-                    $steps['lhp_release']['date'] = $lhps->approved_at ?? null;
+                    $steps['lhp_release']['date'] = $tglSampling ? ($lhps->approved_at ?? null) : null;
 
                     $steps['activeStep'] = $this->detectActiveStep($steps);
 
