@@ -1297,7 +1297,7 @@ class ReadyOrderController extends Controller
 
             DB::commit();
 
-            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -2165,7 +2165,7 @@ class ReadyOrderController extends Controller
 
             DB::commit();
 
-            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
 
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
