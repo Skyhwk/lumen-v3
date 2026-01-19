@@ -227,7 +227,7 @@ class SertifikatWebinarController extends Controller
             SertifikatWebinarDetail::upsert(
                 array_values($attendances),
                 ['header_id', 'email', 'name'],
-                ['time_session']
+                ['time_session','filename']
             );
 
             DB::commit();
@@ -249,7 +249,7 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-    public function bulkGenerateCertificate(int $id)
+    public function renderSertifikat(int $id)
     {
         $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', $id)->first();
         $getDetail = $getHeader->details;
@@ -425,7 +425,7 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-    public function renderSertifikat(Request $request) {
+    public function renderSertifikatOld(Request $request) {
         $header = SertifikatWebinarHeader::with('details', 'layout', 'font', 'template')->find($request->id);
         $title = $header->title;
         $topic = $header->topic;
