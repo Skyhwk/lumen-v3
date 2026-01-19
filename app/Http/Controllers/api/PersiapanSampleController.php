@@ -45,14 +45,27 @@ class PersiapanSampleController extends Controller
 
             if ($interval->days > 31)
                 return response()->json(['message' => 'Periode tidak boleh lebih dari 1 bulan'], 403);
-
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang;
+            $isOrangPusat = in_array("0", $myPrivileges);
+            $query = OrderDetail::query();
+            if (!$isOrangPusat) {
+                $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
+                    $q->whereIn('id_cabang', $myPrivileges);
+                });
+            }
+            $data = $query->with([
                 'orderHeader:id,tanggal_order,nama_perusahaan,konsultan,no_document,alamat_sampling,nama_pic_order,nama_pic_sampling,no_tlp_pic_sampling,jabatan_pic_sampling,jabatan_pic_order,is_revisi',
                 'orderHeader.samplingPlan',
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
-                    $q->select(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang', DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')])
-                        ->where('is_active', true)
-                        ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
+                    $q->select([
+                        'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
+                        DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
+                    ])
+                    ->where('is_active', true)
+                    ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
                 ->select(['id_order_header', 'no_order', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -66,7 +79,7 @@ class PersiapanSampleController extends Controller
 
             $data = $data->get()->toArray();
 
-            $formattedData = array_reduce($data, function ($carry, $item) {
+            $formattedData = array_reduce($data, function ($carry, $item) use($isOrangPusat,$myPrivileges) {
 
                 if (empty($item['order_header']) || empty($item['order_header']['sampling']))
                     return $carry;
@@ -88,6 +101,10 @@ class PersiapanSampleController extends Controller
                 $jadwal = $targetPlan['jadwal'] ?? [];
                 $results = [];
                 foreach ($jadwal as $schedule) {
+                    $cabangId = $schedule['id_cabang'] ?? null;
+                    if (!$isOrangPusat && !in_array($cabangId, $myPrivileges)) {
+                        continue;
+                    }
                     if ($schedule['tanggal'] == $item['tanggal_sampling']) {
                         $results[] = [
                             'nomor_quotation' => $item['order_header']['no_document'] ?? '',
@@ -445,247 +462,9 @@ class PersiapanSampleController extends Controller
             ], 500);
         }
     }
-    /* public function indexV(Request $request)
-    {
-        try {
-            $periode_awal = Carbon::parse($request->periode_awal); // format dari frontend YYYY-MM
-            $periode_akhir = Carbon::parse($request->periode_akhir)->endOfMonth(); // mengambil tanggal terakhir dari bulan terpilih
-            
-            $interval = $periode_awal->diff($periode_akhir);
-
-            if ($interval->days > 31)
-                return response()->json(['message' => 'Periode tidak boleh lebih dari 1 bulan'], 403);
-
-            $data = OrderDetail::with([
-                'orderHeader' => function ($q) {
-                    $q->select([
-                        'id',
-                        'tanggal_order',
-                        'nama_perusahaan',
-                        'konsultan',
-                        'no_document',
-                        'alamat_sampling',
-                        'nama_pic_order',
-                        'nama_pic_sampling',
-                        'no_tlp_pic_sampling',
-                        'jabatan_pic_sampling',
-                        'jabatan_pic_order',
-                        'is_revisi'
-                    ]);
-                },
-                'orderHeader.samplingPlan' => function ($q) {
-                    $q->select(['id','periode_kontrak', 'quotation_id', 'status_quotation']);
-                },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
-                    $q->select([
-                        'id_sampling',
-                        'kategori',
-                        'tanggal',
-                        'durasi',
-                        'jam_mulai',
-                        'jam_selesai',
-                        'id_cabang',
-                        DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
-                    ])
-                    ->where('is_active', true)
-                    ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
-                }
-            ])
-            ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
-            ->where('is_active', true)
-            ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
-            ->get();
-           
-
-            // Mapping nama cabang untuk performa
-            $cabangMap = [
-                1 => 'HEAD OFFICE',
-                4 => 'RO-KARAWANG',
-                5 => 'RO-PEMALANG'
-            ];
-
-            // Proses data dengan satu loop dan grouping langsung
-            $groupedData = [];
-
-            foreach ($data as $item) {
-                // Skip jika tidak ada order header atau sampling plan
-                if (!$item->orderHeader || !$item->orderHeader->samplingPlan) {
-                    continue;
-                }
-
-                $orderHeader = $item->orderHeader;
-                $periode = $item->periode ?? '';
-                
-                // Cari sampling plan yang sesuai periode
-                $targetPlan = null;
-                
-                foreach ($orderHeader->sampling as $plan) {
-                    if ($periode && isset($plan->periode_kontrak) && $plan->periode_kontrak == $periode) {
-                        $targetPlan = $plan;
-                        break;
-                    }
-                    if (!$periode && !$targetPlan) {
-                        $targetPlan = $plan;
-                    }
-                }
-                
-                // Skip jika tidak ada target plan
-                if (!$targetPlan || !$targetPlan->jadwal) {
-                    continue;
-                }
-                
-
-                // Prepare info yang sering digunakan (hindari json_encode berulang)
-                $infoPendukung = json_encode([
-                    'nama_pic_order' => $orderHeader->nama_pic_order,
-                    'nama_pic_sampling' => $orderHeader->nama_pic_sampling,
-                    'no_tlp_pic_sampling' => $orderHeader->no_tlp_pic_sampling,
-                    'jabatan_pic_sampling' => $orderHeader->jabatan_pic_sampling,
-                    'jabatan_pic_order' => $orderHeader->jabatan_pic_order
-                ]);
-
-                $infoSampling = json_encode([
-                    'id_request' => $targetPlan->quotation_id,
-                    'status_quotation' => $targetPlan->status_quotation
-                ]);
-
-                // Loop jadwal dan langsung grouping
-                foreach ($targetPlan->jadwal as $schedule) 
-                {
-                    if ($schedule->tanggal != $item->tanggal_sampling) {
-                        continue;
-                    }
-
-                    $kategori = implode(',', json_decode($schedule->kategori, true) ?? []);
-                    $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
-
-                    // Buat key untuk grouping
-                    $key = implode('|', [
-                        $orderHeader->no_document ?? '',
-                        $orderHeader->nama_perusahaan ?? '',
-                        $item->kategori_1 ?? '',
-                        $periode,
-                        $schedule->tanggal,
-                        $item->no_order ?? '',
-                        $orderHeader->alamat_sampling ?? '',
-                        $orderHeader->konsultan ?? '',
-                        $kategori,
-                        $infoPendukung,
-                        $schedule->jam_mulai,
-                        $schedule->jam_selesai,
-                        $infoSampling,
-                        $namaCabang,
-                    ]);
-
-                    // Jika key sudah ada, gabungkan sampler
-                    if (isset($groupedData[$key])) {
-                        // Tambahkan sampler baru
-                        $existingSamplers = explode(',', $groupedData[$key]['sampler']);
-                        $newSamplers = explode(',', $schedule->sampler ?? '');
-                        $allSamplers = array_merge($existingSamplers, $newSamplers);
-                        // Unique dan filter empty
-                        $allSamplers = array_filter(array_unique($allSamplers));
-                        $groupedData[$key]['sampler'] = implode(',', $allSamplers);
-                    } else {
-                        // Buat entry baru
-                        $groupedData[$key] = [
-                            'nomor_quotation' => $orderHeader->no_document ?? '',
-                            'nama_perusahaan' => $orderHeader->nama_perusahaan ?? '',
-                            'status_sampling' => $item->kategori_1 ?? '',
-                            'periode' => $periode,
-                            'jadwal' => $schedule->tanggal,
-                            'kategori' => $kategori,
-                            'sampler' => $schedule->sampler ?? '',
-                            'no_order' => $item->no_order ?? '',
-                            'alamat_sampling' => $orderHeader->alamat_sampling ?? '',
-                            'konsultan' => $orderHeader->konsultan ?? '',
-                            'info_pendukung' => $infoPendukung,
-                            'jadwal_jam_mulai' => $schedule->jam_mulai,
-                            'jadwal_jam_selesai' => $schedule->jam_selesai,
-                            'info_sampling' => $infoSampling,
-                            'is_revisi' => $orderHeader->is_revisi,
-                            'nama_cabang' => $namaCabang,
-                        ];
-                    }
-                }
-            }
-           
-            // Convert ke indexed array
-            $finalResult = array_values($groupedData);
-            
-            return DataTables::of(collect($finalResult))
-                // Global search
-                ->filter(function ($item) use ($request) {
-                    $keyword = $request->input('search.value');
-
-                    if (!$keyword)
-                        return true;
-
-                    $fieldsToSearch = [
-                        'nomor_quotation',
-                        'nama_perusahaan',
-                        'periode',
-                        'jadwal'
-                    ];
-
-                    foreach ($fieldsToSearch as $field) {
-                        if (!empty($item->$field) && stripos($item->$field, $keyword) !== false) {
-                            return true;
-                        }
-                    }
-
-                    return false;
-                })
-                // Column search
-                ->filter(function ($item) use ($request) {
-                    $columns = $request->input('columns', []);
-
-                    foreach ($columns as $column) {
-                        $colName = $column['name'] ?? null;
-                        $colValue = trim($column['search']['value'] ?? '');
-
-                        if ($colName && $colValue) {
-                            $field = $item->$colName ?? '';
-
-                            if ($colName === 'periode') {
-                                try {
-                                    $parsed = Carbon::parse($field)->translatedFormat('F Y');
-                                    if (stripos($parsed, $colValue) === false) {
-                                        return false;
-                                    }
-                                } catch (Exception $e) {
-                                    return false;
-                                }
-                            } elseif ($colName === 'jadwal') {
-                                try {
-                                    $parsed = Carbon::parse($field)->format('d/m/Y');
-                                    if (stripos($parsed, $colValue) === false) {
-                                        return false;
-                                    }
-                                } catch (Exception $e) {
-                                    return false;
-                                }
-                            } else {
-                                if (stripos($field, $colValue) === false) {
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-
-                    return true;
-                }, true)
-                ->make(true);
-        } catch (Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-            ], 500);
-        }
-    }
- */
     public function indexPersiapan(Request $request)
     {
+        
         try {
             $existingWork = DB::table('persiapan_sampel_header')
             ->select('no_order', 'tanggal_sampling', 'sampler_jadwal')
@@ -713,7 +492,17 @@ class PersiapanSampleController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("0", $myPrivileges);
+
+            $query =OrderDetail::query();
+            if (!$isOrangPusat) {
+                $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
+                    $q->where('is_active',true);
+                    $q->whereIn('id_cabang', $myPrivileges);
+                });
+            }
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -723,22 +512,31 @@ class PersiapanSampleController extends Controller
                 },
                 'orderHeader.samplingPlan' => function ($q) {
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
-                    ->where('is_active', true); // Pastikan plan aktif
+                    ->where('is_active', true);
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
+                    
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
-                        // Group Concat sampler di level database agar array PHP lebih ringan
+                        // Teknik GROUP_CONCAT ini sangat bagus untuk performa! Pertahankan.
                         DB::raw('GROUP_CONCAT(DISTINCT sampler SEPARATOR ",") AS sampler')
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
+                    
+                    // LOGIC PENYEMPURNAAN DI DALAM EAGER LOAD
+                    // Jika Orang Pusat: Biarkan dia melihat semua (atau filter jika ada request spesifik).
+                    // Jika Orang Cabang: PAKSA filter di sini juga untuk memastikan konsistensi.
+                    
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
             ->where('is_active', true)
             ->whereBetween('tanggal_sampling', [$request->periode_awal, $request->periode_akhir])
-            ->get(); // Hati-hati, load semua ke memori
+            ->get();
 
             // 2. Mapping Manual (High Performance PHP Array)
             $cabangMap = [
@@ -786,6 +584,9 @@ class PersiapanSampleController extends Controller
 
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
@@ -827,6 +628,7 @@ class PersiapanSampleController extends Controller
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
                         $schedule->tanggal . '|' . 
+                        $schedule->id_cabang .'|'.
                         $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
