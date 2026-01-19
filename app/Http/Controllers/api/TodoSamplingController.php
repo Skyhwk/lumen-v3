@@ -22,7 +22,7 @@ class TodoSamplingController extends Controller
             ->whereDate('tanggal_sampling', $request->tanggal_sampling)
             ->get();
 
-        $result = [];
+        $groupedResults = [];
 
         foreach ($samples as $sample) {
             $orderHeader = $sample->orderHeader;
@@ -31,8 +31,10 @@ class TodoSamplingController extends Controller
                 continue;
             }
 
+            $noOrder = $orderHeader->no_order;
+
             // Cari jadwal yang cocok berdasarkan no_order
-            $matchedJadwal = $getJadwal->firstWhere('orderHeader.no_order', $orderHeader->no_order);
+            $matchedJadwal = $getJadwal->firstWhere('orderHeader.no_order', $noOrder);
             
             $isJadwalExist = false;
             
@@ -54,13 +56,8 @@ class TodoSamplingController extends Controller
                     // Ekstrak no_sampel dari sample (format: "ORDER123/001")
                     $sampleNoSampelParts = explode('/', $sample->no_sampel ?? '');
                     $sampleNoSampelCode = trim($sampleNoSampelParts[1] ?? '');
-        
-                    $targetKategori = $sampleKategoriNama . ' - ' . $sampleNoSampelCode;
-                    
+
                     // Cocokkan kategori dan no sampel
-                    // if($orderHeader->no_order == 'KDKI012502' && $sampleNoSampelCode == '012'){
-                    //     dd($jadwalNoSampel);
-                    // }
                     if ($jadwalKategoriNama === $sampleKategoriNama && 
                         $jadwalNoSampel === $sampleNoSampelCode) {
                         $isJadwalExist = true;
@@ -69,23 +66,34 @@ class TodoSamplingController extends Controller
                 }
             }
 
-            // Buat unique key untuk grouping (jika diperlukan)
-            $key = $orderHeader->no_order . '_' . $sample->id;
+            // Group by no_order
+            if (!isset($groupedResults[$noOrder])) {
+                $groupedResults[$noOrder] = [
+                    'id' => $sample->id,
+                    'id_cabang' => $matchedJadwal->id_cabang ?? '-',
+                    'no_document' => $orderHeader->no_document ?? '-',
+                    'nama_perusahaan' => $orderHeader->nama_perusahaan ?? '-',
+                    'no_order' => $noOrder,
+                    'kategori' => $matchedJadwal->kategori ?? $sample->kategori_3 ?? '-',
+                    'is_jadwal_exist' => $isJadwalExist,
+                    'tanggal' => $sample->tanggal_sampling,
+                    'samples' => [] // untuk tracking
+                ];
+            }
 
-            $result[] = [
-                'id' => $sample->id,
-                'id_cabang' => $matchedJadwal->id_cabang ?? '-',
-                'no_document' => $orderHeader->no_document ?? '-',
-                'nama_perusahaan' => $orderHeader->nama_perusahaan ?? '-',
-                'no_order' => $orderHeader->no_order,
+            // Update is_jadwal_exist menjadi true jika ada salah satu sample yang memiliki jadwal
+            if ($isJadwalExist) {
+                $groupedResults[$noOrder]['is_jadwal_exist'] = true;
+            }
+
+            // Simpan info sample (opsional, untuk debugging)
+            $groupedResults[$noOrder]['samples'][] = [
                 'no_sampel' => $sample->no_sampel,
-                'kategori' => $matchedJadwal->kategori ?? $sample->kategori_3 ?? '-',
-                'is_jadwal_exist' => $isJadwalExist,
-                'tanggal' => $sample->tanggal_sampling,
+                'has_jadwal' => $isJadwalExist
             ];
         }
 
-        $data = collect($result)->unique('no_order')->values()->all();
+        $data = array_values($groupedResults);
 
         // Jika menggunakan DataTables server-side
         return datatables()
@@ -96,6 +104,13 @@ class TodoSamplingController extends Controller
                     return '<span class="badge badge-success">Ada Jadwal</span>';
                 }
                 return '<span class="badge badge-warning">Belum Ada Jadwal</span>';
+            })
+            ->addColumn('jumlah_sampel', function($row) {
+                return count($row['samples']);
+            })
+            ->addColumn('sampel_terjadwal', function($row) {
+                $terjadwal = collect($row['samples'])->where('has_jadwal', true)->count();
+                return $terjadwal . '/' . count($row['samples']);
             })
             ->rawColumns(['status_jadwal'])
             ->make(true);
