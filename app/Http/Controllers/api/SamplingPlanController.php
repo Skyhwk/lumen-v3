@@ -35,6 +35,7 @@ class SamplingPlanController extends Controller
 
     public function index(Request $request)
     {
+        
         $active = $request->is_active == '' ? true : $request->is_active;
 
         $data = Jadwal::with([
@@ -49,19 +50,58 @@ class SamplingPlanController extends Controller
             ->where('is_active', $active);
 
         // Filter cabang
-        if ($request->filled('id_cabang_filter')) {
-            $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+        // if ($request->filled('id_cabang_filter')) {
+        //     $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
 
-            $data->where(function ($query) use ($idCabang) {
-                $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
-                if (!empty($filtered)) {
-                    $query->whereIn('id_cabang', $filtered);
-                }
+        //     $data->where(function ($query) use ($idCabang) {
+        //         $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+        //         if (!empty($filtered)) {
+        //             $query->whereIn('id_cabang', $filtered);
+        //         }
 
-                if (in_array('null', $idCabang, true)) {
-                    $query->orWhereNull('id_cabang');
-                }
-            });
+        //         if (in_array('null', $idCabang, true)) {
+        //             $query->orWhereNull('id_cabang');
+        //         }
+        //     });
+        // }
+        // CEK HIERARKI KLAN (Auth Check)
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("0", $myPrivileges);
+        if ($isOrangPusat) {
+            // === SKENARIO 1: PETINGGI (ADA AKSES "1") ===
+            // Karena dia punya akses "1", dia dianggap 'Maha Tahu'.
+            // Dia bebas melihat semua data secara default.
+            // Namun, jika dia ingin menggunakan teknik filter (Request Filter):
+            if ($request->filled('id_cabang_filter')) {
+                $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                $data->where(function ($query) use ($idCabang) {
+                    $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+                    if (!empty($filtered)) {
+                        $query->whereIn('id_cabang', $filtered);
+                    }
+                    if (in_array('null', $idCabang, true)) {
+                        $query->orWhereNull('id_cabang');
+                    }
+                });
+            }
+
+        } else {
+            // === SKENARIO 2: PENYIHIR CABANG (TIDAK ADA "1") ===
+            // Mereka terikat sumpah. Mereka WAJIB dibatasi hanya pada array privilege mereka.
+            // PERTAHANAN LAPIS 1: Batasi data hanya sesuai privilege (Wajib)
+            // SQL: WHERE id_cabang IN ("2", "4")
+            $data->whereIn('id_cabang', $myPrivileges);
+            // PERTAHANAN LAPIS 2 (OPSIONAL): 
+            // Jika user cabang ini ingin memfilter LEBIH SEMPIT lagi di dalam wilayahnya sendiri.
+            // Misal: Dia punya akses ["2", "4"], tapi dia cuma klik filter "Cabang 2".
+            if ($request->filled('id_cabang_filter')) {
+                $reqFilter = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                // Kita tambahkan filter user di atas batasan privilege.
+                // Secara otomatis SQL akan melakukan interseksi (AND).
+                // WHERE id_cabang IN ("2", "4") AND id_cabang IN ("2") -> Hasilnya data "2".
+                // Jika dia nekat minta "5": WHERE id_cabang IN ("2","4") AND id_cabang IN ("5") -> Hasil Kosong.
+                $data->whereIn('id_cabang', $reqFilter);
+            }
         }
 
         $data->orderBy('tanggal', 'DESC');
@@ -125,7 +165,29 @@ class SamplingPlanController extends Controller
                         ->orWhere('created_at', 'like', '%' . $keyword . '%');
                 });
             })
+            ->with([
+                'cabang_options' => $this->getBranchOptionsForUser() 
+            ])
             ->make(true);
+    }
+
+    private function getBranchOptionsForUser()
+    {
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("1", $myPrivileges);
+
+        $query = MasterCabang::select('id', 'nama_cabang'); // Sesuaikan nama kolom
+
+        if (!$isOrangPusat) {
+            $query->whereIn('id', $myPrivileges);
+        }
+        // Ambil datanya
+        return $query->get()->map(function($item) {
+            return [
+                'value' => $item->id,
+                'label' => $item->nama_cabang
+            ];
+        });
     }
 
     public function kantorCabang(Request $request)
