@@ -863,7 +863,7 @@ class SertifikatWebinarController extends Controller
                 $validAttachments = array_merge($validAttachments, $templateAttachments);
 
 
-                $mail = SendEmail::where('to', 'restunugroho@intilab.com')
+                $mail = SendEmail::where('to', $value->email)
                     ->where('subject', 'E-Sertifikat ' . $header->title)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
