@@ -181,23 +181,24 @@ class RandomSalesAssign
                         // 3. Jika punya order
                         if ($customer->latestOrder) {
 
-                            // Order > 8 bulan?
-                            if (Carbon::parse($customer->latestOrder->tanggal_order)->lt(Carbon::now()->subMonths(8))) {
+                            // // Order > 8 bulan?
+                            // if (Carbon::parse($customer->latestOrder->tanggal_order)->lt(Carbon::now()->subMonths(8))) {
 
-                                if ($shouldReassignByQuotation()) {
-                                    $customer->reAssignReason = 'Order lebih dari 8 bulan dan penawaran terakhir lebih dari 6 bulan';
-                                    $AssignToSalesNewByCheckingAll[] = $customer;
-                                } elseif ($shouldReassignByDFUS()) {
-                                    $customer->reAssignReason = 'Order lebih dari 8 bulan dan follow up sales terakhir lebih dari 1 minggu';
-                                    $AssignToSalesNewByCheckingAll[] = $customer;
-                                } else {
-                                    $NotReAssign[] = $customer;
-                                    // $customer->reAssignReason = 'Order lebih dari 8 bulan';
-                                    // $AssignToSalesNewByCheckingAll[] = $customer;
-                                }
-                            } else {
-                                $NotReAssign[] = $customer;
-                            }
+                            //     if ($shouldReassignByQuotation()) {
+                            //         $customer->reAssignReason = 'Order lebih dari 8 bulan dan penawaran terakhir lebih dari 6 bulan';
+                            //         $AssignToSalesNewByCheckingAll[] = $customer;
+                            //     } elseif ($shouldReassignByDFUS()) {
+                            //         $customer->reAssignReason = 'Order lebih dari 8 bulan dan follow up sales terakhir lebih dari 1 minggu';
+                            //         $AssignToSalesNewByCheckingAll[] = $customer;
+                            //     } else {
+                            //         $NotReAssign[] = $customer;
+                            //         // $customer->reAssignReason = 'Order lebih dari 8 bulan';
+                            //         // $AssignToSalesNewByCheckingAll[] = $customer;
+                            //     }
+                            // } else {
+                            //     $NotReAssign[] = $customer;
+                            // }
+                            $NotReAssign[] = $customer;
 
                             continue;
                         }

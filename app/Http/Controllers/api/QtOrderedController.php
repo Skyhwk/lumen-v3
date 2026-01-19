@@ -94,6 +94,8 @@ class QtOrderedController extends Controller
                         // single object
                         $po = $row->konfirmasi->no_purchaseorder;
                         return (!is_null($po) && trim($po) !== '') ? $po : '-';
+                    } else if ($row->konfirmasi && empty($row->konfirmasi->no_purchaseorder)) {
+                        return $row->konfirmasi->keterangan_approval_order;
                     } else {
                         return '-';
                     }
@@ -104,11 +106,12 @@ class QtOrderedController extends Controller
                     });
                 })
                 ->filterColumn('no_po', function ($query, $keyword) {
-                $query->whereHas('konfirmasi', function ($q) use ($keyword) {
-                    $q->whereNotNull('no_purchaseorder')
-                        ->where('no_purchaseorder', '!=', '')
-                        ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
-                });
+                    $query->whereHas('konfirmasi', function ($q) use ($keyword) {
+                        $q->whereNotNull('no_purchaseorder')
+                            ->where('no_purchaseorder', '!=', '')
+                            ->where('no_purchaseorder', 'like', '%' . $keyword . '%');
+                        $q->orWhere('keterangan_approval_order', 'like', '%' . $keyword . '%');
+                    });
                 })
                 ->make(true);
         } catch (\Exception $e) {

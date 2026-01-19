@@ -126,6 +126,8 @@ class RequestFeeExternalController extends Controller
         $claim->status_pembayaran = "TRANSFER";
         $claim->transferred_by = $this->karyawan;
         $claim->tanggal_pembayaran = $request->transfer_date;
+        $claim->potongan = $request->potongan;
+        $claim->nominal_bayar = $request->nominal_bayar;
         $claim->save();
 
         return response()->json(['message' => 'Claim Fee External Berhasil Ditransfer']);
@@ -162,7 +164,5 @@ class RequestFeeExternalController extends Controller
             $query->whereYear($column, $value);
         }
     }
-
-
 
 }

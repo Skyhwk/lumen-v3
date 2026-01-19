@@ -149,8 +149,8 @@ class ClaimFeeExternalController extends Controller
             
             $claim->no_order = $request->no_order;
             $claim->nama_penerima = $request->nama_penerima;
-            $claim->nama_bank = $request->bank;
-            $claim->no_rekening = $request->no_rekening;
+            $claim->nama_bank = $request->bank != '' ? $request->bank : null;
+            $claim->no_rekening = $request->no_rekening != '' ? $request->no_rekening : null;
             $claim->nama_perusahaan = $request->nama_perusahaan;
             $claim->nominal = $request->nominal;
             $claim->due_date = $request->tanggal_claim;
@@ -160,6 +160,7 @@ class ClaimFeeExternalController extends Controller
             $claim->no_invoice = $noInvoice;
             $claim->biaya_akhir = $request->biaya_akhir;
             $claim->periode = $request->periode;
+            $claim->metode_pembayaran = $request->metode_bayar;
             $claim->save();
             
             DB::commit();

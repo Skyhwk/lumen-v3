@@ -124,6 +124,39 @@ class TqcUdaraLingkunganKerjaController extends Controller
         ], 200);
     }
 
+    public function approveData(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = OrderDetail::where('id', $request->id)->first();
+            if ($data) {
+                $data->status = 2;
+                $data->save();
+                HistoryAppReject::insert([
+                    'no_lhp' => $data->cfr,
+                    'no_sampel' => $data->no_sampel,
+                    'kategori_2' => $data->kategori_2,
+                    'kategori_3' => $data->kategori_3,
+                    'menu' => 'TQC Udara',
+                    'status' => 'approve',
+                    'approved_at' => Carbon::now(),
+                    'approved_by' => $this->karyawan
+                ]);
+                DB::commit();
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Data tqc no sample ' . $data->no_sampel . ' berhasil diapprove'
+                ]);
+            }
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan ' . $th->getMessage()
+            ]);
+        }
+    }
+
     public function handleRejectSelected(Request $request)
     {
         OrderDetail::whereIn('no_sampel', $request->no_sampel_list)->update(['status' => 0]);

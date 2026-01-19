@@ -280,7 +280,7 @@ class DraftUdaraKebisinganController extends Controller
                 $fileName = null;
                 if (in_array($id_regulasii, [46, 54, 151, 167, 168, 382, 1321])) {
 
-                    $parameter = $details->first()->param;
+                    $parameter = json_decode($header->parameter_uji)[0];
                     if (strpos($parameter, '24 Jam') !== false) {
                         $is_sesaat = false;
                     } else {
@@ -871,7 +871,7 @@ class DraftUdaraKebisinganController extends Controller
                 return response()->json(['message' => 'Link not found'], 404);
             }
             return response()->json(['link' => env('PORTALV3_LINK') . $link->token], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }
     }

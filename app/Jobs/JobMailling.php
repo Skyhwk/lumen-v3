@@ -43,7 +43,8 @@ class JobMailling extends Job
             ->where('body', $content)
             ->where('attachment', $attachments)
             ->where('karyawan', $karyawan)
-            ->noReply()
+            ->fromPromoSales()
+            // ->noReply()
             ->send();
         }
     }

@@ -847,8 +847,9 @@ class DraftUdaraAmbientController extends Controller
                     $mainData[] = $entry;
 
                     if ($request->other_regulasi) {
+                        $kosongBuatRef = []; // kalau gaada nanti eror soalnya &methodUsed harus by ref bukan literal
                         foreach ($request->other_regulasi as $id_regulasi) {
-                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi, [], $getHasilUji);
+                            $otherRegulations[$id_regulasi][] = $this->formatEntry((object) $item, $id_regulasi, $kosongBuatRef, $getHasilUji);
                         }
                     }
                 }

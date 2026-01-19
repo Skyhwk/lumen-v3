@@ -204,17 +204,24 @@ class DraftSwabTesController extends Controller
                 $regulasiList = [$request->regulasi];
             }
 
+            if (empty($regulasiList)) {
+                $regulasiList = [null]; // Set null agar tetap loop sekali
+            }
+
             $mappedData = [];
 
             // LOOP SETIAP REGULASI
+            
             foreach ($regulasiList as $full_regulasi) {
                 // contoh: "143-Peraturan Menteri Kesehatan Nomor 7 Tahun 2019"
-                $parts_regulasi = explode('-', $full_regulasi, 2);
-                $id_regulasi    = $parts_regulasi[0] ?? null;
-                $nama_regulasi  = $parts_regulasi[1] ?? null;
-
-                if (! $id_regulasi) {
-                    continue;
+                $id_regulasi   = null;
+                $nama_regulasi = null;
+                
+                // Hanya parse jika regulasi tidak null
+                if ($full_regulasi !== null) {
+                    $parts_regulasi = explode('-', $full_regulasi, 2);
+                    $id_regulasi    = $parts_regulasi[0] ?? null;
+                    $nama_regulasi  = $parts_regulasi[1] ?? null;
                 }
 
                 // mapping setiap swabData terhadap regulasi ini

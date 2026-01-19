@@ -36,7 +36,6 @@ class PrintingController extends Controller
 
     public function print(Request $request)
     {
-        // dd($request->all());
         try {
             $cek_printer = Printers::where('id', $request->printer)->first();
 

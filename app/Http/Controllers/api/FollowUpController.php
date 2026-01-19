@@ -38,6 +38,10 @@ class FollowUpController extends Controller
                 $pelanggan->where('sales_id', $this->user_id);
                 break;
 
+            case 148: 
+                $pelanggan->where('sales_id', $this->user_id);
+                break;
+
             case 21: // Sales Supervisor
                 $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
                 array_push($bawahan, $this->user_id);
@@ -157,7 +161,7 @@ class FollowUpController extends Controller
         if ($cekLog) {
             $karyawan_now = $request->attributes->get('user');
 
-            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 10) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'
@@ -383,7 +387,7 @@ class FollowUpController extends Controller
 
                         if (
                             $cekLog && $cekLog->nama_lengkap != $this->karyawan &&
-                            \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2
+                            \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 10
                         ) {
                             $time = Carbon::parse($cekLog->created_at)->translatedFormat('d F Y H:i');
                             $sudahDihubungi[] = "<strong>{$item['nama_pelanggan']}</strong><br /> oleh: <strong>{$cekLog->nama_lengkap}</strong><br />pada: {$time}";
@@ -440,7 +444,7 @@ class FollowUpController extends Controller
 
                         if ($cekLog) {
 
-                            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+                            if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 10) {
                                 return response()->json([
                                     'status' => 'error',
                                     'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.'

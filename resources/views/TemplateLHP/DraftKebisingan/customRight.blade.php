@@ -53,7 +53,7 @@
                     </tr>
                     <tr>
                     @php
-                         $methode_sampling = $header->metode_sampling ? $header->metode_sampling :[];
+                            $methode_sampling = $header->metode_sampling ? $header->metode_sampling :[];
                     @endphp
                         <td class="custom5" width="120">Metode Sampling</td>
                         <td class="custom5" width="12">:</td>

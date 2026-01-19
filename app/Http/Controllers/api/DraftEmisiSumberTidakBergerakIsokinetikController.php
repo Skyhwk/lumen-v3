@@ -496,7 +496,7 @@ class DraftEmisiSumberTidakBergerakIsokinetikController extends Controller
                     foreach ($data as $val) {
                         if($model === IsokinetikHeader::class){
                             $hasilIsokinetik = json_decode($val->ws_value_cerobong->hasil_isokinetik, true);
-                            dd($hasilIsokinetik);
+                            // dd($hasilIsokinetik);
 
                             // berat_molekul_kering
                             if (array_key_exists('berat_molekul_kering_method5', $hasilIsokinetik)) {
