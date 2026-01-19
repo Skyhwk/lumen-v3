@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Repository;
 
@@ -204,7 +206,7 @@ class SertifikatWebinarController extends Controller
                     'name'          => $name,
                     'email'         => $email,
                     'time_session'  => ($time_session > 180 ? 180 : $time_session),
-                    // 'filename'      => $code . '-' . $useNumberAttend . '-' . $name . '.pdf',
+                    'filename'      => $code . '-' . $useNumberAttend . '.pdf',
                 ];
             }
             
@@ -225,17 +227,19 @@ class SertifikatWebinarController extends Controller
             SertifikatWebinarDetail::upsert(
                 array_values($attendances),
                 ['header_id', 'email', 'name'],
-                ['time_session', 'filename']
+                ['time_session']
             );
 
             DB::commit();
+    
+            // self::bulkGenerateCertificate($request->id);
 
-            self::bulkGenerateCertificate($request->id);
+            Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
+                
 
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
-            dd($th);
             return response()->json([
                 'message' =>
                 'Gagal mengimport data',
@@ -245,14 +249,13 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-    private function bulkGenerateCertificate(int $id)
+    public function bulkGenerateCertificate(int $id)
     {
         $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', $id)->first();
         $getDetail = $getHeader->details;
         $layout = LayoutCertificate::where('id', $getHeader->id_layout)->first();
         $font = JenisFont::where('id', $getHeader->id_font)->first();
         $template = TemplateBackground::where('id', $getHeader->id_template)->first();
-        
         foreach ($getDetail as $key => $value) {
             /**
              * Mulai generate sertifikat satu per satu
@@ -286,6 +289,8 @@ class SertifikatWebinarController extends Controller
             $value->update([
                 'filename' => $filename
             ]);
+
+
         }
     }
 
@@ -537,12 +542,6 @@ class SertifikatWebinarController extends Controller
         $data = WebinarQna::where('id', $request->id)->delete();
         return response()->json(['message' => 'Data Berhasil dihapus'], 200);
     }
-
-    public function sendEmailBulk(Request $request)
-    {
-        
-    }
-
     private static function monthToRoman(int $month): string
     {
         $romans = [
@@ -563,45 +562,143 @@ class SertifikatWebinarController extends Controller
         return $romans[$month] ?? '';
     }
 
-    public function setTemplateEmail(Request $request)
+
+    public function indexTemplateEmail(Request $request)
     {
-        try {
+        $header = DB::table('sertifikat_webinar_header')
+            ->where('id', $request->id)
+            ->first();
 
-                $uuid = (int) str_replace('.', '', microtime(true));
+        if (!$header) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data webinar tidak ditemukan',
+            ], 404);
+        }
 
-                Repository::dir('certificate')->key($uuid)->save($request->content);
+        $body = '';
+        $attachments = [];
 
-                DB::table('sertifikat_webinar_header')
-                    ->where('id', $request->id)
-                    ->update([
-                        'body_email' => $uuid . '.txt',
-                    ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Template Email berhasil disimpan',
-                ], 200);
-
-            } catch (\Throwable $th) {
-                throw $th;
+        if (!empty($header->body_email)) {
+            $filename = $header->body_email;
+            $number = pathinfo($filename, PATHINFO_FILENAME);
+            
+            try {
+                $body = Repository::dir('certificate')->key($number)->get();
+            } catch (\Exception $e) {
+                $body = '';
             }
+        }
+
+        if (!empty($header->attachments)) {
+            $attachmentNames = json_decode($header->attachments, true);
+            
+            if (is_array($attachmentNames) && count($attachmentNames) > 0) {
+                $folderName = Str::slug($header->title ?? 'webinar');
+                
+                $basePath = public_path("uploads/webinar/{$folderName}");
+                $baseUrl = url("uploads/webinar/{$folderName}");
+                
+                foreach ($attachmentNames as $filename) {
+                    $filePath = "{$basePath}/{$filename}";
+                    
+                    if (file_exists($filePath)) {
+                        $attachments[] = [
+                            'name' => $filename,
+                            'url' => "{$baseUrl}/{$filename}",
+                            'size' => filesize($filePath),
+                        ];
+                    }
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'header' => $header,
+                'body' => $body,
+                'attachments' => $attachments,
+                'subject' => "E-Sertifikat Webinar {$header->title}",
+            ],
+            'message' => 'Template email berhasil dimuat',
+        ]);
     }
 
-    public function processEmail(Request $request)
+   
+    public function setTemplateEmail(Request $request)
+    {
+        $uuid = (int) str_replace('.', '', microtime(true));
+
+        Repository::dir('certificate')->key($uuid)->save($request->content);
+
+        $header = DB::table('sertifikat_webinar_header')
+            ->where('id', $request->id)
+            ->first();
+
+        if (!$header) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data webinar tidak ditemukan',
+            ], 404);
+        }
+
+        $folderName = Str::slug($header->title ?? 'webinar');
+        
+        $basePath = public_path("uploads/webinar/{$folderName}");
+
+        if (!file_exists($basePath)) {
+            mkdir($basePath, 0755, true);
+        }
+
+        $existingAttachments = $request->input('existingAttachments', []);
+        
+        $deletedAttachments = $request->input('deletedAttachments', []);
+        
+        if (!empty($deletedAttachments) && is_array($deletedAttachments)) {
+            foreach ($deletedAttachments as $filename) {
+                $filePath = "{$basePath}/{$filename}";
+                if (file_exists($filePath)) {
+                    unlink($filePath); 
+                }
+            }
+        }
+
+        $newAttachments = [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $originalName = $file->getClientOriginalName();
+                $extension = $file->getClientOriginalExtension();
+                $filename = pathinfo($originalName, PATHINFO_FILENAME);
+                $name = $originalName;
+                $file->move($basePath, $name);
+                $newAttachments[] = $name;
+            }
+        }
+
+        $allAttachments = array_merge(
+            is_array($existingAttachments) ? $existingAttachments : [], 
+            $newAttachments
+        );
+
+        DB::table('sertifikat_webinar_header')
+            ->where('id', $request->id)
+            ->update([
+                'body_email' => $uuid . '.txt',
+                'attachments' => json_encode($allAttachments),
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Template Email berhasil disimpan',
+        ]);
+    }
+
+    public function sendEmailBulk(Request $request)
     {
         try {
 
-            $uuid = (int) str_replace('.', '', microtime(true));
-
-            Repository::dir('certificate')->key($uuid)->save($request->content);
-
-            DB::table('sertifikat_webinar_header')
-                ->where('id', $request->id)
-                ->update([
-                    'body_email' => $uuid . '.txt',
-                ]);
-
-            // Http::post('http://127.0.0.1:2999/send-email', ["id" => $request->id]);
+            Http::post('http://127.0.0.1:2999/send-email', ["id" => $request->id]);
 
             return response()->json([
                 'success' => true,
@@ -611,7 +708,10 @@ class SertifikatWebinarController extends Controller
         } catch (\Throwable $th) {
             throw $th;
         }
+        
     }
+
+
 
     public function sendEmail(Request $request)
     {
@@ -633,6 +733,7 @@ class SertifikatWebinarController extends Controller
                 ->where('header_id', $request->id)
                 ->where('time_session' , '>', 60)
                 ->whereNotNull('time_session')
+                ->limit(5)
                 ->orderBy('id','asc')
                 ->get();
 
@@ -657,6 +758,22 @@ class SertifikatWebinarController extends Controller
                 ], 404);
             }
 
+
+            $templateAttachments = [];
+            if (!empty($header->attachments)) {
+                $attachmentNames = json_decode($header->attachments, true);
+                if (is_array($attachmentNames)) {
+                    $folderName = Str::slug($header->title ?? 'webinar');
+                    $basePath = public_path("uploads/webinar/{$folderName}");
+                    foreach ($attachmentNames as $filename) {
+                        $filePath = "{$basePath}/{$filename}";
+                        
+                        if (file_exists($filePath)) {
+                            $templateAttachments[] = $filePath;
+                        }
+                    }
+                }
+            }
 
             foreach ($detail as $value) {
 
@@ -743,7 +860,10 @@ class SertifikatWebinarController extends Controller
 
                 array_push($validAttachments, public_path() . '/certificates/' . $value->filename);
 
-                $mail = SendEmail::where('to', $value->email)
+                $validAttachments = array_merge($validAttachments, $templateAttachments);
+
+
+                $mail = SendEmail::where('to', 'restunugroho@intilab.com')
                     ->where('subject', 'E-Sertifikat ' . $header->title)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
