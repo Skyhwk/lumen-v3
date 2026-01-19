@@ -178,6 +178,7 @@ class GenerateInvoiceController extends Controller
                 DB::raw('MAX(no_spk) AS no_spk'),
                 DB::raw('MAX(tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
                 DB::raw('MAX(filename) AS filename'),
+                DB::raw('MAX(upload_file) AS upload_file'),
                 DB::raw('MAX(order_header.konsultan) AS consultant'),
                 DB::raw('MAX(order_header.no_document) AS document'),
                 DB::raw('MAX(invoice.created_at) AS created_at'),
@@ -425,6 +426,40 @@ class GenerateInvoiceController extends Controller
                     ->update($update);
             }
 
+            $filename = \str_replace("/", "_", $request->no_invoice);
+            $path = public_path() . "/qr_documents/" . $filename . '.svg';
+            if(!file_exists($path)){
+                $invoice = Invoice::where('no_invoice', $request->no_invoice)->where('is_active', true)->first();
+                $link = 'https://www.intilab.com/validation/';
+                $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+                $getDetail = Invoice::select('order_header.nama_perusahaan')
+                    ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                    ->where('invoice.no_invoice', $request->no_invoice)
+                    ->where('invoice.is_active', true)
+                    ->first();
+
+                QrCode::size(200)->generate($link . $unique, $path);
+                $dataQr = [
+                    'type_document' => 'invoice',
+                    'kode_qr' => $unique,
+                    'file' => $filename,
+                    'data' => json_encode([
+                        'no_document' => $request->no_invoice,
+                        'nama_customer' => $getDetail->nama_perusahaan,
+                        'type_document' => 'invoice',
+                        'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                        'Disahkan_Oleh' => $invoice->nama_pj,
+                        'Jabatan' => $invoice->jabatan_pj
+                    ]),
+                    'created_at' => Carbon::now(),
+                    'created_by' => $this->karyawan,
+                ];
+
+                DB::table('qr_documents')->insert($dataQr);
+                // self::generatePDF($request->no_invoice);
+            }
+
             self::generatePDF($request->no_invoice);
 
             DB::commit();
@@ -620,32 +655,41 @@ class GenerateInvoiceController extends Controller
                 } else {
                     $filename = \str_replace("/", "_", $request->no_invoice);
                     $path = public_path() . "/qr_documents/" . $filename . '.svg';
-                    $link = 'https://www.intilab.com/validation/';
-                    $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-                    $getDetail = Invoice::select('order_header.nama_perusahaan')
-                        ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
-                        ->where('invoice.no_invoice', $request->no_invoice)
-                        ->where('invoice.is_active', true)
-                        ->first();
-
-                    QrCode::size(200)->generate($link . $unique, $path);
-                    $dataQr = [
-                        'type_document' => 'invoice',
-                        'kode_qr' => $unique,
-                        'file' => $filename,
-                        'data' => json_encode([
+                    if(!file_exists($path)){
+                        $link = 'https://www.intilab.com/validation/';
+                        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+    
+                        $getDetail = Invoice::select('order_header.nama_perusahaan')
+                            ->leftJoin('order_header', 'invoice.no_order', '=', 'order_header.no_order')
+                            ->where('invoice.no_invoice', $request->no_invoice)
+                            ->where('invoice.is_active', true)
+                            ->first();
+    
+                        QrCode::size(200)->generate($link . $unique, $path);
+                        $dataQr = [
                             'type_document' => 'invoice',
-                            'no_document' => $request->no_invoice,
-                            'nama_customer' => $getDetail->nama_perusahaan,
-                        ]),
-                        'created_at' => Carbon::now(),
-                        'created_by' => $this->karyawan,
-                    ];
-
-                    DB::table('qr_documents')->insert($dataQr);
+                            'kode_qr' => $unique,
+                            'file' => $filename,
+                            'data' => json_encode([
+                                'no_document' => $request->no_invoice,
+                                'nama_customer' => $getDetail->nama_perusahaan,
+                                'type_document' => 'invoice',
+                                'Tanggal_Pengesahan' => Carbon::parse($invoice->tgl_invoice)->locale('id')->isoFormat('DD MMMM YYYY'),
+                                'Disahkan_Oleh' => $invoice->nama_pj,
+                                'Jabatan' => $invoice->jabatan_pj
+                            ]),
+                            'created_at' => Carbon::now(),
+                            'created_by' => $this->karyawan,
+                        ];
+    
+                        DB::table('qr_documents')->insert($dataQr);
+                        self::generatePDF($request->no_invoice);
+                    }
 
                     $tokenService = new GenerateToken();
+                    if($invoice->upload_file != null) {
+                        $invoice->filename = $invoice->upload_file;
+                    }
                     $token = $tokenService->save('INVOICE', $invoice, $this->karyawan, 'invoice');
                     // dd('masuk');
 
@@ -657,7 +701,6 @@ class GenerateInvoiceController extends Controller
                     ]);
                 }
 
-                self::generatePDF($request->no_invoice);
 
                 $message = "Invoice number $invoice->no_invoice success Generated";
                 DB::commit();
@@ -1355,15 +1398,42 @@ class GenerateInvoiceController extends Controller
         }
     }
 
-    public function approveInvoice(Request $request)
+    public function uploadFile(Request $request)
     {
-        Invoice::where('no_invoice', $request->no_invoice)->update([
-            'is_emailed' => true
-        ]);
+        DB::beginTransaction();
+        try {
+            $file = $request->file('file_input');
 
-        return response()->json([
-            'message' => 'Successfully Approve Invoice',
-            'status' => 200
-        ], 200);
+            // Validasi file
+            if (!$file || $file->getClientOriginalExtension() !== 'pdf') {
+                return response()->json(['error' => 'File tidak valid. Harus .pdf'], 400);
+            }
+
+            $inv = Invoice::where('no_invoice', $request->no_invoice)->first();
+            // Pastikan folder invoice ada
+            $folder = public_path('invoice');
+            if (!file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            // Generate nama file unik
+            $fileName = 'INVOICE' . '_' . preg_replace('/\\//', '_', $inv->no_invoice) . '_' . 'upload' . '.pdf';
+
+            // Simpan file
+            $file->move($folder, $fileName);
+            $inv->upload_file = $fileName;
+            $inv->save();
+
+            DB::commit();
+            return response()->json([
+                'success'  => 'Sukses menyimpan file upload',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Terjadi kesalahan server',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 }
