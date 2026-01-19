@@ -170,13 +170,14 @@ class TicketRLHPController extends Controller
 
     public function searchLhp(Request $request)
     {
-        $data = OrderDetail::with(['orderHeader', 'lhps_air', 'lhps_ling', 'lhps_emisi_c'])
+        $data = OrderDetail::with(['orderHeader', 'lhps_air', 'lhps_ling', 'lhps_emisi_c', 'lhps_emisi_isokinetik'])
             ->where('is_active', true)
             ->where('cfr', $request->no_lhp)
             ->where(function ($q) {
                 $q->whereHas('lhps_air')
                     ->orWhereHas('lhps_ling')
-                    ->orWhereHas('lhps_emisi_c');
+                    ->orWhereHas('lhps_emisi_c')
+                    ->orWhereHas('lhps_emisi_isokinetik');
             })
             ->first();
 
@@ -189,6 +190,7 @@ class TicketRLHPController extends Controller
         $hasAir    = $data->relationLoaded('lhps_air') && $data->lhps_air;
         $hasLing   = $data->relationLoaded('lhps_ling') && $data->lhps_ling;
         $hasEmisiC = $data->relationLoaded('lhps_emisi_c') && $data->lhps_emisi_c;
+        $hasEmisiI = $data->relationLoaded('lhps_emisi_isokinetik') && $data->lhps_emisi_isokinetik;
 
         /**
          * Kalau cuma punya lhps_ling saja
@@ -228,6 +230,10 @@ class TicketRLHPController extends Controller
         }
         if ($hasEmisiC) {
             $data->detailParameter = $data->lhps_emisi_c->lhpsEmisiCDetail;
+        }
+
+        if ($hasEmisiI) {
+            $data->detailParameter = $data->lhps_emisi_isokinetik->lhpsEmisiIsokinetikDetail;
         }
 
         // $arrayModels = [
