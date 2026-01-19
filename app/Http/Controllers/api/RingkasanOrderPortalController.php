@@ -13,13 +13,17 @@ class RingkasanOrderPortalController extends Controller
     {
         try {
             $cek =$request->cek;
+            $ambilDB=null;
             $chekToken =GenerateLink::where('token',$request->token)
             ->where('quotation_status','ringkasan_order')
             ->first();
+            
             if($chekToken !== null){
                 $idTokenRingkasan = $chekToken->id_quotation;
                 $ambilDB =DB::table('link_ringkasan_order')->where('id',$idTokenRingkasan)->first();
+                
             }
+            // dd(strlen($request->token));
             if($ambilDB == null)
             {
                 return response()->json(["message"=>"data belum dimuat"],500);
@@ -195,8 +199,8 @@ class RingkasanOrderPortalController extends Controller
             $jadwalFile = null;
             $fileLinkLhp=[];
             $noInvoice =[];
-            if (explode('/', $request->no_document)[1] == 'QTC'){
-                $searchFileName = QuotationKontrakH::where('no_document',$request->no_document)
+            if (explode('/', $ambilDB->no_quotation)[1] == 'QTC'){
+                $searchFileName = QuotationKontrakH::where('no_document',$ambilDB->no_quotation)
                 ->select('filename','jadwalfile')
                 ->where('flag_status','ordered')
                 ->where('is_active',true)
@@ -206,7 +210,7 @@ class RingkasanOrderPortalController extends Controller
                     $jadwalFile = $searchFileName->jadwalfile;
                 }
             }else{
-                $searchFileName = QuotationNonKontrak::where('no_document',$request->no_document)
+                $searchFileName = QuotationNonKontrak::where('no_document',$ambilDB->no_quotation)
                 ->select('filename','jadwalfile')
                 ->where('flag_status','ordered')
                 ->where('is_active',true)
@@ -217,7 +221,7 @@ class RingkasanOrderPortalController extends Controller
                 }
             }
             
-            $searchLinkLhp =LinkLhp::where('no_quotation',$request->no_document)
+            $searchLinkLhp =LinkLhp::where('no_quotation',$ambilDB->no_quotation)
              ->select('no_quotation','link','periode')->get();
              if($searchLinkLhp->isNotEmpty()){
                 foreach($searchLinkLhp as $link){
@@ -230,7 +234,7 @@ class RingkasanOrderPortalController extends Controller
                 }
              }
 
-             $searchInvoice = Invoice::where('no_quotation',$request->no_document)
+             $searchInvoice = Invoice::where('no_quotation',$ambilDB->no_quotation)
              ->select('no_invoice','filename')
              ->where('is_active',true)
              ->get();
@@ -262,12 +266,16 @@ class RingkasanOrderPortalController extends Controller
                 'jadwal_file' =>$filenameJadwalEndcode,
                 'link_lhp' =>$fileLinkLhp,
                 'nomor_invoice' =>$noInvoice,
-                'typQt' => explode('/', $request->no_document)[1],
+                'typQt' => explode('/', $ambilDB->no_quotation)[1],
                 'status' =>true
             ],200);
         } catch (\Throwable $th) {
             //throw $th;
-            return response()->json(['error'=>$th->getMessage(),'line'=>$th->getLine(),'file'=>$th->getFile()],500);
+            return response()->json([
+                'error'=>$th->getMessage(),
+                'line'=>$th->getLine(),
+                'file'=>$th->getFile(),
+                'panjang_token' =>strlen($request->token)],500);
         }
     }
 
