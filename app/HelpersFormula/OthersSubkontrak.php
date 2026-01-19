@@ -36,7 +36,7 @@ class OthersSubkontrak
 		// dd($data->hp);
 		if (strpos($data->hp, '<') !== false || strpos($data->hp, '>') !== false || strpos($data->parameter, 'Rasa') !== false || !is_numeric($data->hp) || !isset($data->fp)) {
 			// dd('masuk');
-			$rumus = $data->hp;
+			$rumus = str_replace(',','.',($data->hp));
 		}else{
 			// dd('masuk1');
 			$rumus = str_replace(',','',$data->hp * $data->fp);
