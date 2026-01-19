@@ -216,7 +216,8 @@ class BasOnlineController extends Controller
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
                         $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->jam_mulai . '|' .
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja
@@ -427,7 +428,8 @@ class BasOnlineController extends Controller
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
                         $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->jam_mulai . '|' .
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja
@@ -2232,6 +2234,11 @@ class BasOnlineController extends Controller
                     if ($parameter['parameter'] == 'Gelombang Elektro' || $parameter['parameter'] == 'N-Propil Asetat (SC)' || $parameter['parameter'] == 'Xylene secara personil sampling (SC)') {
                         continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                     }
+
+                    if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)'){
+                        continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
+                    }
+
                     
                     $verified = $this->verifyStatus($sample->no_sample, $parameter);
                     

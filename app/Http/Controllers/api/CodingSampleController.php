@@ -187,10 +187,15 @@ class CodingSampleController extends Controller
                     $namaCabang = $cabangMap[$schedule->id_cabang] ?? 'HEAD OFFICE (Default)';
 
                     // Key Unik untuk Grouping (Composite Key)
+                    $samplerArray = explode(',', $schedule->sampler ?? '');
+                    $samplerArray = array_map('trim', $samplerArray);
+                    sort($samplerArray); // Wajib sort agar urutan selalu sama
+                    $samplerKey = implode(',', $samplerArray);
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->tanggal . '|' .
+                        $schedule->jam_mulai . '|' . 
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja
@@ -1032,20 +1037,25 @@ class CodingSampleController extends Controller
                     $pdf->WriteHTML("<tr>");
 
                 $padding = ($counter % 2 == 0) ? '8% 40% 0% 0%;' : '8% 0% 0% 0%;';
+                $rowLabel = $psDetail->where('no_sampel', $item->no_sampel)->first();
+                $labelList = $rowLabel ? json_decode($rowLabel->label, true) : [];
 
-                $label = $psDetail->where('no_sampel', $item->no_sampel)->first()->label;
+                if (isset($labelList[$i])) {
+    
+                        $textLabel = $labelList[$i]; // Ambil teks labelnya
 
-                if ($label) {
-                    $pdf->WriteHTML('
-                                <th>
-                                    <td style="text-align: center; padding: ' . $padding . '">
-                                        <span style="font-size: 18px; font-weight: bold;">' . $item->no_sampel . '.</span><br>
-                                        <span style="font-size: 14px; font-weight: bold;">' . json_decode($label)[$i] . '</span><br><hr>
-                                        <span style="font-size: 16px; font-weight: bold;">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</span>
-                                    </td>
-                                </th>
-                    ');
-                }
+                        $pdf->WriteHTML('
+                            <th>
+                                <td style="text-align: center; padding: ' . $padding . '">
+                                    <span style="font-size: 18px; font-weight: bold;">' . $item->no_sampel . '.</span><br>
+                                    
+                                    <span style="font-size: 14px; font-weight: bold;">' . $textLabel . '</span><br><hr>
+                                    
+                                    <span style="font-size: 16px; font-weight: bold;">' . Carbon::parse($orderDetail->first()->tanggal_sampling)->translatedFormat('d F Y') . '</span>
+                                </td>
+                            </th>
+                        ');
+                    }
                 // if ($label) {
                 //     $pdf->WriteHTML('
                 //                 <th>

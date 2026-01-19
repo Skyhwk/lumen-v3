@@ -195,6 +195,13 @@ class UpdateAbsensiController extends Controller
             $hari_kerja = RekapLiburKalender::where('tahun', $bulan[0])
                 ->where('is_active', true)
                 ->first();
+
+            if( !$hari_kerja ) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Kalender hari kerja belum di set untuk tahun ' . $bulan[0] . '.'
+                ], 500);
+            }
             $tgl_kerja = '';
             $masuk_kerja = [];
 
