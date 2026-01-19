@@ -1299,6 +1299,21 @@ class ReadyOrderController extends Controller
 
             // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
+
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
                 'status' => 200
@@ -2166,6 +2181,21 @@ class ReadyOrderController extends Controller
             DB::commit();
 
             // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            if($dataQuotation->use_kuota == 1){
+                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            }else{
+                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+                if($kuotaExist){
+                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+                    if($history){
+                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+                        $kuotaExist->save();
+
+                        $history->delete();
+                    }
+                }
+            }
 
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
