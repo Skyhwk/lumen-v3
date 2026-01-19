@@ -120,7 +120,11 @@
 @endphp
 
 @if (!empty($hasilJson))
-    <div class="left" style="page-break-before: always;">
+    <div class="left"
+     @if(!($isJustBiota && $isFirst))
+        style="page-break-before: always;"
+     @endif
+     >
         @php
             $total_data = count($hasilJson);
         @endphp
