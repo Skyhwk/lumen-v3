@@ -33,14 +33,17 @@ class TodoSamplingController extends Controller
 
             $noOrder = $orderHeader->no_order;
 
-            // Cari jadwal yang cocok berdasarkan no_order
-            $matchedJadwal = $getJadwal->firstWhere('orderHeader.no_order', $noOrder);
+            // Cari SEMUA jadwal yang cocok berdasarkan no_order
+            $matchedJadwals = $getJadwal->where('orderHeader.no_order', $noOrder);
             
             $isJadwalExist = false;
+            $samplers = []; // Array untuk menampung semua sampler
             
-            if ($matchedJadwal) {
+            foreach ($matchedJadwals as $matchedJadwal) {
                 // Parse kategori dari jadwal (format JSON array)
                 $kategoriJadwal = json_decode($matchedJadwal->kategori, true) ?? [];
+                
+                $jadwalMatch = false;
                 
                 // Cek apakah ada kategori yang cocok di jadwal
                 foreach ($kategoriJadwal as $kategori) {
@@ -60,8 +63,18 @@ class TodoSamplingController extends Controller
                     // Cocokkan kategori dan no sampel
                     if ($jadwalKategoriNama === $sampleKategoriNama && 
                         $jadwalNoSampel === $sampleNoSampelCode) {
-                        $isJadwalExist = true;
+                        $jadwalMatch = true;
                         break;
+                    }
+                }
+                
+                // Jika jadwal ini match, ambil samplernya
+                if ($jadwalMatch) {
+                    $isJadwalExist = true;
+                    
+                    // Tambahkan sampler jika belum ada (untuk menghindari duplikasi)
+                    if ($matchedJadwal->sampler && !in_array($matchedJadwal->sampler, $samplers)) {
+                        $samplers[] = $matchedJadwal->sampler;
                     }
                 }
             }
@@ -70,20 +83,28 @@ class TodoSamplingController extends Controller
             if (!isset($groupedResults[$noOrder])) {
                 $groupedResults[$noOrder] = [
                     'id' => $sample->id,
-                    'id_cabang' => $matchedJadwal->id_cabang ?? '-',
+                    'id_cabang' => $matchedJadwals->first()->id_cabang ?? '-',
                     'no_document' => $orderHeader->no_document ?? '-',
                     'nama_perusahaan' => $orderHeader->nama_perusahaan ?? '-',
                     'no_order' => $noOrder,
-                    'kategori' => $matchedJadwal->kategori ?? $sample->kategori_3 ?? '-',
+                    'kategori' => $matchedJadwals->first()->kategori ?? $sample->kategori_3 ?? '-',
                     'is_jadwal_exist' => $isJadwalExist,
+                    'samplers' => [], // Array untuk akumulasi sampler
                     'tanggal' => $sample->tanggal_sampling,
-                    'samples' => [] // untuk tracking
+                    'samples' => []
                 ];
             }
 
             // Update is_jadwal_exist menjadi true jika ada salah satu sample yang memiliki jadwal
             if ($isJadwalExist) {
                 $groupedResults[$noOrder]['is_jadwal_exist'] = true;
+                
+                // Gabungkan sampler (hindari duplikasi)
+                foreach ($samplers as $sampler) {
+                    if (!in_array($sampler, $groupedResults[$noOrder]['samplers'])) {
+                        $groupedResults[$noOrder]['samplers'][] = $sampler;
+                    }
+                }
             }
 
             // Simpan info sample (opsional, untuk debugging)
@@ -91,6 +112,13 @@ class TodoSamplingController extends Controller
                 'no_sampel' => $sample->no_sampel,
                 'has_jadwal' => $isJadwalExist
             ];
+        }
+
+        // Convert array samplers menjadi string dengan delimiter ','
+        foreach ($groupedResults as &$result) {
+            $result['sampler_list'] = !empty($result['samplers']) 
+                ? implode(', ', $result['samplers']) 
+                : '-';
         }
 
         $data = array_values($groupedResults);
@@ -104,6 +132,9 @@ class TodoSamplingController extends Controller
                     return '<span class="badge badge-success">Ada Jadwal</span>';
                 }
                 return '<span class="badge badge-warning">Belum Ada Jadwal</span>';
+            })
+            ->addColumn('sampler', function($row) {
+                return $row['sampler_list'];
             })
             ->addColumn('jumlah_sampel', function($row) {
                 return count($row['samples']);
