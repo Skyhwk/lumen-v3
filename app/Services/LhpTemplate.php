@@ -213,36 +213,57 @@ class LhpTemplate
         $showKan = $this->showKan;
         $filename = $prefix . '-' . $namaFile . '.pdf';
         $filePath = $dir . '/' . $filename;
-
-        $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
+        
+        $htmlBody = null;
         $htmlHeader = view($this->directoryDefault . '.header', compact('header', 'detail',  'mode', 'view', 'showKan'))->render();
         $htmlFooter = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'mode' => $mode, 'last' => false])->render();
         $htmlLastFooter = view($this->directoryDefault . '.footer', compact('header', 'detail',  'mode', 'last'))->render();
         if ($header->getTable() === 'lhps_air_header') {
+            $isJustBiota = $detail->every(fn ($d) =>
+                !empty($d->hasil_uji_json)
+                && !empty(json_decode($d->hasil_uji_json, true))
+            );
+            if(!$isJustBiota){
+                $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
+            }
+
             $biota = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
             foreach ($biota as $key => $value) {
                 $is_custom = false;
                 $page = null;
-                $biotaBody[$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                $isFirst = $key === 0 ? true : false;
+                $biotaBody[$key] = view($view . '.biota', compact('header', 'value', 'mode', 'isJustBiota', 'isFirst'))->render();
                 $biotaHeader[$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
                 
             }
+        } else {
+            $htmlBody = view($view . '.left', compact('header', 'detail',  'mode'))->render();
         }
         if (!empty($customs)) {
             foreach ($customs as $page => $custom) {
                 $last = ($page === array_key_last($customs)) ? true : false;
-                $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
+                $htmlCustomBody[$page] = null;
                 $htmlCustomHeader[$page] = view($this->directoryDefault . '.customHeader', compact('header', 'detail', 'mode', 'view', 'showKan', 'page'))->render();
                 $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
                 $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
-
                 if ($header->getTable() === 'lhps_air_header') {
+                    $isJustBiota = collect($custom)->every(fn ($d) =>
+                        !empty($d->hasil_uji_json)
+                        && !empty(json_decode($d->hasil_uji_json, true))
+                    );
+                    if(!$isJustBiota){
+                        $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
+                    }
+
                     $biota_custom = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
                     foreach ($biota_custom as $key => $value) {
                         $is_custom = true;
-                        $biotaCustomBody[$page][$key] = view($view . '.biota', compact('header', 'value', 'mode'))->render();
+                        $isFirst = $key === 0 ? true : false;
+                        $biotaCustomBody[$page][$key] = view($view . '.biota', compact('header', 'value', 'mode', 'isJustBiota', 'isFirst'))->render();
                         $biotaCustomHeader[$page][$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
                     }
+                } else {
+                    $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
                 }
             }
         }
@@ -319,11 +340,11 @@ class LhpTemplate
             $mpdf->showWatermarkImage = true;
         }
 
-        $mpdf->SetHTMLHeader($htmlHeader);
-        $mpdf->SetHTMLFooter($htmlFooter);
+        if($htmlBody) $mpdf->SetHTMLHeader($htmlHeader);
+        if($htmlBody) $mpdf->SetHTMLFooter($htmlFooter);
         $mpdf->WriteHTML($this->stylesheet, \Mpdf\HTMLParserMode::HEADER_CSS);
-        $mpdf->WriteHTML($htmlBody);
-        $mpdf->SetHTMLFooter($htmlLastFooter);
+        if($htmlBody) $mpdf->WriteHTML($htmlBody);
+        if($htmlBody) $mpdf->SetHTMLFooter($htmlLastFooter);
         if(isset($biotaBody) && isset($biotaHeader)) {
             foreach ($biotaBody as $page => $custom) {
                 $mpdf->SetHTMLHeader($biotaHeader[$page]);
@@ -334,10 +355,10 @@ class LhpTemplate
         }
         if (isset($htmlCustomBody) && isset($htmlCustomHeader) && isset($htmlCustomFooter) && isset($htmlCustomLastFooter)) {
             foreach ($htmlCustomBody as $page => $custom) {
-                $mpdf->SetHTMLHeader($htmlCustomHeader[$page]);
-                $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
-                $mpdf->WriteHTML($htmlCustomBody[$page]);
-                $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
+                if ($htmlCustomBody[$page]) $mpdf->SetHTMLHeader($htmlCustomHeader[$page]);
+                if ($htmlCustomBody[$page]) $mpdf->SetHTMLFooter($htmlCustomFooter[$page]);
+                if ($htmlCustomBody[$page]) $mpdf->WriteHTML($htmlCustomBody[$page]);
+                if ($htmlCustomBody[$page]) $mpdf->SetHTMLFooter($htmlCustomLastFooter[$page]);
 
                 if(isset($biotaCustomBody[$page]) && isset($biotaCustomHeader[$page])) {
                     foreach ($biotaCustomBody[$page] as $biotaPage => $biotaCustom) {
@@ -418,7 +439,7 @@ class LhpTemplate
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnet','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {
