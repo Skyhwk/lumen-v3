@@ -125,7 +125,7 @@ class ValidatorHandler extends BaseController
 				if ($cek->type_document != 'signature') {
 					$data = json_decode($cek->data);
 					// dd($data);
-					if (isset($data->Nomor_LHP) || in_array($cek->type_document, ['berita_acara_sampling', 'surat_tugas_pengambilan_sampel', 'coding_sample', 'persiapan_sampel', 'permintaan_dokumentasi_sampling', 'invoice'])) {
+					if (isset($data->Nomor_LHP) || in_array($cek->type_document, ['berita_acara_sampling', 'surat_tugas_pengambilan_sampel', 'coding_sample', 'persiapan_sampel', 'permintaan_dokumentasi_sampling', 'invoice','e_certificate_webinar'])) {
 						$array = (array) $data;
 					} else {
 						$array = [
