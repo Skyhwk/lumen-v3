@@ -34,6 +34,7 @@ class SamplingPlanController extends Controller
 
     public function index(Request $request)
     {
+        
         $active = $request->is_active == '' ? true : $request->is_active;
 
         $data = Jadwal::with([
@@ -48,19 +49,43 @@ class SamplingPlanController extends Controller
             ->where('is_active', $active);
 
         // Filter cabang
-        if ($request->filled('id_cabang_filter')) {
-            $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+        // if ($request->filled('id_cabang_filter')) {
+        //     $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
 
-            $data->where(function ($query) use ($idCabang) {
-                $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
-                if (! empty($filtered)) {
-                    $query->whereIn('id_cabang', $filtered);
-                }
+        //     $data->where(function ($query) use ($idCabang) {
+        //         $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+        //         if (!empty($filtered)) {
+        //             $query->whereIn('id_cabang', $filtered);
+        //         }
 
-                if (in_array('null', $idCabang, true)) {
-                    $query->orWhereNull('id_cabang');
-                }
-            });
+        //         if (in_array('null', $idCabang, true)) {
+        //             $query->orWhereNull('id_cabang');
+        //         }
+        //     });
+        // }
+        // CEK HIERARKI KLAN (Auth Check)
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("1", $myPrivileges);
+        if ($isOrangPusat) {
+            if ($request->filled('id_cabang_filter')) {
+                $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                $data->where(function ($query) use ($idCabang) {
+                    $filtered = array_filter($idCabang, fn($v) => $v !== 'null');
+                    if (!empty($filtered)) {
+                        $query->whereIn('id_cabang', $filtered);
+                    }
+                    if (in_array('null', $idCabang, true)) {
+                        $query->orWhereNull('id_cabang');
+                    }
+                });
+            }
+
+        } else {
+            $data->whereIn('id_cabang', $myPrivileges);
+            if ($request->filled('id_cabang_filter')) {
+                $reqFilter = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
+                $data->whereIn('id_cabang', $reqFilter);
+            }
         }
 
         $data->orderBy('tanggal', 'DESC');
@@ -124,7 +149,29 @@ class SamplingPlanController extends Controller
                         ->orWhere('created_at', 'like', '%' . $keyword . '%');
                 });
             })
+            ->with([
+                'cabang_options' => $this->getBranchOptionsForUser() 
+            ])
             ->make(true);
+    }
+
+    private function getBranchOptionsForUser()
+    {
+        $myPrivileges = $this->privilageCabang;
+        $isOrangPusat = in_array("1", $myPrivileges);
+
+        $query = MasterCabang::select('id', 'nama_cabang'); // Sesuaikan nama kolom
+
+        if (!$isOrangPusat) {
+            $query->whereIn('id', $myPrivileges);
+        }
+        // Ambil datanya
+        return $query->get()->map(function($item) {
+            return [
+                'value' => $item->id,
+                'label' => $item->nama_cabang
+            ];
+        });
     }
 
     public function kantorCabang(Request $request)

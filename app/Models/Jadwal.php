@@ -24,6 +24,11 @@ class Jadwal extends Sector
         return $this->hasMany(OrderDetail::class, "no_quotation", "no_quotation");
     }
 
+    public function orderHeader()
+    {
+        return $this->belongsTo(OrderHeader::class, "no_quotation", "no_document");
+    }
+
     public function quotationKontrakH()
     {
         return $this->belongsTo(QuotationKontrakH::class, "no_quotation", "no_document");
