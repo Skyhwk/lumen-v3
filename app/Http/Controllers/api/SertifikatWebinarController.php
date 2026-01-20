@@ -260,6 +260,12 @@ class SertifikatWebinarController extends Controller
             /**
              * Mulai generate sertifikat satu per satu
              */
+
+            $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                unset($speaker['karyawan_id']);
+                return $speaker;
+            })->values()->toArray();
+
             $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
             $filename = $no_sertifikat . '.pdf';
             $generate = GenerateWebinarSertificate::make($filename)
@@ -273,7 +279,7 @@ class SertifikatWebinarController extends Controller
                 'webinarTopic'      => $getHeader->topic,
                 'webinarSubTopic'   => $getHeader->sub_topic,
                 'webinarDate'       => $getHeader->date,
-                'panelis'           => $getHeader->speakers,
+                'panelis'           => $panelis,
                 'noSertifikat'      => $no_sertifikat,
             ])
             ->generate();
@@ -921,7 +927,6 @@ class SertifikatWebinarController extends Controller
                 ->where('header_id', $request->id)
                 ->where('time_session' , '>', 60)
                 ->whereNotNull('time_session')
-                ->limit(5)
                 ->orderBy('id','asc')
                 ->get();
 
@@ -1025,6 +1030,8 @@ class SertifikatWebinarController extends Controller
                 $replace = [
                     '{{name}}'  => $value->name,
                     '{{title}}' => $header->title,
+                    '{{topic}}' => $header->topic,
+                    '{{subtopic}}' => $header->sub_topic,
                     '{{date}}'  => Carbon::parse($header->date)
                         ->locale('id')
                         ->translatedFormat('l, d F Y'),
@@ -1052,7 +1059,7 @@ class SertifikatWebinarController extends Controller
 
 
                 $mail = SendEmail::where('to', $value->email)
-                    ->where('subject', 'E-Sertifikat ' . $header->title)
+                    ->where('subject', 'E-Sertifikat ' . $header->topic)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
                     ->noReply();
