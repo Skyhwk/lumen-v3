@@ -66,12 +66,8 @@ class SamplingPlanController extends Controller
         // }
         // CEK HIERARKI KLAN (Auth Check)
         $myPrivileges = $this->privilageCabang;
-        $isOrangPusat = in_array("0", $myPrivileges);
+        $isOrangPusat = in_array("1", $myPrivileges);
         if ($isOrangPusat) {
-            // === SKENARIO 1: PETINGGI (ADA AKSES "1") ===
-            // Karena dia punya akses "1", dia dianggap 'Maha Tahu'.
-            // Dia bebas melihat semua data secara default.
-            // Namun, jika dia ingin menggunakan teknik filter (Request Filter):
             if ($request->filled('id_cabang_filter')) {
                 $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
                 $data->where(function ($query) use ($idCabang) {
@@ -86,20 +82,9 @@ class SamplingPlanController extends Controller
             }
 
         } else {
-            // === SKENARIO 2: PENYIHIR CABANG (TIDAK ADA "1") ===
-            // Mereka terikat sumpah. Mereka WAJIB dibatasi hanya pada array privilege mereka.
-            // PERTAHANAN LAPIS 1: Batasi data hanya sesuai privilege (Wajib)
-            // SQL: WHERE id_cabang IN ("2", "4")
             $data->whereIn('id_cabang', $myPrivileges);
-            // PERTAHANAN LAPIS 2 (OPSIONAL): 
-            // Jika user cabang ini ingin memfilter LEBIH SEMPIT lagi di dalam wilayahnya sendiri.
-            // Misal: Dia punya akses ["2", "4"], tapi dia cuma klik filter "Cabang 2".
             if ($request->filled('id_cabang_filter')) {
                 $reqFilter = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
-                // Kita tambahkan filter user di atas batasan privilege.
-                // Secara otomatis SQL akan melakukan interseksi (AND).
-                // WHERE id_cabang IN ("2", "4") AND id_cabang IN ("2") -> Hasilnya data "2".
-                // Jika dia nekat minta "5": WHERE id_cabang IN ("2","4") AND id_cabang IN ("5") -> Hasil Kosong.
                 $data->whereIn('id_cabang', $reqFilter);
             }
         }
@@ -758,6 +743,7 @@ class SamplingPlanController extends Controller
 
     public function cancelJadwal(Request $request)
     {
+        
         DB::beginTransaction();
         try {
             if (!is_array($request->mode['batchId'])) {
@@ -766,7 +752,8 @@ class SamplingPlanController extends Controller
                 $batchId = $request->mode['batchId'];
             }
             $temptMessage = '';
-            if ($request->mode['parsial'] !== null) { //menandakan data yg terpilih adalah partial
+            if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
+              
                 $dataParsial = Jadwal::whereIn('id', $batchId)
                     ->where('is_active', true)
                     ->update([
@@ -804,6 +791,7 @@ class SamplingPlanController extends Controller
                     ], 401);
                 }
             }
+            
             // $message = "No QT :" . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh staff :". $karyawan->karyawan($this->db,$this->karyawan)."\n" . ($temptMessage != '') ? $temptMessage : "";
             $message = "No QT: " . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh " . $this->karyawan . "\n" . (($temptMessage != '') ? $temptMessage : "");
 
