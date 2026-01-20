@@ -12,24 +12,17 @@ use App\Models\SertifikatWebinarHeader;
 use App\Models\TemplateBackground;
 use App\Services\GenerateWebinarSertificate;
 use App\Models\WebinarQna;
-<<<<<<< HEAD
-=======
 use App\Services\SendEmail;
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
 use Yajra\Datatables\Datatables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-<<<<<<< HEAD
-use PhpOffice\PhpSpreadsheet\IOFactory;
-=======
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Repository;
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
 
 class SertifikatWebinarController extends Controller
 {
@@ -47,45 +40,6 @@ class SertifikatWebinarController extends Controller
         return Datatables::of($data)->make(true);
     }
 
-<<<<<<< HEAD
-    private function generateWebinarCode(string $topic, $existingCodes): string
-    {
-        $topic = preg_replace('/[^A-Za-z]/', '', strtoupper($topic));
-        $dateDigits = Carbon::now()->format('d'); // 2 digit hari
-
-        if (strlen($topic) < 2) {
-            throw new \Exception('Topic harus punya minimal 2 huruf');
-        }
-
-        while (true) {
-            // 🔹 Ambil 2 huruf BERBEDA
-            $letters = array_unique(str_split($topic));
-            shuffle($letters);
-
-            if (count($letters) < 2) {
-                continue;
-            }
-
-            $picked = array_slice($letters, 0, 2);
-            $base = array_merge($picked, str_split($dateDigits));
-
-            // 🔹 Random posisi max 4x
-            for ($i = 0; $i < 4; $i++) {
-                shuffle($base);
-                $code = implode('', $base);
-
-                if (!isset($existingCodes[$code])) {
-                    // simpan ke memory biar request ini aman
-                    $existingCodes[$code] = true;
-                    return $code;
-                }
-            }
-            // kalau bentrok semua → ulang ambil huruf
-        }
-    }
-
-
-=======
     private function generateWebinarCode(string $date, $existingCodes): string
     {
         /**
@@ -118,7 +72,6 @@ class SertifikatWebinarController extends Controller
         return $webinarCode;
     }
 
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
     public function storeHeader(Request $request)
     {
         DB::beginTransaction();
@@ -126,36 +79,22 @@ class SertifikatWebinarController extends Controller
             $existingCodes = SertifikatWebinarHeader::pluck('webinar_code')
                 ->map(fn($v) => strtoupper($v))
                 ->flip();
-<<<<<<< HEAD
-
-            $webinarCode = $this->generateWebinarCode(
-                $request->topic,
-                $existingCodes
-            );
-
-=======
             
             $webinarCode = $this->generateWebinarCode(
                 $request->date,
                 $existingCodes
             );
             
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
             SertifikatWebinarHeader::create([
                 'webinar_code' => strtoupper($webinarCode),
                 'title' => $request->title,
                 'topic' => $request->topic,
-<<<<<<< HEAD
-                'speakers' => json_decode($request->speakers, true),
-                'date' => $request->date,
-=======
                 'sub_topic' => $request->sub_topic,
                 'speakers' => json_decode($request->speakers, true),
                 'date' => $request->date,
                 'id_template' => $request->template_id,
                 'id_layout' => $request->layout_id,
                 'id_font' => $request->font_id,
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
                 'created_at' => Carbon::now(),
                 'created_by' => $this->karyawan
             ]);
@@ -256,11 +195,7 @@ class SertifikatWebinarController extends Controller
                 if (isset($existing[$key])) {
                     $useNumberAttend = $existing[$key]->number_attend;
                 } else {
-<<<<<<< HEAD
-                    $useNumberAttend = sprintf('%03d', $numberAttend);
-=======
                     $useNumberAttend = sprintf('%04d', $numberAttend);
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
                     $numberAttend++;
                     $importedCount++;
                 }
@@ -270,13 +205,8 @@ class SertifikatWebinarController extends Controller
                     'number_attend' => $useNumberAttend,
                     'name'          => $name,
                     'email'         => $email,
-<<<<<<< HEAD
-                    'time_session'  => $time_session,
-                    'filename'      => $code . '-' . $useNumberAttend . '-' . $name . '.pdf',
-=======
                     'time_session'  => ($time_session > 180 ? 180 : $time_session),
                     // 'filename'      => $code . '-' . $useNumberAttend . '.pdf',
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
                 ];
             }
             
@@ -287,27 +217,16 @@ class SertifikatWebinarController extends Controller
                     'status' => '400'
                 ], 400);
             }
-<<<<<<< HEAD
-=======
             // hilangkan data jika time_session < 60
             foreach ($attendances as $key => $value) {
                 if ($value['time_session'] < 60) {
                     unset($attendances[$key]);
                 }
             }
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
 
             SertifikatWebinarDetail::upsert(
                 array_values($attendances),
                 ['header_id', 'email', 'name'],
-<<<<<<< HEAD
-                ['time_session', 'filename']
-            );
-
-            DB::commit();
-            Http::post('http://127.0.0.1:2999/render-sertifikat', ['id' => $request->id]);
-            // self::generateCertificate($request->id);
-=======
                 ['time_session','filename']
             );
 
@@ -318,7 +237,6 @@ class SertifikatWebinarController extends Controller
             // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
                 
 
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -331,8 +249,6 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-<<<<<<< HEAD
-=======
     public function bulkGenerateCertificate(int $id)
     {
         $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', $id)->first();
@@ -384,7 +300,6 @@ class SertifikatWebinarController extends Controller
         }
     }
 
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
     public function importDataQna(Request $request)
     {
         $file = $request->file('file_input');
@@ -516,11 +431,7 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-<<<<<<< HEAD
-    public function renderSertifikat(Request $request) {
-=======
     public function renderSertifikatOld(Request $request) {
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
         $header = SertifikatWebinarHeader::with('details', 'layout', 'font', 'template')->find($request->id);
         $title = $header->title;
         $topic = $header->topic;
@@ -556,10 +467,7 @@ class SertifikatWebinarController extends Controller
                 'noSertifikat' => $no_sertifikat . $detail->number_attend,
             ])
             ->generate();
-<<<<<<< HEAD
-=======
 
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
         }
         
         SertifikatWebinarDetail::where('header_id', $request->id)->update(['sertifikat_generated' => '1']);
@@ -567,24 +475,11 @@ class SertifikatWebinarController extends Controller
         return response()->json(['message' => `Sertifikat Webinar {$header->title} berhasil di generate`], 200);
     }
 
-<<<<<<< HEAD
-    public function sendEmail(Request $request)
-    {
-        return response()->json(['message' => 'Gagal mengimport data', 'status' => '500'], 500);
-    }
-
-    public function getTemplate()
-    {
-        $jenis_font = JenisFont::all();
-        $template = TemplateBackground::all();
-        $layout = LayoutCertificate::all();
-=======
     public function getTemplate()
     {
         $jenis_font = JenisFont::select('id', 'jenis_font')->where('is_active', true)->get();
         $template = TemplateBackground::select('id', 'nama_template')->where('is_active', true)->get();
         $layout = LayoutCertificate::select('id', 'id_template', 'nama_file')->get();
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
 
         return response()->json([
             'message' => 'Data hasbeen show',
@@ -648,32 +543,6 @@ class SertifikatWebinarController extends Controller
         return response()->json(['message' => 'Data has been updated', 'data' => $data], 200);
     }
 
-<<<<<<< HEAD
-    public function sendEmailBulk(Request $request)
-    {
-        
-    }
-
-    private static function monthToRoman(int $month): string
-{
-    $romans = [
-        1  => 'I',
-        2  => 'II',
-        3  => 'III',
-        4  => 'IV',
-        5  => 'V',
-        6  => 'VI',
-        7  => 'VII',
-        8  => 'VIII',
-        9  => 'IX',
-        10 => 'X',
-        11 => 'XI',
-        12 => 'XII',
-    ];
-
-    return $romans[$month] ?? '';
-}
-=======
     public function deleteQna(Request $request)
     {
         $data = WebinarQna::where('id', $request->id)->delete();
@@ -1227,5 +1096,4 @@ class SertifikatWebinarController extends Controller
             ], 500);
         }
     }
->>>>>>> 719c3933b5833a105cf30b0f981e017b0a5480ac
 }
