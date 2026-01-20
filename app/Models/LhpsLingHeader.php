@@ -24,6 +24,9 @@ class LhpsLingHeader extends Sector
     {
         return $this->belongsTo('App\Models\GenerateLink','id','id_quotation')
         ->where('quotation_status', 'draft_ambient');
+    }public function detail()
+    {
+        return $this->hasMany(LhpsLingDetail::class, 'id_header', 'id');
     }
 
  
