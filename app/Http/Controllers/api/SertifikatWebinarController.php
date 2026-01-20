@@ -921,7 +921,6 @@ class SertifikatWebinarController extends Controller
                 ->where('header_id', $request->id)
                 ->where('time_session' , '>', 60)
                 ->whereNotNull('time_session')
-                ->limit(5)
                 ->orderBy('id','asc')
                 ->get();
 
@@ -1025,6 +1024,8 @@ class SertifikatWebinarController extends Controller
                 $replace = [
                     '{{name}}'  => $value->name,
                     '{{title}}' => $header->title,
+                    '{{topic}}' => $header->topic,
+                    '{{subtopic}}' => $header->sub_topic,
                     '{{date}}'  => Carbon::parse($header->date)
                         ->locale('id')
                         ->translatedFormat('l, d F Y'),
@@ -1052,7 +1053,7 @@ class SertifikatWebinarController extends Controller
 
 
                 $mail = SendEmail::where('to', $value->email)
-                    ->where('subject', 'E-Sertifikat ' . $header->title)
+                    ->where('subject', 'E-Sertifikat ' . $header->topic)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
                     ->noReply();
