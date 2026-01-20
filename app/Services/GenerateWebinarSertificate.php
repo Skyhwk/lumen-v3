@@ -617,10 +617,11 @@ class GenerateWebinarSertificate
             'tipe_dokumen'          => 'E-certificate webinar',
             'penerima_sertifikat'   => $this->options['recipientName'],
             'no_sertifikat'         => $this->options['noSertifikat'],
-            'judul_webinar'         => $this->options['webinarTitle'],
+            // 'judul_webinar'         => $this->options['webinarTitle'],
             'topik_webinar'         => $this->options['webinarTopic'],
-            'tanggal_webinar'       => $this->options['webinarDate'],
-            'panelis'               => $this->options['panelis']
+            // 'tanggal_webinar'       => $this->options['webinarDate'],
+            'tanggal_webinar'       => Carbon::parse($this->options['webinarDate'])->locale('id')->isoFormat('DD MMMM YYYY'),
+            // 'panelis'               => $this->options['panelis']
         ]);
 
         $qr->created_by = 'SYSTEM';
