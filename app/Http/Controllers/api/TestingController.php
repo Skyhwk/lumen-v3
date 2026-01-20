@@ -271,7 +271,10 @@ class TestingController extends Controller
                         $value->update([
                             'filename' => $filename
                         ]);
+
+                        FacadesLog::info('update ' . $value->id . ' ' . $filename);
                     }
+                    
                     dd('done');
                     break;
                 case 'addSubscriber':
