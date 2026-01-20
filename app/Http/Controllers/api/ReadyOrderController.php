@@ -35,7 +35,7 @@ use App\Models\KuotaPengujian;
 use App\Models\MasterPelanggan;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
-
+use Illuminate\Support\Facades\Http;
 
 class ReadyOrderController extends Controller
 {
@@ -956,6 +956,8 @@ class ReadyOrderController extends Controller
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
             DB::commit();
+            
+            self::generateInvoice($no_order);
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
@@ -1321,6 +1323,9 @@ class ReadyOrderController extends Controller
                     }
                 }
             }
+
+            
+            self::generateInvoice($dataOrderHeader->no_order);
 
             return response()->json([
                 'message' => 'Generate Order Non Kontrak Success',
@@ -2218,6 +2223,8 @@ class ReadyOrderController extends Controller
                 }
             }
 
+            self::generateInvoice($dataOrderHeader->no_order);
+
             return response()->json([
                 'message' => 'Generate Order Kontrak Success',
                 'status' => 200
@@ -2307,10 +2314,6 @@ class ReadyOrderController extends Controller
             'expired' => $expired,
         ];
         Invoice::insert($insert);
-
-        // dd($insert);
-
-        self::generatePDF($noInvoice);
     }
 
     public function createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $periode, $first = true, $firstPeriode = false)
@@ -2387,10 +2390,11 @@ class ReadyOrderController extends Controller
             'expired' => $expired,
         ];
         Invoice::insert($insert);
+    }
 
-        // dd($insert);
-
-        self::generatePDF($noInvoice);
+    private function generateInvoice($no_order){
+        $invoice_numbers = Invoice::where('no_order', $no_order)->where('is_active', 1)->get()->pluck('no_invoice')->toArray();
+        Http::post('http://10.88.1.140:9999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
     }
 
     private static function generatePDF($noInvoice)

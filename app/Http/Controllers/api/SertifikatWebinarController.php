@@ -371,7 +371,10 @@ class SertifikatWebinarController extends Controller
         $title = $header->title;
         $topic = $header->topic;
         $webinarDate = $header->date;
-        $panelis = $header->speakers;
+        $panelis = [];
+        foreach ($header->speakers as $detail) {
+            $panelis[] = '<strong>' . $detail['nama']  . '</strong> (' . $detail['jabatan'] . ')';
+        }
         $font = [
             'fontName' => $header->font->jenis_font,
             'filename' => $header->font->filename
@@ -384,6 +387,7 @@ class SertifikatWebinarController extends Controller
         $no_sertifikat = 'ISL/' . $code . '/' . substr($year, -2) . '-' . self::monthToRoman($month) . '/';
         foreach ($header->details as $detail) {
             $filename = $code . '-' . $detail->number_attend . '-' .  $detail->name . '.pdf';
+            // dd($filename);
             $generateService = GenerateWebinarSertificate::make($filename)
             ->options([
                 'id' => $detail->id,
@@ -399,7 +403,7 @@ class SertifikatWebinarController extends Controller
             ])
             ->generate();
         }
-
+        
         SertifikatWebinarDetail::where('header_id', $request->id)->update(['sertifikat_generated' => '1']);
 
         return response()->json(['message' => `Sertifikat Webinar {$header->title} berhasil di generate`], 200);
