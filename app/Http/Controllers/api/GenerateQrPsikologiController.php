@@ -705,15 +705,14 @@ class GenerateQrPsikologiController extends Controller
                 }
             }
 
-            if (is_array($request->cc)) {
-                $cc = $request->cc;
-            }else{
-                if(empty($request->cc)){
-                    $cc = $request->cc;
-                } else if (str_contains($request->cc, ',')) {
-                    $cc = explode(',', $request->cc);
+            $cc = $request->input('cc', []);
+
+            $ccArray = [];
+            if (!empty($cc)) {
+                if (is_array($cc)) {
+                    $ccArray = $cc;
                 } else {
-                    $cc = [$request->cc];
+                    $ccArray = array_filter(array_map('trim', explode(',', $cc)));
                 }
             }
 
@@ -730,7 +729,7 @@ class GenerateQrPsikologiController extends Controller
             $email = SendEmail::where('to', $request->to)
                 ->where('subject', $request->subject)
                 ->where('body', $request->content)
-                ->where('cc', $cc)
+                ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
                 ->where('attachment', $validAttachments)
                 ->where('karyawan', $this->karyawan)
