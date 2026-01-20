@@ -260,6 +260,12 @@ class SertifikatWebinarController extends Controller
             /**
              * Mulai generate sertifikat satu per satu
              */
+
+            $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                unset($speaker['karyawan_id']);
+                return $speaker;
+            })->values()->toArray();
+
             $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
             $filename = $no_sertifikat . '.pdf';
             $generate = GenerateWebinarSertificate::make($filename)
@@ -273,7 +279,7 @@ class SertifikatWebinarController extends Controller
                 'webinarTopic'      => $getHeader->topic,
                 'webinarSubTopic'   => $getHeader->sub_topic,
                 'webinarDate'       => $getHeader->date,
-                'panelis'           => $getHeader->speakers,
+                'panelis'           => $panelis,
                 'noSertifikat'      => $no_sertifikat,
             ])
             ->generate();
