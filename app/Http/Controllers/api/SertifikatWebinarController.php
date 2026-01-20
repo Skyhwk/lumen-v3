@@ -206,7 +206,7 @@ class SertifikatWebinarController extends Controller
                     'name'          => $name,
                     'email'         => $email,
                     'time_session'  => ($time_session > 180 ? 180 : $time_session),
-                    'filename'      => $code . '-' . $useNumberAttend . '.pdf',
+                    // 'filename'      => $code . '-' . $useNumberAttend . '.pdf',
                 ];
             }
             
@@ -232,9 +232,9 @@ class SertifikatWebinarController extends Controller
 
             DB::commit();
     
-            // self::bulkGenerateCertificate($request->id);
+            self::bulkGenerateCertificate($request->id);
 
-            Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
+            // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
                 
 
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
@@ -249,7 +249,7 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-    public function renderSertifikat(int $id)
+    public function bulkGenerateCertificate(int $id)
     {
         $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', $id)->first();
         $getDetail = $getHeader->details;
