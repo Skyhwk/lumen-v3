@@ -705,6 +705,18 @@ class GenerateQrPsikologiController extends Controller
                 }
             }
 
+            if (is_array($request->cc)) {
+                $cc = $request->cc;
+            }else{
+                if(empty($request->cc)){
+                    $cc = $request->cc;
+                } else if (str_contains($request->cc, ',')) {
+                    $cc = explode(',', $request->cc);
+                } else {
+                    $cc = [$request->cc];
+                }
+            }
+
             $validAttachments = [];
             foreach ($request->attachments as $item) {
                 $filePath = base_path('public/qr_psikologi/' . $item['name']);
@@ -718,7 +730,7 @@ class GenerateQrPsikologiController extends Controller
             $email = SendEmail::where('to', $request->to)
                 ->where('subject', $request->subject)
                 ->where('body', $request->content)
-                ->where('cc', $request->cc)
+                ->where('cc', $cc)
                 ->where('bcc', $bcc)
                 ->where('attachment', $validAttachments)
                 ->where('karyawan', $this->karyawan)
