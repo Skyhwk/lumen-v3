@@ -115,8 +115,8 @@
         }
     }
     // Main processing
-    $hasilJson = !empty($value->hasil_uji_json) ? json_decode($value->hasil_uji_json, true) : [];
-    $type = $value['type'] ?? null;
+    $hasilJson = !empty(data_get($value, 'hasil_uji_json')) ? json_decode(data_get($value, 'hasil_uji_json'), true) : [];
+    $type = data_get($value, 'type') ?? null;
 @endphp
 
 @if (!empty($hasilJson))
