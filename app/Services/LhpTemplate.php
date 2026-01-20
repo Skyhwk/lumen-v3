@@ -247,22 +247,18 @@ class LhpTemplate
                 $htmlCustomFooter[$page] = view($this->directoryDefault . '.footer', ['header' => $header, 'detail' => $detail, 'custom' => $custom, 'mode' => $mode, 'last' => false])->render();
                 $htmlCustomLastFooter[$page] = view($this->directoryDefault . '.footer', compact('header', 'detail', 'custom', 'mode', 'last'))->render();
                 if ($header->getTable() === 'lhps_air_header') {
-                    // dd($custom);
                     $isJustBiota = collect($custom)->every(fn ($d) =>
-                        !empty($d['hasil_uji_json'])
-                        && !empty(json_decode($d['hasil_uji_json'], true))
+                        !empty($d->hasil_uji_json)
+                        && !empty(json_decode($d->hasil_uji_json, true))
                     );
-                    // dd($isJustBiota);
                     if(!$isJustBiota){
                         $htmlCustomBody[$page] = view($view . '.customLeft', compact('header', 'custom', 'page'))->render();
                     }
-                    $biota_custom = collect($custom)->filter(fn ($d) =>
-                        !empty($d['hasil_uji_json']) && $d['hasil_uji_json'] !== '{}'
-                    );
+
+                    $biota_custom = $detail->filter(fn($d) => !empty($d->hasil_uji_json) && $d->hasil_uji_json !== '{}');
                     foreach ($biota_custom as $key => $value) {
                         $is_custom = true;
-                        $isFirst = ($key === 0 && $page === 0) ? true : false;
-                        // dd($isJustBiota, $isFirst);
+                        $isFirst = $key === 0 ? true : false;
                         $biotaCustomBody[$page][$key] = view($view . '.biota', compact('header', 'value', 'mode', 'isJustBiota', 'isFirst'))->render();
                         $biotaCustomHeader[$page][$key] = view($view . '.biotaHeader', compact('header', 'value', 'mode', 'view', 'showKan', 'is_custom', 'page'))->render();
                     }
@@ -443,7 +439,7 @@ class LhpTemplate
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnit statis','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
+                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnet','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {

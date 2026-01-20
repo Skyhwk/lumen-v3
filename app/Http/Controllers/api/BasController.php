@@ -370,8 +370,9 @@ class BasController extends Controller
                     // Key Unik untuk Grouping (Composite Key)
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
-                        $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->tanggal . '|' .
+                        $schedule->jam_mulai . '|' .
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja

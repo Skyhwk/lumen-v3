@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, RenderInvoice, UseKuotaService};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -1309,7 +1309,9 @@ class ReadyOrderController extends Controller
             }
             DB::commit();
 
-            if ($dataQuotation->use_kuota == 1) {
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
             } else {
                 $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
@@ -2208,7 +2210,9 @@ class ReadyOrderController extends Controller
 
             DB::commit();
 
-            if ($dataQuotation->use_kuota == 1) {
+            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            if($dataQuotation->use_kuota == 1){
                 (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
             } else {
                 $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();

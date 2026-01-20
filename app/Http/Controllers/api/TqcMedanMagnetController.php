@@ -43,7 +43,7 @@ class TqcMedanMagnetController extends Controller
             ->where('kategori_3', '27-Udara Lingkungan Kerja');
 
         $data->where(function ($q) {
-            $q->whereJsonContains('parameter', "563;Medan Magnit Statis")
+            $q->whereJsonContains('parameter', "563;Medan Magnet")
                 ->orWhereJsonContains('parameter', "316;Power Density")
                 ->orWhereJsonContains('parameter', "277;Medan Listrik")
                 ->orWhereJsonContains('parameter', "236;Gelombang Elektro");

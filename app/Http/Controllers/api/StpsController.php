@@ -55,7 +55,16 @@ class StpsController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            if (!$isOrangPusat) {
+                $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
+                    $q->where('is_active',true);
+                    $q->whereIn('id_cabang', $myPrivileges);
+                });
+            }
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -67,7 +76,7 @@ class StpsController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -75,6 +84,9 @@ class StpsController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -90,7 +102,7 @@ class StpsController extends Controller
             ];
 
             $groupedData = [];
-
+             
             foreach ($data as $item) {
                 // Early exit jika relasi tidak lengkap
                 if (!$item->orderHeader || $item->orderHeader->sampling->isEmpty()) {continue;}
@@ -128,7 +140,10 @@ class StpsController extends Controller
 
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
-                    // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di OrderDetail
+                    // Strict check: Tanggal jadwal HARUS sama dengan tanggal sampling di 
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -177,7 +192,8 @@ class StpsController extends Controller
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
                         $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->jam_mulai . '|' .
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja
@@ -212,7 +228,7 @@ class StpsController extends Controller
                     }
                 }
             }
-
+           
             // 3. Return ke DataTables (Collection Client Side)
             // Karena data sudah berupa Array, kita bungkus dengan collect()
             return DataTables::of(collect(array_values($groupedData)))
@@ -258,7 +274,10 @@ class StpsController extends Controller
                 }
             }
             // 1. Ambil Data (Eager Loading Optimized)
-            $data = OrderDetail::with([
+            $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
+            $isOrangPusat = in_array("1", $myPrivileges);
+            $query =OrderDetail::query();
+            $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([
                         'id', 'tanggal_order', 'nama_perusahaan', 'konsultan', 'no_document', 
@@ -270,7 +289,7 @@ class StpsController extends Controller
                     $q->select(['id', 'periode_kontrak', 'quotation_id', 'status_quotation', 'is_active'])
                     ->where('is_active', true); // Pastikan plan aktif
                 },
-                'orderHeader.samplingPlan.jadwal' => function ($q) {
+                'orderHeader.samplingPlan.jadwal' => function ($q) use ($isOrangPusat, $myPrivileges) {
                     $q->select([
                         'id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang',
                         // Group Concat sampler di level database agar array PHP lebih ringan
@@ -278,6 +297,9 @@ class StpsController extends Controller
                     ])
                     ->where('is_active', true)
                     ->groupBy(['id_sampling', 'kategori', 'tanggal', 'durasi', 'jam_mulai', 'jam_selesai', 'id_cabang']);
+                    if (!$isOrangPusat) {
+                        $q->whereIn('id_cabang', $myPrivileges);
+                    }
                 }
             ])
             ->select(['id_order_header', 'no_order', 'kategori_1', 'kategori_2', 'kategori_3', 'periode', 'tanggal_sampling'])
@@ -331,6 +353,9 @@ class StpsController extends Controller
 
                 // Loop Jadwal
                 foreach ($targetPlan->jadwal as $schedule) {
+                    if (!$isOrangPusat && !in_array($schedule->id_cabang, $this->privilageCabang)) {
+                        continue; 
+                    }
                     if ($schedule->tanggal !== $item->tanggal_sampling) {
                         continue;
                     }
@@ -379,7 +404,8 @@ class StpsController extends Controller
                     $key = $orderHeader->no_document . '|' . 
                         $item->no_order . '|' . 
                         $schedule->tanggal . '|' . 
-                        $schedule->jam_mulai; // Key dipersingkat agar hash lebih cepat
+                        $schedule->jam_mulai . '|' .
+                        $kategori; // Key dipersingkat agar hash lebih cepat
 
                     if (isset($groupedData[$key])) {
                         // Jika data sudah ada, gabungkan Sampler-nya saja

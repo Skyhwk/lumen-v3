@@ -274,6 +274,19 @@ class InvoiceController extends Controller
                     END = ?
                 ", [$status]);
             }
+            if ($request->filled('no_po')) {
+                $data->havingRaw(
+                    'MAX(invoice.no_po) LIKE ?',
+                    ['%' . $request->no_po . '%']
+                );
+            }
+
+            if ($request->filled('no_spk')) {
+                $data->havingRaw(
+                    'MAX(invoice.no_spk) LIKE ?',
+                    ['%' . $request->no_spk . '%']
+                );
+            }
             if ($request->filled('emailed_by')) {
                 $data->havingRaw(
                     'MAX(invoice.emailed_by) LIKE ?',
