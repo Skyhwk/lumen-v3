@@ -66,7 +66,7 @@ class SamplingPlanController extends Controller
         // }
         // CEK HIERARKI KLAN (Auth Check)
         $myPrivileges = $this->privilageCabang;
-        $isOrangPusat = in_array("0", $myPrivileges);
+        $isOrangPusat = in_array("1", $myPrivileges);
         if ($isOrangPusat) {
             if ($request->filled('id_cabang_filter')) {
                 $idCabang = is_array($request->id_cabang_filter) ? $request->id_cabang_filter : [$request->id_cabang_filter];
@@ -159,7 +159,7 @@ class SamplingPlanController extends Controller
     private function getBranchOptionsForUser()
     {
         $myPrivileges = $this->privilageCabang;
-        $isOrangPusat = in_array("0", $myPrivileges);
+        $isOrangPusat = in_array("1", $myPrivileges);
 
         $query = MasterCabang::select('id', 'nama_cabang'); // Sesuaikan nama kolom
 

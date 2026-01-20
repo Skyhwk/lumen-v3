@@ -56,7 +56,7 @@ class StpsController extends Controller
             }
             // 1. Ambil Data (Eager Loading Optimized)
             $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
-            $isOrangPusat = in_array("0", $myPrivileges);
+            $isOrangPusat = in_array("1", $myPrivileges);
             $query =OrderDetail::query();
             if (!$isOrangPusat) {
                 $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
@@ -275,7 +275,7 @@ class StpsController extends Controller
             }
             // 1. Ambil Data (Eager Loading Optimized)
             $myPrivileges = $this->privilageCabang; // Contoh: ["1", "4"] atau ["4"]
-            $isOrangPusat = in_array("0", $myPrivileges);
+            $isOrangPusat = in_array("1", $myPrivileges);
             $query =OrderDetail::query();
             $data = $query->with([
                 'orderHeader' => function ($q) {
