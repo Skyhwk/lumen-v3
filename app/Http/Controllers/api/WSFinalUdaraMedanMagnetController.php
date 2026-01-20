@@ -32,7 +32,7 @@ class WSFinalUdaraMedanMagnetController extends Controller
     public function index(Request $request)
     {
         $parameters = [
-            "563;Medan Magnit Statis",
+            "563;Medan Magnet",
             "316;Power Density",
             "277;Medan Listrik",
             "236;Gelombang Elektro",

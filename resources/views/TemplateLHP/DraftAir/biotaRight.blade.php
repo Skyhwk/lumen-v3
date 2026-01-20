@@ -74,17 +74,17 @@
                             Parameter Pengujian
                         </td>
                         <td class="custom5" width="12">:</td>
-                        <td class="custom5">{{ $value->parameter }}</td>
+                        <td class="custom5">{{ data_get($value, 'parameter') }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Metode Pengujian</td>
                         <td class="custom5">:</td>
-                        <td class="custom5">{{ $value->metode_sampling }}</td>
+                        <td class="custom5">{{ data_get($value, 'metode_sampling') }}</td>
                     </tr>
                     <tr>
                         <td class="custom5">Keterangan</td>
                         <td class="custom5">:</td>
-                        <td class="custom5"><strong>{{ $value->deskripsi_titik }}</strong></td>
+                        <td class="custom5"><strong>{{ data_get($header, 'deskripsi_titik') }}</strong></td>
                     </tr>
                     <tr>
                         <td class="custom5" width="120">Tanggal Sampling</td>
@@ -138,7 +138,7 @@
                         <td class="custom5">Kesimpulan:</td>
                     </tr>
                     <tr>
-                        <td class="custom5 border">{{$value->kesimpulan}}</td>
+                        <td class="custom5 border">{{data_get($value, 'kesimpulan')}}</td>
                     </tr>
                 </table>
             </td>
