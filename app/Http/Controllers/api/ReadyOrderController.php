@@ -1002,7 +1002,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
             self::createInvoice($data, $dataQuotation, $request);
-            if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
+            if ((int)str_replace(',', '', $dataQuotation->biaya_akhir) > (int)str_replace(',', '', $request->tagihan_awal)) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -1395,8 +1395,7 @@ class ReadyOrderController extends Controller
             //dedi 2025-02-14 proses fixing jadwal
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
             self::createInvoice($dataOrderHeader, $dataQuotation, $request);
-
-            if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
+            if ((float)str_replace(',', '', $dataQuotation->biaya_akhir) > (float)str_replace(',', '', $request->tagihan_awal)) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
 
