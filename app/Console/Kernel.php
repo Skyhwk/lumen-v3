@@ -7,6 +7,7 @@ use Laravel\Lumen\Console\Kernel as ConsoleKernel;
 use App\Console\Commands\CleanOldRequestLogs;
 use App\Console\Commands\ScheduleEverySecond;
 use App\Console\Commands\CacheCommand;
+use App\Console\Commands\ScheduleUpdateForecastSP;
 use App\Console\Commands\SchaduleUpdateQsd;
 use App\Console\Commands\SchaduleUpdateSummaryQsd;
 use App\Console\Commands\FeeSales;
@@ -25,6 +26,7 @@ class Kernel extends ConsoleKernel
         Commands\CleanOldRequestLogs::class,
         Commands\ScheduleEverySecond::class,
         Commands\CacheCommand::class,
+        Commands\ScheduleUpdateForecastSP::class,
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
         Commands\FeeSales::class,

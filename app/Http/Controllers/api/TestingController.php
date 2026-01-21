@@ -70,7 +70,12 @@ use App\Models\{
     DataPsikologi,
     DetailFlowMeter,
     DetailSoundMeter,
-    DailyQsd
+    DailyQsd,
+    SertifikatWebinarHeader,
+    SertifikatWebinarDetail,
+    LayoutCertificate,
+    JenisFont,
+    TemplateBackground
 };
 use App\Services\{
     GetAtasan,
@@ -222,25 +227,55 @@ class TestingController extends Controller
             
             switch ($request->menu) {
                 case 'generateSertificate':
-                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
-                    ->options([
-                        // 'template' => 'bg-biru.png',
-                        'template' => 'bg-biru-v1.webp',
-                        'layout' => 'layout-1',
-                        // 'font' => [
-                        //     'fontName' => 'greatvibes',
-                        //     'filename' => 'GreatVibes-Regular.ttf'
-                        // ],
-                        'recipientName' => 'Rangga Manggala Yudha Bahtiayar',
-                        'id' => 14527,
-                        'webinarTitle' => 'Kelas Online',
-                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
-                        'webinarDate' => '2026-01-14',
-                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expertise)', '<strong>Bima Ghafara</strong> (Technical Expertise)'],
-                        'noSertifikat' => 'ISL012601-0001',
-                    ])
-                    ->generate();
-                    dd($path);
+                    $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
+                    $getDetail = $getHeader->details;
+                    $layout = LayoutCertificate::where('id', $getHeader->id_layout)->first();
+                    $font = JenisFont::where('id', $getHeader->id_font)->first();
+                    $template = TemplateBackground::where('id', $getHeader->id_template)->first();
+                    foreach ($getDetail as $key => $value) {
+                        /**
+                         * Mulai generate sertifikat satu per satu
+                         */
+
+                        $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                            unset($speaker['karyawan_id']);
+                            return $speaker;
+                        })->values()->toArray();
+
+                        $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
+                        $filename = $no_sertifikat . '.pdf';
+                        $generate = GenerateWebinarSertificate::make($filename)
+                        ->options([
+                            'layout'            => $layout->nama_file,
+                            'font'              => $font->jenis_font ?? 'roboto',
+                            'template'          => $template->nama_template,
+                            'recipientName'     => $value->name,
+                            'id'                => $value->id,
+                            'webinarTitle'      => $getHeader->title,
+                            'webinarTopic'      => $getHeader->topic,
+                            'webinarSubTopic'   => $getHeader->sub_topic,
+                            'webinarDate'       => $getHeader->date,
+                            'panelis'           => $panelis,
+                            'noSertifikat'      => $no_sertifikat,
+                        ])
+                        ->generate();
+
+                        if($generate instanceof Exception) {
+                            return response()->json([
+                                'message' => 'Gagal menggenerate sertifikat',
+                                'line' => $generate->getLine(),
+                                'status' => '500'
+                            ], 500);
+                        }
+
+                        $value->update([
+                            'filename' => $filename
+                        ]);
+
+                        FacadesLog::info('update ' . $value->id . ' ' . $filename);
+                    }
+                    
+                    dd('done');
                     break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';

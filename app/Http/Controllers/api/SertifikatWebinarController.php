@@ -261,10 +261,10 @@ class SertifikatWebinarController extends Controller
              * Mulai generate sertifikat satu per satu
              */
 
-            // $panelis = collect($getHeader->speakers)->map(function ($speaker) {
-            //     unset($speaker['karyawan_id']);
-            //     return $speaker;
-            // })->values()->toArray();
+            $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                unset($speaker['karyawan_id']);
+                return $speaker;
+            })->values()->toArray();
 
             $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
             $filename = $no_sertifikat . '.pdf';
@@ -275,12 +275,11 @@ class SertifikatWebinarController extends Controller
                 'template'          => $template->nama_template,
                 'recipientName'     => $value->name,
                 'id'                => $value->id,
-                // 'webinarTitle'      => $getHeader->title,
+                'webinarTitle'      => $getHeader->title,
                 'webinarTopic'      => $getHeader->topic,
                 'webinarSubTopic'   => $getHeader->sub_topic,
-                // 'webinarDate'       => $getHeader->date,
-                'webinarDate'       => Carbon::parse($getHeader->date)->locale('id')->isoFormat('DD MMMM YYYY'),
-                // 'panelis'           => $panelis,
+                'webinarDate'       => $getHeader->date,
+                'panelis'           => $panelis,
                 'noSertifikat'      => $no_sertifikat,
             ])
             ->generate();
@@ -626,7 +625,7 @@ class SertifikatWebinarController extends Controller
                 'header' => $header,
                 'body' => $body,
                 'attachments' => $attachments,
-                'subject' => "E-Sertifikat Webinar {$header->title}",
+                'subject' => "E-Sertifikat Webinar {$header->topic}",
             ],
             'message' => 'Template email berhasil dimuat',
         ]);
@@ -1060,7 +1059,7 @@ class SertifikatWebinarController extends Controller
 
 
                 $mail = SendEmail::where('to', $value->email)
-                    ->where('subject', 'E-Sertifikat ' . $header->topic)
+                    ->where('subject', 'E-Sertifikat Webinar '. $header->topic)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
                     ->noReply();

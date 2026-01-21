@@ -615,12 +615,13 @@ class GenerateWebinarSertificate
 
         $qr->data = json_encode([
             'tipe_dokumen'          => 'E-certificate webinar',
-            'penerima_sertifikat'   => $this->options['recipientName'],
             'no_sertifikat'         => $this->options['noSertifikat'],
-            'judul_webinar'         => $this->options['webinarTitle'],
             'topik_webinar'         => $this->options['webinarTopic'],
-            'tanggal_webinar'       => $this->options['webinarDate'],
-            'panelis'               => $this->options['panelis']
+            'penerima_sertifikat'   => $this->options['recipientName'],
+            'tanggal_webinar'       => Carbon::parse($this->options['webinarDate'])->locale('id')->isoFormat('DD MMMM YYYY'),
+            // 'judul_webinar'         => $this->options['webinarTitle'],
+            // 'tanggal_webinar'       => $this->options['webinarDate'],
+            // 'panelis'               => $this->options['panelis']
         ]);
 
         $qr->created_by = 'SYSTEM';
