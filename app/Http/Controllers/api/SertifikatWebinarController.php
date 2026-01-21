@@ -625,7 +625,7 @@ class SertifikatWebinarController extends Controller
                 'header' => $header,
                 'body' => $body,
                 'attachments' => $attachments,
-                'subject' => "E-Sertifikat Webinar {$header->title}",
+                'subject' => "E-Sertifikat Webinar {$header->topic}",
             ],
             'message' => 'Template email berhasil dimuat',
         ]);
@@ -1059,7 +1059,7 @@ class SertifikatWebinarController extends Controller
 
 
                 $mail = SendEmail::where('to', $value->email)
-                    ->where('subject', 'E-Sertifikat ' . $header->topic)
+                    ->where('subject', 'E-Sertifikat Webinar '. $header->topic)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
                     ->noReply();

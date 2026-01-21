@@ -75,6 +75,16 @@ class OrderDetail extends Sector
         return $this->hasMany(WsValueAir::class, 'no_sampel', 'no_sampel')->with('gravimetri', 'titrimetri', 'colorimetri', 'subkontrak')->where('is_active', true);
     }
 
+    public function wsValueUdara()
+    {
+        return $this->hasMany(WsValueUdara::class, 'no_sampel', 'no_sampel')->with(['lingkungan', 'microbiologi', 'medanLm', 'sinaruv', 'iklim', 'getaran', 'kebisingan', 'direct_lain', 'partikulat', 'pencahayaan', 'swab', 'subkontrak', 'dustfall'])->where('is_active', true);
+    }
+
+    public function wsValueEmisiCerobong()
+    {
+        return $this->hasMany(WsValueEmisiCerobong::class, 'no_sampel', 'no_sampel')->with(['emisi_cerobong_header', 'emisi_isokinetik', 'subkontrak'])->where('is_active', true);
+    }
+
     public function dataLapanganAir()
     {
         return $this->belongsTo(DataLapanganAir::class, 'no_sampel', 'no_sampel');
@@ -366,6 +376,10 @@ class OrderDetail extends Sector
         return $this->belongsTo(MicrobioHeader::class, 'no_sampel', 'no_sampel')->where('microbio_header.parameter', 'like', "%Swab%");
     }
 
+    public function ergonomiHeader()
+    {
+        return $this->belongsTo(ErgonomiHeader::class, 'no_sampel', 'no_sampel');
+    }
 
     public function getAnyHeaderUdara()
     {

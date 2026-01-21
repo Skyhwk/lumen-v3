@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Datatables;
 use Carbon\Carbon;
-use App\Services\{Notification, GetAtasan, ProcessAfterOrder, UseKuotaService};
+use App\Services\{Notification, GetAtasan, ProcessAfterOrder, SendEmail, UseKuotaService};
 use App\Services\SamplingPlanServices;
 use App\Models\SamplingPlan;
 use App\Models\QuotationNonKontrak;
@@ -32,6 +32,7 @@ use App\Models\AlasanVoidQt;
 use App\Models\Invoice;
 use App\Models\HistoryKuotaPengujian;
 use App\Models\KuotaPengujian;
+use App\Models\LinkRingkasanOrder;
 use App\Models\MasterPelanggan;
 use App\Models\QrPsikologi;
 use App\Services\ReorderNotifierService;
@@ -955,6 +956,48 @@ class ReadyOrderController extends Controller
             if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
+
+            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
+            if ($linkRingkasanOrder) {
+                $name = $data->konsultan ?: $data->nama_perusahaan;
+
+                $emailBody = "
+                    <p>Yth. Bapak/Ibu {$name},</p>
+
+                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                        <br>
+                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                Klik di sini untuk melihat Ringkasan Order
+                            </a>
+                    </p>
+
+                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+
+                    <p>Terima kasih atas kerja samanya.</p>
+
+                    <p>
+                        Hormat kami,<br>
+                        PT. Inti Surya Laboratorium
+                    </p>
+                ";
+    
+                SendEmail::where('to', $data->email_pic_order)
+                    ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
+                    ->where('body', $emailBody)
+                    ->where('cc', json_decode($dataQuotation->email_cc, true))
+                    ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
+                    ->noReply()
+                    ->send();
+    
+                $linkRingkasanOrder->is_emailed = 1;
+                $linkRingkasanOrder->count_email += 1;
+                $linkRingkasanOrder->emailed_by = $this->karyawan;
+                $linkRingkasanOrder->emailed_at = Carbon::now();
+                $linkRingkasanOrder->save();
+            }
+
             DB::commit();
             
             self::generateInvoice($no_order);
@@ -1307,25 +1350,64 @@ class ReadyOrderController extends Controller
             if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                 self::createInvoice($dataOrderHeader, $dataQuotation, $request, false);
             }
-            DB::commit();
 
-            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
+            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
-            if($dataQuotation->use_kuota == 1){
-                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
-            } else {
-                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
-                if ($kuotaExist) {
-                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
-                    if ($history) {
-                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
-                        $kuotaExist->save();
-                        $history->delete();
-                        DB::commit();
-                    }
-                }
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $dataOrderHeader->no_order)->latest()->first();
+            if ($linkRingkasanOrder) {
+                $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
+
+                $emailBody = "
+                    <p>Yth. Bapak/Ibu {$name},</p>
+
+                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                        <br>
+                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                Klik di sini untuk melihat Ringkasan Order
+                            </a>
+                    </p>
+
+                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+
+                    <p>Terima kasih atas kerja samanya.</p>
+
+                    <p>
+                        Hormat kami,<br>
+                        PT. Inti Surya Laboratorium
+                    </p>
+                ";
+    
+                SendEmail::where('to', $dataOrderHeader->email_pic_order)
+                    ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
+                    ->where('body', $emailBody)
+                    ->where('cc', json_decode($dataQuotation->email_cc, true))
+                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->noReply()
+                    ->send();
+    
+                $linkRingkasanOrder->is_emailed = 1;
+                $linkRingkasanOrder->count_email += 1;
+                $linkRingkasanOrder->emailed_by = $this->karyawan;
+                $linkRingkasanOrder->emailed_at = Carbon::now();
+                $linkRingkasanOrder->save();
             }
 
+            DB::commit();
+
+            // if($dataQuotation->use_kuota == 1){
+            //     (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            // } else {
+            //     $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+            //     if ($kuotaExist) {
+            //         $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+            //         if ($history) {
+            //             $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+            //             $kuotaExist->save();
+            //             $history->delete();
+            //             DB::commit();
+            //         }
+            //     }
+            // }
             
             self::generateInvoice($dataOrderHeader->no_order);
 
@@ -2208,24 +2290,63 @@ class ReadyOrderController extends Controller
                 }
             }
 
+            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $dataOrderHeader->no_order)->latest()->first();
+            if ($linkRingkasanOrder) {
+                $name = $dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan;
+
+                $emailBody = "
+                    <p>Yth. Bapak/Ibu {$name},</p>
+
+                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                        <br>
+                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                Klik di sini untuk melihat Ringkasan Order
+                            </a>
+                    </p>
+
+                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+
+                    <p>Terima kasih atas kerja samanya.</p>
+
+                    <p>
+                        Hormat kami,<br>
+                        PT. Inti Surya Laboratorium
+                    </p>
+                ";
+
+                SendEmail::where('to', $dataOrderHeader->email_pic_order)
+                    ->where('subject', "Ringkasan Order - {$dataOrderHeader->no_order} / " . ($dataOrderHeader->konsultan ?: $dataOrderHeader->nama_perusahaan))
+                    ->where('body', $emailBody)
+                    ->where('cc', json_decode($dataQuotation->email_cc, true))
+                    ->where('bcc', GetAtasan::where('user_id', $dataOrderHeader->sales_id)->get()->pluck('email')->toArray())
+                    ->noReply()
+                    ->send();
+
+                $linkRingkasanOrder->is_emailed = 1;
+                $linkRingkasanOrder->count_email += 1;
+                $linkRingkasanOrder->emailed_by = $this->karyawan;
+                $linkRingkasanOrder->emailed_at = Carbon::now();
+                $linkRingkasanOrder->save();
+            }
+
             DB::commit();
 
-            // (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+            // if($dataQuotation->use_kuota == 1){
+            //     (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
+            // } else {
+            //     $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
+            //     if ($kuotaExist) {
+            //         $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
+            //         if ($history) {
+            //             $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
+            //             $kuotaExist->save();
 
-            if($dataQuotation->use_kuota == 1){
-                (new UseKuotaService($dataQuotation->pelanggan_ID, $dataOrderHeader->no_order))->useKuota();
-            } else {
-                $kuotaExist = KuotaPengujian::where('pelanggan_ID', $dataQuotation->pelanggan_ID)->first();
-                if ($kuotaExist) {
-                    $history = HistoryKuotaPengujian::where('id_kuota', $kuotaExist->id)->where('no_order', $kuotaExist->no_order)->first();
-                    if ($history) {
-                        $kuotaExist->sisa = $kuotaExist->sisa - $history->total_used;
-                        $kuotaExist->save();
-
-                        $history->delete();
-                    }
-                }
-            }
+            //             $history->delete();
+            //         }
+            //     }
+            // }
 
             self::generateInvoice($dataOrderHeader->no_order);
 
@@ -2398,7 +2519,7 @@ class ReadyOrderController extends Controller
 
     private function generateInvoice($no_order){
         $invoice_numbers = Invoice::where('no_order', $no_order)->where('is_active', 1)->get()->pluck('no_invoice')->toArray();
-        Http::post('http://10.88.1.140:9999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
+        Http::post('http://127.0.0.1:2999/render-invoice', ['invoice_numbers' => $invoice_numbers]);
     }
 
     private static function generatePDF($noInvoice)
