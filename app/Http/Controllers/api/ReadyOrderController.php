@@ -2439,6 +2439,7 @@ class ReadyOrderController extends Controller
             'expired' => $expired,
         ];
         Invoice::insert($insert);
+        self::generateQrInvoice($noInvoice, $insert[0]);
     }
 
     public function createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $periode, $first = true, $firstPeriode = false)
@@ -2515,6 +2516,34 @@ class ReadyOrderController extends Controller
             'expired' => $expired,
         ];
         Invoice::insert($insert);
+        self::generateQrInvoice($noInvoice, $insert[0]);
+        
+    }
+
+    private function generateQrInvoice($noInvoice, $insert){
+        $filename = 'INVOICE' . '_' . preg_replace('/\\//', '_', $noInvoice) . '.pdf';
+        $path = public_path() . "/qr_documents/" . $filename . '.svg';
+        $link = 'https://www.intilab.com/validation/';
+        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+
+        QrCode::size(200)->generate($link . $unique, $path);
+        $dataQr = [
+            'type_document' => 'invoice',
+            'kode_qr' => $unique,
+            'file' => $filename,
+            'data' => json_encode([
+                'no_document' => $noInvoice,
+                'nama_customer' => $insert['nama_perusahaan'],
+                'type_document' => 'invoice',
+                'Tanggal_Pengesahan' => Carbon::parse($insert['tgl_invoice'])->locale('id')->isoFormat('DD MMMM YYYY'),
+                'Disahkan_Oleh' => $insert['nama_pj'],
+                'Jabatan' => $insert['jabatan_pj']
+            ]),
+            'created_at' => Carbon::now(),
+            'created_by' => 'System',
+        ];
+
+        DB::table('qr_documents')->insert($dataQr);
     }
 
     private function generateInvoice($no_order){
