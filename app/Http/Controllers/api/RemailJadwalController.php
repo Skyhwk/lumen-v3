@@ -33,7 +33,7 @@ class RemailJadwalController extends Controller
                 $data = QuotationNonKontrak::with(['sales', 'order:no_order,no_document'])
                     ->select('request_quotation.*') // tambahkan ini
                     ->where('request_quotation.id_cabang', $request->cabang)
-                    ->where('request_quotation.flag_status', 'ordered')
+                    ->whereIn('request_quotation.flag_status', ['ordered','sp'])
                     ->where('request_quotation.is_approved', true)
                     ->where('request_quotation.is_emailed', true)
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
@@ -42,7 +42,7 @@ class RemailJadwalController extends Controller
                 $data = QuotationKontrakH::with(['sales', 'order:no_order,no_document'])
                     ->select('request_quotation_kontrak_H.*')
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
-                    ->where('request_quotation_kontrak_H.flag_status', 'ordered')
+                    ->whereIn('request_quotation_kontrak_H.flag_status', ['ordered','sp'])
                     ->where('request_quotation_kontrak_H.is_approved', true)
                     ->where('request_quotation_kontrak_H.is_emailed', true)
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
