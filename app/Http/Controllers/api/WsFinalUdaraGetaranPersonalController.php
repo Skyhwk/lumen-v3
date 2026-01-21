@@ -163,9 +163,11 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
 					$dataLapanganDurasi = json_decode($dataLapanganDurasi);
 					if (is_array($dataLapanganDurasi)) {
-						$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
+						// Gunakan floatval supaya 0.01 tidak berubah jadi 0
+						$dataLapanganDurasi = array_sum(array_map('floatval', $dataLapanganDurasi));
 					} else {
-						$dataLapanganDurasi = intval($dataLapanganDurasi);
+						// Gunakan floatval untuk menangani nilai tunggal desimal
+						$dataLapanganDurasi = floatval($dataLapanganDurasi);
 					}
 					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
 
