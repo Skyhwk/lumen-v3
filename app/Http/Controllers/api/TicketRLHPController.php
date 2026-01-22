@@ -181,12 +181,7 @@ class TicketRLHPController extends Controller
             })
             ->first();
 
-        if (! $data) {
-            return response()->json([
-                'message' => 'Data not found',
-            ], 404);
-        }
-
+        if ($data) { // NON DIRECT
         $hasAir    = $data->relationLoaded('lhps_air') && $data->lhps_air;
         $hasLing   = $data->relationLoaded('lhps_ling') && $data->lhps_ling;
         $hasEmisiC = $data->relationLoaded('lhps_emisi_c') && $data->lhps_emisi_c;
@@ -243,9 +238,179 @@ class TicketRLHPController extends Controller
         // ]
 
         return response()->json([
+            'type'    => 'NON DIRECT',
             'data'    => $data,
             'message' => 'Data found',
         ], 200);
+        } else { // DIRECT
+            $orderDetails = OrderDetail::with(['orderHeader', 'lhps_emisi'])
+                ->where('cfr', $request->no_lhp)
+                ->where('is_active', true)
+                ->where(function ($q) {
+                    $q->whereHas('lhps_emisi');
+                })
+                ->get();
+
+            if ($orderDetails->isEmpty()) {
+                return response()->json(['message' => 'Data not found'], 404);
+            }
+
+            return response()->json([
+                'type'    => 'DIRECT',
+                'data'    => $orderDetails,
+                'message' => 'Data retrieved successfully',
+            ], 200);
+        }
+    }
+
+    public function searchLhpByNoSampel(Request $request)
+    {
+        $data = OrderDetail::with(['orderHeader', 'lhps_emisi', 'lhps_getaran', 'lhps_kebisingan', 'lhps_kebisingan_personal', 'lhps_medanlm', 'lhps_pencahayaan', 'lhps_sinaruv', 'lhps_iklim', 'lhps_swab_udara', 'lhps_microbiologi'])
+            ->where('no_sampel', $request->no_sampel)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereHas('lhps_emisi')
+                    ->orWhereHas('lhps_getaran')
+                    ->orWhereHas('lhps_kebisingan')
+                    ->orWhereHas('lhps_kebisingan_personal')
+                    ->orWhereHas('lhps_medanlm')
+                    ->orWhereHas('lhps_pencahayaan')
+                    ->orWhereHas('lhps_sinaruv')
+                    ->orWhereHas('lhps_iklim')
+                    ->orWhereHas('lhps_swab_udara')
+                    ->orWhereHas('lhps_microbiologi');
+            })
+            ->first();
+
+        if ($data) {
+            $hasEmisi = $data->relationLoaded('lhps_emisi') && $data->lhps_emisi;
+            $hasGetaran = $data->relationLoaded('lhps_getaran') && $data->lhps_getaran;
+            $hasKebisingan = $data->relationLoaded('lhps_kebisingan') && $data->lhps_kebisingan;
+            $hasKebisinganPersonal = $data->relationLoaded('lhps_kebisingan_personal') && $data->lhps_kebisingan_personal;
+            $hasMedanLm = $data->relationLoaded('lhps_medanlm') && $data->lhps_medanlm;
+            $hasPencahayaan = $data->relationLoaded('lhps_pencahayaan') && $data->lhps_pencahayaan;
+            $hasSinarUv = $data->relationLoaded('lhps_sinaruv') && $data->lhps_sinaruv;
+            $hasIklim = $data->relationLoaded('lhps_iklim') && $data->lhps_iklim;
+            $hasSwabUdara = $data->relationLoaded('lhps_swab_udara') && $data->lhps_swab_udara;
+            $hasMicrobiologi = $data->relationLoaded('lhps_microbiologi') && $data->lhps_microbiologi;
+
+            $param = OrderDetail::where('is_active', true)
+                ->where('no_sampel', $request->no_sampel)
+                ->pluck('parameter') // ambil kolom parameter saja
+                ->flatMap(fn($p) => json_decode($p, true) ?? [])
+                ->unique()
+                ->map(function ($item) {
+                    [$id, $name] = explode(';', $item);
+                    return (object) [
+                        'id'   => $id,
+                        'name' => $name,
+                    ];
+                })
+                ->values();
+
+            $data->parameter = $param;
+
+            if ($hasEmisi) {
+                $detailParameter = [];
+                foreach (json_decode($data->lhps_emisi->lhpsEmisiDetail->firstWhere('no_sampel', $request->no_sampel)->hasil_uji, true) as $key => $val) {
+                    $detailParameter[] = [
+                        'parameter' => $key,
+                        'hasil_uji' => $val,
+                    ];
+                }
+                $data->detailParameter = $detailParameter;
+            }
+
+            if ($hasGetaran) {
+                $lhpsGetaranDetail = $data->lhps_getaran->lhpsGetaranDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsGetaranDetail->param,
+                    'hasil_uji' => $lhpsGetaranDetail->hasil,
+                ]];
+            }
+
+            if ($hasKebisingan) {
+                $lhpsKebisinganDetail = $data->lhps_kebisingan->lhpsKebisinganDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsKebisinganDetail->param,
+                    'hasil_uji' => $lhpsKebisinganDetail->hasil_uji,
+                ]];
+            }
+
+            if ($hasKebisinganPersonal) {
+                $lhpsKebisinganPersonalDetail = $data->lhps_kebisingan_personal->lhpsKebisinganPersonalDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsKebisinganPersonalDetail->param,
+                    'hasil_uji' => $lhpsKebisinganPersonalDetail->hasil_uji,
+                ]];
+            }
+
+            if ($hasMedanLm) {
+                $lhpsMedanLMDetail = $data->lhps_getaran->lhpsMedanLMDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsMedanLMDetail->parameter,
+                    'hasil_uji' => $lhpsMedanLMDetail->hasil,
+                ]];
+            }
+
+            if ($hasPencahayaan) {
+                $lhpsPencahayaanDetail = $data->lhps_pencahayaan->lhpsPencahayaanDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsPencahayaanDetail->parameter,
+                    'hasil_uji' => $lhpsPencahayaanDetail->hasil_uji,
+                ]];
+            }
+
+            if ($hasSinarUv) {
+                $lhpsSinarUvDetail = $data->lhps_sinaruv->lhpsSinarUvDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [
+                    [
+                        'parameter' => 'Mata',
+                        'hasil_uji' => $lhpsSinarUvDetail->mata,
+                    ],
+                    [
+                        'parameter' => 'Siku',
+                        'hasil_uji' => $lhpsSinarUvDetail->siku,
+                    ],
+                    [
+                        'parameter' => 'Betis',
+                        'hasil_uji' => $lhpsSinarUvDetail->betis,
+                    ],
+                ];
+            }
+
+            if ($hasIklim) {
+                $lhpsIklimDetail = $data->lhps_iklim->lhpsIklimDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsIklimDetail->param,
+                    'hasil_uji' => $lhpsIklimDetail->hasil_uji,
+                ]];
+            }
+
+            if ($hasSwabUdara) {
+                $lhpsSwabTesDetail = $data->lhps_swab_udara->lhpsSwabTesDetail->firstWhere('no_sampel', $request->no_sampel);
+                $data->detailParameter = [[
+                    'parameter' => $lhpsSwabTesDetail->parameter,
+                    'hasil_uji' => $lhpsSwabTesDetail->hasil_uji,
+                ]];
+            }
+
+            if ($hasMicrobiologi) {
+                $lhpsMicrobiologiDetailSampel = $data->lhps_microbiologi->lhpsMicrobiologiDetailSampel->firstWhere('no_sampel', $request->no_sampel);
+                $parameter = $lhpsMicrobiologiDetailSampel->parameter !== $lhpsMicrobiologiDetailSampel->parameter_lab ? $lhpsMicrobiologiDetailSampel->parameter . ' (' . $lhpsMicrobiologiDetailSampel->parameter_lab . ')' : $lhpsMicrobiologiDetailSampel->parameter;
+                $data->detailParameter = [[
+                    'parameter' => $parameter,
+                    'hasil_uji' => $lhpsMicrobiologiDetailSampel->hasil_uji,
+                ]];
+            }
+
+            return response()->json([
+                'data'    => $data,
+                'message' => 'Data found',
+            ], 200);
+        } else {
+            return response()->json(['message' => 'Data not found'], 404);
+        }
     }
 
     private function getTypeLHP($kategori2, $kategori3, $parameter)
@@ -665,10 +830,8 @@ class TicketRLHPController extends Controller
                 } else {
                     $data->dokumentasi = null;
                 }
-
-                $data->perubahan_tanggal = $request->perubahan_tanggal ? json_encode($request->perubahan_tanggal) : null;
-                $data->perubahan_data    = $request->perubahan_data ? json_encode($request->perubahan_data) : null;
                 $data->no_lhp            = $request->no_lhp;
+                if ($request->no_sampel) $data->no_sampel = $request->no_sampel;
                 $data->data_perusahaan   = $request->data_perusahaan ? json_encode($request->data_perusahaan) : null;
 
                 $data->nama_menu    = $request->nama_menu;
@@ -719,6 +882,8 @@ class TicketRLHPController extends Controller
                 file_put_contents(public_path($contentDir . '/' . $data->filename), $content);
                 $message = 'Ticket R-LHP Telah Diperbarui';
             }
+            $data->perubahan_tanggal = $request->perubahan_tanggal ? json_encode($request->perubahan_tanggal) : null;
+            $data->perubahan_data    = $request->perubahan_data ? json_encode($request->perubahan_data) : null;
 
             $data->status   = 'WAITING PROCESS';
             $data->kategori = $request->kategori;
