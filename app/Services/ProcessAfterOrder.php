@@ -143,7 +143,7 @@ class ProcessAfterOrder
                 GenerateLink::where('id_quotation', $linkLhp->id)
                     ->where('type', 'lhp_rilis')
                     ->where('quotation_status', 'lhp_rilis')
-                    ->update(['expired' => Carbon::now()->format('Y-m-d')]);
+                    ->update(['status' => 1]);
                 
                 Log::info('Expired removed period', ['periode' => $periode]);
             }
