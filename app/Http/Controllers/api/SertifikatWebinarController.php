@@ -300,6 +300,44 @@ class SertifikatWebinarController extends Controller
         }
     }
 
+    public function updateDataAudience(Request $request)
+    {
+        DB::beginTransaction();
+        $update = SertifikatWebinarDetail::where('id', $request->id)->first();
+        $update->name = $request->name;
+        $update->save();
+        DB::commit();
+        
+        $header = SertifikatWebinarHeader::find($update->header_id);
+        $layout = LayoutCertificate::where('id', $header->id_layout)->first();
+        $font = JenisFont::where('id', $header->id_font)->first();
+        $template = TemplateBackground::where('id', $header->id_template)->first();
+        $panelis = collect($header->speakers)->map(function ($speaker) {
+                unset($speaker['karyawan_id']);
+                return $speaker;
+            })->values()->toArray();
+
+            $no_sertifikat = $header->webinar_code . '-' . $update->number_attend;
+            $filename = $no_sertifikat . '.pdf';
+            $generate = GenerateWebinarSertificate::make($filename)
+            ->options([
+                'layout'            => $layout->nama_file,
+                'font'              => $font->jenis_font ?? 'roboto',
+                'template'          => $template->nama_template,
+                'recipientName'     => $update->name,
+                'id'                => $update->id,
+                'webinarTitle'      => $header->title,
+                'webinarTopic'      => $header->topic,
+                'webinarSubTopic'   => $header->sub_topic,
+                'webinarDate'       => $header->date,
+                'panelis'           => $panelis,
+                'noSertifikat'      => $no_sertifikat,
+            ])
+            ->generate();
+
+        return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);     
+    }
+
     public function importDataQna(Request $request)
     {
         $file = $request->file('file_input');
