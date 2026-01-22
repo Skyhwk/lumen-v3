@@ -143,7 +143,7 @@ class ProcessAfterOrder
                 GenerateLink::where('id_quotation', $linkLhp->id)
                     ->where('type', 'lhp_rilis')
                     ->where('quotation_status', 'lhp_rilis')
-                    ->update(['expired' => Carbon::now()]);
+                    ->update(['expired' => Carbon::now()->format('Y-m-d')]);
                 
                 Log::info('Expired removed period', ['periode' => $periode]);
             }
@@ -151,7 +151,7 @@ class ProcessAfterOrder
 
         // 3. PROSES PERIODE YANG TETAP (UNCHANGED)
         // Update expired periode yang tetap agar sama seperti periode baru (tambah 1 tahun dari sekarang)
-        $newExpiredDate = Carbon::now()->addYear();
+        $newExpiredDate = Carbon::now()->addYear()->format('Y-m-d');
         foreach ($unchangedPeriods as $periode) {
             $linkLhp = LinkLhp::where('no_order', $this->no_order)
                 ->where('periode', $periode)
@@ -215,7 +215,7 @@ class ProcessAfterOrder
             ]);
 
             // Update expired jadi 1 tahun dari sekarang
-            $newExpiredDate = Carbon::now()->addYear();
+            $newExpiredDate = Carbon::now()->addYear()->format('Y-m-d');
             GenerateLink::where('id_quotation', $linkLhp->id)
                 ->where('type', 'lhp_rilis')
                 ->where('quotation_status', 'lhp_rilis')

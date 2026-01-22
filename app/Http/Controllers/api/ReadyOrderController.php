@@ -388,6 +388,10 @@ class ReadyOrderController extends Controller
                 ], 401);
             } else {
                 return response()->json([
+                    'error' => $th->getMessage(),
+                    'line' => $th->getLine(),
+                    'file' => $th->getFile(),
+                    'trace' => $th->getTrace(),
                     'message' => 'Write Order Failed: ' . $th->getMessage(),
                     'status' => 401
                 ], 401);
@@ -1934,6 +1938,45 @@ class ReadyOrderController extends Controller
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data_lama->no_order, false, true, false, $dataQuotation->use_kuota, $this->karyawan))->run();
 
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
+            if ($linkRingkasanOrder) {
+                $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
+
+                $emailBody = "
+                    <p>Yth. Bapak/Ibu {$name},</p>
+
+                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                        <br>
+                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                Klik di sini untuk melihat Ringkasan Order
+                            </a>
+                    </p>
+
+                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+
+                    <p>Terima kasih atas kerja samanya.</p>
+
+                    <p>
+                        Hormat kami,<br>
+                        PT. Inti Surya Laboratorium
+                    </p>
+                ";
+
+                SendEmail::where('to', $dataQuotation->email_pic_order)
+                    ->where('subject', "Ringkasan Order - {$data_lama->no_order} / " . ($dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan))
+                    ->where('body', $emailBody)
+                    ->where('cc', json_decode($dataQuotation->email_cc, true))
+                    ->where('bcc', GetAtasan::where('user_id', $dataQuotation->sales_id)->get()->pluck('email')->toArray())
+                    ->noReply()
+                    ->send();
+
+                $linkRingkasanOrder->is_emailed = 1;
+                $linkRingkasanOrder->count_email += 1;
+                $linkRingkasanOrder->emailed_by = $this->karyawan;
+                $linkRingkasanOrder->emailed_at = Carbon::now();
+                $linkRingkasanOrder->save();
+            }
+
             $data_detail_baru = OrderDetail::where('no_order', $no_order)->where('is_active', 1)
                 ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'kategori_3', 'keterangan_1', 'regulasi', 'parameter')->get();
 
@@ -3076,6 +3119,45 @@ class ReadyOrderController extends Controller
             Jadwal::where('no_quotation', $dataQuotation->no_document)->update(['status' => '1']);
 
             (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data_lama->no_order, true, true, false, $dataQuotation->use_kuota, $this->karyawan))->run();
+
+            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data_lama->no_order)->latest()->first();
+            if ($linkRingkasanOrder) {
+                $name = $dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan;
+
+                $emailBody = "
+                    <p>Yth. Bapak/Ibu {$name},</p>
+
+                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                        <br>
+                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                Klik di sini untuk melihat Ringkasan Order
+                            </a>
+                    </p>
+
+                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+
+                    <p>Terima kasih atas kerja samanya.</p>
+
+                    <p>
+                        Hormat kami,<br>
+                        PT. Inti Surya Laboratorium
+                    </p>
+                ";
+
+                SendEmail::where('to', $dataQuotation->email_pic_order)
+                    ->where('subject', "Ringkasan Order - {$data_lama->no_order} / " . ($dataQuotation->konsultan ?: $dataQuotation->nama_perusahaan))
+                    ->where('body', $emailBody)
+                    ->where('cc', json_decode($dataQuotation->email_cc, true))
+                    ->where('bcc', GetAtasan::where('user_id', $dataQuotation->sales_id)->get()->pluck('email')->toArray())
+                    ->noReply()
+                    ->send();
+
+                $linkRingkasanOrder->is_emailed = 1;
+                $linkRingkasanOrder->count_email += 1;
+                $linkRingkasanOrder->emailed_by = $this->karyawan;
+                $linkRingkasanOrder->emailed_at = Carbon::now();
+                $linkRingkasanOrder->save();
+            }
 
             $data_detail_baru = OrderDetail::where('id_order_header', $data_lama->id_order)->where('is_active', 1)
                 ->select('no_order', 'no_sampel', 'periode', 'tanggal_sampling', 'kategori_1', 'kategori_2', 'kategori_3', 'keterangan_1', 'regulasi', 'parameter')->get();
