@@ -1,34 +1,33 @@
 <?php
-
 namespace App\Http\Controllers\api;
 
-use Illuminate\Http\Request;
-use App\Models\SamplingPlan;
-use App\Models\MasterKaryawan;
+use App\Http\Controllers\Controller;
+use App\Jobs\RenderAndEmailJadwal;
+use App\Jobs\RenderSamplingPlan;
 use App\Models\Jadwal;
 use App\Models\JadwalLibur;
-use App\Models\MasterDriver;
-use App\Models\PraNoSample;
-use App\Models\QuotationKontrakH;
-use App\Models\MasterCabang;
-use App\Models\QuotationKontrakD;
-use App\Models\QuotationNonKontrak;
-use App\Models\OrderHeader;
-use App\Models\OrderDetail;
-use App\Models\PerbantuanSampler;
-use App\Jobs\RenderSamplingPlan;
-use App\Services\JadwalServices;
-use App\Services\GetAtasan;
-use App\Services\Notification;
-use App\Http\Controllers\Controller;
-use Yajra\Datatables\Datatables;
-use Carbon\Carbon;
-use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
-use App\Jobs\RenderAndEmailJadwal;
 use App\Models\JobTask;
+use App\Models\MasterCabang;
+use App\Models\MasterDriver;
+use App\Models\MasterKaryawan;
+use App\Models\OrderDetail;
+use App\Models\OrderHeader;
+use App\Models\PerbantuanSampler;
+use App\Models\PraNoSample;
+use App\Models\QuotationKontrakD;
+use App\Models\QuotationKontrakH;
+use App\Models\QuotationNonKontrak;
+use App\Models\SamplingPlan;
+use App\Services\GenerateDocumentSampling;
+use App\Services\GetAtasan;
+use App\Services\JadwalServices;
+use App\Services\Notification;
+use App\Services\RenderSamplingPlan as RenderSamplingPlanService;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-
+use Yajra\Datatables\Datatables;
 
 class SamplingPlanController extends Controller
 {
@@ -42,10 +41,10 @@ class SamplingPlanController extends Controller
             'samplingPlan:id,created_at,filename,is_active',
             'samplingPlan' => function ($query) {
                 $query->WithTypeModelSub();
-            }
+            },
         ])
-            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan','isokinetic','pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
-            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan','isokinetic','pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->select('id_sampling', 'parsial', 'no_quotation', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'tanggal', 'periode', 'jam_mulai', 'jam_selesai', 'kategori', 'durasi', 'status', 'warna', 'note', 'urutan', 'driver', 'id_cabang', 'wilayah', DB::raw('group_concat(sampler) as sampler'), DB::raw('group_concat(id) as batch_id'), DB::raw('group_concat(userid) as batch_user'), 'created_by', 'created_at', 'updated_at', 'updated_by')
+            ->groupBy('id_sampling', 'parsial', 'no_quotation', 'tanggal', 'periode', 'nama_perusahaan', 'isokinetic', 'pendampingan_k3', 'durasi', 'driver', 'kategori', 'status', 'jam_mulai', 'jam_selesai', 'warna', 'note', 'urutan', 'wilayah', 'id_cabang', 'created_by', 'created_at', 'updated_at', 'updated_by')
             ->whereNotNull('no_quotation')
             ->where('is_active', $active);
 
@@ -119,7 +118,7 @@ class SamplingPlanController extends Controller
                     $query->where('durasi', 1);
                 } elseif (preg_match('/(\d+)x?24/', $keyword, $matches)) {
                     // Handle 1x24, 2x24, etc.
-                    $days = (int)$matches[1];
+                    $days = (int) $matches[1];
                     $query->where('durasi', $days + 1); // durasi 2 = 1x24, durasi 3 = 2x24, etc.
                 }
             })
@@ -134,7 +133,7 @@ class SamplingPlanController extends Controller
             ->filterColumn('kategori', function ($query, $keyword) {
                 $query->where('kategori', 'like', '%' . $keyword . '%');
             })
-            // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
+        // Filter kolom 'sampler' dengan where biasa, karena havingRaw tidak berfungsi di sini
             ->filterColumn('sampler', function ($query, $keyword) {
                 $query->where('sampler', 'like', '%' . $keyword . '%');
             })
@@ -183,7 +182,7 @@ class SamplingPlanController extends Controller
 
     public function updateWarnaSampler(Request $request)
     {
-        $data = MasterKaryawan::where('id', $request->id)->first();
+        $data        = MasterKaryawan::where('id', $request->id)->first();
         $data->warna = $request->warna;
         $data->save();
 
@@ -205,13 +204,13 @@ class SamplingPlanController extends Controller
             $samplers = $samplers->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
-            $privateSampler =  PerbantuanSampler::with('users.jabatan')
+            $privateSampler = PerbantuanSampler::with('users.jabatan')
                 ->where('is_active', true)
                 ->orderBy('nama_lengkap')
                 ->get();
             $privateSampler->transform(function ($item) {
-                $digitCount = strlen((string)$item->user_id);
-    
+                $digitCount = strlen((string) $item->user_id);
+
                 // 2. Tentukan suffix (akhiran nama)
                 if ($digitCount > 4) {
                     $item->nama_display = $item->nama_lengkap . ' (freelance)';
@@ -227,8 +226,8 @@ class SamplingPlanController extends Controller
                     $item->setRelation('jabatan', $jabatanObj);
                 } else {
                     // Fallback jika data kosong (opsional, biar frontend gak error undefined)
-                    $jabatanObj = (object)[
-                        "nama_jabatan" => "Freelance Sampler"
+                    $jabatanObj = (object) [
+                        "nama_jabatan" => "Freelance Sampler",
                     ];
                     $item->jabatan = $jabatanObj;
                 }
@@ -247,7 +246,7 @@ class SamplingPlanController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => '401'
+                'status'  => '401',
             ], 401);
         }
     }
@@ -255,20 +254,20 @@ class SamplingPlanController extends Controller
     public function insertJadwalLibur(Request $request)
     {
         if ($request->id != '') {
-            $data = JadwalLibur::where('id', $request->id)->first();
+            $data             = JadwalLibur::where('id', $request->id)->first();
             $data->updated_by = $this->karyawan;
             $data->updated_at = Carbon::now()->format('Y-m-d H:i:s');
-            $message = 'Berhasil update jadwal libur';
+            $message          = 'Berhasil update jadwal libur';
         } else {
-            $data = new JadwalLibur();
+            $data             = new JadwalLibur();
             $data->created_by = $this->karyawan;
             $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
-            $message = 'Berhasil menambahkan jadwal libur';
+            $message          = 'Berhasil menambahkan jadwal libur';
         }
-        ($request->judul != '') ? $data->judul = $request->judul : $data->judul = null;
-        ($request->deskripsi != '') ? $data->deskripsi = $request->deskripsi : $data->deskripsi = null;
+        ($request->judul != '') ? $data->judul           = $request->judul : $data->judul           = null;
+        ($request->deskripsi != '') ? $data->deskripsi   = $request->deskripsi : $data->deskripsi   = null;
         ($request->start_date != '') ? $data->start_date = $request->start_date : $data->start_date = null;
-        ($request->end_date != '') ? $data->end_date = $request->end_date : $data->end_date = $request->start_date;
+        ($request->end_date != '') ? $data->end_date     = $request->end_date : $data->end_date     = $request->start_date;
         $data->save();
 
         return response()->json([
@@ -296,41 +295,41 @@ class SamplingPlanController extends Controller
     {
         try {
             if (isset($request->id) && $request->id != null) {
-                $usr = explode(",", $request->sampler);
-                $data = Jadwal::where('id', $request->id)->first();
+                $usr                   = explode(",", $request->sampler);
+                $data                  = Jadwal::where('id', $request->id)->first();
                 $data->nama_perusahaan = $request->keterangan;
-                $data->tanggal = $request->tanggal_mulai;
-                $data->sampler = $usr[1];
-                $data->userid = $usr[0];
-                $data->durasi = $request->total_hari;
-                $data->flag = 1;
+                $data->tanggal         = $request->tanggal_mulai;
+                $data->sampler         = $usr[1];
+                $data->userid          = $usr[0];
+                $data->durasi          = $request->total_hari;
+                $data->flag            = 1;
                 $data->save();
 
                 $message = 'Cuti has been update.!';
             } else {
-                $usr = explode(",", $request->sampler);
-                $data = new Jadwal();
+                $usr                   = explode(",", $request->sampler);
+                $data                  = new Jadwal();
                 $data->nama_perusahaan = $request->keterangan;
-                $data->tanggal = $request->tanggal_mulai;
-                $data->sampler = $usr[1];
-                $data->userid = $usr[0];
-                $data->durasi = $request->total_hari;
-                $data->flag = 1;
-                $data->created_by = $this->karyawan;
-                $data->created_at = Carbon::now()->format('Y-m-d H:i:s');
+                $data->tanggal         = $request->tanggal_mulai;
+                $data->sampler         = $usr[1];
+                $data->userid          = $usr[0];
+                $data->durasi          = $request->total_hari;
+                $data->flag            = 1;
+                $data->created_by      = $this->karyawan;
+                $data->created_at      = Carbon::now()->format('Y-m-d H:i:s');
                 $data->save();
 
                 $message = 'CUTI has been Save.!';
             }
             return response()->json([
                 'message' => $message,
-                'status' => '200'
+                'status'  => '200',
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => $e->getCode(),
-                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'line'    => $e->getLine(),
             ], 500);
         }
     }
@@ -338,42 +337,42 @@ class SamplingPlanController extends Controller
     public function insertDriver(Request $request)
     {
         try {
-            $usr = explode(",", $request->driver);
-            $id = $usr[0];
+            $usr  = explode(",", $request->driver);
+            $id   = $usr[0];
             $nama = $usr[1];
             if (isset($request->id) && $request->id != null) {
 
-                $data = MasterDriver::where('id', $request->id)->first();
-                $data->user_id = $id ?? null;
+                $data              = MasterDriver::where('id', $request->id)->first();
+                $data->user_id     = $id ?? null;
                 $data->nama_driver = $nama ?? null;
-                $data->updated_by = $this->karyawan ?? null;
-                $data->updated_at = Carbon::now()->format('Y-m-d H:i:s') ?? null;
-                $data->is_active = true;
+                $data->updated_by  = $this->karyawan ?? null;
+                $data->updated_at  = Carbon::now()->format('Y-m-d H:i:s') ?? null;
+                $data->is_active   = true;
                 $data->save();
 
                 $message = 'Cuti has been update.!';
             } else {
 
-                $data = new MasterDriver();
-                $data->user_id = $id ?? null;
+                $data              = new MasterDriver();
+                $data->user_id     = $id ?? null;
                 $data->nama_driver = $nama ?? null;
-                $data->created_by = $this->karyawan ?? null;
-                $data->created_at = Carbon::now()->format('Y-m-d H:i:s') ?? null;
-                $data->is_active = true;
+                $data->created_by  = $this->karyawan ?? null;
+                $data->created_at  = Carbon::now()->format('Y-m-d H:i:s') ?? null;
+                $data->is_active   = true;
                 $data->save();
 
                 $message = 'Driver Berhasil Ditambahkan.!';
             }
             return response()->json([
                 'message' => $message,
-                'status' => 200,
-                'success' => true
+                'status'  => 200,
+                'success' => true,
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => $e->getCode(),
-                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'line'    => $e->getLine(),
             ], 500);
         }
     }
@@ -382,21 +381,21 @@ class SamplingPlanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $data = MasterDriver::where('id', $request->id)->first();
+            $data            = MasterDriver::where('id', $request->id)->first();
             $data->is_active = false;
             $data->save();
             DB::commit();
             return response()->json([
                 'message' => 'Driver Berhasil Dihapus.!',
-                'status' => 200,
-                'success' => true
+                'status'  => 200,
+                'success' => true,
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => $e->getCode(),
-                'line' => $e->getLine(),
+                'status'  => $e->getCode(),
+                'line'    => $e->getLine(),
             ], 500);
         }
     }
@@ -422,7 +421,7 @@ class SamplingPlanController extends Controller
 
         return response()->json([
             'message' => 'Cuti berhasil dihapus',
-            'status' => '200'
+            'status'  => '200',
         ], 200);
     }
 
@@ -441,53 +440,53 @@ class SamplingPlanController extends Controller
                 ->where('is_active', true)
                 ->get();
 
-            $value = array();
+            $value             = [];
             $value['batch_id'] = [];
             foreach ($data as $key => $val) {
-                $value['id'] = $val->id;
-                $value['no_quotation'] = $val->no_quotation;
+                $value['id']              = $val->id;
+                $value['no_quotation']    = $val->no_quotation;
                 $value['nama_perusahaan'] = $val->nama_perusahaan;
-                $value['wilayah'] = $val->wilayah;
-                $value['alamat'] = $val->alamat;
-                $value['tanggal'] = $val->tanggal . ' ' . $val->jam;
-                $value['tgl_lama'] = $val->tanggal;
-                $value['kategori'] = json_decode($val->kategori);
-                $value['note'] = $val->note;
-                $value['warna'] = $val->warna;
-                $value['durasi'] = $val->durasi;
-                $value['status'] = $val->status;
-                $value['jam_mulai'] = $val->jam_mulai;
-                $value['jam_selesai'] = $val->jam_selesai;
-                $value['urutan'] = $val->urutan;
-                $value['kendaraan'] = $val->kendaraan;
-                $value['parsial'] = $val->parsial;
-                $value['id_sampling'] = $val->id_sampling;
+                $value['wilayah']         = $val->wilayah;
+                $value['alamat']          = $val->alamat;
+                $value['tanggal']         = $val->tanggal . ' ' . $val->jam;
+                $value['tgl_lama']        = $val->tanggal;
+                $value['kategori']        = json_decode($val->kategori);
+                $value['note']            = $val->note;
+                $value['warna']           = $val->warna;
+                $value['durasi']          = $val->durasi;
+                $value['status']          = $val->status;
+                $value['jam_mulai']       = $val->jam_mulai;
+                $value['jam_selesai']     = $val->jam_selesai;
+                $value['urutan']          = $val->urutan;
+                $value['kendaraan']       = $val->kendaraan;
+                $value['parsial']         = $val->parsial;
+                $value['id_sampling']     = $val->id_sampling;
 
                 array_push($value['batch_id'], $val->id);
-                $user = MasterKaryawan::where('nama_lengkap', $val->sampler)->where('is_active', true)->first();
-                $message = '';
+                $user         = MasterKaryawan::where('nama_lengkap', $val->sampler)->where('is_active', true)->first();
+                $message      = '';
                 $resonse_code = '200';
-                if (!is_null($user)) {
-                    $usr[] = $user->id . ',' . $user->nama_lengkap;
+                if (! is_null($user)) {
+                    $usr[]            = $user->id . ',' . $user->nama_lengkap;
                     $value['sampler'] = $usr;
                 } else {
-                    $message = 'Sampler atas nama ' . $val->sampler . ' tidak ditemukan / keluar silahkan cek dan dilakukan update sampler.!';
+                    $message      = 'Sampler atas nama ' . $val->sampler . ' tidak ditemukan / keluar silahkan cek dan dilakukan update sampler.!';
                     $resonse_code = '201';
                 }
 
                 $value['ketegori_detail'] = [];
-                $sp = SamplingPlan::where('id', $val->id_sampling)->first();
+                $sp                       = SamplingPlan::where('id', $val->id_sampling)->first();
 
                 if ($sp) {
                     $value['periode_kontrak'] = $sp->periode_kontrak;
-                    $value['no_sp'] = $sp->no_document;
-                    $value['opsi_1'] = $sp->opsi_1;
-                    $value['opsi_2'] = $sp->opsi_2;
-                    $value['opsi_3'] = $sp->opsi_3;
-                    $value['is_sabtu'] = $sp->is_sabtu;
-                    $value['is_minggu'] = $sp->is_minggu;
-                    $value['is_malam'] = $sp->is_malam;
-                    $value['tambahan'] = $sp->tambahan;
+                    $value['no_sp']           = $sp->no_document;
+                    $value['opsi_1']          = $sp->opsi_1;
+                    $value['opsi_2']          = $sp->opsi_2;
+                    $value['opsi_3']          = $sp->opsi_3;
+                    $value['is_sabtu']        = $sp->is_sabtu;
+                    $value['is_minggu']       = $sp->is_minggu;
+                    $value['is_malam']        = $sp->is_malam;
+                    $value['tambahan']        = $sp->tambahan;
                     $value['keterangan_lain'] = $sp->keterangan_lain;
                 } else {
                     return response()->json([
@@ -499,17 +498,17 @@ class SamplingPlanController extends Controller
 
                 if ($qt == 'QT') {
                     $jumlah_titik = 0;
-                    $detail = QuotationNonKontrak::where('no_document', $val->no_quotation)->where('is_active', true)->first();
+                    $detail       = QuotationNonKontrak::where('no_document', $val->no_quotation)->where('is_active', true)->first();
                     // dd($detail);
                     if ($detail != null) {
-                        $value['konsultan'] = $detail->konsultan;
-                        $value['nama_perusahaan'] = $detail->nama_perusahaan;
-                        $value['alamat_sampling'] = $detail->alamat_sampling;
-                        $value['status_sampling'] = $detail->status_sampling;
-                        $value['transportasi'] = $detail->transportasi;
-                        $value['wilayah'] = $detail->wilayah;
+                        $value['konsultan']            = $detail->konsultan;
+                        $value['nama_perusahaan']      = $detail->nama_perusahaan;
+                        $value['alamat_sampling']      = $detail->alamat_sampling;
+                        $value['status_sampling']      = $detail->status_sampling;
+                        $value['transportasi']         = $detail->transportasi;
+                        $value['wilayah']              = $detail->wilayah;
                         $value['perdiem_jumlah_orang'] = $detail->perdiem_jumlah_orang;
-                        $value['perdiem_jumlah_hari'] = $detail->perdiem_jumlah_hari;
+                        $value['perdiem_jumlah_hari']  = $detail->perdiem_jumlah_hari;
 
                         $query = PraNoSample::where('no_quotation', $val->no_quotation)->first();
                     } else {
@@ -518,21 +517,21 @@ class SamplingPlanController extends Controller
                         ], 401);
                     }
                 } else if ($qt == 'QTC') {
-                    $query = PraNoSample::where('no_quotation', $val->no_quotation)->where('periode', $val->periode)->first();
+                    $query       = PraNoSample::where('no_quotation', $val->no_quotation)->where('periode', $val->periode)->first();
                     $kontrakData = QuotationKontrakH::with([
                         'detail' => function ($q) use ($sp) {
                             $q->where('periode_kontrak', $sp->periode_kontrak);
-                        }
+                        },
                     ])
                         ->where('no_document', $val->no_quotation)
                         ->first();
 
-                    if (!$kontrakData) {
+                    if (! $kontrakData) {
                         return response()->json([
                             'message' => 'Data kontrak tidak ditemukan',
                         ], 404);
                     }
-                    $cek_H = $kontrakData;
+                    $cek_H  = $kontrakData;
                     $detail = null;
                     foreach ($kontrakData->detail as $d) {
                         if ($d->periode_kontrak == $sp->periode_kontrak) {
@@ -541,13 +540,13 @@ class SamplingPlanController extends Controller
                         }
                     }
 
-                    if (!$detail) {
+                    if (! $detail) {
                         return response()->json([
                             'message' => 'Detail kontrak tidak ditemukan untuk periode tersebut',
                         ], 404);
                     }
 
-                    $jumlah_titik = 0;
+                    $jumlah_titik   = 0;
                     $data_pendukung = json_decode($detail->data_pendukung_sampling);
                     foreach ($data_pendukung as $item) {
                         if ($item->periode_kontrak < $sp->periode_kontrak) {
@@ -557,35 +556,35 @@ class SamplingPlanController extends Controller
                         }
                     }
 
-                    $value['konsultan'] = $cek_H->konsultan;
-                    $value['nama_perusahaan'] = $cek_H->nama_perusahaan;
-                    $value['alamat_sampling'] = $cek_H->alamat_sampling;
-                    $value['status_sampling'] = $detail->status_sampling;
-                    $value['transportasi'] = $detail->transportasi;
-                    $value['wilayah'] = $cek_H->wilayah;
+                    $value['konsultan']            = $cek_H->konsultan;
+                    $value['nama_perusahaan']      = $cek_H->nama_perusahaan;
+                    $value['alamat_sampling']      = $cek_H->alamat_sampling;
+                    $value['status_sampling']      = $detail->status_sampling;
+                    $value['transportasi']         = $detail->transportasi;
+                    $value['wilayah']              = $cek_H->wilayah;
                     $value['perdiem_jumlah_orang'] = $detail->perdiem_jumlah_orang;
-                    $value['perdiem_jumlah_hari'] = $detail->perdiem_jumlah_hari;
+                    $value['perdiem_jumlah_hari']  = $detail->perdiem_jumlah_hari;
                 }
-                $value['jumlah_sebelum'] = $jumlah_titik;
+                $value['jumlah_sebelum']  = $jumlah_titik;
                 $value['ketegori_detail'] = $detail->data_pendukung_sampling;
-                $value['tipe_qt'] = $qt;
-                $pra_sample = [];
+                $value['tipe_qt']         = $qt;
+                $pra_sample               = [];
                 if ($query != null) {
                     $pra_sample = json_decode($query->kategori);
                 }
             }
 
             return response()->json([
-                'data' => $value,
+                'data'     => $value,
                 'kategori' => $pra_sample,
-                'message' => $message,
-                'status' => $resonse_code
+                'message'  => $message,
+                'status'   => $resonse_code,
             ], 200);
         } catch (\Exception $ex) {
             return response()->json([
                 'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-                'status' => '401'
+                'line'    => $ex->getLine(),
+                'status'  => '401',
             ], 401);
             //throw $th;
         }
@@ -593,35 +592,35 @@ class SamplingPlanController extends Controller
 
     public function updateJadwal(Request $request)
     {
-        
+
         try {
             //code...
             $dataObject = (object) [
-                'no_quotation' => $request->no_quotation,
+                'no_quotation'    => $request->no_quotation,
                 'nama_perusahaan' => $request->nama_perusahaan,
-                'jam_mulai' => $request->jam_mulai,
-                'jam_selesai' => $request->jam_selesai,
-                'kategori' => $request->kategori,
-                'warna' => $request->warna,
-                'note' => $request->note,
-                'durasi' => $request->durasi,
-                'status' => $request->status,
-                'batch_id' => $request->batch_id,
-                'urutan' => $request->urutan != '' ? $request->urutan : null,
-                'kendaraan' => $request->kendaraan,
-                'sampling' => $request->sampling,
-                'karyawan' => $this->karyawan,
-                'jadwal_id' => $request->id,
-                'tanggal' => $request->tanggal,
-                'alamat' => $request->alamat,
-                'sampler' => $request->sampler,
-                'driver' => ($request->has('driver')) ? $request->driver[0] : null,
-                'durasi_lama' => $request->durasi_lama,
-                'tanggal_lama' => $request->tanggal_lama,
-                'tipe_parsial' => $request->tipe_parsial,
-                'isokinetic' => (int)$request->isokinetic,
-                'pendampingan_k3' => (int)$request->pendampingan_k3,
-                'id_cabang' => $request->id_cabang[0],
+                'jam_mulai'       => $request->jam_mulai,
+                'jam_selesai'     => $request->jam_selesai,
+                'kategori'        => $request->kategori,
+                'warna'           => $request->warna,
+                'note'            => $request->note,
+                'durasi'          => $request->durasi,
+                'status'          => $request->status,
+                'batch_id'        => $request->batch_id,
+                'urutan'          => $request->urutan != '' ? $request->urutan : null,
+                'kendaraan'       => $request->kendaraan,
+                'sampling'        => $request->sampling,
+                'karyawan'        => $this->karyawan,
+                'jadwal_id'       => $request->id,
+                'tanggal'         => $request->tanggal,
+                'alamat'          => $request->alamat,
+                'sampler'         => $request->sampler,
+                'driver'          => ($request->has('driver')) ? $request->driver[0] : null,
+                'durasi_lama'     => $request->durasi_lama,
+                'tanggal_lama'    => $request->tanggal_lama,
+                'tipe_parsial'    => $request->tipe_parsial,
+                'isokinetic'      => (int) $request->isokinetic,
+                'pendampingan_k3' => (int) $request->pendampingan_k3,
+                'id_cabang'       => $request->id_cabang[0],
             ];
 
             $type = explode('/', $request->no_quotation)[1];
@@ -629,7 +628,7 @@ class SamplingPlanController extends Controller
                 if ($type == 'QTC') {
                     $dataObject->periode = $request->periode;
                 }
-                
+
                 $jadwal = JadwalServices::on('updateJadwal', $dataObject)->updateJadwalSP();
             } else {
                 if ($type == 'QTC') {
@@ -641,23 +640,31 @@ class SamplingPlanController extends Controller
             // TAMBAHAN UNTUK UPDATE ORDER DETAIL
             $this->updateOrderDetail($dataObject, $request->tanggal);
 
+            if ($type == 'QT') {
+                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                GenerateDocumentSampling::onNonKontrak($quotation->id)->save();
+            } else {
+                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                GenerateDocumentSampling::onKontrak($quotation->id)->onPeriode($request->periode)->renderPartialKontrak();
+            }
+
             if ($jadwal) {
                 return response()->json([
                     'message' => 'Berhasil melakukan update Jadwal.!',
-                    'status' => '200'
+                    'status'  => '200',
                 ], 200);
             } else {
                 return response()->json([
                     'message' => 'Gagal melakukan update Jadwal.!',
-                    'status' => '400'
+                    'status'  => '400',
                 ], 400);
             }
         } catch (\Exception $ex) {
             //throw $th;
             return response()->json([
                 'message' => $ex->getMessage(),
-                'line' => $ex->getLine(),
-                'status' => '401'
+                'line'    => $ex->getLine(),
+                'status'  => '401',
             ], 401);
         }
     }
@@ -666,56 +673,64 @@ class SamplingPlanController extends Controller
     {
         try {
             $dataObject = (object) [
-                'id' => $request->id,
-                'id_sampling' => $request->id_sampling,
-                'totkateg' => count($request->kategori),
-                'kategori' => $request->kategori,
-                'no_quotation' => $request->no_quotation,
+                'id'              => $request->id,
+                'id_sampling'     => $request->id_sampling,
+                'totkateg'        => count($request->kategori),
+                'kategori'        => $request->kategori,
+                'no_quotation'    => $request->no_quotation,
                 'nama_perusahaan' => $request->nama_perusahaan,
-                'wilayah' => $request->wilayah,
-                'alamat' => $request->alamat,
-                'tanggal' => $request->tanggal,
-                'note' => $request->note,
-                'warna' => $request->warna,
-                'jam_mulai' => $request->jam_mulai,
-                'jam_selesai' => $request->jam_selesai,
-                'durasi' => $request->durasi,
-                'status' => $request->status,
-                'urutan' => $request->urutan != '' ? $request->urutan : null,
-                'karyawan' => $this->karyawan,
-                'kendaraan' => $request->kendaraan,
-                'sampler' => $request->sampler,
-                'driver' => $request->driver,
+                'wilayah'         => $request->wilayah,
+                'alamat'          => $request->alamat,
+                'tanggal'         => $request->tanggal,
+                'note'            => $request->note,
+                'warna'           => $request->warna,
+                'jam_mulai'       => $request->jam_mulai,
+                'jam_selesai'     => $request->jam_selesai,
+                'durasi'          => $request->durasi,
+                'status'          => $request->status,
+                'urutan'          => $request->urutan != '' ? $request->urutan : null,
+                'karyawan'        => $this->karyawan,
+                'kendaraan'       => $request->kendaraan,
+                'sampler'         => $request->sampler,
+                'driver'          => $request->driver,
                 'pendampingan_k3' => $request->pendampingan_k3,
-                'isokinetic' => $request->isokinetic,
-                'id_cabang' => $request->id_cabang[0],
+                'isokinetic'      => $request->isokinetic,
+                'id_cabang'       => $request->id_cabang[0],
             ];
 
             $type = explode('/', $request->no_quotation)[1];
             if ($type == 'QTC') {
                 $dataObject->periode = $request->periode;
-                $jadwal = JadwalServices::on('insertParsialKontrak', $dataObject)->insertParsialKontrak();
+                $jadwal              = JadwalServices::on('insertParsialKontrak', $dataObject)->insertParsialKontrak();
             } else {
                 $jadwal = JadwalServices::on('insertParsial', $dataObject)->insertParsial();
             }
 
             $this->updateOrderDetail($dataObject, $request->tanggal);
 
+            if ($type == 'QT') {
+                $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+                GenerateDocumentSampling::onNonKontrak($quotation->id)->save();
+            } else {
+                $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
+                GenerateDocumentSampling::onKontrak($quotation->id)->onPeriode($request->periode)->renderPartialKontrak();
+            }
+
             if ($jadwal) {
                 return response()->json([
                     'message' => 'Berhasil melakukan insert Jadwal Parsial.!',
-                    'status' => '200'
+                    'status'  => '200',
                 ], 200);
             } else {
                 return response()->json([
                     'message' => 'Gagal melakukan insert Jadwal Parsial.!',
-                    'status' => '400'
+                    'status'  => '400',
                 ], 400);
             }
         } catch (\Exception $e) {
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => '401'
+                'status'  => '401',
             ], 401);
         }
     }
@@ -726,8 +741,8 @@ class SamplingPlanController extends Controller
         if ($cekOrder) {
             $array_no_samples = [];
             foreach ($data->kategori as $x => $y) {
-                $pra_no_sample = explode(" - ", $y)[1];
-                $no_samples = $cekOrder->no_order . '/' . $pra_no_sample;
+                $pra_no_sample      = explode(" - ", $y)[1];
+                $no_samples         = $cekOrder->no_order . '/' . $pra_no_sample;
                 $array_no_samples[] = $no_samples;
             }
 
@@ -746,7 +761,7 @@ class SamplingPlanController extends Controller
         
         DB::beginTransaction();
         try {
-            if (!is_array($request->mode['batchId'])) {
+            if (! is_array($request->mode['batchId'])) {
                 $batchId = explode(',', $request->mode['batchId']);
             } else {
                 $batchId = $request->mode['batchId'];
@@ -757,8 +772,8 @@ class SamplingPlanController extends Controller
                 $dataParsial = Jadwal::whereIn('id', $batchId)
                     ->where('is_active', true)
                     ->update([
-                        'flag' => 1,
-                        "is_active" => false,
+                        'flag'        => 1,
+                        "is_active"   => false,
                         "canceled_by" => $this->karyawan,
                         "canceled_at" => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
@@ -775,8 +790,8 @@ class SamplingPlanController extends Controller
                         })
                         ->where('is_active', true)
                         ->update([
-                            'flag' => 1,
-                            "is_active" => false,
+                            'flag'        => 1,
+                            "is_active"   => false,
                             "canceled_by" => $this->karyawan,
                             "canceled_at" => Carbon::now()->format('Y-m-d H:i:s'),
                         ]);
@@ -787,7 +802,7 @@ class SamplingPlanController extends Controller
                 } else {
                     return response()->json([
                         'message' => 'Terdapat Jadwal Parsial yg belum di hapus.!',
-                        'status' => '401'
+                        'status'  => '401',
                     ], 401);
                 }
             }
@@ -801,7 +816,7 @@ class SamplingPlanController extends Controller
             DB::commit();
             return response()->json([
                 'message' => 'Jadwal berhasil dicancel',
-                'status' => '200'
+                'status'  => '200',
             ], 200);
         } catch (\Exception $ex) {
             DB::rollback();
@@ -814,18 +829,18 @@ class SamplingPlanController extends Controller
     {
         $isContract = $request->periode_kontrak !== null;
         $categories = [];
-        if (!$isContract) {
-            $qt = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
+        if (! $isContract) {
+            $qt                    = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
             $dataPendukungSampling = json_decode($qt->data_pendukung_sampling);
             foreach ($dataPendukungSampling as $dps) {
                 $kategori = explode("-", $dps->kategori_2)[1];
                 foreach ($dps->penamaan_titik as $penamaanTitik) {
-                    $props = get_object_vars($penamaanTitik);
+                    $props    = get_object_vars($penamaanTitik);
                     $noSampel = key($props);
 
                     array_push($categories, "$kategori - $noSampel");
                 }
-            };
+            }
         } else {
             $qtH = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
             $qtD = QuotationKontrakD::where('id_request_quotation_kontrak_h', $qtH->id)->where('periode_kontrak', $request->periode_kontrak)->first();
@@ -835,13 +850,13 @@ class SamplingPlanController extends Controller
                 foreach ($dps->data_sampling as $ds) {
                     $kategori = explode("-", $ds->kategori_2)[1];
                     foreach ($ds->penamaan_titik as $penamaanTitik) {
-                        $props = get_object_vars($penamaanTitik);
+                        $props    = get_object_vars($penamaanTitik);
                         $noSampel = key($props);
 
                         array_push($categories, "$kategori - $noSampel");
                     }
                 }
-            };
+            }
         }
 
         $categories = str_replace('\\', '', json_encode($categories));
@@ -860,7 +875,7 @@ class SamplingPlanController extends Controller
             if ($chek) {
                 return response()->json([
                     'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
-                    'status' => '401'
+                    'status'  => '401',
                 ], 401);
             }
             $filename = RenderSamplingPlanService::onKontrak($samplingPlan['quotation_id'])->onPeriode($samplingPlan['periode_kontrak'])->renderPartialKontrak();
@@ -869,7 +884,7 @@ class SamplingPlanController extends Controller
             if ($chek) {
                 return response()->json([
                     'message' => 'No Dokumen ' . $chek->no_document . ' sedang di reject, tidak bisa di proses.,menunggu proses dari sales!',
-                    'status' => '401'
+                    'status'  => '401',
                 ], 401);
             }
             $filename = RenderSamplingPlanService::onNonKontrak($samplingPlan['quotation_id'])->save();
@@ -915,9 +930,9 @@ class SamplingPlanController extends Controller
     {
         DB::beginTransaction();
         try {
-            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
-            $cek = SamplingPlan::where('id', $request->id)->where('is_active', true)->first();
-            $checkJadwal = JadwalServices::on('no_quotation', $cek->no_quotation)->countJadwalApproved();
+            $timestamp      = Carbon::now()->format('Y-m-d H:i:s');
+            $cek            = SamplingPlan::where('id', $request->id)->where('is_active', true)->first();
+            $checkJadwal    = JadwalServices::on('no_quotation', $cek->no_quotation)->countJadwalApproved();
             $chekQoutations = JadwalServices::on('no_quotation', $cek->no_quotation)
                 ->on('quotation_id', $cek->quotation_id)->countQuotation();
 
@@ -929,7 +944,7 @@ class SamplingPlanController extends Controller
                         DB::raw("GROUP_CONCAT(DISTINCT tanggal ORDER BY tanggal ASC) as tanggal"),
                         DB::raw("MIN(jam_mulai) as jam_mulai"),
                         DB::raw("MAX(jam_selesai) as jam_selesai"),
-                        DB::raw("GROUP_CONCAT(DISTINCT sampler) as sampler")
+                        DB::raw("GROUP_CONCAT(DISTINCT sampler) as sampler"),
                     ])
                         ->where('no_quotation', $cek->no_quotation)
                         ->where('is_active', true)
@@ -939,12 +954,12 @@ class SamplingPlanController extends Controller
                     $value = [];
                     if ($data->isNotEmpty()) {
                         foreach ($data as $row) {
-                            $periode = $row->periode; // contoh: '2025-03'
+                            $periode         = $row->periode; // contoh: '2025-03'
                             $value[$periode] = [
-                                'tanggal' => array_unique(explode(',', $row->tanggal)),
-                                'jam_mulai' => $row->jam_mulai,
+                                'tanggal'     => array_unique(explode(',', $row->tanggal)),
+                                'jam_mulai'   => $row->jam_mulai,
                                 'jam_selesai' => $row->jam_selesai,
-                                'sampler' => array_unique(explode(',', $row->sampler)),
+                                'sampler'     => array_unique(explode(',', $row->sampler)),
                             ];
                         }
                     }
@@ -957,32 +972,32 @@ class SamplingPlanController extends Controller
                             DB::raw("GROUP_CONCAT(DISTINCT tanggal ORDER BY tanggal ASC) as tanggal"),
                             DB::raw("MIN(jam_mulai) as jam_mulai"),
                             DB::raw("MAX(jam_selesai) as jam_selesai"),
-                            DB::raw("GROUP_CONCAT(DISTINCT sampler) as sampler")
+                            DB::raw("GROUP_CONCAT(DISTINCT sampler) as sampler"),
                         ]);
 
                     $value = [];
                     if ($data->isNotEmpty()) {
-                        $value['tanggal'] = array_unique(explode(',', $data[0]->tanggal));
-                        $value['jam_mulai'] = $data[0]->jam_mulai;
+                        $value['tanggal']     = array_unique(explode(',', $data[0]->tanggal));
+                        $value['jam_mulai']   = $data[0]->jam_mulai;
                         $value['jam_selesai'] = $data[0]->jam_selesai;
-                        $value['sampler'] = array_unique(explode(',', $data[0]->sampler));
+                        $value['sampler']     = array_unique(explode(',', $data[0]->sampler));
                     }
                 }
 
                 JobTask::insert([
-                    'job' => 'RenderAndEmailJadwal',
-                    'status' => 'processing',
+                    'job'         => 'RenderAndEmailJadwal',
+                    'status'      => 'processing',
                     'no_document' => $cek->no_quotation,
-                    'timestamp' => $timestamp
+                    'timestamp'   => $timestamp,
                 ]);
 
                 $dataRequest = (object) [
-                    'sampling_id' => $request->id,
-                    'no_document' => $cek->no_quotation,
+                    'sampling_id'  => $request->id,
+                    'no_document'  => $cek->no_quotation,
                     'quotation_id' => $cek->quotation_id,
-                    'karyawan' => $this->karyawan,
-                    'karyawan_id' => $this->user_id,
-                    'timestamp' => $timestamp,
+                    'karyawan'     => $this->karyawan,
+                    'karyawan_id'  => $this->user_id,
+                    'timestamp'    => $timestamp,
                 ];
 
                 $job = new RenderAndEmailJadwal($dataRequest, $value);
@@ -991,20 +1006,20 @@ class SamplingPlanController extends Controller
                 DB::commit();
                 return response()->json([
                     'message' => 'Berhasil mengirim ulang email jadwal ' . $cek->no_quotation,
-                    'status' => 'success'
+                    'status'  => 'success',
                 ], 200);
             } else {
                 DB::commit();
                 return response()->json([
                     'message' => 'Terdapat jadwal yang belum di-approve pada Validator.!',
-                    'status' => 'failed'
+                    'status'  => 'failed',
                 ], 200);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => $e->getMessage(),
-                'status' => 'failed'
+                'status'  => 'failed',
             ], 500);
         }
     }
@@ -1012,13 +1027,13 @@ class SamplingPlanController extends Controller
     public function getStatusSampling(Request $request)
     {
         try {
-            $getLabelStatusSampling =QuotationKontrakD::where('id_request_quotation_kontrak_h',$request->id_request_quotation_kontrak_h)
-            ->where('periode_kontrak',$request->periode_kontrak)->first(['status_sampling']);
-            
-            return response()->json(['data'=>$getLabelStatusSampling],200);
+            $getLabelStatusSampling = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->id_request_quotation_kontrak_h)
+                ->where('periode_kontrak', $request->periode_kontrak)->first(['status_sampling']);
+
+            return response()->json(['data' => $getLabelStatusSampling], 200);
         } catch (\Throwable $th) {
             //throw $th;
-            return response()->json(["message"=>$th->getMessage(),"line"=>$getLine(),"file" =>$th->getFile()],400);
+            return response()->json(["message" => $th->getMessage(), "line" => $th->getLine(), "file" => $th->getFile()], 400);
         }
     }
 }
