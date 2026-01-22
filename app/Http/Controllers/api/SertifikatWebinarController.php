@@ -338,6 +338,195 @@ class SertifikatWebinarController extends Controller
         return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);     
     }
 
+    public function sendCertificateEmail(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+
+            $header = DB::table('sertifikat_webinar_header')
+                ->where('id', $request->webinar_id)
+                ->first();
+
+            if (! $header) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Header tidak ditemukan',
+                ], 404);
+            }
+
+            $detail = DB::table('sertifikat_webinar_detail')
+                ->where('id', $request->id)
+                ->where('header_id', $request->webinar_id)
+                ->where('time_session' , '>', 60)
+                ->whereNotNull('time_session')
+                ->first();
+
+            // dd($detail);
+            
+            if (!$detail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data peserta kosong',
+                ], 404);
+            }
+
+            $filename = $header->body_email;
+            $number   = pathinfo($filename, PATHINFO_FILENAME);
+
+            $body = Repository::dir('certificate')->key($number)->get();
+
+            if (! $body) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Template email tidak ditemukan',
+                ], 404);
+            }
+
+
+            $templateAttachments = [];
+            if (!empty($header->attachments)) {
+                $attachmentNames = json_decode($header->attachments, true);
+                if (is_array($attachmentNames)) {
+                    $folderName = Str::slug($header->title ?? 'webinar');
+                    $basePath = public_path("uploads/webinar/{$folderName}");
+                    foreach ($attachmentNames as $filename) {
+                        $filePath = "{$basePath}/{$filename}";
+                        
+                        if (file_exists($filePath)) {
+                            $templateAttachments[] = $filePath;
+                        }
+                    }
+                }
+            }
+
+
+            
+            $qna = DB::table('webinar_qna')
+                ->where('webinar_id', $request->id)
+                ->where('asker_name', $detail->name)
+                ->where('asker_email', $detail->email)
+                ->get();
+
+            $qnaHtml = '';
+
+            if ($qna->isNotEmpty()) {
+
+                $questions = [];
+                $answers = [];
+                
+                foreach ($qna as $item) {
+                    if (!empty($item->question)) {
+                        $questions[] = e($item->question);
+                    }
+                    if (!empty($item->answer)) {
+                        $answers[] = e($item->answer);
+                    }
+                }
+                
+                $answers = array_unique($answers);
+                
+                $qnaHtml .= '<table width="100%" cellpadding="10" cellspacing="0" style="border: none;">
+                        <tr>
+                            <td width="50%" valign="top" style="border: none;">
+                                <strong>Pertanyaan:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">';
+                
+                foreach ($questions as $question) {
+                    $qnaHtml .= '<li style="margin-bottom: 5px;">' . $question . '</li>';
+                }
+                
+                $qnaHtml .= '</ul>
+                            </td>
+                            <td width="50%" valign="top" style="border: none;">
+                                <strong>Jawaban:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">';
+                
+                if (!empty($answers)) {
+                    foreach ($answers as $answer) {
+                        $qnaHtml .= '<li style="margin-bottom: 5px;">' . $answer . '</li>';
+                    }
+                } else {
+                    $qnaHtml .= '<li style="margin-bottom: 5px;"><em>Belum dijawab</em></li>';
+                }
+                
+                $qnaHtml .= '
+                                </ul>
+                            </td>
+                        </tr>
+                    </table>
+                ';
+            } 
+
+            $replace = [
+                '{{name}}'  => $detail->name,
+                '{{title}}' => $header->title,
+                '{{topic}}' => $header->topic,
+                '{{subtopic}}' => $header->sub_topic,
+                '{{date}}'  => Carbon::parse($header->date)
+                    ->locale('id')
+                    ->translatedFormat('l, d F Y'),
+                '{{qna}}'=> $qnaHtml 
+            ];
+
+            $emailBody = str_replace(
+                array_keys($replace),
+                array_values($replace),
+                $body
+            );
+
+            /**
+             * attachement dari template body email belum ada
+             * kemungkinan yang akan di letakan di template adalah :
+             * materi webinar
+             * Q&A global
+             */
+
+            $validAttachments = [];
+
+            array_push($validAttachments, public_path() . '/certificates/' . $detail->filename);
+
+            $validAttachments = array_merge($validAttachments, $templateAttachments);
+
+
+            $mail = SendEmail::where('to', $detail->email)
+                ->where('subject', 'E-Sertifikat Webinar '. $header->topic)
+                ->where('body', $emailBody)
+                ->where('karyawan', 'System')
+                ->noReply();
+
+            if (!empty($validAttachments)) {
+                $mail = $mail->where('attachment', $validAttachments);
+            }
+            
+            $mail->send();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email berhasil dikirim',
+            ], 200);
+
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            Log::error('Send Email Webinar Error', [
+                'id'      => $request->id,
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim email',
+                'error'   => $e->getMessage(), // hapus di production
+                'line'    => $e->getLine(),
+            ], 500);
+        }
+    }
+
     public function importDataQna(Request $request)
     {
         $file = $request->file('file_input');
