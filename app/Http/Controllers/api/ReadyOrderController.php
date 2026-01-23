@@ -437,13 +437,17 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
-            self::updateCustomer($request);
             $data_lama = null;
+            
             if ($dataQuotation->data_lama != null) {
                 $data_lama = json_decode($dataQuotation->data_lama);
                 if ($data_lama->no_order != null) {
                     $no_order = $data_lama->no_order;
+                } else {
+                    self::updateCustomer($request);
                 }
+            } else {
+                self::updateCustomer($request);
             }
             // dd($no_order);
             if ($data_lama != null && $data_lama->no_order != null) {
@@ -549,61 +553,63 @@ class ReadyOrderController extends Controller
             $dataQuotation->is_generate_data_lab = 0;
             $dataQuotation->save();
 
-            self::createInvoice($data, $dataQuotation, $request);
-            if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
-                self::createInvoice($data, $dataQuotation, $request, false);
-            }
+            if($data_lama == null) {
+                self::createInvoice($data, $dataQuotation, $request);
+                if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
+                    self::createInvoice($data, $dataQuotation, $request, false);
+                }
 
-            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+                (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
 
-            $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
-            if ($linkRingkasanOrder) {
-                $name = $data->konsultan ?: $data->nama_perusahaan;
+                $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
+                if ($linkRingkasanOrder) {
+                    $name = $data->konsultan ?: $data->nama_perusahaan;
 
-                $emailBody = "
-                    <p>Yth. Bapak/Ibu {$name},</p>
+                    $emailBody = "
+                        <p>Yth. Bapak/Ibu {$name},</p>
 
-                    <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
-                        <br>
-                        👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
-                                Klik di sini untuk melihat Ringkasan Order
-                            </a>
-                    </p>
+                        <p>Ringkasan order Anda dapat diakses melalui tautan berikut:
+                            <br>
+                            👉 <a href=\"{$linkRingkasanOrder->link}\" target=\"_blank\">
+                                    Klik di sini untuk melihat Ringkasan Order
+                                </a>
+                        </p>
 
-                    <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
+                        <p>Apabila terdapat pertanyaan atau data yang perlu dikonfirmasi, silakan hubungi sales terkait.</p>
 
-                    <p>Terima kasih atas kerja samanya.</p>
+                        <p>Terima kasih atas kerja samanya.</p>
 
-                    <p>
-                        Hormat kami,<br>
-                        PT. Inti Surya Laboratorium
-                    </p>
-                ";
-    
-                SendEmail::where('to', $data->email_pic_order)
-                    ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
-                    ->where('body', $emailBody)
-                    ->where('cc', json_decode($dataQuotation->email_cc, true))
-                    ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
-                    ->noReply()
-                    ->send();
-    
-                $linkRingkasanOrder->is_emailed = 1;
-                $linkRingkasanOrder->count_email += 1;
-                $linkRingkasanOrder->emailed_by = $this->karyawan;
-                $linkRingkasanOrder->emailed_at = Carbon::now();
-                $linkRingkasanOrder->save();
+                        <p>
+                            Hormat kami,<br>
+                            PT. Inti Surya Laboratorium
+                        </p>
+                    ";
+        
+                    SendEmail::where('to', $data->email_pic_order)
+                        ->where('subject', "Ringkasan Order - {$data->no_order} / " . ($data->konsultan ?: $data->nama_perusahaan))
+                        ->where('body', $emailBody)
+                        ->where('cc', json_decode($dataQuotation->email_cc, true))
+                        ->where('bcc', GetAtasan::where('user_id', $data->sales_id)->get()->pluck('email')->toArray())
+                        ->noReply()
+                        ->send();
+        
+                    $linkRingkasanOrder->is_emailed = 1;
+                    $linkRingkasanOrder->count_email += 1;
+                    $linkRingkasanOrder->emailed_by = $this->karyawan;
+                    $linkRingkasanOrder->emailed_at = Carbon::now();
+                    $linkRingkasanOrder->save();
+                }
+                self::generateInvoice($no_order);
             }
 
             DB::commit();
-            
-            self::generateInvoice($no_order);
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
             ], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
+            dd($th);
             throw new Exception($th->getMessage() . ' in line ' . $th->getLine(), 401);
         }
     }
@@ -3308,8 +3314,8 @@ class ReadyOrderController extends Controller
 
     private function updateCustomer($data){
         $customer = MasterPelanggan::where('id_pelanggan', $data->id_pelanggan)->where('is_active', true)->first();
-        $customer->kategori_pelanggan = $data->kategori_pelanggan;
-        $customer->sub_kategori = $data->sub_kategori;
+        $customer->kategori_pelanggan = $data->kategori_pelanggan ?? null;
+        $customer->sub_kategori = $data->sub_kategori ?? null;
         $customer->bahan_pelanggan = $data->bahan_pelanggan ?? null;
         $customer->merk_pelanggan = $data->merk_pelanggan ?? null;
         $customer->save();
