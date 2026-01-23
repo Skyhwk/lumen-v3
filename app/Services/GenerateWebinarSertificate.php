@@ -495,6 +495,14 @@ class GenerateWebinarSertificate
             } else {
                 $out[] = ucfirst(strtolower($p));
             }
+
+            // Gelar Indonesia → FULL CAPS
+            if (strlen($p) <= 3) {
+                $out[] = strtoupper($p);
+            } else {
+                // untuk kasus seperti Amd, Ter, dll
+                $out[] = ucfirst(strtolower($p));
+            }
         }
 
         return implode('.', $out) . '.';
