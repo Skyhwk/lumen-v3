@@ -7,6 +7,7 @@ use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SalesKpi;
 use App\Models\TargetSales;
+use App\Models\ForecastSP;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -362,12 +363,52 @@ class DashboardSalesController extends Controller
                     $result[$yr] = $chartBar;
                 }
 
+                // --- TAMBAHAN FORECAST MODE ALL ---
+                $rawForecast = ForecastSP::where(function ($q) use ($years) {
+                    foreach ($years as $yr) { $q->orWhere('periode', 'like', $yr . '-%'); }
+                })
+                ->selectRaw('periode, 
+                    SUM(revenue_forecast) as total
+                ')
+                ->groupBy('periode')
+                ->get()
+                ->keyBy('periode');
+
+                // Untuk forecastChartBar (sudah ada)
+                foreach ($years as $yr) {
+                    $tmp = [];
+                    foreach ($months as $mName => $mNum) {
+                        $key = $yr . '-' . $mNum;
+                        $tmp[] = ['month' => $mName, 'value' => $rawForecast[$key]->total ?? 0];
+                    }
+                    $forecastChartBar[$yr] = $tmp;
+                }
+
+                // TAMBAHAN BARU: Untuk forecastChart (tahun saat ini saja, seperti $chart)
+                $forecastChart = [];
+                foreach ($months as $mnthName => $mnthNum) {
+                    $periodeKey = $tahun . '-' . $mnthNum;
+                    $value = isset($rawForecast[$periodeKey]) ? $rawForecast[$periodeKey]->total : null;
+                    $forecastChart[] = [
+                        'month' => $mnthName,
+                        'value' => $value,
+                    ];
+                }
+
+                $forecastPie = [
+                    'value' => $rawForecast[$periode]->total ?? 0,
+                ];
+                // --- END TAMBAHAN ---
+
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
                     'chart'    => $chart,
                     'piechart' => $piechart,
-                    'chartBar' => $result
+                    'chartBar' => $result,
+                    'forecastChart' => $forecastChart,
+                    'forecastChartBar' => $forecastChartBar, // Tambahan
+                    'forecastPie' => $forecastPie          // Tambahan
                 ], 200);
 
             } else if (strpos($request->mode, "team") !== false) {
@@ -510,11 +551,46 @@ class DashboardSalesController extends Controller
                     ->orderBy('revenue_sp', 'desc')
                     ->get();
 
+                // --- TAMBAHAN FORECAST MODE TEAM ---
+                $rawForecast = ForecastSP::whereIn('sales_id', $bawahanIds)
+                    ->where('periode', 'like', $tahun . '-%')
+                    ->selectRaw('periode, 
+                        SUM(revenue_forecast) as total
+                    ')
+                    ->groupBy('periode')
+                    ->get()
+                    ->keyBy('periode');
+
+                $tmp = [];
+                foreach ($months as $mName => $mNum) {
+                    $tmp[] = ['month' => $mName, 'value' => $rawForecast[$tahun . '-' . $mNum]->total ?? 0];
+                }
+                $forecastChartBar[$tahun] = $tmp;
+
+                // TAMBAHAN BARU: Untuk forecastChart
+                $forecastChart = [];
+                foreach ($months as $mnthName => $mnthNum) {
+                    $periodeKey = $tahun . '-' . $mnthNum;
+                    $value = isset($rawForecast[$periodeKey]) ? $rawForecast[$periodeKey]->total : null;
+                    $forecastChart[] = [
+                        'month' => $mnthName,
+                        'value' => $value,
+                    ];
+                }
+
+                $forecastPie = [
+                    'value' => $rawForecast[$periode]->total ?? 0,
+                ];
+                // --- END TAMBAHAN ---
+
                 return response()->json([
                     'heading'  => $return,
                     'table'    => $table,
                     'chart'    => $chart,
                     'piechart' => $piechart,
+                    'forecastChart' => $forecastChart,
+                    'forecastChartBar' => $forecastChartBar, // Tambahan
+                    'forecastPie' => $forecastPie          // Tambahan
                 ], 200);
 
             } else {
@@ -572,11 +648,46 @@ class DashboardSalesController extends Controller
                     'exist' => $sumall->revenue_order_nonkontrak_exist + $sumall->revenue_order_kontrak_exist,
                 ];
 
+                // --- TAMBAHAN FORECAST MODE INDIVIDUAL ---
+                $rawForecast = ForecastSP::where('sales_id', $request->karyawan_id)
+                    ->where('periode', 'like', $tahun . '-%')
+                    ->selectRaw('periode, 
+                        SUM(revenue_forecast) as total
+                    ')
+                    ->groupBy('periode')
+                    ->get()
+                    ->keyBy('periode');
+
+                $tmp = [];
+                foreach ($months as $mName => $mNum) {
+                    $tmp[] = ['month' => $mName, 'value' => $rawForecast[$tahun . '-' . $mNum]->total ?? 0];
+                }
+                $forecastChartBar[$tahun] = $tmp;
+
+                // TAMBAHAN BARU: Untuk forecastChart
+                $forecastChart = [];
+                foreach ($months as $mnthName => $mnthNum) {
+                    $periodeKey = $tahun . '-' . $mnthNum;
+                    $value = isset($rawForecast[$periodeKey]) ? $rawForecast[$periodeKey]->total : null;
+                    $forecastChart[] = [
+                        'month' => $mnthName,
+                        'value' => $value,
+                    ];
+                }
+
+                $forecastPie = [
+                    'value' => $rawForecast[$periode]->total ?? 0,
+                ];
+                // --- END TAMBAHAN ---
+
                 return response()->json([
                     'heading'  => $return,
                     'table'    => null,
                     'chart'    => $chart,
                     'piechart' => $piechart,
+                    'forecastChart' => $forecastChart,
+                    'forecastChartBar' => $forecastChartBar, // Tambahan
+                    'forecastPie' => $forecastPie          // Tambahan
                 ], 200);
             }
         } catch (\Throwable $th) {
@@ -590,29 +701,105 @@ class DashboardSalesController extends Controller
         }
     }
 
-    public function yearlyComparison(Request $request){
+    // public function yearlyComparison(Request $request){
+    //     $years = [
+    //         ($request->year - 1),
+    //         $request->year,
+    //     ];
+
+    //     $allKpiBar = SalesKpi::where(function ($q) use ($years) {
+    //         foreach ($years as $yr) {
+    //             $q->orWhere('periode', 'like', $yr . '-%');
+    //         }
+    //     })
+    //         ->selectRaw('periode,
+    //             SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+    //             SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+    //             SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+    //             SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
+    //         ')
+    //         ->groupBy('periode')
+    //         ->get()
+    //         ->keyBy('periode');
+
+    //     $result = [];
+
+    //     foreach ($years as $yr) {
+    //         $chartBar = [];
+
+    //         foreach ($this->months as $mnthName => $mnthNum) {
+    //             $periodeKey = $yr . '-' . $mnthNum;
+
+    //             if (isset($allKpiBar[$periodeKey])) {
+    //                 $item  = $allKpiBar[$periodeKey];
+    //                 $value =
+    //                     ($item->revenue_order_nonkontrak_new ?? 0) +
+    //                     ($item->revenue_order_nonkontrak_exist ?? 0) +
+    //                     ($item->revenue_order_kontrak_new ?? 0) +
+    //                     ($item->revenue_order_kontrak_exist ?? 0);
+    //             } else {
+    //                 $value = null;
+    //             }
+
+    //             $chartBar[] = [
+    //                 'month' => $mnthName,
+    //                 'value' => $value,
+    //             ];
+    //         }
+
+    //         $result[$yr] = $chartBar;
+    //     }
+
+    //     return response()->json([
+    //         'chartBar' => $result,
+    //     ], 200);
+    // }
+
+    public function yearlyComparison(Request $request)
+    {
+        // Years untuk Revenue Chart
         $years = [
             ($request->year - 1),
             $request->year,
         ];
 
+        // Years untuk Forecast Chart (bisa berbeda dengan revenue)
+        $yearsForecast = [
+            ($request->yearForecast - 1),
+            $request->yearForecast,
+        ];
+
+        // --- Query Data Revenue ---
         $allKpiBar = SalesKpi::where(function ($q) use ($years) {
             foreach ($years as $yr) {
                 $q->orWhere('periode', 'like', $yr . '-%');
             }
         })
-            ->selectRaw('periode,
-                SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
-                SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
-                SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
-                SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
-            ')
-            ->groupBy('periode')
-            ->get()
-            ->keyBy('periode');
+        ->selectRaw('periode,
+            SUM(revenue_order_nonkontrak_new) as revenue_order_nonkontrak_new,
+            SUM(revenue_order_nonkontrak_exist) as revenue_order_nonkontrak_exist,
+            SUM(revenue_order_kontrak_new) as revenue_order_kontrak_new,
+            SUM(revenue_order_kontrak_exist) as revenue_order_kontrak_exist
+        ')
+        ->groupBy('periode')
+        ->get()
+        ->keyBy('periode');
+
+        // --- Query Data Forecast ---
+        $allForecastBar = ForecastSP::where(function ($q) use ($yearsForecast) {
+            foreach ($yearsForecast as $yr) {
+                $q->orWhere('periode', 'like', $yr . '-%');
+            }
+        })
+        ->selectRaw('periode, SUM(revenue_forecast) as total_forecast')
+        ->groupBy('periode')
+        ->get()
+        ->keyBy('periode');
 
         $result = [];
+        $forecastResult = [];
 
+        // Build Revenue Chart Data
         foreach ($years as $yr) {
             $chartBar = [];
 
@@ -620,12 +807,11 @@ class DashboardSalesController extends Controller
                 $periodeKey = $yr . '-' . $mnthNum;
 
                 if (isset($allKpiBar[$periodeKey])) {
-                    $item  = $allKpiBar[$periodeKey];
-                    $value =
-                        ($item->revenue_order_nonkontrak_new ?? 0) +
-                        ($item->revenue_order_nonkontrak_exist ?? 0) +
-                        ($item->revenue_order_kontrak_new ?? 0) +
-                        ($item->revenue_order_kontrak_exist ?? 0);
+                    $item = $allKpiBar[$periodeKey];
+                    $value = ($item->revenue_order_nonkontrak_new ?? 0) +
+                            ($item->revenue_order_nonkontrak_exist ?? 0) +
+                            ($item->revenue_order_kontrak_new ?? 0) +
+                            ($item->revenue_order_kontrak_exist ?? 0);
                 } else {
                     $value = null;
                 }
@@ -639,8 +825,29 @@ class DashboardSalesController extends Controller
             $result[$yr] = $chartBar;
         }
 
+        // Build Forecast Chart Data
+        foreach ($yearsForecast as $yr) {
+            $chartForecast = [];
+
+            foreach ($this->months as $mnthName => $mnthNum) {
+                $periodeKey = $yr . '-' . $mnthNum;
+
+                $forecastValue = isset($allForecastBar[$periodeKey]) 
+                    ? ($allForecastBar[$periodeKey]->total_forecast ?? 0)
+                    : null;
+
+                $chartForecast[] = [
+                    'month' => $mnthName,
+                    'value' => $forecastValue,
+                ];
+            }
+
+            $forecastResult[$yr] = $chartForecast;
+        }
+
         return response()->json([
             'chartBar' => $result,
+            'forecastChartBar' => $forecastResult,
         ], 200);
     }
 
