@@ -486,22 +486,15 @@ class GenerateWebinarSertificate
         $parts = explode('.', $degree);
 
         $out = [];
-        foreach ($parts as $p) {
-            if ($p === '') continue;
-
-            // PhD special case
-            if (strtolower($p) === 'phd') {
+        foreach ($segments as $seg) {
+            if ($seg === '') continue;
+    
+            if (strcasecmp($seg, 'phd') === 0) {
                 $out[] = 'PhD';
+            } elseif (strlen($seg) <= 3) {
+                $out[] = strtoupper($seg);
             } else {
-                $out[] = ucfirst(strtolower($p));
-            }
-
-            // Gelar Indonesia → FULL CAPS
-            if (strlen($p) <= 3) {
-                $out[] = strtoupper($p);
-            } else {
-                // untuk kasus seperti Amd, Ter, dll
-                $out[] = ucfirst(strtolower($p));
+                $out[] = ucfirst(strtolower($seg));
             }
         }
 
