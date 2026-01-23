@@ -79,19 +79,19 @@ class RingkasanOrderPortalController extends Controller
                 ->sort()
                 ->values();
             
-
-            // 3. Looping & Formatting
-            $ringkasanPerPeriode = $allPeriods->map(function ($periode) use ($plansByPeriod, $detailsSamplingByPeriod, $detailsSDByPeriod, $jadwalByPeriod) {
-                    
-                    if ($periode === 'non-contract') {
-                        $periodeLabel = 'Non - Kontrak / Ad-hoc';
-                        $cleanPeriode = 'non-contract';
-                        $plan = null;
-                    } else {
-                        $periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');
-                        $cleanPeriode = $periode;
-                        $plan = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
-                    }
+                $getPeriodeAktif=[];
+                // 3. Looping & Formatting
+                $ringkasanPerPeriode = $allPeriods->map(function ($periode) use ($plansByPeriod, $detailsSamplingByPeriod, $detailsSDByPeriod, $jadwalByPeriod,&$getPeriodeAktif) {
+                        
+                        if ($periode === 'non-contract') {
+                            $periodeLabel = 'Non - Kontrak / Ad-hoc';
+                            $cleanPeriode = 'non-contract';
+                            $plan = null;
+                        } else {
+                            $periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');
+                            $cleanPeriode = $periode;
+                            $plan = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
+                        }
 
                     // Ambil Data per Periode
                     $plan           = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
@@ -180,6 +180,7 @@ class RingkasanOrderPortalController extends Controller
                     $periodeLabel = "-";
                     if($periode !== 'non-contract') {$periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');};
                     // --- RETURN FINAL ---
+                    array_push($getPeriodeAktif,$periode);
                     return [
                         'periode'           => $periode,
                         'periodeLabel'      => $periodeLabel,
@@ -193,7 +194,7 @@ class RingkasanOrderPortalController extends Controller
                     ];
             });
 
-
+            
             // file summary
             $fileName = null;
             $jadwalFile = null;
@@ -222,6 +223,7 @@ class RingkasanOrderPortalController extends Controller
             }
             
             $searchLinkLhp =LinkLhp::where('no_quotation',$ambilDB->no_quotation)
+            ->whereIn('periode',$getPeriodeAktif)
              ->select('no_quotation','link','periode')->get();
              if($searchLinkLhp->isNotEmpty()){
                 foreach($searchLinkLhp as $link){
