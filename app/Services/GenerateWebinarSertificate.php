@@ -19,7 +19,7 @@ class GenerateWebinarSertificate
     private $options = [];
     private $mpdf;
     private $qr_code;
-    private $top_distance = 27;
+    private $top_distance = 28;
     private $outputDir = 'certificates';
 
     /**
@@ -207,9 +207,9 @@ class GenerateWebinarSertificate
             $this->mpdf->AddPage();
 
             // Dapatkan dimensi halaman
-            $pageWidth = $this->mpdf->w;
-            $pageHeight = $this->mpdf->h;
-
+            $pageWidth = 297;
+            $pageHeight = 210;
+            
             // Konversi nama ke format yang sesuai
             $convertedName = $this->formatName($this->options['recipientName']);
             
@@ -233,7 +233,7 @@ class GenerateWebinarSertificate
                 $dataPlaceholder = [
                     'page_width'        => $pageWidth,
                     'page_height'       => $pageHeight,
-                    'title_top'         => $this->top_distance - 12,
+                    'title_top'         => $this->top_distance - 13,
                     'content_top'       => $this->top_distance,
                     'font'              => $this->options['font'],
                     'font_size'         => $fontSize,
@@ -432,83 +432,72 @@ class GenerateWebinarSertificate
         }
     }
 
-    private function formatName(string $name): string
+    private function formatName(string $input): string
     {
-        // Konversi nama ke format yang sesuai
-        $name = trim($name);
-        
-        // Hapus karakter khusus dan extra spaces
-        $name = preg_replace('/\s+/', ' ', $name);
-        
-        // Pisahkan nama dan gelar (jika ada)
-        $parts = explode(' ', $name);
-        $formattedParts = [];
-        
-        // Daftar gelar yang umum digunakan
-        $commonDegrees = ['SKM', 'SH', 'MM', 'SE', 'ST', 'MT', 'DR', 'IR', 'HJ', 'DRS', 'DRA', 'SST', 'AMD', 'SPD', 'MPD', 'MKM', 'MPH', 'MBA', 'MSI', 'MSC', 'PHD'];
-        
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if (empty($part)) continue;
-            
-            // Cek apakah ini singkatan (misal: A. atau S.Pd atau SKM)
-            if (preg_match('/^[A-Z]\.$/i', $part)) {
-                // Singkatan nama seperti "A." - uppercase
-                $formattedParts[] = strtoupper($part);
-            } elseif (preg_match('/^[A-Z]+$/i', $part) && strlen($part) <= 4 && in_array(strtoupper($part), $commonDegrees)) {
-                // Gelar tanpa titik seperti "SKM", "SH", "MM" - uppercase (hanya jika ada di daftar gelar)
-                $formattedParts[] = strtoupper($part);
-            } elseif (preg_match('/^[A-Za-z]+\.[A-Za-z]*\.?$/i', $part)) {
-                // Gelar dengan titik seperti "S.Pd", "S.Kom", "M.Sc" - uppercase
-                $formattedParts[] = strtoupper($part);
-            } elseif (preg_match('/^\.[A-Za-z]+$/i', $part)) {
-                // Gelar yang dimulai dengan titik seperti ".SKM" - uppercase tanpa titik di depan
-                $formattedParts[] = strtoupper(ltrim($part, '.'));
-            } elseif (strpos($part, '.') !== false && strlen($part) <= 6) {
-                // Kemungkinan gelar lain dengan titik - uppercase
-                $formattedParts[] = strtoupper($part);
-            } elseif (strpos($part, ',') !== false) {
-                // Handle koma sebelum gelar (misal: "Octapiani,")
-                $subParts = explode(',', $part);
-                $formattedSubParts = [];
-                foreach ($subParts as $subPart) {
-                    $subPart = trim($subPart);
-                    if (!empty($subPart)) {
-                        if (in_array(strtoupper($subPart), $commonDegrees)) {
-                            $formattedSubParts[] = strtoupper($subPart);
-                        } else {
-                            $formattedSubParts[] = ucfirst(strtolower($subPart));
-                        }
+        $input = trim(preg_replace('/\s+/', ' ', $input));
+        $segments = array_map('trim', explode(',', $input));
+
+        /* ===== FORMAT NAMA ===== */
+        $nameTokens = explode(' ', $segments[0]);
+        $formattedName = [];
+
+        foreach ($nameTokens as $t) {
+            $formattedName[] = $this->formatNameToken($t);
+        }
+
+        $result = implode(' ', $formattedName);
+
+        /* ===== FORMAT GELAR ===== */
+        if (count($segments) > 1) {
+            $degrees = [];
+
+            for ($i = 1; $i < count($segments); $i++) {
+                $tokens = preg_split('/\s+/', $segments[$i]);
+
+                foreach ($tokens as $token) {
+                    if (strpos($token, '.') !== false) {
+                        $degrees[] = $this->normalizeDegree($token);
+                    } else {
+                        // Gelar tanpa titik
+                        $degrees[] = strtoupper($token);
                     }
                 }
-                $formattedParts[] = implode(', ', $formattedSubParts);
-            } else {
-                // Nama biasa - Title Case (termasuk nama 3 huruf seperti DWI, EKO, dll)
-                $formattedParts[] = ucfirst(strtolower($part));
             }
+
+            $result .= ', ' . implode(' ', $degrees);
         }
-        
-        // Gabungkan kembali dengan handling khusus untuk gelar
-        $result = '';
-        $prevWasInitial = false;
-        
-        foreach ($formattedParts as $index => $part) {
-            if ($index === 0) {
-                $result = $part;
-            } else {
-                // Cek apakah part sebelumnya adalah singkatan nama (misal "A.")
-                if ($prevWasInitial) {
-                    $result .= ' ' . $part;
-                } else {
-                    $result .= ' ' . $part;
-                }
-            }
-            
-            // Cek apakah part saat ini adalah singkatan nama
-            $prevWasInitial = preg_match('/^[A-Z]\.$/i', $part);
-        }
-        
+
         return $result;
+    }
+
+    private function formatNameToken(string $token): string
+    {
+        // Inisial nama: M. | H. | A. dll
+        if (preg_match('/^[A-Za-z]\.$/', $token)) {
+            return strtoupper($token);
+        }
+
+        return ucfirst(strtolower($token));
+    }
+
+    private function normalizeDegree(string $degree): string
+    {
+        $degree = trim($degree, " .");
+        $parts = explode('.', $degree);
+
+        $out = [];
+        foreach ($parts as $p) {
+            if ($p === '') continue;
+
+            // PhD special case
+            if (strtolower($p) === 'phd') {
+                $out[] = 'PhD';
+            } else {
+                $out[] = ucfirst(strtolower($p));
+            }
+        }
+
+        return implode('.', $out) . '.';
     }
 
     private function calculateFontSize(int $nameLength): int
