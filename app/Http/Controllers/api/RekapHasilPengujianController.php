@@ -32,21 +32,21 @@ class RekapHasilPengujianController extends Controller
 
     public function updateKeterangan(Request $request)
     {
-        DB::beginTransaction();
         try {
-            $linkLhp = LinkLhp::find($request->id);
-            
-            if(!$linkLhp) return response()->json(['message' => 'Link LHP tidak ditemukan harap hubungi IT'], 404);
+            $linkLhp = LinkLhp::findOrFail($request->id);
+            $linkLhp->update([
+                'keterangan' => $request->keterangan
+            ]);
 
-            $linkLhp->keterangan = $request->keterangan;
-            $linkLhp->save();
-
-            DB::commit();
-            return response()->json(['message' => 'Keterangan berhasil diupdate'], 200);
+            return response()->json([
+                'message' => 'Keterangan berhasil diupdate'
+            ], 200);
 
         } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json(['message' => 'Terjadi kesalahan: ' . $th->getMessage()], 500);
+            return response()->json([
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => $th->getMessage()
+            ], 500);
         }
 
     }
