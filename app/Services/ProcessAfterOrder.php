@@ -2,13 +2,17 @@
 
 namespace App\Services;
 
+use App\Models\Ftc;
+use App\Models\FtcT;
 use App\Models\GenerateLink;
 use App\Models\HistoryKuotaPengujian;
+use App\Models\Jadwal;
 use App\Models\KuotaPengujian;
 use App\Models\LinkLhp;
 use App\Models\LinkRingkasanOrder;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
+use App\Models\SamplingPlan;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -51,10 +55,53 @@ class ProcessAfterOrder
 
     public function run()
     {
-        if(!$this->is_invoicing) $this->saveLinkLhp();
+        if(!$this->is_invoicing) {
+            $this->saveLinkLhp();
+        }else{
+            $this->deleteDataPengujianIfExist();
+        }
         $this->saveUseKuotaData();
         $this->saveLinkRingkasanOrder();
     }
+
+    private function deleteDataPengujianIfExist()
+    {
+        // Ambil list sampel
+        $sampleList = OrderDetail::where('no_order', $this->no_order)
+            ->pluck('no_sampel');
+
+        foreach ($sampleList as $sample) {
+
+            if (Ftc::where('no_sampel', $sample)->exists()) {
+                Ftc::where('no_sampel', $sample)
+                    ->update(['is_active' => 0]);
+            }
+
+            if (FtcT::where('no_sampel', $sample)->exists()) {
+                FtcT::where('no_sampel', $sample)
+                    ->update(['is_active' => 0]);
+            }
+        }
+
+        // Order Detail
+        if (OrderDetail::where('no_order', $this->no_order)->exists()) {
+            OrderDetail::where('no_order', $this->no_order)
+                ->update(['is_active' => 0]);
+        }
+
+        // Sampling Plan
+        if (SamplingPlan::where('no_quotation', $this->orderHeader->no_document)->exists()) {
+            SamplingPlan::where('no_quotation', $this->orderHeader->no_document)
+                ->update(['is_active' => 0]);
+        }
+
+        // Jadwal
+        if (Jadwal::where('no_quotation', $this->orderHeader->no_document)->exists()) {
+            Jadwal::where('no_quotation', $this->orderHeader->no_document)
+                ->update(['is_active' => 0]);
+        }
+    }
+
 
     private function saveLinkLhp()
     {
