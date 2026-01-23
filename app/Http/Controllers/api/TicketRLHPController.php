@@ -109,6 +109,13 @@ class TicketRLHPController extends Controller
                         $filePath = public_path('ticket_rlhp/' . $row->filename);
                         return file_exists($filePath) ? file_get_contents($filePath) : 'File not found';
                     })
+                    ->filterColumn('data_perusahaan.nama_perusahaan', function ($query, $keyword) {
+                        $uppercaseKeyword = strtoupper($keyword);
+                        $query->whereRaw(
+                            "JSON_UNQUOTE(JSON_EXTRACT(data_perusahaan, '$.nama_perusahaan')) LIKE ?",
+                            ["%{$uppercaseKeyword}%"]
+                        );
+                    })
                     ->make(true);
 
             } else {
@@ -149,6 +156,13 @@ class TicketRLHPController extends Controller
                     })
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
                         return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+                    })
+                    ->filterColumn('data_perusahaan.nama_perusahaan', function ($query, $keyword) {
+                        $uppercaseKeyword = strtoupper($keyword);
+                        $query->whereRaw(
+                            "JSON_UNQUOTE(JSON_EXTRACT(data_perusahaan, '$.nama_perusahaan')) LIKE ?",
+                            ["%{$uppercaseKeyword}%"]
+                        );
                     })
                     ->make(true);
             }
