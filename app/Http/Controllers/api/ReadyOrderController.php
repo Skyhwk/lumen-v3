@@ -443,8 +443,6 @@ class ReadyOrderController extends Controller
                 $data_lama = json_decode($dataQuotation->data_lama);
                 if ($data_lama->no_order != null) {
                     $no_order = $data_lama->no_order;
-                } else {
-                    self::updateCustomer($request);
                 }
             } else {
                 self::updateCustomer($request);
@@ -552,14 +550,13 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->is_generate_data_lab = 0;
             $dataQuotation->save();
-
-            if($data_lama == null) {
+            
+            (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
+            if($dataQuotation->data_lama == null || ($dataquotation->data_lama != null && $data_lama->no_order == null)) {
                 self::createInvoice($data, $dataQuotation, $request);
                 if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
-
-                (new ProcessAfterOrder($dataQuotation->pelanggan_ID, $data->no_order, false, false, true, $dataQuotation->use_kuota, $this->karyawan))->run();
 
                 $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
                 if ($linkRingkasanOrder) {
@@ -599,10 +596,11 @@ class ReadyOrderController extends Controller
                     $linkRingkasanOrder->emailed_at = Carbon::now();
                     $linkRingkasanOrder->save();
                 }
-                self::generateInvoice($no_order);
             }
 
             DB::commit();
+            
+            // self::generateInvoice($no_order);
             return response()->json([
                 'message' => "Generate Order Non Kontrak $dataQuotation->no_document Non Pengujian Success",
                 'status' => 200
