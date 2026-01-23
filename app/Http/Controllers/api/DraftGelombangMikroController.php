@@ -421,9 +421,11 @@ class DraftGelombangMikroController extends Controller
                         ];
                     })->values()->toArray();
 
+                    $parts = explode('-', $regulasi, 2);
+
                     $grouped[] = [
-                        "nama_regulasi"      => explode('-', $regulasi)[1],
-                        "id_regulasi"        => explode('-', $regulasi)[0],
+                        "nama_regulasi"      => $parts[1] ?? '', 
+                        "id_regulasi"        => $parts[0] ?? '',
                         "detail"             => $convertedDetails,
                         'observasi'          => $observasi[$i] ?? null,
                         'kesimpulan'         => $kesimpulan[$i] ?? null,
@@ -521,7 +523,6 @@ class DraftGelombangMikroController extends Controller
     {
         $category = explode('-', $request->kategori_3)[0];
         DB::beginTransaction();
-        // dd($request->all());
         try {
             // =========================
             // BAGIAN HEADER (punyamu)

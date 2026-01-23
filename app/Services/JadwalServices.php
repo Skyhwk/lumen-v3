@@ -225,7 +225,8 @@ class JadwalServices
             return true;
         } catch (Exception $ex) {
             DB::rollBack();
-            throw new Exception($ex->getMessage(), 401);
+            $code = $ex->getCode() ?: 500; 
+            throw new Exception($ex->getMessage(), $code);
         }
     }
 

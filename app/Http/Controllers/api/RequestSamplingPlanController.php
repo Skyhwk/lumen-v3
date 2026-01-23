@@ -201,19 +201,26 @@ class RequestSamplingPlanController extends Controller
             "rejection_reason" => $request->rejection_reason,
             "karyawan" => $this->karyawan,
         ];
-
-        $tipe = explode('/', $request->no_quotation)[1];
-        if ($tipe == 'QTC') {
-            $jadwal = JadwalServices::on('rejectJadwalKontrak', $ObjectData)->rejectJadwalSPKontrak();
-        } else if ($tipe == 'QT') {
-            $jadwal = JadwalServices::on('rejectJadwalNon', $ObjectData)->rejectJadwalSP();
-        }
-
-        if ($jadwal) {
+        try {
+            //code...
+            $tipe = explode('/', $request->no_quotation)[1];
+            if ($tipe == 'QTC') {
+                $jadwal = JadwalServices::on('rejectJadwalKontrak', $ObjectData)->rejectJadwalSPKontrak();
+            } else if ($tipe == 'QT') {
+                $jadwal = JadwalServices::on('rejectJadwalNon', $ObjectData)->rejectJadwalSP();
+            }
+    
+            if ($jadwal) {
+                return response()->json([
+                    "message" => "Berhasil menolak jadwal",
+                    "status" => "success"
+                ], 200);
+            }
+        } catch (\Throwable $e) {
             return response()->json([
-                "message" => "Berhasil menolak jadwal",
-                "status" => "success"
-            ], 200);
+                "message" => $e->getMessage(),
+                "status" => "error"
+            ], $e->getCode() ?: 500);
         }
     }
 

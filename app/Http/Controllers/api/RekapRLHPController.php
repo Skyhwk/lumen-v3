@@ -35,7 +35,7 @@ class RekapRLHPController extends Controller
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
 
-            if (($department == 17 || $department == 7) && ! in_array($this->user_id, [10, 15, 93, 123])) {
+            if (($department == 17 || $department == 7 || in_array($this->user_id, [13])) && ! in_array($this->user_id, [10, 15, 93, 123])) {
                 $data = TicketRLHP::where('is_active', true)
                     ->whereIn('status', ['DONE', 'REJECT', 'VOID', 'WAITING PROCESS'])
                     ->where(function ($q) {
