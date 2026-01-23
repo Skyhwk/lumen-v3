@@ -87,13 +87,6 @@ class TicketRLHPController extends Controller
             if (($department == 17 || $department == 7  || in_array($this->user_id, [13])) && ! in_array($this->user_id, [10, 15, 93, 123])) {
                 $data = TicketRLHP::where('is_active', true)
                     ->whereNotIn('status', ['DONE', 'REJECT', 'VOID'])
-                    ->where(function ($q) {
-                        $q->where('kategori', 'TANGGAL')
-                            ->orWhere(function ($q2) {
-                                $q2->where('kategori', 'DATA')
-                                    ->whereNotNull('approved_by');
-                            });
-                    })
                     ->orderByDesc('id');
 
                 return DataTables::of($data)
