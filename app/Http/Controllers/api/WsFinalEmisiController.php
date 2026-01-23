@@ -27,8 +27,8 @@ class WsFinalEmisiController extends Controller
 				->where('kategori_2', '5-Emisi')
 				->where('status', 0)
 				->whereNotNull('tanggal_terima')
-				->whereMonth('tanggal_terima', explode('-', $request->date)[1])
-				->whereYear('tanggal_terima', explode('-', $request->date)[0]);
+				->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+				->orderBy('tanggal_sampling');
 
 			return Datatables::of($data)->make(true);
 		} catch (\Exception $e) {
