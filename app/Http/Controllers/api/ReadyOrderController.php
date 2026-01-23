@@ -1477,7 +1477,7 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
-            self::updateCustomer($request);
+            // self::updateCustomer($request);
             $generator = new Barcode();
             $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->get();
 
@@ -2662,7 +2662,7 @@ class ReadyOrderController extends Controller
     {
         DB::beginTransaction();
         try {
-            self::updateCustomer($request);
+            // self::updateCustomer($request);
             $generator = new Barcode();
             $data_detail_lama = OrderDetail::where('no_order', $data_lama->no_order)->where('is_active', 1)->get();
 
