@@ -758,6 +758,7 @@ class SamplingPlanController extends Controller
 
     public function cancelJadwal(Request $request)
     {
+        
         DB::beginTransaction();
         try {
             if (! is_array($request->mode['batchId'])) {
@@ -766,7 +767,8 @@ class SamplingPlanController extends Controller
                 $batchId = $request->mode['batchId'];
             }
             $temptMessage = '';
-            if ($request->mode['parsial'] !== null) { //menandakan data yg terpilih adalah partial
+            if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
+              
                 $dataParsial = Jadwal::whereIn('id', $batchId)
                     ->where('is_active', true)
                     ->update([
@@ -804,6 +806,7 @@ class SamplingPlanController extends Controller
                     ], 401);
                 }
             }
+            
             // $message = "No QT :" . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh staff :". $karyawan->karyawan($this->db,$this->karyawan)."\n" . ($temptMessage != '') ? $temptMessage : "";
             $message = "No QT: " . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh " . $this->karyawan . "\n" . (($temptMessage != '') ? $temptMessage : "");
 

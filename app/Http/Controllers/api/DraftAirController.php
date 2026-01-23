@@ -227,7 +227,7 @@ class DraftAirController extends Controller
                             'methode'     => $request->custom_methode[$page][$param] ?? '',
                             'baku_mutu'   => json_encode($request->custom_baku_mutu[$page][$param] ?? []),
                             'metode_sampling' => $request->metode_sampling_biota_custom[$page][$param] ?? '',
-                            'kesimpulan' => $request->custom_kesimpulan_biota[$page][$param] ?? null
+                            'kesimpulan' => $request->kesimpulan_biota_custom[$page][$param] ?? null
                         ]);
                     }
                 }
