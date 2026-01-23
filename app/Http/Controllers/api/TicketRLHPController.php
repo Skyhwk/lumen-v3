@@ -87,13 +87,6 @@ class TicketRLHPController extends Controller
             if (($department == 17 || $department == 7  || in_array($this->user_id, [13])) && ! in_array($this->user_id, [10, 15, 93, 123])) {
                 $data = TicketRLHP::where('is_active', true)
                     ->whereNotIn('status', ['DONE', 'REJECT', 'VOID'])
-                    ->where(function ($q) {
-                        $q->where('kategori', 'TANGGAL')
-                            ->orWhere(function ($q2) {
-                                $q2->where('kategori', 'DATA')
-                                    ->whereNotNull('approved_by');
-                            });
-                    })
                     ->orderByDesc('id');
 
                 return DataTables::of($data)
@@ -115,6 +108,13 @@ class TicketRLHPController extends Controller
                     ->addColumn('reff', function ($row) {
                         $filePath = public_path('ticket_rlhp/' . $row->filename);
                         return file_exists($filePath) ? file_get_contents($filePath) : 'File not found';
+                    })
+                    ->filterColumn('data_perusahaan.nama_perusahaan', function ($query, $keyword) {
+                        $uppercaseKeyword = strtoupper($keyword);
+                        $query->whereRaw(
+                            "JSON_UNQUOTE(JSON_EXTRACT(data_perusahaan, '$.nama_perusahaan')) LIKE ?",
+                            ["%{$uppercaseKeyword}%"]
+                        );
                     })
                     ->make(true);
 
@@ -156,6 +156,13 @@ class TicketRLHPController extends Controller
                     })
                     ->addColumn('can_approve', function ($row) use ($getBawahan) {
                         return in_array($row->created_by, $getBawahan) && $this->karyawan != $row->created_by;
+                    })
+                    ->filterColumn('data_perusahaan.nama_perusahaan', function ($query, $keyword) {
+                        $uppercaseKeyword = strtoupper($keyword);
+                        $query->whereRaw(
+                            "JSON_UNQUOTE(JSON_EXTRACT(data_perusahaan, '$.nama_perusahaan')) LIKE ?",
+                            ["%{$uppercaseKeyword}%"]
+                        );
                     })
                     ->make(true);
             }
