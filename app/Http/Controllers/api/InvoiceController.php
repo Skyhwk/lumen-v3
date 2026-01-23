@@ -287,6 +287,21 @@ class InvoiceController extends Controller
                     ['%' . $request->no_spk . '%']
                 );
             }
+
+            if ($request->filled('nilai_invoice')) {
+                $data->havingRaw(
+                    'SUM(invoice.nilai_tagihan) LIKE ?',
+                    ['%' . $request->nilai_invoice . '%']
+                );
+            }
+
+            if ($request->filled('pembayaran')) {
+                $data->havingRaw(
+                    '(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) LIKE ?',
+                    ['%' . $request->pembayaran . '%']
+                );
+            }
+
             if ($request->filled('emailed_by')) {
                 $data->havingRaw(
                     'MAX(invoice.emailed_by) LIKE ?',
