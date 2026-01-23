@@ -188,6 +188,7 @@ class ValidatorSPController extends Controller
                         $chekNotice->generated_by = $this->karyawan;
                         $chekNotice->jadwalfile   = $mailfilename;
                         $chekNotice->is_generated = true;
+                        $chekNotice->is_ready_order = 1;
                         $chekNotice->save();
                     } else {
                         throw new \Exception('Gagal generate file jadwal sampling!');
@@ -249,6 +250,7 @@ class ValidatorSPController extends Controller
                     $chekNotice->generated_by = $this->karyawan;
                     $chekNotice->jadwalfile   = $mailfilename;
                     $chekNotice->is_generated = true;
+                    $chekNotice->is_ready_order = 1;
                     $chekNotice->save();
                 } else {
                     throw new \Exception('Gagal generate file jadwal sampling!');
