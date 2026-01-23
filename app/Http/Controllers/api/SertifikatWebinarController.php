@@ -73,6 +73,34 @@ class SertifikatWebinarController extends Controller
         return $webinarCode;
     }
 
+    public function updateHeader(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            SertifikatWebinarHeader::find($request->id)->update([
+                'title' => $request->title,
+                'topic' => $request->topic,
+                'sub_topic' => $request->sub_topic,
+                'speakers' => json_decode($request->speakers, true),
+                'date' => $request->date,
+                'id_template' => $request->template_id,
+                'id_layout' => $request->layout_id,
+                'id_font' => $request->font_id,
+            ]);
+
+            DB::commit();
+            self::bulkGenerateCertificate($request->id);
+            return response()->json(['message' => 'Berhasil Membuat Webinar', 'status' => '200'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal Membuat Webinar',
+                'line' => $th->getLine(),
+                'status' => '500'
+            ], 500);
+        }
+    }
+
     public function storeHeader(Request $request)
     {
         DB::beginTransaction();
