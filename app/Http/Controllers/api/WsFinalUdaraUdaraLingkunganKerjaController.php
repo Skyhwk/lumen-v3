@@ -62,10 +62,9 @@ class WsFinalUdaraUdaraLingkunganKerjaController extends Controller
             ->whereNotNull('tanggal_terima')
             ->whereJsonDoesntContain('parameter', ["318;Psikologi"])
             ->whereJsonDoesntContain('parameter', ['230;Ergonomi'])
-            ->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-            ->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
             ->groupBy('cfr')
-            ->orderBy('tanggal_terima');
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)->make(true);
     }
