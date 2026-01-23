@@ -9,5 +9,5 @@ class ForecastSP extends Sector
     protected $table = 'forecast_sp';
 
     public $timestamps = false;
-    protected $guarded = ['id'];
+    protected $guarded = [];
 }
