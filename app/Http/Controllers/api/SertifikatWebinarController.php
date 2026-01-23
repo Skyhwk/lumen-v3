@@ -9,6 +9,7 @@ use App\Models\JenisFont;
 use App\Models\LayoutCertificate;
 use App\Models\SertifikatWebinarDetail;
 use App\Models\SertifikatWebinarHeader;
+use App\Models\SertifikatWebinarSurvei;
 use App\Models\TemplateBackground;
 use App\Services\GenerateWebinarSertificate;
 use App\Models\WebinarQna;
@@ -28,7 +29,7 @@ class SertifikatWebinarController extends Controller
 {
     public function index()
     {
-        $data = SertifikatWebinarHeader::get();
+        $data = SertifikatWebinarHeader::with('survei');
 
         return Datatables::of($data)->make(true);
     }
@@ -48,12 +49,12 @@ class SertifikatWebinarController extends Controller
          *  01 -> urutan webinar di adakan (reset setiap tahun baru)
          *  26 -> tahun webinar di adakan
          *  01 -> bulan webinar di adakan
-         */ 
+         */
         $companyCode = 'ISL';
         $year = date('y', strtotime($date)); // 2 digit tahun
         $month = date('m', strtotime($date)); // 2 digit bulan
         $sequence = 1;
-        
+
         foreach ($existingCodes as $code => $value) {
             if (strlen($code) === 9 && substr($code, 0, 3) === $companyCode) {
                 $codeYear = substr($code, 5, 2);
@@ -65,10 +66,10 @@ class SertifikatWebinarController extends Controller
                 }
             }
         }
-        
+
         $sequenceStr = str_pad($sequence, 2, '0', STR_PAD_LEFT);
         $webinarCode = $companyCode . $sequenceStr . $year . $month;
-        
+
         return $webinarCode;
     }
 
@@ -79,12 +80,12 @@ class SertifikatWebinarController extends Controller
             $existingCodes = SertifikatWebinarHeader::pluck('webinar_code')
                 ->map(fn($v) => strtoupper($v))
                 ->flip();
-            
+
             $webinarCode = $this->generateWebinarCode(
                 $request->date,
                 $existingCodes
             );
-            
+
             SertifikatWebinarHeader::create([
                 'webinar_code' => strtoupper($webinarCode),
                 'title' => $request->title,
@@ -124,7 +125,7 @@ class SertifikatWebinarController extends Controller
         if (!in_array($extension, ['xlsx', 'csv'])) {
             return response()->json(['error' => 'File tidak valid. Harus .xlsx atau .csv'], 400);
         }
-        
+
         DB::beginTransaction();
         try {
             if ($extension === 'csv') {
@@ -177,7 +178,7 @@ class SertifikatWebinarController extends Controller
                 ->keyBy(fn($row) => strtolower($row->email . '|' . $row->name));
 
             for ($rowIndex = $startRow; $rowIndex <= $highestRow; $rowIndex++) {
-                $name  = trim($sheet->getCell('C' . $rowIndex)->getFormattedValue()) . ' '. trim($sheet->getCell('D' . $rowIndex)->getFormattedValue());
+                $name  = trim($sheet->getCell('C' . $rowIndex)->getFormattedValue()) . ' ' . trim($sheet->getCell('D' . $rowIndex)->getFormattedValue());
                 $email = trim($sheet->getCell('E' . $rowIndex)->getFormattedValue());
                 $time_session = trim($sheet->getCell('J' . $rowIndex)->getFormattedValue());
 
@@ -209,7 +210,7 @@ class SertifikatWebinarController extends Controller
                     // 'filename'      => $code . '-' . $useNumberAttend . '.pdf',
                 ];
             }
-            
+
             if (empty($attendances)) {
                 DB::rollBack();
                 return response()->json([
@@ -227,15 +228,142 @@ class SertifikatWebinarController extends Controller
             SertifikatWebinarDetail::upsert(
                 array_values($attendances),
                 ['header_id', 'email', 'name'],
-                ['time_session','filename']
+                ['time_session', 'filename']
             );
 
             DB::commit();
-    
+
             self::bulkGenerateCertificate($request->id);
 
             // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
-                
+
+
+            return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' =>
+                'Gagal mengimport data',
+                'line' => $th->getLine(),
+                'status' => '500'
+            ], 500);
+        }
+    }
+
+    public function importDataSurvei(Request $request)
+    {
+        $file = $request->file('file_input');
+
+        // Validasi file - terima xlsx dan csv
+        if (!$file) {
+            return response()->json(['error' => 'File tidak ditemukan'], 400);
+        }
+
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'csv'])) {
+            return response()->json(['error' => 'File tidak valid. Harus .xlsx atau .csv'], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($extension === 'csv') {
+                $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Csv');
+                $reader->setDelimiter(',');
+                $reader->setEnclosure('"');
+                $reader->setSheetIndex(0);
+                $spreadsheet = $reader->load($file->getPathname());
+            } else {
+                $spreadsheet = IOFactory::load($file->getPathname());
+            }
+
+            $sheet = $spreadsheet->getActiveSheet();
+            // dd($sheet);
+            $highestColumn = $sheet->getHighestColumn();
+            $highestRow = $sheet->getHighestRow();
+
+            // Ambil header row (row 1)
+            $headers = $sheet->rangeToArray("A1:{$highestColumn}1")[0];
+
+            // Cari index kolom "Nama Lengkap"
+            $startIndex = null;
+            foreach ($headers as $i => $header) {
+                $normalized = strtolower(trim($header));
+                if (str_contains($normalized, 'nama lengkap')) {
+                    $startIndex = $i;
+                    break;
+                }
+            }
+
+            if ($startIndex === null) {
+                DB::rollBack();
+                return response()->json([
+                    'error' => 'Header "Nama Lengkap" tidak ditemukan di row 1',
+                    'status' => 400
+                ], 400);
+            }
+
+            // Kolom setelah "Nama Lengkap" adalah pertanyaan
+            $questions = array_slice($headers, $startIndex + 1);
+
+            // Kumpulin jawaban
+            $result = [];
+
+            foreach ($questions as $qIndex => $question) {
+                $colIndex = $startIndex + 1 + $qIndex;
+                $answers = [];
+
+                for ($row = 2; $row <= $highestRow; $row++) {
+                    $cellValue = $sheet->getCellByColumnAndRow($colIndex + 1, $row)->getValue();
+                    if ($cellValue !== null && $cellValue !== '') {
+                        $answers[$cellValue] = ($answers[$cellValue] ?? 0) + 1;
+                    }
+                }
+
+                // Skip kalau header cuma "ColumnXX" atau kosong atau gak ada jawaban
+                if (
+                    empty(trim($question)) ||
+                    preg_match('/^Column\d+$/i', trim($question)) ||
+                    empty($answers)
+                ) {
+                    continue;
+                }
+
+                $result[] = [
+                    'question' => $question,
+                    'answers' => $answers
+                ];
+            }
+
+            $participants = [];
+
+            for ($row = 2; $row <= $highestRow; $row++) {
+                $email = $sheet->getCellByColumnAndRow(4, $row)->getValue(); // D
+                $name  = $sheet->getCellByColumnAndRow(9, $row)->getValue(); // I
+
+                if ($email || $name) {
+                    $participants[] = [
+                        'email' => $email,
+                        'name'  => $name,
+                        'header_id' => $request->id
+                    ];
+                }
+            }
+
+            SertifikatWebinarDetail::upsert(
+                array_values($participants),
+                ['header_id', 'email'],
+                ['name']
+            );
+
+            SertifikatWebinarSurvei::updateOrCreate(['header_id' => $request->id], ['survei' => json_encode($result)]);
+            // dd($result);
+
+            DB::commit();
+
+            self::bulkGenerateCertificate($request->id);
+
+            // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
+
 
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
@@ -269,22 +397,22 @@ class SertifikatWebinarController extends Controller
             $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
             $filename = $no_sertifikat . '.pdf';
             $generate = GenerateWebinarSertificate::make($filename)
-            ->options([
-                'layout'            => $layout->nama_file,
-                'font'              => $font->jenis_font ?? 'roboto',
-                'template'          => $template->nama_template,
-                'recipientName'     => $value->name,
-                'id'                => $value->id,
-                'webinarTitle'      => $getHeader->title,
-                'webinarTopic'      => $getHeader->topic,
-                'webinarSubTopic'   => $getHeader->sub_topic,
-                'webinarDate'       => $getHeader->date,
-                'panelis'           => $panelis,
-                'noSertifikat'      => $no_sertifikat,
-            ])
-            ->generate();
+                ->options([
+                    'layout'            => $layout->nama_file,
+                    'font'              => $font->jenis_font ?? 'roboto',
+                    'template'          => $template->nama_template,
+                    'recipientName'     => $value->name,
+                    'id'                => $value->id,
+                    'webinarTitle'      => $getHeader->title,
+                    'webinarTopic'      => $getHeader->topic,
+                    'webinarSubTopic'   => $getHeader->sub_topic,
+                    'webinarDate'       => $getHeader->date,
+                    'panelis'           => $panelis,
+                    'noSertifikat'      => $no_sertifikat,
+                ])
+                ->generate();
 
-            if($generate instanceof Exception) {
+            if ($generate instanceof Exception) {
                 return response()->json([
                     'message' => 'Gagal menggenerate sertifikat',
                     'line' => $generate->getLine(),
@@ -295,8 +423,232 @@ class SertifikatWebinarController extends Controller
             $value->update([
                 'filename' => $filename
             ]);
+        }
+    }
+
+    public function updateDataAudience(Request $request)
+    {
+        DB::beginTransaction();
+        $update = SertifikatWebinarDetail::where('id', $request->id)->first();
+        $update->name = $request->name;
+        $update->save();
+        DB::commit();
+
+        $header = SertifikatWebinarHeader::find($update->header_id);
+        $layout = LayoutCertificate::where('id', $header->id_layout)->first();
+        $font = JenisFont::where('id', $header->id_font)->first();
+        $template = TemplateBackground::where('id', $header->id_template)->first();
+        $panelis = collect($header->speakers)->map(function ($speaker) {
+            unset($speaker['karyawan_id']);
+            return $speaker;
+        })->values()->toArray();
+
+        $no_sertifikat = $header->webinar_code . '-' . $update->number_attend;
+        $filename = $no_sertifikat . '.pdf';
+        $generate = GenerateWebinarSertificate::make($filename)
+            ->options([
+                'layout'            => $layout->nama_file,
+                'font'              => $font->jenis_font ?? 'roboto',
+                'template'          => $template->nama_template,
+                'recipientName'     => $update->name,
+                'id'                => $update->id,
+                'webinarTitle'      => $header->title,
+                'webinarTopic'      => $header->topic,
+                'webinarSubTopic'   => $header->sub_topic,
+                'webinarDate'       => $header->date,
+                'panelis'           => $panelis,
+                'noSertifikat'      => $no_sertifikat,
+            ])
+            ->generate();
+
+        return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);
+    }
+
+    public function sendCertificateEmail(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+
+            $header = DB::table('sertifikat_webinar_header')
+                ->where('id', $request->webinar_id)
+                ->first();
+
+            if (! $header) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Header tidak ditemukan',
+                ], 404);
+            }
+
+            $detail = DB::table('sertifikat_webinar_detail')
+                ->where('id', $request->id)
+                ->where('header_id', $request->webinar_id)
+                ->where('time_session', '>', 60)
+                ->whereNotNull('time_session')
+                ->first();
+
+            // dd($detail);
+
+            if (!$detail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data peserta kosong',
+                ], 404);
+            }
+
+            $filename = $header->body_email;
+            $number   = pathinfo($filename, PATHINFO_FILENAME);
+
+            $body = Repository::dir('certificate')->key($number)->get();
+
+            if (! $body) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Template email tidak ditemukan',
+                ], 404);
+            }
 
 
+            $templateAttachments = [];
+            if (!empty($header->attachments)) {
+                $attachmentNames = json_decode($header->attachments, true);
+                if (is_array($attachmentNames)) {
+                    $folderName = Str::slug($header->title ?? 'webinar');
+                    $basePath = public_path("uploads/webinar/{$folderName}");
+                    foreach ($attachmentNames as $filename) {
+                        $filePath = "{$basePath}/{$filename}";
+
+                        if (file_exists($filePath)) {
+                            $templateAttachments[] = $filePath;
+                        }
+                    }
+                }
+            }
+
+
+
+            $qna = DB::table('webinar_qna')
+                ->where('webinar_id', $request->id)
+                ->where('asker_name', $detail->name)
+                ->where('asker_email', $detail->email)
+                ->get();
+
+            $qnaHtml = '';
+
+            if ($qna->isNotEmpty()) {
+
+                $questions = [];
+                $answers = [];
+
+                foreach ($qna as $item) {
+                    if (!empty($item->question)) {
+                        $questions[] = e($item->question);
+                    }
+                    if (!empty($item->answer)) {
+                        $answers[] = e($item->answer);
+                    }
+                }
+
+                $answers = array_unique($answers);
+
+                $qnaHtml .= '<table width="100%" cellpadding="10" cellspacing="0" style="border: none;">
+                        <tr>
+                            <td width="50%" valign="top" style="border: none;">
+                                <strong>Pertanyaan:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">';
+
+                foreach ($questions as $question) {
+                    $qnaHtml .= '<li style="margin-bottom: 5px;">' . $question . '</li>';
+                }
+
+                $qnaHtml .= '</ul>
+                            </td>
+                            <td width="50%" valign="top" style="border: none;">
+                                <strong>Jawaban:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">';
+
+                if (!empty($answers)) {
+                    foreach ($answers as $answer) {
+                        $qnaHtml .= '<li style="margin-bottom: 5px;">' . $answer . '</li>';
+                    }
+                } else {
+                    $qnaHtml .= '<li style="margin-bottom: 5px;"><em>Belum dijawab</em></li>';
+                }
+
+                $qnaHtml .= '
+                                </ul>
+                            </td>
+                        </tr>
+                    </table>
+                ';
+            }
+
+            $replace = [
+                '{{name}}'  => $detail->name,
+                '{{title}}' => $header->title,
+                '{{topic}}' => $header->topic,
+                '{{subtopic}}' => $header->sub_topic,
+                '{{date}}'  => Carbon::parse($header->date)
+                    ->locale('id')
+                    ->translatedFormat('l, d F Y'),
+                '{{qna}}' => $qnaHtml
+            ];
+
+            $emailBody = str_replace(
+                array_keys($replace),
+                array_values($replace),
+                $body
+            );
+
+            /**
+             * attachement dari template body email belum ada
+             * kemungkinan yang akan di letakan di template adalah :
+             * materi webinar
+             * Q&A global
+             */
+
+            $validAttachments = [];
+
+            array_push($validAttachments, public_path() . '/certificates/' . $detail->filename);
+
+            $validAttachments = array_merge($validAttachments, $templateAttachments);
+
+
+            $mail = SendEmail::where('to', $detail->email)
+                ->where('subject', 'E-Sertifikat Webinar ' . $header->topic)
+                ->where('body', $emailBody)
+                ->where('karyawan', 'System')
+                ->noReply();
+
+            if (!empty($validAttachments)) {
+                $mail = $mail->where('attachment', $validAttachments);
+            }
+
+            $mail->send();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email berhasil dikirim',
+            ], 200);
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            Log::error('Send Email Webinar Error', [
+                'id'      => $request->id,
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim email',
+                'error'   => $e->getMessage(), // hapus di production
+                'line'    => $e->getLine(),
+            ], 500);
         }
     }
 
@@ -431,7 +783,8 @@ class SertifikatWebinarController extends Controller
         }
     }
 
-    public function renderSertifikatOld(Request $request) {
+    public function renderSertifikatOld(Request $request)
+    {
         $header = SertifikatWebinarHeader::with('details', 'layout', 'font', 'template')->find($request->id);
         $title = $header->title;
         $topic = $header->topic;
@@ -454,22 +807,21 @@ class SertifikatWebinarController extends Controller
             $filename = $code . '-' . $detail->number_attend . '-' .  $detail->name . '.pdf';
             // dd($filename);
             $generateService = GenerateWebinarSertificate::make($filename)
-            ->options([
-                'id' => $detail->id,
-                'template' => $template, //--> background image
-                'layout' => $layout, //--> layout blade
-                'font' => $font, //--> font fullname recipient certificate
-                'recipientName' => $detail->name,
-                'webinarTitle' => $title,
-                'webinarTopic' => $topic,
-                'webinarDate' => $webinarDate,
-                'panelis' => $panelis,
-                'noSertifikat' => $no_sertifikat . $detail->number_attend,
-            ])
-            ->generate();
-
+                ->options([
+                    'id' => $detail->id,
+                    'template' => $template, //--> background image
+                    'layout' => $layout, //--> layout blade
+                    'font' => $font, //--> font fullname recipient certificate
+                    'recipientName' => $detail->name,
+                    'webinarTitle' => $title,
+                    'webinarTopic' => $topic,
+                    'webinarDate' => $webinarDate,
+                    'panelis' => $panelis,
+                    'noSertifikat' => $no_sertifikat . $detail->number_attend,
+                ])
+                ->generate();
         }
-        
+
         SertifikatWebinarDetail::where('header_id', $request->id)->update(['sertifikat_generated' => '1']);
 
         return response()->json(['message' => `Sertifikat Webinar {$header->title} berhasil di generate`], 200);
@@ -588,7 +940,7 @@ class SertifikatWebinarController extends Controller
         if (!empty($header->body_email)) {
             $filename = $header->body_email;
             $number = pathinfo($filename, PATHINFO_FILENAME);
-            
+
             try {
                 $body = Repository::dir('certificate')->key($number)->get();
             } catch (\Exception $e) {
@@ -598,16 +950,16 @@ class SertifikatWebinarController extends Controller
 
         if (!empty($header->attachments)) {
             $attachmentNames = json_decode($header->attachments, true);
-            
+
             if (is_array($attachmentNames) && count($attachmentNames) > 0) {
                 $folderName = Str::slug($header->title ?? 'webinar');
-                
+
                 $basePath = public_path("uploads/webinar/{$folderName}");
                 $baseUrl = url("uploads/webinar/{$folderName}");
-                
+
                 foreach ($attachmentNames as $filename) {
                     $filePath = "{$basePath}/{$filename}";
-                    
+
                     if (file_exists($filePath)) {
                         $attachments[] = [
                             'name' => $filename,
@@ -631,7 +983,7 @@ class SertifikatWebinarController extends Controller
         ]);
     }
 
-   
+
     public function setTemplateEmail(Request $request)
     {
         $uuid = (int) str_replace('.', '', microtime(true));
@@ -650,7 +1002,7 @@ class SertifikatWebinarController extends Controller
         }
 
         $folderName = Str::slug($header->title ?? 'webinar');
-        
+
         $basePath = public_path("uploads/webinar/{$folderName}");
 
         if (!file_exists($basePath)) {
@@ -658,14 +1010,14 @@ class SertifikatWebinarController extends Controller
         }
 
         $existingAttachments = $request->input('existingAttachments', []);
-        
+
         $deletedAttachments = $request->input('deletedAttachments', []);
-        
+
         if (!empty($deletedAttachments) && is_array($deletedAttachments)) {
             foreach ($deletedAttachments as $filename) {
                 $filePath = "{$basePath}/{$filename}";
                 if (file_exists($filePath)) {
-                    unlink($filePath); 
+                    unlink($filePath);
                 }
             }
         }
@@ -683,7 +1035,7 @@ class SertifikatWebinarController extends Controller
         }
 
         $allAttachments = array_merge(
-            is_array($existingAttachments) ? $existingAttachments : [], 
+            is_array($existingAttachments) ? $existingAttachments : [],
             $newAttachments
         );
 
@@ -714,7 +1066,7 @@ class SertifikatWebinarController extends Controller
     //     } catch (\Throwable $th) {
     //         throw $th;
     //     }
-        
+
     // }
 
 
@@ -743,7 +1095,7 @@ class SertifikatWebinarController extends Controller
     //             ->get();
 
     //         // dd($detail);
-                
+
     //         if ($detail->isEmpty()) {
     //             return response()->json([
     //                 'success' => false,
@@ -772,7 +1124,7 @@ class SertifikatWebinarController extends Controller
     //                 $basePath = public_path("uploads/webinar/{$folderName}");
     //                 foreach ($attachmentNames as $filename) {
     //                     $filePath = "{$basePath}/{$filename}";
-                        
+
     //                     if (file_exists($filePath)) {
     //                         $templateAttachments[] = $filePath;
     //                     }
@@ -782,7 +1134,7 @@ class SertifikatWebinarController extends Controller
 
     //         foreach ($detail as $value) {
 
-            
+
     //             $qna = DB::table('webinar_qna')
     //                 ->where('webinar_id', $request->id)
     //                 ->where('asker_name', $value->name)
@@ -795,7 +1147,7 @@ class SertifikatWebinarController extends Controller
 
     //                 $questions = [];
     //                 $answers = [];
-                    
+
     //                 foreach ($qna as $item) {
     //                     if (!empty($item->question)) {
     //                         $questions[] = e($item->question);
@@ -804,25 +1156,25 @@ class SertifikatWebinarController extends Controller
     //                         $answers[] = e($item->answer);
     //                     }
     //                 }
-                    
+
     //                 $answers = array_unique($answers);
-                    
+
     //                 $qnaHtml .= '<table width="100%" cellpadding="10" cellspacing="0" style="border: none;">
     //                         <tr>
     //                             <td width="50%" valign="top" style="border: none;">
     //                                 <strong>Pertanyaan:</strong>
     //                                 <ul style="margin: 5px 0; padding-left: 20px;">';
-                    
+
     //                 foreach ($questions as $question) {
     //                     $qnaHtml .= '<li style="margin-bottom: 5px;">' . $question . '</li>';
     //                 }
-                    
+
     //                 $qnaHtml .= '</ul>
     //                             </td>
     //                             <td width="50%" valign="top" style="border: none;">
     //                                 <strong>Jawaban:</strong>
     //                                 <ul style="margin: 5px 0; padding-left: 20px;">';
-                    
+
     //                 if (!empty($answers)) {
     //                     foreach ($answers as $answer) {
     //                         $qnaHtml .= '<li style="margin-bottom: 5px;">' . $answer . '</li>';
@@ -830,7 +1182,7 @@ class SertifikatWebinarController extends Controller
     //                 } else {
     //                     $qnaHtml .= '<li style="margin-bottom: 5px;"><em>Belum dijawab</em></li>';
     //                 }
-                    
+
     //                 $qnaHtml .= '
     //                                 </ul>
     //                             </td>
@@ -877,7 +1229,7 @@ class SertifikatWebinarController extends Controller
     //             if (!empty($validAttachments)) {
     //                 $mail = $mail->where('attachment', $validAttachments);
     //             }
-                
+
     //             $mail->send();
     //         }
 
@@ -925,13 +1277,13 @@ class SertifikatWebinarController extends Controller
 
             $detail = DB::table('sertifikat_webinar_detail')
                 ->where('header_id', $request->id)
-                ->where('time_session' , '>', 60)
+                ->where('time_session', '>', 60)
                 ->whereNotNull('time_session')
-                ->orderBy('id','asc')
+                ->orderBy('id', 'asc')
                 ->get();
 
             // dd($detail);
-                
+
             if ($detail->isEmpty()) {
                 return response()->json([
                     'success' => false,
@@ -960,7 +1312,7 @@ class SertifikatWebinarController extends Controller
                     $basePath = public_path("uploads/webinar/{$folderName}");
                     foreach ($attachmentNames as $filename) {
                         $filePath = "{$basePath}/{$filename}";
-                        
+
                         if (file_exists($filePath)) {
                             $templateAttachments[] = $filePath;
                         }
@@ -970,7 +1322,7 @@ class SertifikatWebinarController extends Controller
 
             foreach ($detail as $value) {
 
-            
+
                 $qna = DB::table('webinar_qna')
                     ->where('webinar_id', $request->id)
                     ->where('asker_name', $value->name)
@@ -983,7 +1335,7 @@ class SertifikatWebinarController extends Controller
 
                     $questions = [];
                     $answers = [];
-                    
+
                     foreach ($qna as $item) {
                         if (!empty($item->question)) {
                             $questions[] = e($item->question);
@@ -992,25 +1344,25 @@ class SertifikatWebinarController extends Controller
                             $answers[] = e($item->answer);
                         }
                     }
-                    
+
                     $answers = array_unique($answers);
-                    
+
                     $qnaHtml .= '<table width="100%" cellpadding="10" cellspacing="0" style="border: none;">
                             <tr>
                                 <td width="50%" valign="top" style="border: none;">
                                     <strong>Pertanyaan:</strong>
                                     <ul style="margin: 5px 0; padding-left: 20px;">';
-                    
+
                     foreach ($questions as $question) {
                         $qnaHtml .= '<li style="margin-bottom: 5px;">' . $question . '</li>';
                     }
-                    
+
                     $qnaHtml .= '</ul>
                                 </td>
                                 <td width="50%" valign="top" style="border: none;">
                                     <strong>Jawaban:</strong>
                                     <ul style="margin: 5px 0; padding-left: 20px;">';
-                    
+
                     if (!empty($answers)) {
                         foreach ($answers as $answer) {
                             $qnaHtml .= '<li style="margin-bottom: 5px;">' . $answer . '</li>';
@@ -1018,14 +1370,14 @@ class SertifikatWebinarController extends Controller
                     } else {
                         $qnaHtml .= '<li style="margin-bottom: 5px;"><em>Belum dijawab</em></li>';
                     }
-                    
+
                     $qnaHtml .= '
                                     </ul>
                                 </td>
                             </tr>
                         </table>
                     ';
-                } 
+                }
 
                 $replace = [
                     '{{name}}'  => $value->name,
@@ -1035,7 +1387,7 @@ class SertifikatWebinarController extends Controller
                     '{{date}}'  => Carbon::parse($header->date)
                         ->locale('id')
                         ->translatedFormat('l, d F Y'),
-                    '{{qna}}'=> $qnaHtml 
+                    '{{qna}}' => $qnaHtml
                 ];
 
                 $emailBody = str_replace(
@@ -1059,7 +1411,7 @@ class SertifikatWebinarController extends Controller
 
 
                 $mail = SendEmail::where('to', $value->email)
-                    ->where('subject', 'E-Sertifikat Webinar '. $header->topic)
+                    ->where('subject', 'E-Sertifikat Webinar ' . $header->topic)
                     ->where('body', $emailBody)
                     ->where('karyawan', 'System')
                     ->noReply();
@@ -1067,7 +1419,7 @@ class SertifikatWebinarController extends Controller
                 if (!empty($validAttachments)) {
                     $mail = $mail->where('attachment', $validAttachments);
                 }
-                
+
                 $mail->send();
             }
 
@@ -1077,7 +1429,6 @@ class SertifikatWebinarController extends Controller
                 'success' => true,
                 'message' => 'Email berhasil dikirim',
             ], 200);
-
         } catch (\Throwable $e) {
 
             DB::rollBack();
