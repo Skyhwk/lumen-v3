@@ -222,20 +222,32 @@ class RingkasanOrderPortalController extends Controller
                 }
             }
             
-            $searchLinkLhp =LinkLhp::where('no_quotation',$ambilDB->no_quotation)
-            ->whereIn('periode',$getPeriodeAktif)
-             ->select('no_quotation','link','periode')->get();
-             if($searchLinkLhp->isNotEmpty()){
-                foreach($searchLinkLhp as $link){
-                    $dataPush =[
-                        'no_quotation' =>$link->no_quotation,
-                        'periode' => $link->periode,
-                        'link' => $link->link
+            // 1. Inisialisasi Query Builder
+            $query = LinkLhp::query(); 
+            // 2. Tambahkan Filter
+            $query->where('no_quotation', $ambilDB->no_quotation);
+            // 3. Cek Tipe QTC
+            // Gunakan empty check untuk array explode agar aman
+            $parts = explode('/', $ambilDB->no_quotation);
+            if (isset($parts[1]) && $parts[1] == 'QTC'){
+                // Pastikan $getPeriodeAktif sudah array (hasil fix sebelumnya)
+                $query->whereIn('periode', $getPeriodeAktif);
+            }
+            // 4. Select & Execute
+            // Filter select langsung di chain ke $query
+            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')->get();
+            // 5. Olah Hasil
+            // Perbaikan typo >isNotEmpty() menjadi ->isNotEmpty()
+            if ($resultLinkLhp->isNotEmpty()) {
+                foreach ($resultLinkLhp as $link) {
+                    $dataPush = [
+                        'no_quotation' => $link->no_quotation,
+                        'periode'      => $link->periode,
+                        'link'         => $link->link
                     ];
-                    array_push($fileLinkLhp,$dataPush);
+                    array_push($fileLinkLhp, $dataPush);
                 }
-             }
-
+            }
              $searchInvoice = Invoice::where('no_quotation',$ambilDB->no_quotation)
              ->select('no_invoice','filename')
              ->where('is_active',true)
