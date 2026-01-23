@@ -72,13 +72,13 @@ class ProcessAfterOrder
 
         foreach ($sampleList as $sample) {
 
-            if (Ftc::where('no_sampel', $sample)->exists()) {
-                Ftc::where('no_sampel', $sample)
+            if (Ftc::where('no_sample', $sample)->exists()) {
+                Ftc::where('no_sample', $sample)
                     ->update(['is_active' => 0]);
             }
 
-            if (FtcT::where('no_sampel', $sample)->exists()) {
-                FtcT::where('no_sampel', $sample)
+            if (FtcT::where('no_sample', $sample)->exists()) {
+                FtcT::where('no_sample', $sample)
                     ->update(['is_active' => 0]);
             }
         }
