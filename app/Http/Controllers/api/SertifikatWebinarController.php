@@ -457,16 +457,17 @@ class SertifikatWebinarController extends Controller
 
     public function updateDataAudience(Request $request)
     {
-        DB::beginTransaction();
+        // DB::beginTransaction();
         try {
             $update = SertifikatWebinarDetail::where('id', $request->id)->first();
             $update->name = $request->name;
             $update->save();
-            
+            // dd($update);
             $header = SertifikatWebinarHeader::find($update->header_id);
             $layout = LayoutCertificate::where('id', $header->id_layout)->first();
             $font = JenisFont::where('id', $header->id_font)->first();
             $template = TemplateBackground::where('id', $header->id_template)->first();
+
             $panelis = collect($header->speakers)->map(function ($speaker) {
                 unset($speaker['karyawan_id']);
                 return $speaker;
@@ -490,10 +491,10 @@ class SertifikatWebinarController extends Controller
                     'noSertifikat'      => $no_sertifikat,
                 ])
                 ->generate();
-            DB::commit();
+            // DB::commit();
             return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
-            DB::rollBack();
+            // DB::rollBack();
             return response()->json([
                 'message' => 'Gagal mengupdate data',
                 'line' => $th->getLine(),
