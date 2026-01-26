@@ -195,6 +195,8 @@ class InvoiceController extends Controller
 
                     DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
                     DB::raw('MAX(invoice.filename) AS filename'),
+                    DB::raw('MAX(invoice.upload_file) AS upload_file'),
+                    DB::raw('MAX(invoice.file_pph) AS file_pph'),
 
                     DB::raw('MAX(order_header.konsultan) AS consultant'),
                     DB::raw('MAX(order_header.no_document) AS document'),
