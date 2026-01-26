@@ -2,7 +2,7 @@
 namespace App\Http\Controllers\api;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;

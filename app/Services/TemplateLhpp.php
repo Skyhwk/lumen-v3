@@ -8,7 +8,7 @@ use App\Models\OrderDetail;
 use App\Models\PengesahanLhp;
 use App\Models\QrDocument;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf as PDF;
+use App\Services\MpdfService as PDF;
 use Carbon\Carbon;
 
 class TemplateLhpp

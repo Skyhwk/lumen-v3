@@ -9,7 +9,7 @@ use App\Models\Jadwal;
 use App\Models\Parameter;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 class RenderSamplingPlan
 {
