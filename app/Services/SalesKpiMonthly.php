@@ -90,8 +90,8 @@ class SalesKpiMonthly
 
                     $quotationData = DB::table('daily_qsd as d')
                         ->whereIn('d.sales_id', $getAllSales)
-                        ->whereYear('d.tanggal_sampling_min', '=', explode('-', $periodeBulan)[0])
-                        ->whereMonth('d.tanggal_sampling_min', '=', explode('-', $periodeBulan)[1])
+                        ->whereYear('d.tanggal_kelompok', '=', explode('-', $periodeBulan)[0])
+                        ->whereMonth('d.tanggal_kelompok', '=', explode('-', $periodeBulan)[1])
                         ->selectRaw("
                             d.sales_id,
                             d.kontrak,
