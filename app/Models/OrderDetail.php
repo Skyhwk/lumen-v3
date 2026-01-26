@@ -389,6 +389,9 @@ class OrderDetail extends Sector
         if ($this->getaranHeader()->exists()) {
             return $this->GetaranHeader;
         }
+        if ($this->udaraSubKontrak()->exists()) {
+            return $this->udaraSubKontrak;
+        }
         if ($this->kebisinganHeader()->exists()) {
             return $this->KebisinganHeader;
         }
