@@ -73,6 +73,7 @@ class GenerateWebinarSertificate
             
             return true;
         } catch (Exception $e) {
+            dd($e);
             $this->resetParams();
             return response()->json([
                 'message' => $e->getMessage(),
@@ -428,6 +429,7 @@ class GenerateWebinarSertificate
             
             $this->mpdf->WriteHTML($html);
         } catch (Exception $e) {
+            dd($e);
             throw new Exception("Gagal membuat sertifikat: " . $e->getMessage());
         }
     }
@@ -482,18 +484,22 @@ class GenerateWebinarSertificate
 
     private function normalizeDegree(string $degree): string
     {
-        $degree = trim($degree, " .");
-        $parts = explode('.', $degree);
+        $degree = trim($degree);
+        $degree = rtrim($degree, '.');
 
+        $parts = explode('.', $degree);
         $out = [];
-        foreach ($segments as $seg) {
+
+        foreach ($parts as $seg) {
             if ($seg === '') continue;
-    
+
             if (strcasecmp($seg, 'phd') === 0) {
                 $out[] = 'PhD';
-            } elseif (strlen($seg) <= 3) {
-                $out[] = strtoupper($seg);
+            } elseif ($seg === strtoupper($seg)) {
+                // S.ST | M.KM | A.Md
+                $out[] = $seg;
             } else {
+                // Kes, Ter, dll
                 $out[] = ucfirst(strtolower($seg));
             }
         }

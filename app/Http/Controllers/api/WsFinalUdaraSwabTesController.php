@@ -51,10 +51,9 @@ class WsFinalUdaraSwabTesController extends Controller
             ->where('is_active', true)
             ->where('kategori_3', '46-Udara Swab Test')
             ->where('status', 0)
-            ->whereMonth('tanggal_sampling', $date[1])
-            ->whereYear('tanggal_sampling', $date[0])
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', $date[0])->whereMonth('tanggal_sampling', $date[1]))
             ->groupBy('cfr')
-            ->orderBy('tanggal_terima_min');
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)->make(true);
     }
