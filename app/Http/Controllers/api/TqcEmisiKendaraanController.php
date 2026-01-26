@@ -120,7 +120,13 @@ class TqcEmisiKendaraanController extends Controller
 
         $data = [];
         foreach ($orderDetails as $orderDetail) {
-            $id_kendaraan = DataLapanganEmisiOrder::where('no_sampel', $orderDetail->no_sampel)->first()->id_kendaraan;
+            $emisiOrder = DataLapanganEmisiOrder::where('no_sampel', $orderDetail->no_sampel)->first() ?? null;
+            
+            if(!$emisiOrder){
+                continue;
+            }
+
+            $id_kendaraan = $emisiOrder->id_kendaraan;
 
             $idFdlList = DataLapanganEmisiOrder::where('id_kendaraan', $id_kendaraan)
                 ->pluck('id_fdl')->toArray();
