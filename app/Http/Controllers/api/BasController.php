@@ -16,7 +16,7 @@ use App\Models\OrderDetail;
 use App\Models\PersiapanSampelHeader;
 use App\Models\QrDocument;
 use Carbon\Carbon;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 
 use DateTime;
 

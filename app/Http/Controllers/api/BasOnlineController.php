@@ -21,7 +21,7 @@ use App\Models\OrderHeader;
 use App\Models\OrderDetail;
 use App\Models\PersiapanSampelHeader;
 use Carbon\Carbon;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 use App\Models\DataLapanganAir;
 use App\Models\DataLapanganKebisingan;
 use App\Models\DataLapanganKebisinganPersonal;

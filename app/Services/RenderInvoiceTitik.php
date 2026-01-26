@@ -10,7 +10,7 @@ use App\Models\QuotationKontrakD;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use Illuminate\Support\Facades\DB;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 
 class RenderInvoiceTitik
 {

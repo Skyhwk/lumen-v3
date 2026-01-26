@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\File;
 use Yajra\Datatables\Datatables;
 use Illuminate\Http\Request;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 use App\Models\PengesahanLhp;
 use Carbon\Carbon;
 

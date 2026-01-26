@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Services\RenderData;
 use Illuminate\Support\Facades\DB;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 use Imagick;
 use App\Models\GenerateLink;
 
