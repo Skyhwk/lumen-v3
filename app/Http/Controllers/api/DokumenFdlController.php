@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 use Carbon\Carbon;
 
 Carbon::setLocale('id');

@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 
