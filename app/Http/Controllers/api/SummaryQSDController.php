@@ -196,11 +196,11 @@ class SummaryQSDController extends Controller
         $query = DB::table('daily_qsd')
             ->select(
                 'sales_id',
-                DB::raw("MONTH(tanggal_sampling_min) as month_num"),
+                DB::raw("MONTH(tanggal_kelompok) as month_num"),
                 DB::raw('SUM(total_revenue) as total_revenue')
             )
             ->whereNotIn('pelanggan_ID', ['SAIR02', 'T2PE01'])
-            ->whereYear('tanggal_sampling_min', $tahun);
+            ->whereYear('tanggal_kelompok', $tahun);
 
         // Apply type filters
         switch ($type) {
@@ -241,7 +241,7 @@ class SummaryQSDController extends Controller
         }
 
         // OPTIMASI: Mapping bulan lebih efisien dengan array statis
-        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
         $result     = [];
 
         foreach ($data as $record) {
@@ -263,7 +263,7 @@ class SummaryQSDController extends Controller
     {
         return [
             'Jan' => 0, 'Feb' => 0, 'Mar' => 0, 'Apr' => 0,
-            'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agu' => 0,
+            'Mei' => 0, 'Jun' => 0, 'Jul' => 0, 'Agt' => 0,
             'Sep' => 0, 'Okt' => 0, 'Nov' => 0, 'Des' => 0
         ];
     }
