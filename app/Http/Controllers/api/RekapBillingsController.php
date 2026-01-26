@@ -84,7 +84,7 @@ class RekapBillingsController extends Controller
         $months = $dailyAll
             ->groupBy('bulan_key')
             ->map(function ($days, $bulanKey) {
-                $bulanLabel = Carbon::createFromFormat('Y-m', $bulanKey)->translatedFormat('F Y');
+                $bulanLabel = Carbon::createFromFormat('Y-m', $bulanKey)->locale('id_ID')->translatedFormat('F Y');
 
                 return [
                     'bulan_key' => $bulanKey,
