@@ -103,7 +103,7 @@ class ReassignCustomerController extends Controller
 
                 if (
                     $cekLog && $cekLog->nama_lengkap != $this->karyawan &&
-                    \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 10
+                    \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 5
                 ) {
                     $time             = Carbon::parse($cekLog->created_at)->translatedFormat('d F Y H:i');
                     $sudahDihubungi[] = "<strong>{$item['nama_pelanggan']}</strong><br /> oleh: <strong>{$cekLog->nama_lengkap}</strong><br />pada: {$time}";
@@ -162,7 +162,7 @@ class ReassignCustomerController extends Controller
 
                 if ($cekLog) {
 
-                    if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInMonths(\Carbon\Carbon::now()) < 2) {
+                    if (($karyawan_now->karyawan->id_jabatan != 148) && $cekLog->nama_lengkap != $this->karyawan && \Carbon\Carbon::parse($cekLog->created_at)->diffInDays(\Carbon\Carbon::now()) <= 5) {
                         return response()->json([
                             'status'  => 'error',
                             'message' => 'Pelanggan sudah pernah dihubungi pada ' . $cekLog->created_at . ' oleh ' . $cekLog->nama_lengkap . '.',

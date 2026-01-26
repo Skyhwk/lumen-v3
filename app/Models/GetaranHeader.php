@@ -20,6 +20,10 @@ class GetaranHeader extends Sector
     public function ws_udara() {
         return $this->belongsTo('App\Models\WsValueUdara', 'no_sampel', 'no_sampel');
     }
+    
+    public function subKontrak() {
+        return $this->belongsTo('App\Models\Subkontrak', 'no_sampel', 'no_sampel');
+    }
 
     public function master_parameter() {
         return $this->belongsTo('App\Models\Parameter', 'parameter', 'nama_lab')->where('id_kategori', 4)->where('is_active', true);

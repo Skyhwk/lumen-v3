@@ -73,6 +73,34 @@ class SertifikatWebinarController extends Controller
         return $webinarCode;
     }
 
+    public function updateHeader(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            SertifikatWebinarHeader::find($request->id)->update([
+                'title' => $request->title,
+                'topic' => $request->topic,
+                'sub_topic' => $request->sub_topic,
+                'speakers' => json_decode($request->speakers, true),
+                'date' => $request->date,
+                'id_template' => $request->template_id,
+                'id_layout' => $request->layout_id,
+                'id_font' => $request->font_id,
+            ]);
+
+            DB::commit();
+            self::bulkGenerateCertificate($request->id);
+            return response()->json(['message' => 'Berhasil Membuat Webinar', 'status' => '200'], 200);
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal Membuat Webinar',
+                'line' => $th->getLine(),
+                'status' => '500'
+            ], 500);
+        }
+    }
+
     public function storeHeader(Request $request)
     {
         DB::beginTransaction();
@@ -234,10 +262,6 @@ class SertifikatWebinarController extends Controller
             DB::commit();
 
             self::bulkGenerateCertificate($request->id);
-
-            // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
-
-
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -349,22 +373,27 @@ class SertifikatWebinarController extends Controller
                 }
             }
 
-            SertifikatWebinarDetail::upsert(
-                array_values($participants),
-                ['header_id', 'email'],
-                ['name']
-            );
+            foreach ($participants as $p) {
+                SertifikatWebinarDetail::where('email', $p['email'])
+                    ->where('header_id', $p['header_id'])
+                    ->update([
+                        'name' => $p['name']
+                    ]);
+            }
+
+            // SertifikatWebinarDetail::upsert(
+            //     array_values($participants),
+            //     ['header_id', 'email'],
+            //     ['name']
+            // );
 
             SertifikatWebinarSurvei::updateOrCreate(['header_id' => $request->id], ['survei' => json_encode($result)]);
-            // dd($result);
 
             DB::commit();
 
             self::bulkGenerateCertificate($request->id);
 
             // Http::post('http://127.0.0.1:2999/render-sertifikat', ["id" => $request->id]);
-
-
             return response()->json(['message' => 'Berhasil mengimport data', 'status' => '200'], 200);
         } catch (\Throwable $th) {
             DB::rollBack();
@@ -428,40 +457,50 @@ class SertifikatWebinarController extends Controller
 
     public function updateDataAudience(Request $request)
     {
-        DB::beginTransaction();
-        $update = SertifikatWebinarDetail::where('id', $request->id)->first();
-        $update->name = $request->name;
-        $update->save();
-        DB::commit();
+        // DB::beginTransaction();
+        try {
+            $update = SertifikatWebinarDetail::where('id', $request->id)->first();
+            $update->name = $request->name;
+            $update->save();
+            // dd($update);
+            $header = SertifikatWebinarHeader::find($update->header_id);
+            $layout = LayoutCertificate::where('id', $header->id_layout)->first();
+            $font = JenisFont::where('id', $header->id_font)->first();
+            $template = TemplateBackground::where('id', $header->id_template)->first();
 
-        $header = SertifikatWebinarHeader::find($update->header_id);
-        $layout = LayoutCertificate::where('id', $header->id_layout)->first();
-        $font = JenisFont::where('id', $header->id_font)->first();
-        $template = TemplateBackground::where('id', $header->id_template)->first();
-        $panelis = collect($header->speakers)->map(function ($speaker) {
-            unset($speaker['karyawan_id']);
-            return $speaker;
-        })->values()->toArray();
+            $panelis = collect($header->speakers)->map(function ($speaker) {
+                unset($speaker['karyawan_id']);
+                return $speaker;
+            })->values()->toArray();
 
-        $no_sertifikat = $header->webinar_code . '-' . $update->number_attend;
-        $filename = $no_sertifikat . '.pdf';
-        $generate = GenerateWebinarSertificate::make($filename)
-            ->options([
-                'layout'            => $layout->nama_file,
-                'font'              => $font->jenis_font ?? 'roboto',
-                'template'          => $template->nama_template,
-                'recipientName'     => $update->name,
-                'id'                => $update->id,
-                'webinarTitle'      => $header->title,
-                'webinarTopic'      => $header->topic,
-                'webinarSubTopic'   => $header->sub_topic,
-                'webinarDate'       => $header->date,
-                'panelis'           => $panelis,
-                'noSertifikat'      => $no_sertifikat,
-            ])
-            ->generate();
-
-        return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);
+            $no_sertifikat = $header->webinar_code . '-' . $update->number_attend;
+            $filename = $no_sertifikat . '.pdf';
+            
+            $generate = GenerateWebinarSertificate::make($filename)
+                ->options([
+                    'layout'            => $layout->nama_file,
+                    'font'              => $font->jenis_font ?? 'roboto',
+                    'template'          => $template->nama_template,
+                    'recipientName'     => $update->name,
+                    'id'                => $update->id,
+                    'webinarTitle'      => $header->title,
+                    'webinarTopic'      => $header->topic,
+                    'webinarSubTopic'   => $header->sub_topic,
+                    'webinarDate'       => $header->date,
+                    'panelis'           => $panelis,
+                    'noSertifikat'      => $no_sertifikat,
+                ])
+                ->generate();
+            // DB::commit();
+            return response()->json(['message' => 'Berhasil mengupdate data', 'status' => '200'], 200);
+        } catch (\Throwable $th) {
+            // DB::rollBack();
+            return response()->json([
+                'message' => 'Gagal mengupdate data',
+                'line' => $th->getLine(),
+                'status' => '500'
+            ], 500);
+        }
     }
 
     public function sendCertificateEmail(Request $request)
