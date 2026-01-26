@@ -200,11 +200,32 @@ class ProcessAfterOrder
         // Update expired periode yang tetap agar sama seperti periode baru (tambah 1 tahun dari sekarang)
         $newExpiredDate = Carbon::now()->addYear()->format('Y-m-d');
         foreach ($unchangedPeriods as $periode) {
+            // Hitung jumlah LHP untuk periode ini
+            $orderDetail = OrderDetail::where('no_order', $this->no_order)
+                ->where('periode', $periode)
+                ->whereNotNull('cfr')
+                ->orderBy('id', 'desc')
+                ->get()
+                ->unique('cfr')
+                ->values();
+
+            $jumlah_lhp = $orderDetail->count();
+
+            // Update link LHP
             $linkLhp = LinkLhp::where('no_order', $this->no_order)
                 ->where('periode', $periode)
                 ->first();
             
             if ($linkLhp) {
+                // Update basic info
+                $linkLhp->update([
+                    'jumlah_lhp' => $jumlah_lhp,
+                    'no_quotation' => $this->orderHeader->no_document,
+                    'updated_by' => $this->created_by,
+                    'updated_at' => Carbon::now()
+                ]);
+                
+                // Update expired
                 GenerateLink::where('id_quotation', $linkLhp->id)
                     ->where('type', 'lhp_rilis')
                     ->where('quotation_status', 'lhp_rilis')
@@ -251,11 +272,22 @@ class ProcessAfterOrder
     {
         Log::info('Processing NON-KONTRAK REORDER');
 
+        // Hitung jumlah LHP
+        $orderDetail = OrderDetail::where('no_order', $this->no_order)
+            ->whereNotNull('cfr')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->unique('cfr')
+            ->values();
+
+        $jumlah_lhp = $orderDetail->count();
+
         $linkLhp = LinkLhp::where('no_order', $this->no_order)->first();
         
         if ($linkLhp) {
             // Update basic info
             $linkLhp->update([
+                'jumlah_lhp' => $jumlah_lhp,
                 'no_quotation' => $this->orderHeader->no_document,
                 'updated_by' => $this->created_by,
                 'updated_at' => Carbon::now()
@@ -273,8 +305,45 @@ class ProcessAfterOrder
                 'new_expired' => $newExpiredDate
             ]);
         } else {
-            Log::warning('No LHP link found for non-kontrak reorder', [
-                'no_order' => $this->no_order
+            // Buat link LHP baru
+            $linkLhp = new LinkLhp();
+            $linkLhp->no_quotation = $this->orderHeader->no_document;
+            $linkLhp->no_order = $this->no_order;
+            $linkLhp->nama_perusahaan = $this->orderHeader->nama_perusahaan;
+            $linkLhp->jumlah_lhp = $jumlah_lhp;
+            $linkLhp->created_by = $this->created_by;
+            $linkLhp->created_at = Carbon::now();
+            $linkLhp->updated_by = $this->created_by;
+            $linkLhp->updated_at = Carbon::now();
+            $linkLhp->save();
+
+            // Generate token dan link
+            $key = $this->no_order;
+            $gen = md5($key);
+            $gen_tahun = $this->encrypt(Carbon::now()->format('Y-m-d'));
+            $token = $this->encrypt($gen . '|' . $gen_tahun);
+
+            $tokenId = GenerateLink::insertGetId([
+                'token' => $token,
+                'key' => $gen,
+                'id_quotation' => $linkLhp->id,
+                'quotation_status' => "lhp_rilis",
+                'type' => 'lhp_rilis',
+                'expired' => Carbon::now()->addYear(),
+                'created_at' => Carbon::now(),
+                'created_by' => $this->created_by
+            ]);
+
+            $linkLhp->update([
+                'id_token' => $tokenId,
+                'link' => env('PORTAL_LHP', 'https://portal.intilab.com/lhp/') . $token
+            ]);
+
+            Log::info('Created non-kontrak reorder link', [
+                'link_id' => $linkLhp->id,
+                'token_id' => $tokenId,
+                'token' => $token,
+                'link' => $linkLhp->link
             ]);
         }
     }
