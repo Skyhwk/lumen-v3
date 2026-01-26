@@ -68,24 +68,10 @@ class WSFinalUdaraSinarUvController extends Controller
             ->where('kategori_3', '27-Udara Lingkungan Kerja')
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
-            ->whereJsonContains('parameter', ["324;Sinar UV"]);        // Filter by date (YYYY-MM or YYYY-MM-DD)
-        if ($request->filled('date')) {
-            $date = $request->date;
-            if (preg_match('/^\d{4}-\d{2}$/', $date)) {
-                $data->where(function ($q) use ($date) {
-                    $q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
-                        ->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
-                });
-            } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                $data->where(function ($q) use ($date) {
-                    $q->whereDate('tanggal_sampling', $date)
-                        ->orWhereDate('tanggal_terima', $date);
-                });
-            }
-        }
-
-        $data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-            ->orderBy('tanggal_terima');
+            ->whereJsonContains('parameter', ["324;Sinar UV"])
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)
             ->make(true);

@@ -4,7 +4,7 @@
     use App\Models\DetailLingkunganKerja;
     use App\Models\LhpsLingCustom;
     use Carbon\Carbon;
-        
+
     $isManyNoSampel = $header->is_many_sampel == 1 ? true : false;
     if ($header->tanggal_sampling_awal || $header->tanggal_sampling_akhir) {
         if ($header->tanggal_sampling_awal == $header->tanggal_sampling_akhir) {
@@ -75,6 +75,11 @@
             $tekanan_udara = $cekDataLapangan->tekanan_udara;
         }
     }
+
+    $paramUnik = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('parameter')->filter()->unique()->values();
+
+    $methode_sampling = LhpsLingCustom::where('id_header', $header->id)->where('page', $page)->pluck('methode')->filter()->unique()->values();
+
 @endphp
 <div class="right" style="margin-top: {{ $mode == 'downloadLHPFinal' ? '0px' : '14px' }};">
     <table style="border-collapse: collapse; font-size: 10px; font-family: Arial, Helvetica, sans-serif;">
@@ -178,9 +183,6 @@
                                 </table>
                             </td>
                         </tr> --}}
-                        @php
-                            $methode_sampling = $header->methode_sampling ? json_decode($header->methode_sampling, true) : [];
-                        @endphp
                         <tr>
                             <td class="custom5" width="120">Metode Sampling</td>
                             <td class="custom5" width="12">:</td>

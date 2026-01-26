@@ -46,10 +46,9 @@ class WsFinalUdaraKebisinganPersonalController extends Controller
 			->where('status', 0)
 			->whereNotNull('tanggal_terima')
 			->where('parameter', 'like' , '%Kebisingan (P8J)%')
-			->whereMonth('tanggal_sampling', explode('-', $request->date)[1])
-			->whereYear('tanggal_sampling', explode('-', $request->date)[0])
+			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
 			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderBy('tanggal_terima');
+			->orderBy('tanggal_sampling');
 
 		return Datatables::of($data)->make(true);
 	}

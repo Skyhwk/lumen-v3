@@ -30,6 +30,29 @@ class RekapHasilPengujianController extends Controller
         ->make(true);
     }
 
+    public function updateKeterangan(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $linkLhp = LinkLhp::find($request->id);
+            
+            if(!$linkLhp) return response()->json(['message' => 'Link LHP tidak ditemukan harap hubungi IT'], 404);
+
+            $linkLhp->keterangan = $request->keterangan;
+            $linkLhp->save();
+
+            DB::commit();
+            return response()->json(['message' => 'Keterangan berhasil diupdate'], 200);
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return response()->json(['message' => 'Terjadi kesalahan: ' . $th->getMessage()], 500);
+        }
+
+    }
+
+
+
     public function reject(Request $request) 
     {
         $linkLhp = LinkLhp::find($request->id);

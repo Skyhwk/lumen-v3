@@ -2336,7 +2336,7 @@ class AppsBasController extends Controller
                     continue; // Skip Gelombang Elektro and N-Propil Asetat (SC)
                 }
 
-                if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)'){
+                if($sample->no_sample == 'ITEM012501/015' && $parameter['parameter'] == 'NO2 (24 Jam)' || $parameter['parameter'] == 'PM 10 (24 Jam)' || $parameter['parameter'] == 'PM 2.5 (24 Jam)'){
                     continue; // Skip NO2 (24 Jam) for sample ITEM012501/015
                 }
 
