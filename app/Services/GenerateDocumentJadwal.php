@@ -1,11 +1,15 @@
 <?php
 namespace App\Services;
 
+use App\Models\GenerateLink;
 use App\Models\Jadwal;
+use App\Models\JobTask;
 use App\Models\Parameter;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Mpdf\Mpdf;
 
 class GenerateDocumentJadwal
@@ -33,11 +37,129 @@ class GenerateDocumentJadwal
         return $self;
     }
 
+    public function setKaryawan($karyawan)
+    {
+        $this->karyawan = $karyawan;
+        return $this;
+    }
+
     public function save()
+    {
+        $quote     = $this->data;
+        DB::beginTransaction();
+        try {
+            $filename  = $this->renderNonKontrak($quote);
+            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
+
+            if ($filename) {
+                $key   = $quote->created_by . DATE('YmdHis');
+                $gen   = MD5($key);
+                $token = $this->encrypt($gen . '|' . $quote->email_pic_order);
+                $data  = [
+                    'token'            => $token,
+                    'key'              => $gen,
+                    'expired'          => Carbon::parse($quote->expired)->addMonths(3)->format('Y-m-d'),
+                    'created_at'       => Carbon::parse($timestamp)->format('Y-m-d'),
+                    'created_by'       => $this->karyawan,
+                    'fileName_pdf'     => $filename,
+                    'is_reschedule'    => 1,
+                    'quotation_status' => 'non_kontrak',
+                    'type'             => 'jadwal',
+                    'id_quotation'     => $quote->id,
+                ];
+                $dataLink              = GenerateLink::insert($data);
+                $quote->expired        = Carbon::parse($quote->expired)->addMonths(1)->format('Y-m-d');
+                $quote->generated_at   = $timestamp;
+                $quote->generated_by   = $this->karyawan;
+                $quote->jadwalfile     = $filename;
+                $quote->is_generated   = true;
+                $quote->is_ready_order = 1;
+                $quote->save();
+            }
+
+            JobTask::insert([
+                'job'         => 'GenerateDocumentJadwal',
+                'status'      => 'success',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            DB::commit();
+            return true;
+        } catch (\Throwable $th) {
+            DB::rollback();
+            JobTask::insert([
+                'job'         => 'GenerateDocumentJadwal',
+                'status'      => 'failed',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            return false;
+        }
+
+    }
+
+    public function saveKontrak()
+    {
+        $quote     = $this->data;
+        DB::beginTransaction();
+        try {
+            $filename  = $this->renderKontrak($quote);
+            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
+
+            if ($filename) {
+                $key   = $quote->created_by . DATE('YmdHis');
+                $gen   = MD5($key);
+                $token = $this->encrypt($gen . '|' . $quote->email_pic_order);
+                $data  = [
+                    'token'            => $token,
+                    'key'              => $gen,
+                    'expired'          => Carbon::parse($quote->expired)->addMonths(3)->format('Y-m-d'),
+                    'created_at'       => Carbon::parse($timestamp)->format('Y-m-d'),
+                    'created_by'       => $this->karyawan,
+                    'fileName_pdf'     => $filename,
+                    'is_reschedule'    => 1,
+                    'quotation_status' => 'kontrak',
+                    'type'             => 'jadwal',
+                    'id_quotation'     => $quote->id,
+                ];
+                $dataLink              = GenerateLink::insert($data);
+                $quote->expired        = Carbon::parse($quote->expired)->addMonths(1)->format('Y-m-d');
+                $quote->generated_at   = $timestamp;
+                $quote->generated_by   = $this->karyawan;
+                $quote->jadwalfile     = $filename;
+                $quote->is_generated   = true;
+                $quote->is_ready_order = 1;
+                $quote->save();
+            }
+
+            JobTask::insert([
+                'job'         => 'GenerateDocumentJadwal',
+                'status'      => 'success',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            DB::commit();
+            return true;
+        } catch (\Throwable $th) {
+            DB::rollback();
+            JobTask::insert([
+                'job'         => 'GenerateDocumentJadwal',
+                'status'      => 'failed',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            return false;
+        }
+
+    }
+
+    private function renderNonKontrak($data)
     {
         try {
             $sampling = '';
-            $data     = $this->data;
+            $data     = $data;
 
             if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
@@ -181,26 +303,6 @@ class GenerateDocumentJadwal
                     );
                 }
 
-                // if ($data->transportasi > 0) {
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $data->transportasi . '</td>
-                //     </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $data->perdiem_jumlah_orang . ' Orang/hari</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari . '</td>
-                //     </tr>');
-                // }
-
                 $pdf->WriteHTML('</tbody></table>');
             } else {
 
@@ -242,152 +344,7 @@ class GenerateDocumentJadwal
                     );
                 }
 
-                // if ($data->transportasi > 0) {
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $data->transportasi . '</td>
-                //     </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $data->perdiem_jumlah_orang . ' Orang/hari</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari . '</td>
-                //     </tr>');
-                // }
-
                 $pdf->WriteHTML('</tbody></table>');
-            }
-
-            if (! $hasParsial) {
-                $pdf->WriteHTML('
-                                    <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                                        <thead class="text-center">
-                                            <tr>
-                                                <th colspan="5" style="text-align:center;">PERMINTAAN WAKTU SAMPLING</th>
-                                            </tr>
-                                            <tr>
-                                                <td style="text-align:center;">Tanggal</td>
-                                                <td style="text-align:center;">JAM</td>
-                                                <td style="text-align:center;">SABTU</td>
-                                                <td style="text-align:center;">MINGGU</td>
-                                                <td style="text-align:center;">MALAM</td>
-                                            </tr>
-                                        </thead>
-                                        <tbody>');
-                $datopsi = [$sampling_plan->opsi_1, $sampling_plan->opsi_2];
-
-                foreach ($datopsi as $k => $v) {
-                    if ($v != null) {
-                        $dattgl   = preg_replace('/\s+/', ' ', $v);
-                        $dattgl2  = str_replace(',', ' ', $dattgl);
-                        $dattgl3  = explode(" ", $dattgl2);
-                        $opsi_tgl = $dattgl3[0] . ' ' . $dattgl3[1] . ' ' . $dattgl3[2] . ' ';
-                        $opsi_jam = $dattgl3[3] . ' ' . $dattgl3[4] . ' ' . $dattgl3[5] . ' ';
-                        $pdf->WriteHTML('
-                                            <tr>
-                                                <td style="text-align:center;">' . $opsi_tgl . '</td>
-                                                <td style="text-align:center;">' . $opsi_jam . '</td>
-                                                <td style="vertical-align: middle; text-align:center;">' . $sampling_plan->is_sabtu . '</td>
-                                                <td style="text-align:center;">' . $sampling_plan->is_minggu . '</td>
-                                                <td style="text-align:center;">' . $sampling_plan->is_malam . '</td>
-                                            </tr>');
-                    }
-                }
-
-                $pdf->WriteHTML('</tbody></table>');
-
-                /* ======== perubahan logic */
-                $isTambahanEmpty       = $sampling_plan->tambahan === 'null' || $sampling_plan->tambahan === null || empty(json_decode($sampling_plan->tambahan));
-                $isKeteranganLainEmpty = $sampling_plan->keterangan_lain === 'null' || $sampling_plan->keterangan_lain === null || empty(json_decode($sampling_plan->keterangan_lain));
-
-                if (! $isTambahanEmpty || ! $isKeteranganLainEmpty) {
-                    $pdf->WriteHTML('
-                    <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                        <thead class="text-center">
-                            <tr>
-                                <th style="text-align:center;" colspan="2">TAMBAHAN</th>
-                                <th style="text-align:center;">KETERANGAN LAIN</th>
-                            </tr>
-                        </thead>
-                        <tbody>');
-                    $no = 0;
-                    $n  = 0;
-                    if ($sampling_plan->tambahan != 'null' || $sampling_plan->tambahan != null) {
-                        $tambahanData       = json_decode($sampling_plan->tambahan);
-                        $keteranganLainData = array_values((array) json_decode($sampling_plan->keterangan_lain));
-                        $totalRows          = max(count($tambahanData), count($keteranganLainData));
-
-                        for ($i = 0; $i < $totalRows; $i++) {
-                            $pdf->WriteHTML('<tr>');
-
-                            if (isset($tambahanData[$i])) {
-                                switch ($tambahanData[$i]) {
-                                    case "genset":
-                                        $valTambahan = "GENSET";
-                                        break;
-                                    case "sarungLatex":
-                                        $valTambahan = "SARUNG TANGAN ( LATEX )";
-                                        break;
-                                    case "masker":
-                                        $valTambahan = "MASKER";
-                                        break;
-                                    case "sarungKain":
-                                        $valTambahan = "SARUNG TANGAN ( KAIN )";
-                                        break;
-                                    case "faceShield":
-                                        $valTambahan = "FACE SHIELD";
-                                        break;
-                                    case "workingPermit":
-                                        $valTambahan = "WORKING PERMIT";
-                                        break;
-                                    case "apdLengkap":
-                                        $valTambahan = "APD LENGKAP";
-                                        break;
-                                    case "pickupSampel":
-                                        $valTambahan = "Pick Up Sampel";
-                                        break;
-                                    case "hazmat":
-                                        $valTambahan = "Hazmat";
-                                        break;
-                                    default:
-                                        $valTambahan = $tambahanData[$i];
-                                        break;
-                                }
-
-                                $pdf->WriteHTML('<td style="text-align:center;">V</td>');
-                                $pdf->WriteHTML('<td style="text-align:center;">' . $valTambahan . '</td>');
-                            } else {
-                                $pdf->WriteHTML('<td style="text-align:center;">&nbsp;</td>');
-                                $pdf->WriteHTML('<td style="text-align:center;">&nbsp;</td>');
-                            }
-
-                            if (isset($keteranganLainData[$i])) {
-                                $pdf->WriteHTML('<td style="text-align:center;">' . $keteranganLainData[$i] . '</td>');
-                            } else {
-                                $pdf->WriteHTML('<td style="text-align:center;">&nbsp;</td>');
-                            }
-
-                            $pdf->WriteHTML('</tr>');
-                        }
-                    } else {
-                        for ($i = 0; $i < 12; $i++) {
-                            $pdf->WriteHTML('
-                            <tr>
-                                <td style="text-align:center;">&nbsp;</td>
-                                <td style="text-align:center;"></td>
-                                <td style="text-align:center;"></td>
-                            </tr>');
-                        }
-                    }
-                    $pdf->WriteHTML('</tbody></table>');
-                }
-
             }
 
             // Bagian PENGAMBILAN SAMPLING & PENJADWALAN - Ditampilkan untuk semua kondisi
@@ -424,29 +381,6 @@ class GenerateDocumentJadwal
             }
 
             if (is_array($groupedData) && count($groupedData) > 0) {
-                // $pdf->WriteHTML('
-                // <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                //     <thead class="text-center">
-                //         <tr>
-                //             <th width="2%" style="padding: 5px !important;">NO</th>
-                //             <th width="85%">PENGAMBILAN SAMPLING</th>
-                //             <th width="13%">TITIK</th>
-                //         </tr>
-                //     </thead>
-                //     <tbody>');
-
-                // $i = 1;
-
-                // foreach ($groupedData as $kategori => $jumlah) {
-                //     $pdf->WriteHTML(
-                //         '<tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 11px;">' . $i++ . '</td>
-                //         <td style="font-size: 11px; padding: 5px;"><b style="font-size: 11px;">' . $kategori . '</b></td>
-                //         <td style="font-size: 11px; padding: 5px;text-align:center;">' . $jumlah . '</td>
-                //     </tr>'
-                //     );
-                // }
-                // $pdf->WriteHTML('</tbody></table>');
 
                 // Tabel Penjadwalan Sampling - Per Baris dengan pengelompokan tanggal yang sama
                 $pdf->WriteHTML('
@@ -519,17 +453,14 @@ class GenerateDocumentJadwal
             $filePath = $dir . '/' . $fileName;
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-
             return $fileName;
         } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line'    => $ex->getLine(),
-            ], 500);
+            Log::error(['RenderNonKontrakDocumentJadwal: ' . $ex->getMessage() . ' - ' . $ex->getFile() . ' - ' . $ex->getLine()]);
+            return false;
         }
     }
 
-    public function renderPartialKontrak()
+    public function renderKontrak()
     {
         try {
             $sampling = '';
@@ -822,14 +753,11 @@ class GenerateDocumentJadwal
             $filePath = $dir . '/' . $fileName;
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-
+          
             return $fileName;
-
         } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line'    => $ex->getLine(),
-            ], 500);
+            Log::error(['RenderKontrakDocumentJadwal: ' . $ex->getMessage() . ' - ' . $ex->getFile() . ' - ' . $ex->getLine()]);
+            return false;
         }
     }
 
@@ -882,5 +810,16 @@ class GenerateDocumentJadwal
         } else {
             return $var[2] . ' ' . $bulan[(int) $var[1]] . ' ' . $var[0];
         }
+    }
+
+    private function encrypt($data)
+    {
+        $ENCRYPTION_KEY       = 'intilab_jaya';
+        $ENCRYPTION_ALGORITHM = 'AES-256-CBC';
+        $EncryptionKey        = base64_decode($ENCRYPTION_KEY);
+        $InitializationVector = openssl_random_pseudo_bytes(openssl_cipher_iv_length($ENCRYPTION_ALGORITHM));
+        $EncryptedText        = openssl_encrypt($data, $ENCRYPTION_ALGORITHM, $EncryptionKey, 0, $InitializationVector);
+        $return               = base64_encode($EncryptedText . '::' . $InitializationVector);
+        return $return;
     }
 }

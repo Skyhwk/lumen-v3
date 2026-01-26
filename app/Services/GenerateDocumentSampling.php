@@ -2,11 +2,14 @@
 namespace App\Services;
 
 use App\Models\Jadwal;
+use App\Models\JobTask;
 use App\Models\Parameter;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Mpdf\Mpdf;
 
 class GenerateDocumentSampling
@@ -18,8 +21,6 @@ class GenerateDocumentSampling
     {
         $data = QuotationKontrakH::with('detail', 'sampling')->where('id', $id)->first();
 
-        // dd(json_decode($data->data_pendukung_sampling)->toArray());
-        // dd($data->sampling->where('periode_kontrak','2025-02')->first()->jadwal()->where('periode' ,'2025-02')->get()->toArray());
         $self       = new self();
         $self->data = $data;
 
@@ -45,9 +46,66 @@ class GenerateDocumentSampling
 
     public function save()
     {
+        $quote = $this->data;
+        DB::beginTransaction();
+        try {
+            $this->renderNonKontrak($quote);
+            JobTask::insert([
+                'job'         => 'GenerateDocumentSampling',
+                'status'      => 'success',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            DB::commit();
+            return true;
+        } catch (\Throwable $th) {
+            DB::rollback();
+            JobTask::insert([
+                'job'         => 'GenerateDocumentSampling',
+                'status'      => 'failed',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            return false;
+
+        }
+    }
+
+    public function saveKontrak()
+    {
+        $quote   = $this->data;
+        $periode = $this->periode;
+        DB::beginTransaction();
+        try {
+            $this->renderKontrak($quote, $periode);
+            JobTask::insert([
+                'job'         => 'GenerateDocumentSampling',
+                'status'      => 'success',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            DB::commit();
+            return true;
+        } catch (\Throwable $th) {
+            DB::rollback();
+            JobTask::insert([
+                'job'         => 'GenerateDocumentSampling',
+                'status'      => 'failed',
+                'no_document' => $quote->no_document,
+                'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+            Log::error(['GenerateDocumentJadwal: ' . $th->getMessage() . ' - ' . $th->getFile() . ' - ' . $th->getLine()]);
+            return false;
+
+        }
+    }
+
+    public function renderNonKontrak($data)
+    {
         try {
             $sampling = '';
-            $data     = $this->data;
+            $data     = $data;
 
             if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
@@ -190,38 +248,6 @@ class GenerateDocumentSampling
                     );
                 }
 
-                // if ($data->transportasi > 0) {
-                //     // $pdf->WriteHTML('
-                //     //     <tr>
-                //     //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //         <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //     //         <td style="font-size: 13px; text-align:center;">' . $data->transportasi / $data->transportasi . '</td>
-                //     //     </tr>');
-                //     $pdf->WriteHTML('
-                //         <tr>
-                //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //             <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //             <td style="font-size: 13px; text-align:center;">' . $data->transportasi . '</td>
-                //         </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-
-                //     $pdf->WriteHTML('
-                //         <tr>
-                //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //             <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $data->perdiem_jumlah_orang . ' Orang/hari</td>
-                //             <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari . '</td>
-                //         </tr>');
-                //     /* $pdf->WriteHTML('
-                //         <tr>
-                //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //             <td style="font-size: 13px;padding: 5px;">Perdiem : ' . ceil($data->perdiem_jumlah_orang / $data->perdiem_jumlah_hari) . '</td>
-                //             <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari / $data->perdiem_jumlah_hari . '</td>
-                //         </tr>'); */
-                // }
-
                 $pdf->WriteHTML('</tbody></table>');
             } else {
 
@@ -231,10 +257,6 @@ class GenerateDocumentSampling
                     $regulasi  = '';
 
                     if (is_array($a->regulasi) && count($a->regulasi) > 0) {
-
-                        // $cleanedRegulasi = array_map(function ($peraturan) {
-                        //     return $peraturan && explode("-", $peraturan, 2)[1]; // Ambil bagian setelah "-"
-                        // }, $a->regulasi);
 
                         $cleanedRegulasi = array_map(function ($peraturan) {
                             $parts = explode("-", $peraturan, 2);
@@ -268,37 +290,6 @@ class GenerateDocumentSampling
                         '<td style="font-size: 13px; padding: 5px;text-align:center;">' . $a->jumlah_titik . '</td></tr>'
                     );
                 }
-
-                // if ($data->transportasi > 0) {
-                //     // $pdf->WriteHTML('
-                //     //     <tr>
-                //     //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //         <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //     //         <td style="font-size: 13px; text-align:center;">' . $data->transportasi / $data->transportasi . '</td>
-                //     //     </tr>');
-                //     $pdf->WriteHTML('
-                //         <tr>
-                //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //             <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //             <td style="font-size: 13px; text-align:center;">' . $data->transportasi . '</td>
-                //         </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-                //     // $pdf->WriteHTML('
-                //     //     <tr>
-                //     //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . ceil($data->perdiem_jumlah_orang / $data->perdiem_jumlah_hari) . '</td>
-                //     //         <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari / $data->perdiem_jumlah_hari . '</td>
-                //     //     </tr>');
-                //     $pdf->WriteHTML('
-                //         <tr>
-                //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //             <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $data->perdiem_jumlah_orang . ' Orang/hari</td>
-                //             <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari . '</td>
-                //         </tr>');
-                // }
 
                 $pdf->WriteHTML('</tbody></table>');
             }
@@ -337,19 +328,19 @@ class GenerateDocumentSampling
             if (is_array($groupedData) && count($groupedData) > 0) {
 
                 $pdf->WriteHTML('
-                    <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                        <thead class="text-center">
-                            <tr>
-                                <th colspan="6" style="text-align:center;">PENJADWALAN SAMPLING</th>
-                            </tr>
-                            <tr>
-                                <th class="text-center">Tanggal</th>
-                                <th class="text-center">Jam Mulai</th>
-                                <th class="text-center">Jam Selesai</th>
-                                <th colspan="3" class="text-center">Sampler</th>
-                            </tr>
-                        </thead>
-                        <tbody>');
+                   <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
+                    <thead class="text-center">
+                        <tr>
+                            <th colspan="4" style="text-align:center;">JADWAL SAMPLING</th>
+                        </tr>
+                        <tr>
+                            <th class="text-center" width="25%">Tanggal</th>
+                            <th class="text-center" width="15%">Jam Mulai</th>
+                            <th class="text-center" width="15%">Jam Selesai</th>
+                            <th class="text-center" width="45%">Sampler</th>
+                        </tr>
+                    </thead>
+                    <tbody>');
 
                 // Kelompokkan jadwal berdasarkan tanggal
                 $jadwalGrouped = [];
@@ -386,9 +377,15 @@ class GenerateDocumentSampling
                         <td style="text-align:center; vertical-align: middle;">' . substr($maxJamSelesai, 0, 5) . '</td>
                         <td style="text-align:center; vertical-align: middle;">' . implode(", ", $samplerList) . '</td>
                     </tr>');
+
                 }
 
                 $pdf->WriteHTML('</tbody></table>');
+
+                $pdf->WriteHTML('
+                <p style="font-size: 9px; font-style: italic; margin-top: 5px; text-align: left;">
+                    <b>Catatan:</b> Sampler dapat berubah sewaktu-waktu sesuai dengan kondisi lapangan.
+                </p>');
             }
 
             $dir = public_path('sampling_plan/');
@@ -405,24 +402,21 @@ class GenerateDocumentSampling
             $updatedSP->filename_new = $fileName;
             $updatedSP->save();
 
-            return $fileName;
+            return true;
         } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line'    => $ex->getLine(),
-            ], 500);
+            Log::error(['RenderNonKontrakDocumentSampling: ' . $ex->getMessage() . ' - ' . $ex->getFile() . ' - ' . $ex->getLine()]);
+            return false;
         }
+
     }
 
-    public function renderPartialKontrak()
+    public function renderKontrak($data, $periode)
     {
 
         try {
             $sampling = '';
-            $data     = $this->data;
-            $periode  = $this->periode;
-            // dd($data->sampling->where('periode_kontrak', $periode)->toArray());
-            // dd($data->detail->toArray());
+            $data     = $data;
+            $periode  = $periode;
 
             if ($data->status_sampling == 'S24') {
                 $sampling = 'SAMPLING 24 JAM';
@@ -598,39 +592,6 @@ class GenerateDocumentSampling
                     );
                 }
 
-                // if ($data->transportasi > 0) {
-                //     // $pdf->WriteHTML('
-                //     //         <tr>
-                //     //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //             <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //     //             <td style="font-size: 13px; text-align:center;">' . $data->transportasi / $data->transportasi . '</td>
-                //     //         </tr>');
-                //     $transportasi = $data->detail->where('periode_kontrak', $periode)->first();
-                //     $pdf->WriteHTML('
-                //             <tr>
-                //                 <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //                 <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //                 <td style="font-size: 13px; text-align:center;">' . $transportasi->transportasi . '</td>
-                //             </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-                //     /* $pdf->WriteHTML('
-                //             <tr>
-                //                 <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //                 <td style="font-size: 13px;padding: 5px;">Perdiem : ' . ceil($data->perdiem_jumlah_orang / $data->perdiem_jumlah_hari) . '</td>
-                //                 <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari / $data->perdiem_jumlah_hari . '</td>
-                //             </tr>'); */
-                //     $perdiem = $data->detail->where('periode_kontrak', $periode)->first();
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $perdiem->perdiem_jumlah_orang . ' Orang/hari</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $perdiem->perdiem_jumlah_hari . '</td>
-                //     </tr>');
-                // }
-
                 $pdf->WriteHTML('</tbody></table>');
             } else {
                 foreach (json_decode($data->data_pendukung_sampling) as $key => $a) {
@@ -666,49 +627,8 @@ class GenerateDocumentSampling
                     );
                 }
 
-                // if ($data->transportasi > 0) {
-                //     // $pdf->WriteHTML('
-                //     //         <tr>
-                //     //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //             <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //     //             <td style="font-size: 13px; text-align:center;">' . $data->transportasi / $data->transportasi . '</td>
-                //     //         </tr>');
-                //     $transportasi = $data->detail->where('periode_kontrak', $periode)->first();
-                //     $pdf->WriteHTML('
-                //             <tr>
-                //                 <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //                 <td style="font-size: 13px;padding: 5px;">Transportasi - Wilayah Sampling : ' . explode('-', $data->wilayah)[1] . '</td>
-                //                 <td style="font-size: 13px; text-align:center;">' . $transportasi->transportasi . '</td>
-                //             </tr>');
-                // }
-
-                // if ($data->perdiem_jumlah_orang > 0) {
-                //     $i = $i + 1;
-                //     // $pdf->WriteHTML('
-                //     //         <tr>
-                //     //             <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //             <td style="font-size: 13px;padding: 5px;">Perdiem : ' . ceil($data->perdiem_jumlah_orang / $data->perdiem_jumlah_hari) . '</td>
-                //     //             <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari / $data->perdiem_jumlah_hari . '</td>
-                //     //         </tr>');
-
-                //     // $pdf->WriteHTML('
-                //     //     <tr>
-                //     //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //     //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $data->perdiem_jumlah_orang . ' Orang/hari</td>
-                //     //         <td style="font-size: 13px; text-align:center;">' . $data->perdiem_jumlah_hari . '</td>
-                //     //     </tr>');
-                //     $perdiem = $data->detail->where('periode_kontrak', $periode)->first();
-                //     $pdf->WriteHTML('
-                //     <tr>
-                //         <td style="vertical-align: middle; text-align:center;font-size: 13px;">' . $i . '</td>
-                //         <td style="font-size: 13px;padding: 5px;">Perdiem : ' . $perdiem->perdiem_jumlah_orang . ' Orang/hari</td>
-                //         <td style="font-size: 13px; text-align:center;">' . $perdiem->perdiem_jumlah_hari . '</td>
-                //     </tr>');
-                // }
-
                 $pdf->WriteHTML('</tbody></table>');
             }
-
 
             $groupedKategori   = [];
             $groupedSampler    = [];
@@ -743,20 +663,19 @@ class GenerateDocumentSampling
 
             if (is_array($groupedData) && count($groupedData) > 0) {
                 $pdf->WriteHTML('
-                        <table class="table table-bordered" style="font-size: 8px; margin-top:5px;" width="100%">
-                            <thead class="text-center">
-                                <tr>
-                                    <th colspan="6" style="text-align:center;">PENJADWALAN SAMPLING</th>
-                                </tr>
-                                <tr>
-                                    <th class="text-center">Tanggal</th>
-                                    <th class="text-center">Jam Mulai</th>
-                                    <th class="text-center">Jam Selesai</th>
-                                    <th colspan="3" class="text-center">Sampler</th>
-                                </tr>
-                            </thead>
-                            <tbody>');
-                
+                        <table class="table table-bordered" style="font-size: 8px; margin-top:30px;" width="100%">
+                    <thead class="text-center">
+                        <tr>
+                            <th colspan="4" style="text-align:center;">JADWAL SAMPLING</th>
+                        </tr>
+                        <tr>
+                            <th class="text-center" width="25%">Tanggal</th>
+                            <th class="text-center" width="15%">Jam Mulai</th>
+                            <th class="text-center" width="15%">Jam Selesai</th>
+                            <th class="text-center" width="45%">Sampler</th>
+                        </tr>
+                    </thead>
+                    <tbody>');
 
                 $jadwalGrouped = [];
                 foreach ($sampling_plan->jadwal as $jadwal) {
@@ -813,16 +732,14 @@ class GenerateDocumentSampling
 
             $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
 
-            $updatedSP           = SamplingPlan::where('id', $sampling_plan->id)->first();
+            $updatedSP               = SamplingPlan::where('id', $sampling_plan->id)->first();
             $updatedSP->filename_new = $fileName;
             $updatedSP->save();
 
-            return $fileName;
+            return true;
         } catch (\Exception $ex) {
-            return response()->json([
-                'message' => $ex->getMessage(),
-                'line'    => $ex->getLine(),
-            ], 500);
+            Log::error(['RenderKontrakDocumentSampling: ' . $ex->getMessage() . ' - ' . $ex->getFile() . ' - ' . $ex->getLine()]);
+            return false;
         }
     }
 
