@@ -6,7 +6,7 @@ class RenderQrPsikologi
 {
     public function render($data, $qr_audiens, $qr_admin){
         try {
-            $mpdf = new \App\Services\MpdfService as Mpdf([
+            $mpdf = new \App\Services\MpdfService([
                 'orientation' => 'L',
                 'format' => 'A4',
                 'margin_left' => 10,

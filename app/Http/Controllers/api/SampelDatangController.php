@@ -491,7 +491,7 @@ class SampelDatangController extends Controller
 
     //     // Buat PDF menggunakan mPDF
     //     try {
-    //         $pdf = new \App\Services\MpdfService as Mpdf([
+    //         $pdf = new \App\Services\MpdfService([
     //             'mode' => 'utf-8',
     //             'format' => 'A4-P', // A4 dengan orientasi landscape
     //             'margin_left' => 4,

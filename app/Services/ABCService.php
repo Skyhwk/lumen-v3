@@ -233,7 +233,7 @@ class ABCService
     }
 }
 
-        $mpdf = new \App\Services\MpdfService as Mpdf([
+        $mpdf = new \App\Services\MpdfService([
             'mode' => 'utf-8',
             'format' => 'A4',
             'margin_header' => ($mode == 'downloadLHPFinal' ? 12 : 17),
