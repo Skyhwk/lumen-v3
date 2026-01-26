@@ -28,9 +28,8 @@ class WsFinalEmisiEmisiSumberTidakBergerakController extends Controller
         	->where('parameter', 'not like', '%Iso-%')
             ->where('status', 0)
             ->whereNotNull('tanggal_terima')
-            ->whereMonth('tanggal_terima', explode('-', $request->date)[1])
-            ->whereYear('tanggal_terima', explode('-', $request->date)[0])
-            ->orderByDesc('tanggal_terima');
+            ->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+            ->orderBy('tanggal_sampling');
 
         return Datatables::of($data)->make(true);
     }
