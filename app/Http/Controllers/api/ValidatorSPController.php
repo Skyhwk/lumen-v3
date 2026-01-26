@@ -2,13 +2,13 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Models\GenerateLink;
+use App\Jobs\GenerateDocumentJadwalJob;
 use App\Models\Jadwal;
+use App\Models\JobTask;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Services\EmailJadwal;
-use App\Services\GenerateDocumentJadwal;
 use App\Services\GenerateQrDocument;
 use App\Services\JadwalServices;
 use App\Services\Notification;
@@ -159,40 +159,17 @@ class ValidatorSPController extends Controller
                     ->on('quotation_id', $request->quotation_id)->countQuotation();
 
                 if ($chekQoutations == $checkJadwal) {
-                    // GENERATE QR
                     (new GenerateQrDocument())->insert('jadwal_kontrak', $chekNotice, $this->karyawan);
 
-                    $mailfilename = GenerateDocumentJadwal::onKontrak($cek->quotation_id)->renderPartialKontrak();
+                    $job = new GenerateDocumentJadwalJob('QTC', $chekNotice->id, $this->karyawan);
+                    $this->dispatch($job);
 
-                    if ($chekNotice != null && $mailfilename != null) {
-                        $key   = $chekNotice->created_by . DATE('YmdHis');
-                        $gen   = MD5($key);
-                        $token = $this->encrypt($gen . '|' . $chekNotice->email_pic_order);
-                        $data  = [
-                            'token'            => $token,
-                            'key'              => $gen,
-                            'expired'          => Carbon::parse($chekNotice->expired)->addMonths(3)->format('Y-m-d'),
-                            //'password' => $cek->nama_pic_order[4] . DATE('dym', strtotime($cek->add_at)),
-                            'created_at'       => Carbon::parse($timestamp)->format('Y-m-d'),
-                            'created_by'       => $this->karyawan,
-                            // 'fileName' => json_encode($data_file) ,
-                            'fileName_pdf'     => $mailfilename,
-                            'is_reschedule'    => 1,
-                            'quotation_status' => ($type == 'QT') ? 'non_kontrak' : 'kontrak',
-                            'type'             => 'jadwal',
-                            'id_quotation'     => $chekNotice->id,
-                        ];
-                        $dataLink                 = GenerateLink::insert($data);
-                        $chekNotice->expired      = Carbon::parse($chekNotice->expired)->addMonths(1)->format('Y-m-d');
-                        $chekNotice->generated_at = $timestamp;
-                        $chekNotice->generated_by = $this->karyawan;
-                        $chekNotice->jadwalfile   = $mailfilename;
-                        $chekNotice->is_generated = true;
-                        $chekNotice->is_ready_order = 1;
-                        $chekNotice->save();
-                    } else {
-                        throw new \Exception('Gagal generate file jadwal sampling!');
-                    }
+                    JobTask::insert([
+                        'job'         => 'GenerateDocumentJadwal',
+                        'status'      => 'processing',
+                        'no_document' => $chekNotice->no_document,
+                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                    ]);
 
                 } else {
                     $response = response()->json([
@@ -218,7 +195,6 @@ class ValidatorSPController extends Controller
                 // GENERATE QR
                 (new GenerateQrDocument())->insert('jadwal_non_kontrak', $chekNotice, $this->karyawan);
 
-                $mailfilename = GenerateDocumentJadwal::onNonKontrak($cek->quotation_id)->save();
                 // dd( $mailfilename);
                 $cek->is_approved   = 1;
                 $cek->approved_by   = $this->karyawan;
@@ -226,35 +202,15 @@ class ValidatorSPController extends Controller
                 $cek->status_jadwal = 'jadwal'; /* ['booking','fixed','jadwal','cancel',null] */
                 $cek->save();
 
-                if ($chekNotice != null && $mailfilename != null) {
-                    $key   = $chekNotice->created_by . DATE('YmdHis');
-                    $gen   = MD5($key);
-                    $token = $this->encrypt($gen . '|' . $chekNotice->email_pic_order);
-                    $data  = [
-                        'token'            => $token,
-                        'key'              => $gen,
-                        'expired'          => Carbon::parse($chekNotice->expired)->addMonths(3)->format('Y-m-d'),
-                        //'password' => $cek->nama_pic_order[4] . DATE('dym', strtotime($cek->add_at)),
-                        'created_at'       => Carbon::parse($timestamp)->format('Y-m-d'),
-                        'created_by'       => $this->karyawan,
-                        // 'fileName' => json_encode($data_file) ,
-                        'fileName_pdf'     => $mailfilename,
-                        'is_reschedule'    => 1,
-                        'quotation_status' => ($type == 'QT') ? 'non_kontrak' : 'kontrak',
-                        'type'             => 'jadwal',
-                        'id_quotation'     => $chekNotice->id,
-                    ];
-                    $dataLink                 = GenerateLink::insert($data);
-                    $chekNotice->expired      = Carbon::parse($chekNotice->expired)->addMonths(1)->format('Y-m-d');
-                    $chekNotice->generated_at = $timestamp;
-                    $chekNotice->generated_by = $this->karyawan;
-                    $chekNotice->jadwalfile   = $mailfilename;
-                    $chekNotice->is_generated = true;
-                    $chekNotice->is_ready_order = 1;
-                    $chekNotice->save();
-                } else {
-                    throw new \Exception('Gagal generate file jadwal sampling!');
-                }
+                $job = new GenerateDocumentJadwalJob('QT', $chekNotice->id, $this->karyawan);
+                $this->dispatch($job);
+
+                JobTask::insert([
+                    'job'         => 'GenerateDocumentJadwal',
+                    'status'      => 'processing',
+                    'no_document' => $chekNotice->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
 
             }
 
