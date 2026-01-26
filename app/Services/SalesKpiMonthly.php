@@ -217,7 +217,7 @@ class SalesKpiMonthly
                     );
 
                 }
-                DB::table('sales_kpi_monthly')->whereRaw('LEFT(tanggal_kelompok, 4) = ?', [$year])
+                DB::table('sales_kpi_monthly')->whereRaw('LEFT(periode, 4) = ?', [$year])
                 ->whereNotIn('karyawan_id', $getAllSales)
                 ->delete();
             }
