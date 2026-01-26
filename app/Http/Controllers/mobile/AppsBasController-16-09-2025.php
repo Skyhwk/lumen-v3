@@ -60,7 +60,7 @@ use Illuminate\Support\Str;
 
 use App\Services\SendEmail;
 
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 use DateTime;
 

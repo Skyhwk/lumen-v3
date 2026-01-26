@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 use Exception;
 use App\Helpers\Helper;
 use App\Models\QrDocument;

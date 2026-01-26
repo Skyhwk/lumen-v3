@@ -491,7 +491,7 @@ class SampelDatangController extends Controller
 
     //     // Buat PDF menggunakan mPDF
     //     try {
-    //         $pdf = new \Mpdf\Mpdf([
+    //         $pdf = new \App\Services\MpdfService as Mpdf([
     //             'mode' => 'utf-8',
     //             'format' => 'A4-P', // A4 dengan orientasi landscape
     //             'margin_left' => 4,
@@ -512,7 +512,7 @@ class SampelDatangController extends Controller
     //             'message' => 'File berhasil dibuat.',
     //             'link' => url('TemplateSampelSD/' . $filename),
     //         ]);
-    //     } catch (\Mpdf\MpdfException $e) {
+    //     } catch (\App\Services\MpdfService as MpdfException $e) {
     //         return response()->json([
     //             'message' => 'Terjadi kesalahan saat membuat PDF: ' . $e->getMessage()
     //         ], 500);

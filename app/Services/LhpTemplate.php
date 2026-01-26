@@ -289,7 +289,7 @@ class LhpTemplate
         $defaultFontConfig = (new FontVariables())->getDefaults();
         $fontData = $defaultFontConfig['fontdata'];
 
-        $mpdf = new \Mpdf\Mpdf([
+        $mpdf = new \App\Services\MpdfService as Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
             'margin_header' => ($mode == 'downloadLHPFinal' ? 12 : 17),
