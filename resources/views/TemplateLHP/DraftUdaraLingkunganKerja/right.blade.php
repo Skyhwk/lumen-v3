@@ -78,7 +78,11 @@
                         @if (!$isManyNoSampel)
                             <td class="custom">{{ $header->no_sampel }}</td>                            
                         @endif
-                        <td class="custom">Lingkungan Kerja</td>
+                        @if($header->no_lhp == 'INOS012503/019') 
+                            <td class="custom">Getaran</td>
+                        @else
+                            <td class="custom">Lingkungan Kerja</td>
+                        @endif
                         @if ($isManyNoSampel)
                             <?php
                                 $param = [];
