@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use DateTime;
-use Mpdf\Mpdf;
+use Mpdf;
 use Carbon\Carbon;
 use App\Models\OrderHeader;
 use App\Models\Qsd;

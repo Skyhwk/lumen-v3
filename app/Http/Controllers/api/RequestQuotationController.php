@@ -3354,6 +3354,7 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -3362,6 +3363,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_gabungan = (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $total_diskon += (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
                             $harga_total = $harga_total - (($harga_total + $harga_transport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_gabungan));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_gabungan = null;
                             $dataD->total_discount_gabungan = 0;
@@ -3418,9 +3420,13 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
+                            // if($pengujian->periode_kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
                             $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
-                            $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;
                             $harga_total = $harga_total - $diskon_group;
@@ -4816,6 +4822,8 @@ class RequestQuotationController extends Controller
                     }
 
                     $harga_transport += ($transport_ + $perdiem_ + $jam_);
+
+                    $isDiscountGroupExist = false;
                     // ==================================================END DISKON TRANSPORTASI======================================================================================
                     // =======================================================DISKON GABUNGAN=========================================================================================
                     if ($isPeriodeDiskonExist) {
@@ -4834,6 +4842,7 @@ class RequestQuotationController extends Controller
                             $dataD->total_discount_consultant = ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $total_diskon += ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
                             $harga_total = $harga_total - ($harga_total / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_consultant));
+                            $isDiscountGroupExist = true;
                         } else {
                             $dataD->discount_consultant = null;
                             $dataD->total_discount_consultant = 0;
@@ -4880,8 +4889,12 @@ class RequestQuotationController extends Controller
                                     $totalTransport -= $jam_;
                                 }
                             }
-                            // if($per == '2025-02') dd($harga_total + $totalTransport);
-                            $dataD->discount_group = $data_diskon->discount_data[$indexDataDiskon]->discount_group;
+                            // if($pengujian->kontrak == '2026-05') dd($harga_total, $totalTransport, $biaya_lain, $harga_total + $totalTransport);
+                            if($isDiscountGroupExist){
+                                $diskon_group = (($harga_total + $totalTransport) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }else{
+                                $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
+                            }
                             $diskon_group = ((($harga_total + $totalTransport) - $biaya_lain) / 100 * (int) \str_replace("%", "", $data_diskon->discount_data[$indexDataDiskon]->discount_group));
                             $dataD->total_discount_group = $diskon_group;
                             $total_diskon += $diskon_group;

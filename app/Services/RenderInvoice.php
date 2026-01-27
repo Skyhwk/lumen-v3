@@ -10,7 +10,7 @@ use App\Models\QrDocument;
 use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 
 class RenderInvoice
 {

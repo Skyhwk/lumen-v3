@@ -19,7 +19,7 @@ use Carbon\Carbon;
 use App\Models\OrderDetail;
 use App\Models\OrderHeader;
 use App\Models\Parameter;
-use Mpdf\Mpdf;
+use Mpdf;
 
 class StpsController extends Controller
 {

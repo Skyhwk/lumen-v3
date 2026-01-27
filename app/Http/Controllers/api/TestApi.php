@@ -17,7 +17,7 @@ use App\Models\{
     WsValueErgonomi,
     DraftErgonomiFile,
     PengesahanLhp,OrderDetail,Parameter};
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 class TestApi extends Controller
 {
     

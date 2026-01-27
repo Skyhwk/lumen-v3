@@ -9,7 +9,7 @@ use App\Models\Parameter;
 use App\Models\OrderHeader;
 use Illuminate\Support\Facades\DB;
 use Exception;
-use Mpdf\Mpdf;
+use Mpdf;
 
 class RenderData
 {

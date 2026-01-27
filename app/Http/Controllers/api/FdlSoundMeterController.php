@@ -22,7 +22,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use ZipArchive;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 use File;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;

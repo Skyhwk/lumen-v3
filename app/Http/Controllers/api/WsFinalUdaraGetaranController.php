@@ -215,69 +215,70 @@ class WsFinalUdaraGetaranController extends Controller
 
 			// Gunakan variable hasil query tadi untuk di-loop
 			foreach ($wsData as $item) {
-			// 1. Logic Fallback Durasi (Prioritas Reguler -> Personal)
-			$rawDurasi = null;
-			if (!empty($item->lapangan_getaran->durasi_paparan)) {
-				$rawDurasi = $item->lapangan_getaran->durasi_paparan;
-			} elseif (!empty($item->lapangan_getaran_personal->durasi_paparan)) {
-				$rawDurasi = $item->lapangan_getaran_personal->durasi_paparan;
-			}
-
-			$decodedDurasi = json_decode($rawDurasi);
-			$totalDurasi = is_array($decodedDurasi) ? array_sum(array_map('floatval', $decodedDurasi)) : floatval($decodedDurasi ?? 0);
-			$paparan = $this->convertHourToMinute($totalDurasi);
-
-			// 2. Logic Perhitungan NAB
-			$nab = 0;
-			if ($parameterArray[1] == 'Getaran (LK) TL') {
-				if ($paparan < 30) $nab = 20.0;
-				else if ($paparan < 120) $nab = 14.0; 
-				else if ($paparan < 240) $nab = 7.0;
-				else if ($paparan < 360) $nab = 6.0;
-				else if ($paparan < 480) $nab = 5.0;
-			} else if ($parameterArray[1] == 'Getaran (LK) ST') {
-				if ($paparan < 60) $nab = 3.4644;
-				else if ($paparan < 120) $nab = 2.4497;
-				else if ($paparan < 240) $nab = 1.7322;
-				else if ($paparan < 480) $nab = 1.2249;
-				else $nab = 0.8661;
-			}
-
-			$hasilUji = null;
-			$parameterHeader = '';
-			$analyst = '';
-			$catatan = '';
-
-			if (isset($item->getaran) && isset($item->getaran->parameter)) {
-				$parameterHeader = $item->getaran->parameter;
-				$analyst = $item->getaran->created_by;
-				$catatan = $item->getaran->notes_reject ?? '';
-			} else if (isset($item->subkontrak) && isset($item->subkontrak->parameter)) {
-				$parameterHeader = $item->subkontrak->parameter;
-				$analyst = $item->subkontrak->approved_by;
-				$catatan = $item->subkontrak->note ?? '';
-			}
-
-			if (str_contains(strtolower($parameterHeader), 'hz')) {
-
-				if (!empty($item->hasil1)) {
-					$decoded = json_decode($item->hasil1, true);
-					$hasilUji = $decoded['Kecepatan'] ?? null;
-				} else {
-					$hasilUji = $item->f_koreksi_1 ?? null;
+				// 1. Logic Fallback Durasi (Prioritas Reguler -> Personal)
+				$rawDurasi = null;
+				if (!empty($item->lapangan_getaran->durasi_paparan)) {
+					$rawDurasi = $item->lapangan_getaran->durasi_paparan;
+				} elseif (!empty($item->lapangan_getaran_personal->durasi_paparan)) {
+					$rawDurasi = $item->lapangan_getaran_personal->durasi_paparan;
 				}
+
+				$decodedDurasi = json_decode($rawDurasi);
+				$totalDurasi = is_array($decodedDurasi) ? array_sum(array_map('floatval', $decodedDurasi)) : floatval($decodedDurasi ?? 0);
+				$paparan = $this->convertHourToMinute($totalDurasi);
+
+				// 2. Logic Perhitungan NAB
+				$nab = 0;
+				if ($parameterArray[1] == 'Getaran (LK) TL') {
+					if ($paparan < 30) $nab = 20.0;
+					else if ($paparan < 120) $nab = 14.0; 
+					else if ($paparan < 240) $nab = 7.0;
+					else if ($paparan < 360) $nab = 6.0;
+					else if ($paparan < 480) $nab = 5.0;
+				} else if ($parameterArray[1] == 'Getaran (LK) ST') {
+					if ($paparan < 60) $nab = 3.4644;
+					else if ($paparan < 120) $nab = 2.4497;
+					else if ($paparan < 240) $nab = 1.7322;
+					else if ($paparan < 480) $nab = 1.2249;
+					else $nab = 0.8661;
+				}
+
+				$hasilUji = null;
+				$parameterHeader = '';
+				$analyst = '';
+				$catatan = '';
+				if (isset($item->subkontrak) && isset($item->subkontrak->parameter)) {
+					$parameterHeader = $item->subkontrak->parameter;
+					$analyst = $item->subkontrak->approved_by;
+					$catatan = $item->subkontrak->note ?? '';
+				} else if (isset($item->getaran) && isset($item->getaran->parameter)) {
+					$parameterHeader = $item->getaran->parameter;
+					$analyst = $item->getaran->created_by;
+					$catatan = $item->getaran->notes_reject ?? '';
+				} 
+
+				if (str_contains(strtolower($parameterHeader), 'hz')) {
+
+					if (!empty($item->hasil1)) {
+						$decoded = json_decode($item->hasil1, true);
+						$hasilUji = $decoded['Kecepatan'] ?? null;
+					} else {
+						$hasilUji = $item->f_koreksi_1 ?? null;
+					}
+				}
+				
+				// Simpan NAB ke DB (karena NAB biasanya memang disimpan)
+				$item->nab = $nab;
+				$item->save();
+				
+				// Inject ke Object Collection untuk dibawa ke frontend via Datatables
+				$item->hasil_uji = is_numeric($hasilUji) ? floatval($hasilUji) : null;
+				$item->parameter = $parameterHeader;
+				$item->analyst = $analyst;
+				$item->catatan = $catatan;
 			}
-			
-			// Simpan NAB ke DB (karena NAB biasanya memang disimpan)
-			$item->nab = $nab;
-			$item->save();
-			
-			// Inject ke Object Collection untuk dibawa ke frontend via Datatables
-			$item->hasil_uji = is_numeric($hasilUji) ? floatval($hasilUji) : null;
-			$item->parameter = $parameterHeader;
-			$item->analyst = $analyst;
-			$item->catatan = $catatan;
-		}
+
+		$wsData = $wsData->unique('parameter')->values();
 
 		// Kembalikan data ke Datatables
 		return Datatables::of($wsData)

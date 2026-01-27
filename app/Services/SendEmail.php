@@ -20,6 +20,7 @@ class SendEmail
     private $body;
     private $attachments = [];
     private $fromType = 'noreply';
+    private $alias = null;
     private $karyawan;
     private static $instance;
 
@@ -137,43 +138,50 @@ class SendEmail
         return self::$instance;
     }
 
-    public function noReply()
+    public function noReply($alias = null)
     {
         $this->fromType = 'noreply';
+        $this->alias = $alias ?? $this->emailConfig['noreply']['name'];
         return $this;
     }
 
-    public function fromSales()
+    public function fromSales($alias = null)
     {
         $this->fromType = 'sales';
+        $this->alias = $alias ?? $this->emailConfig['sales']['name'];
         return $this;
     }
 
-    public function fromFinance()
+    public function fromFinance($alias = null)
     {
         $this->fromType = 'finance';
+        $this->alias = $alias ?? $this->emailConfig['finance']['name'];
         return $this;
     }
 
-    public function fromTc()
+    public function fromTc($alias = null)
     {
         $this->fromType = 'tc';
+        $this->alias = $alias ?? $this->emailConfig['tc']['name'];
         return $this;
     }
 
-    public function fromAdmsales()
+    public function fromAdmsales($alias = null)
     {
         $this->fromType = 'admsales';
+        $this->alias = $alias ?? $this->emailConfig['admsales']['name'];
         return $this;
     }
-    public function fromPromoSales()
+    public function fromPromoSales($alias = null)
     {
         $this->fromType = 'promo';
+        $this->alias = $alias ?? $this->emailConfig['promo']['name'];
         return $this;
     }
-    public function fromLhp()
+    public function fromLhp($alias = null)
     {
         $this->fromType = 'lhp';
+        $this->alias = $alias ?? $this->emailConfig['lhp']['name'];
         return $this;
     }
 
@@ -202,7 +210,7 @@ class SendEmail
             $mail->SMTPSecure = env('MAIL_ENCRYPTION');
             $mail->Port = env('MAIL_PORT');
 
-            $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->emailConfig[$this->fromType]['name']);
+            $mail->setFrom($this->emailConfig[$this->fromType]['email'], $this->alias ?? $this->emailConfig[$this->fromType]['name']);
             $emailto = trim(preg_replace('/\s+/u', '', $this->to));
             
             $mail->addAddress($emailto);

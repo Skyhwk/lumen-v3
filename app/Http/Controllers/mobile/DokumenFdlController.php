@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\mobile;
 
-use Mpdf\Mpdf;
+use Mpdf;
 use Carbon\Carbon;
 
 Carbon::setLocale('id');

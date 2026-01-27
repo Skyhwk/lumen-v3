@@ -496,12 +496,20 @@ class PersiapanSampleController extends Controller
             $isOrangPusat = in_array("0", $myPrivileges);
 
             $query =OrderDetail::query();
-            if (!$isOrangPusat) {
+            /* if (!$isOrangPusat) {
                 $query->whereHas('orderHeader.samplingPlan.jadwal', function ($q) use ($myPrivileges) {
                     $q->where('is_active',true);
                     $q->whereIn('id_cabang', $myPrivileges);
                 });
-            }
+            } */
+           $query->whereHas('orderHeader.samplingPlan.jadwal', function($q) use ($request, $myPrivileges, $isOrangPusat) {
+                $q->where('is_active', true)
+                ->whereColumn('tanggal', 'order_detail.tanggal_sampling'); // Match dates at DB level
+
+                if (!$isOrangPusat) {
+                    $q->whereIn('id_cabang', $myPrivileges);
+                }
+            });
             $data = $query->with([
                 'orderHeader' => function ($q) {
                     $q->select([

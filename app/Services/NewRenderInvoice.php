@@ -11,7 +11,7 @@ use App\Models\QrDocument;
 use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf as PDF;
+use App\Services\MpdfService as PDF;
 
 class NewRenderInvoice
 {

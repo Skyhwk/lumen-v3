@@ -53,7 +53,7 @@ class StatusOrderController extends Controller
                     ->where('is_approved', true)
                     ->where('is_emailed', true)
                     ->whereYear('tanggal_penawaran', $request->year)
-                    ->whereMonth('tanggal_penawaran', '>=', 11)
+                    // ->whereMonth('tanggal_penawaran', '>=', 11)
                     ->whereHas('orderHeader') // Harus punya order
                     ->orderBy('tanggal_penawaran', 'desc');
 
@@ -89,7 +89,7 @@ class StatusOrderController extends Controller
                             ->where('is_emailed', true)
                             ->where('is_active', true)
                             ->whereYear('tanggal_penawaran', $request->year)
-                            ->whereMonth('tanggal_penawaran', '>=', 11)
+                            // ->whereMonth('tanggal_penawaran', '>=', 11)
                             ->whereHas('orderHeader');
                     });
 

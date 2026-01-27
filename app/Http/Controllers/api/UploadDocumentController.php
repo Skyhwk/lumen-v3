@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\UploadDocument;
 use Yajra\DataTables\Facades\DataTables;
-use Mpdf\Mpdf;
+use Mpdf;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Carbon\Carbon;
