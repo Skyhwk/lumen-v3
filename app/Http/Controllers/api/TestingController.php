@@ -226,6 +226,43 @@ class TestingController extends Controller
             //code...
             
             switch ($request->menu) {
+                case 'getForecast' :
+                    $jadwalKontrak = Jadwal::selectRaw('no_quotation, periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNotNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation', 'periode')
+                        ->get();
+
+                    $jadwalNonKontrak = Jadwal::selectRaw('no_quotation, NULL as periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation')
+                        ->get();
+                    
+                    $order = OrderHeader::where('is_active', 1)
+                        ->where('is_revisi', 0)
+                        ->pluck('no_document')->toArray();
+
+                    $data = $jadwalKontrak
+                        ->concat($jadwalNonKontrak)
+                        ->filter(function($q) use ($order) {
+                            return !in_array($q->no_quotation, $order);
+                        })
+                        ->sortBy('tanggal')
+                        ->values()->toArray();
+                    
+                    dd(count($data));
+
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data
+                    ]);
+                    
+                    break;
                 case 'generateSertificate':
                     $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
                     $getDetail = $getHeader->details;
