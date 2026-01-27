@@ -232,7 +232,7 @@
                 </table>
 
                 {{-- Kondisi Lingkungan --}}
-                @if (!$isManyNoSampel)
+                @if (!$isManyNoSampel && $header->no_lhp != 'INOS012503/019')
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         <tr>
                             <td class="custom5" width="120">
