@@ -1399,17 +1399,17 @@ class GenerateInvoiceController extends Controller
         }
     }
 
-    public function uploadFile(Request $request)
-    {
-        Invoice::where('no_invoice', $request->no_invoice)->update([
-            'is_emailed' => true
-        ]);
+    // public function uploadFile(Request $request)
+    // {
+    //     Invoice::where('no_invoice', $request->no_invoice)->update([
+    //         'is_emailed' => true
+    //     ]);
 
-        return response()->json([
-            'message' => 'Successfully Approve Invoice',
-            'status' => 200
-        ], 200);
-    }
+    //     return response()->json([
+    //         'message' => 'Successfully Approve Invoice',
+    //         'status' => 200
+    //     ], 200);
+    // }
 
     public function uploadFile(Request $request)
     {
