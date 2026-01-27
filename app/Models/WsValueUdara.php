@@ -111,4 +111,12 @@ class WsValueUdara extends Sector
         return $this->belongsTo('App\Models\DetailLingkunganKerja', 'no_sampel', 'no_sampel');
     }
     
+    public function lapangan_getaran() {
+        return $this->belongsTo('App\Models\DataLapanganGetaran', 'no_sampel', 'no_sampel');
+    }
+    
+    public function lapangan_getaran_personal() {
+        return $this->belongsTo('App\Models\DataLapanganGetaranPersonal', 'no_sampel', 'no_sampel');
+    }
+    
 }

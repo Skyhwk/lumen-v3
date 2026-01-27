@@ -9,6 +9,9 @@
     $detailData = collect($detailData)->map(fn($r) => (array) $r);
 
     $paramUnik = $detailData->pluck('parameter')->filter()->unique()->values();
+
+    $methode_sampling = $detailData->pluck('methode')->filter()->unique()->values();
+
     // $tanggal_sampling = '';
     // if($header->status_sampling == 'S24'){
     //     $detailLapangan = DetailLingkunganKerja::where('no_sampel', $header->no_sampel)->where('shift_pengambilan', 'L2')->first();
@@ -75,7 +78,11 @@
                         @if (!$isManyNoSampel)
                             <td class="custom">{{ $header->no_sampel }}</td>                            
                         @endif
-                        <td class="custom">Lingkungan Kerja</td>
+                        @if($header->no_lhp == 'INOS012503/019') 
+                            <td class="custom">Getaran</td>
+                        @else
+                            <td class="custom">Lingkungan Kerja</td>
+                        @endif
                         @if ($isManyNoSampel)
                             <?php
                                 $param = [];
@@ -156,9 +163,6 @@
                                 </table>
                             </td>
                         </tr> --}}
-                        @php
-                            $methode_sampling = $header->methode_sampling ? json_decode($header->methode_sampling, true) : [];
-                        @endphp
                         <tr>
                             <td class="custom5" width="120">Metode Sampling</td>
                             <td class="custom5" width="12">:</td>
@@ -228,7 +232,7 @@
                 </table>
 
                 {{-- Kondisi Lingkungan --}}
-                @if (!$isManyNoSampel)
+                @if (!$isManyNoSampel && $header->no_lhp != 'INOS012503/019')
                     <table style="padding: 10px 0px 0px 0px;" width="100%">
                         <tr>
                             <td class="custom5" width="120">

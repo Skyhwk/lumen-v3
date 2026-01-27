@@ -16,6 +16,8 @@ class MaillingController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
+                'from' => 'required|string',
+                'alias' => 'required|string',
                 'to' => 'required|array',
                 'to.*' => 'required|email',
                 'subject' => 'required|string',
@@ -23,6 +25,8 @@ class MaillingController extends Controller
                 'attachments' => 'nullable|array',
                 'attachments.*' => 'nullable|file',
             ], [
+                'from.required' => 'The "From" field is required.',
+                'alias.required' => 'The "Alias" field is required.',
                 'to.required' => 'The "To" field is required.',
                 'to.*.required' => 'The "To" field is required.',
                 'to.*.email' => 'The "To" field must contain valid email addresses.',
@@ -63,7 +67,12 @@ class MaillingController extends Controller
                 }
             }
 
-            $job = new JobMailling($to, $subject, $content, $this->karyawan, $attachments);
+            $arrayForm = [
+                'from' => $request->from,
+                'alias' => $request->alias,
+            ];
+
+            $job = new JobMailling($arrayForm,$to, $subject, $content, $this->karyawan, $attachments);
             $this->dispatch($job);
     
             return response()->json(['message' => 'Email akan dikirim bertahap oleh sistem'], 200);

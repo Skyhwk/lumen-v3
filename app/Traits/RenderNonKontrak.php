@@ -7,7 +7,7 @@ use App\Models\QuotationNonKontrak;
 use App\Models\SamplingPlan;
 use App\Models\Jadwal;
 use Illuminate\Support\Facades\DB;
-use Mpdf\Mpdf;
+use Mpdf;
 
 trait RenderNonKontrak
 {

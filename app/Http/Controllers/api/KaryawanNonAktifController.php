@@ -8,7 +8,7 @@ use App\Models\MasterCabang;
 use App\Http\Controllers\Controller;
 use Yajra\Datatables\Datatables;
 use Illuminate\Support\Facades\DB;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 
 class KaryawanNonAktifController extends Controller
 {
