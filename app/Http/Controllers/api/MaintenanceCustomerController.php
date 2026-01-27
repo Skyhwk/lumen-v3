@@ -116,19 +116,19 @@ class MaintenanceCustomerController extends Controller
         //                     $query->whereDate('tanggal', '<=', $sixMonthsAgo);
         //                 });
 
-        // switch ($jabatan) {
-        //     case 24: // Sales Staff
-        //     case 148: // CRO
-        //         $MasterPelanggan->where('sales_id', $this->user_id);
-        //         break;
+        switch ($jabatan) {
+            case 24: 
+            case 148:
+                $orderHeader->where('sales_id', $this->user_id);
+                break;
 
-        //     case 21: // Sales Supervisor
-        //         $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
-        //         array_push($bawahan, $this->user_id);
+            case 21: 
+                $bawahan = MasterKaryawan::whereJsonContains('atasan_langsung', (string) $this->user_id)->pluck('id')->toArray();
+                array_push($bawahan, $this->user_id);
 
-        //         $MasterPelanggan->whereIn('sales_id', $bawahan);
-        //         break;
-        // }
+                $orderHeader->whereIn('sales_id', $bawahan);
+                break;
+        }
 
         return DataTables::of($orderHeader)
     //    ->addColumn('nama_pic', function ($row) {
