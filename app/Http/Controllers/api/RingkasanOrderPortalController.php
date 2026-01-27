@@ -235,15 +235,18 @@ class RingkasanOrderPortalController extends Controller
             }
             // 4. Select & Execute
             // Filter select langsung di chain ke $query
-            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')->get();
+            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')
+            ->orderBy('periode', 'asc')->get();
             // 5. Olah Hasil
             // Perbaikan typo >isNotEmpty() menjadi ->isNotEmpty()
             if ($resultLinkLhp->isNotEmpty()) {
                 foreach ($resultLinkLhp as $link) {
-                    
+                    $periodeLabel = "-";
+                    if($link->periode !== null) {$periodeLabel = \Carbon\Carbon::parse($link->periode)->translatedFormat('F Y');};
                     $dataPush = [
                         'no_quotation' => $link->no_quotation,
                         'periode'      => $link->periode,
+                        'periodeLabel'  => $periodeLabel,
                         'link'         => $link->link
                     ];
                     array_push($fileLinkLhp, $dataPush);
