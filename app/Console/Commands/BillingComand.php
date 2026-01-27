@@ -44,22 +44,31 @@ class BillingComand extends Command
             }, 0);
 
             $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
-            $invoices = $q->invoices->map(function($b) {
+
+            $invoices = $q->invoices->map(function($qq) {
                 $tgl_sampling = null;
+
+                $terbayarInvoice = ($qq->recordPembayaran->sum('nilai_pembayaran') ?? 0) + ($qq->recordWithdraw->sum('nilai_pembayaran') ?? 0);
+                
+                $pph = $qq->recordWithdraw->sum(function($item) {
+                    return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
+                }) ?? 0;
+
+                $statusInvoice = abs($qq->nilai_tagihan - $terbayarInvoice) <= 10 ? 1 : 0;
                 
                 return [
-                    "id_pelanggan" => $b->pelanggan_id,
-                    "no_quotation" => $b->no_quotation,
-                    "no_order" => $b->no_order,
-                    "no_invoice" => $b->no_invoice,
-                    "periode" => $b->periode,
+                    "id_pelanggan" => $qq->pelanggan_id,
+                    "no_quotation" => $qq->no_quotation,
+                    "no_order" => $qq->no_order,
+                    "no_invoice" => $qq->no_invoice,
+                    "periode" => $qq->periode,
                     "tgl_sampling" => $tgl_sampling,
-                    "tgl_invoice" => $b->tgl_invoice,
-                    "tgl_jatuh_tempo" => $b->tgl_jatuh_tempo,
-                    "nilai_tagihan" => $b->nilai_tagihan,
-                    "terbayar" => $b->recordPembayaran->sum('nilai_pembayaran') ?? 0 + $b->recordWithdraw->sum('nilai_pembayaran') ?? 0,
-                    "pph" => $b->recordWithdraw->where('keterangan_pelunasan', 'PPH')->sum('nilai_pembayaran') ?? 0,
-                    "is_complete" => abs($b->nilai_tagihan - ($b->recordPembayaran->sum('nilai_pembayaran') ?? 0 + $b->recordWithdraw->sum('nilai_pembayaran') ?? 0)) <= 10 ? 1 : 0,
+                    "tgl_invoice" => $qq->tgl_invoice,
+                    "tgl_jatuh_tempo" => $qq->tgl_jatuh_tempo,
+                    "nilai_tagihan" => $qq->nilai_tagihan,
+                    "terbayar" => $terbayarInvoice,
+                    "pph" => $pph,
+                    "is_complete" => $statusInvoice,
                 ];
             })->values()->toArray();
 
@@ -158,7 +167,7 @@ class BillingComand extends Command
 
         collect($data)->chunk($chunkSize)->each(function ($chunk) {
 
-            $now = Carbon::now();
+            $now = Carbon::now()->subHours(7);
             $headers = [];
             $details = [];
 
