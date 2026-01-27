@@ -2100,24 +2100,50 @@ class TestingController extends Controller
 
                             foreach ($listPersiapan as $item) {
                                 
-                                $labelParameter = $item['type_botol'] ?? '-';
+                                $labelParameter = $item['type_botol'] ?? $item['parameter'];
 
                                 // Buka baris baru jika counter genap
                                 if ($counter % 2 == 0) {
                                     $pdf->WriteHTML("<tr>");
                                 }
-                                $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                // $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                $styleContainer = ($counter % 2 == 0) 
+                                ? 'padding: 10px 20px 10px 10px;'  // Kolom Kiri
+                                : 'padding: 10px 10px 10px 20px;'; // Kolom Kanan
 
                                 // Render SATU KOTAK STIKER
                                 // Kita gunakan <div> dengan border-radius di dalam <td>
+                                // $pdf->WriteHTML('
+                                //     <th style="padding: ' . $styleContainer . ';">
+                                //         <table width="100%">
+                                //             <tr>
+                                //                 <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                //                 <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                //                 <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                //             </tr>
+                                //             <tr>
+                                //                 <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                //                     ' . $noSampel . '
+                                //                 </td>
+                                //             </tr>
+                                //         </table>
+                                //     </th>
+                                // ');
                                 $pdf->WriteHTML('
-                                    <th style="padding: ' . $padding . ';">
-                                        <table width="100%">
+                                    <th style="' . $styleContainer . '"> 
+                                            <table width="100%">
                                             <tr>
-                                                <td style="text-align: left;"><img src="' . public_path() . $pathQR . $qrImageFile . '"></td>
-                                                <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                                <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                                    <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                                <td style="text-align: center !important; vertical-align: middle;">
+                                                    <span style="font-size: 14px; font-weight: bold;">' . $labelParameter . '</span>
+                                                </td>
                                             </tr>
-                                            <tr><td colspan="2" style="font-size: 12px;">' . $noSampel . '</td></tr>
+                                            <tr>
+                                                <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                                    ' . $noSampel . '
+                                                </td>
+                                            </tr>
                                         </table>
                                     </th>
                                 ');
