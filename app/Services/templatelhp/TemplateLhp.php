@@ -8,7 +8,7 @@ use Exception;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Client\Response;
 use GuzzleHttp\Client;

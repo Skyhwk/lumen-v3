@@ -235,26 +235,32 @@ class RingkasanOrderPortalController extends Controller
             }
             // 4. Select & Execute
             // Filter select langsung di chain ke $query
-            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')->get();
+            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')
+            ->orderBy('periode', 'asc')->get();
             // 5. Olah Hasil
             // Perbaikan typo >isNotEmpty() menjadi ->isNotEmpty()
             if ($resultLinkLhp->isNotEmpty()) {
                 foreach ($resultLinkLhp as $link) {
+                    $periodeLabel = "-";
+                    if($link->periode !== null) {$periodeLabel = \Carbon\Carbon::parse($link->periode)->translatedFormat('F Y');};
                     $dataPush = [
                         'no_quotation' => $link->no_quotation,
                         'periode'      => $link->periode,
+                        'periodeLabel'  => $periodeLabel,
                         'link'         => $link->link
                     ];
                     array_push($fileLinkLhp, $dataPush);
                 }
             }
              $searchInvoice = Invoice::where('no_quotation',$ambilDB->no_quotation)
-             ->select('no_invoice','filename')
+             ->select('no_invoice','filename','upload_file')
              ->where('is_active',true)
              ->get();
              if($searchInvoice->isNotEmpty()){
                 foreach($searchInvoice as $inv){
-                    $realPath = public_path('invoice/' . $inv->filename);
+                    $fileName = $inv->upload_file ?? $inv->filename;
+                    
+                    $realPath = public_path('invoice/' . $fileName);
                     $encodedContent = $this->encode($realPath);
                     $data =[
                         "nomor_invoice" =>$inv->no_invoice,
@@ -263,10 +269,12 @@ class RingkasanOrderPortalController extends Controller
                     array_push($noInvoice,$data);
                 }
              }
+             
              $absolutePathQuot = public_path('quotation/' . $fileName);
              $absolutePathJadwal = public_path('quotation/' . $jadwalFile);
              $filenameQuotationEndcode = $this->encode($absolutePathQuot);
              $filenameJadwalEndcode = $this->encode($absolutePathJadwal);
+             
             return response()->json([
                 'info_dasar' => [
                     'no_order'      => $orderHeader->no_order,

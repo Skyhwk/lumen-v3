@@ -31,7 +31,7 @@ use App\Http\Controllers\defaultApi\HelpersController as Helpers;
 use App\Http\Controllers\EandDcriptController as Edcript;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 use GuzzleHttp\Client;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;

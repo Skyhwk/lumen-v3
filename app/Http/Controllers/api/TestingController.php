@@ -106,7 +106,7 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Services\SalesDailyQSD;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 Carbon::setLocale('id');
 
