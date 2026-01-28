@@ -271,7 +271,6 @@ class LemburController extends Controller
                 'success' => true,
                 'message' => 'Form Lembur berhasil disetujui'
             ], 200);
-
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
@@ -305,6 +304,8 @@ class LemburController extends Controller
                 $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->rejected_hrd_by = $this->karyawan;
                 $formDetail->rejected_hrd_at = Carbon::now()->format('Y-m-d H:i:s');
+                $formDetail->approved_atasan_at = null;
+                $formDetail->approved_atasan_by = null;
                 $formDetail->keterangan_reject = $request->keterangan;
                 $formDetail->save();
             }
@@ -314,7 +315,6 @@ class LemburController extends Controller
                 'success' => true,
                 'message' => 'Form Lembur berhasil ditolak'
             ], 200);
-
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
@@ -357,7 +357,6 @@ class LemburController extends Controller
                 'success' => true,
                 'message' => 'Form Lembur berhasil ditolak'
             ], 200);
-
         } catch (Exception $e) {
             DB::rollback();
             return response()->json([
@@ -614,7 +613,7 @@ class LemburController extends Controller
 
     public function indexByOwner(Request $request)
     {
-        $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray(); 
+        $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
         $data = FormHeader::on('android_intilab')
             ->leftJoin('android_intilab.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
             ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
@@ -624,8 +623,78 @@ class LemburController extends Controller
                 'form_header.no_document',
                 'd.nama_divisi',
                 DB::raw('CASE 
-                                WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING HRD" 
-                                WHEN form_header.status = "APPROVE HRD" THEN "WAITING FINANCE" 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
+                                WHEN form_header.status = "APPROVE HRD" THEN "WAITING APPROVE FINANCE" 
+                                WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED" 
+                                WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
+                                WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
+                                WHEN form_header.status = "REJECTED FINANCE" THEN "REJECTED FINANCE" 
+                                ELSE "WAITING" 
+                            END as status'),
+
+                DB::raw("GROUP_CONCAT(DISTINCT CONCAT('{\"id\": \"', u.id, '\", \"nama\": \"', u.nama_lengkap, '\", \"jabatan\": \"', u.grade, '\"}') SEPARATOR '|') as karyawan"),
+                DB::raw("COUNT(DISTINCT fd.user_id) as total_karyawan"),
+
+                DB::raw('MAX(fd.approved_hrd_by) as approved_hrd_by'),
+                DB::raw('MAX(fd.approved_hrd_at) as approved_hrd_at'),
+                DB::raw('MAX(fd.approved_atasan_by) as approved_atasan_by'),
+                DB::raw('MAX(fd.approved_atasan_at) as approved_atasan_at'),
+                DB::raw('MAX(fd.rejected_atasan_by) as rejected_atasan_by'),
+                DB::raw('MAX(fd.rejected_atasan_at) as rejected_atasan_at'),
+                DB::raw('MAX(fd.approved_finance_by) as approved_finance_by'),
+                DB::raw('MAX(fd.approved_finance_at) as approved_finance_at'),
+
+                DB::raw('MAX(fd.tanggal_mulai) as tanggal'),
+                DB::raw('MAX(fd.jam_mulai) as jam_mulai'),
+                DB::raw('MAX(fd.jam_selesai) as jam_selesai'),
+
+                DB::raw('MAX(form_header.created_by) as nama_pengaju'),
+                DB::raw('MAX(form_header.created_at) as diajukan_pada'),
+                DB::raw('MAX(fd.keterangan) as keterangan')
+
+            )
+            ->groupBy(
+                'form_header.id',
+                'form_header.id',
+                'form_header.no_document',
+                'd.nama_divisi',
+                'form_header.status'
+            )
+            ->havingRaw("
+                (
+                    (MAX(fd.approved_finance_by) IS NULL AND MAX(fd.approved_hrd_by) IS NULL)
+                )
+            ")
+            ->where('form_header.type_document', 'Lembur')
+            ->whereIn('form_header.created_by', $bawahan)
+            ->whereYear('fd.tanggal_mulai', $request->periode)
+            ->get()
+            ->transform(function ($item) {
+                $item->karyawan = array_map('json_decode', explode('|', $item->karyawan));
+                return $item;
+            });
+
+        return Datatables::of($data)
+            ->addColumn('can_approve', function ($row) {
+                return $this->grade == 'MANAGER' ? true : false;
+            })
+            ->make(true);
+    }
+
+    public function indexByOwnerProcessed(Request $request)
+    {
+        $bawahan = GetBawahan::where('id', $this->user_id)->get()->pluck('nama_lengkap')->toArray();
+        $data = FormHeader::on('android_intilab')
+            ->leftJoin('android_intilab.form_detail as fd', 'fd.no_document', '=', 'form_header.no_document')
+            ->leftJoin('intilab_produksi.master_divisi as d', 'd.id', '=', 'fd.department_id')
+            ->leftJoin('intilab_produksi.master_karyawan as u', 'fd.user_id', '=', 'u.id')
+            ->select(
+                'form_header.id',
+                'form_header.no_document',
+                'd.nama_divisi',
+                DB::raw('CASE 
+                                WHEN form_header.status = "APPROVE ATASAN" THEN "WAITING APPROVE HRD" 
+                                WHEN form_header.status = "APPROVE HRD" THEN "WAITING APPROVE FINANCE" 
                                 WHEN form_header.status = "APPROVE FINANCE" THEN "APPROVED" 
                                 WHEN form_header.status = "REJECTED ATASAN" THEN "REJECTED" 
                                 WHEN form_header.status = "REJECTED HRD" THEN "REJECTED HRD" 
@@ -662,6 +731,14 @@ class LemburController extends Controller
                 'form_header.status'
             )
             ->where('form_header.type_document', 'Lembur')
+            // ->where(function ($query) {
+            //     $query->whereNotNull('MAX(fd.approved_hrd_by)')->orWhereNotNull('MAX(fd.rejected_hrd_by)');
+            // })
+            ->havingRaw("
+                (
+                    (MAX(fd.approved_finance_by) IS NOT NULL AND MAX(fd.approved_hrd_by) IS NOT NULL)
+                )
+            ")
             ->whereIn('form_header.created_by', $bawahan)
             ->whereYear('fd.tanggal_mulai', $request->periode)
             ->get()
@@ -767,6 +844,8 @@ class LemburController extends Controller
                 $formDetail = FormDetail::on('android_intilab')->where('id', $formDetailId)->first();
                 $formDetail->rejected_finance_by = $this->karyawan;
                 $formDetail->rejected_finance_at = Carbon::now()->format('Y-m-d H:i:s');
+                $formDetail->approved_hrd_at = null;
+                $formDetail->approved_hrd_by = null;
                 $formDetail->keterangan_reject = $request->keterangan;
                 $formDetail->save();
             }
@@ -824,7 +903,59 @@ class LemburController extends Controller
         );
     }
 
-    public function createLembur(Request $request) {
+    public function updateLembur(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $header = FormHeader::on('android_intilab')->find($request->id);
+    
+            FormDetail::on('android_intilab')->where('no_document', $header->no_document)->delete();
+            
+            foreach ($request->data as $detail) {
+                $atasan = MasterKaryawan::select('atasan_langsung')->where('id', $detail)->first()->atasan_langsung;
+                $details[] = [
+                    'no_document' => $header->no_document,
+                    'user_id' => $detail,
+                    'department_id' => $this->department,
+                    'atasan_langsung' => $atasan,
+                    'jam_mulai' => $request->jam_mulai,
+                    'jam_selesai' => $request->jam_selesai,
+                    'tanggal_mulai' => $request->tanggal_lembur,
+                    'tanggal_selesai' =>  !empty($request->tanggal_selesai) ? $request->tanggal_lembur : $request->tanggal_lembur,
+                    'approved_atasan_by' => $this->grade === 'MANAGER' ? $this->karyawan : null,
+                    'approved_atasan_at' => $this->grade === 'MANAGER' ? Carbon::now()->format('Y-m-d H:i:s') : null,
+                    'keterangan' => $request->keterangan,
+                    'created_by' => $this->karyawan,
+                    'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
+                ];
+            }
+            // dd($details);
+            FormDetail::on('android_intilab')->insert($details);
+
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Form Lembur berhasil diupdate',
+                'data' => [
+                    'no_document' => $header->no_document
+                ]
+            ], 200);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem',
+                'error' => 'Error: ' . $th->getMessage(),
+                'line' => $th->getLine()
+            ], 500);
+        }
+
+
+    }
+
+    public function createLembur(Request $request)
+    {
         DB::beginTransaction();
         try {
             $romanMonth = [
@@ -841,8 +972,10 @@ class LemburController extends Controller
                 '11' => 'XI',
                 '12' => 'XII'
             ];
-            $prefix = 'ISL/LEMBUR/' . date('y') . '-' . $romanMonth[date('m')];
-            $no_document = $prefix . '/' . str_pad($this->getLatestNumber($prefix), 6, '0', STR_PAD_LEFT);
+            // $prefix = 'ISL/LEMBUR/' . date('y') . '-' . $romanMonth[date('m')];
+            // $no_document = $prefix . '/' . str_pad($this->getLatestNumber($prefix), 6, '0', STR_PAD_LEFT);
+            $timestamp = Carbon::now()->timestamp;
+            $no_document = substr($timestamp, 0, 10);
             FormHeader::on('android_intilab')->create([
                 'no_document' => $no_document,
                 'type_document' => 'Lembur',
@@ -852,7 +985,7 @@ class LemburController extends Controller
                 'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
             $details = [];
-            
+
             foreach ($request->data as $detail) {
                 $atasan = MasterKaryawan::select('atasan_langsung')->where('id', $detail)->first()->atasan_langsung;
                 $details[] = [
@@ -870,7 +1003,6 @@ class LemburController extends Controller
                     'created_by' => $this->karyawan,
                     'created_at' => Carbon::now()->format('Y-m-d H:i:s'),
                 ];
-                
             }
             // dd($details);
             FormDetail::on('android_intilab')->insert($details);

@@ -3173,7 +3173,7 @@ class RequestQuotationController extends Controller
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
     
-                        $total_diskon += $total_discount_promo;
+                        // $total_diskon += $total_discount_promo;
                         $dataD->kode_promo = $data_diskon->kode_promo_discount;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,
@@ -4641,7 +4641,7 @@ class RequestQuotationController extends Controller
                         $discount_promo = floatval(str_replace('%', '', $data_diskon->jumlah_promo_discount));
                         $total_discount_promo = $biaya_pengujian / 100 *  $discount_promo;
     
-                        $total_diskon += $total_discount_promo;
+                        // $total_diskon += $total_discount_promo;
                         $dataD->kode_promo = $data_diskon->kode_promo_discount;
                         $dataD->discount_promo = json_encode((object)[
                             'deskripsi_promo_discount' => $data_diskon->deskripsi_promo_discount,

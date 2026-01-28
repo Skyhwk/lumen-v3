@@ -12,6 +12,7 @@ use App\Console\Commands\SchaduleUpdateQsd;
 use App\Console\Commands\SchaduleUpdateSummaryQsd;
 use App\Console\Commands\FeeSales;
 use App\Console\Commands\AssignSales;
+use App\Console\Commands\BillingComand;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -30,7 +31,8 @@ class Kernel extends ConsoleKernel
         Commands\SchaduleUpdateQsd::class,
         Commands\SchaduleUpdateSummaryQsd::class,
         Commands\FeeSales::class,
-        Commands\AssignSales::class
+        Commands\AssignSales::class,
+        Commands\BillingComand::class
     ];
 
     /**
