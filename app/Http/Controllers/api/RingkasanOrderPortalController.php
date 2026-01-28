@@ -79,19 +79,19 @@ class RingkasanOrderPortalController extends Controller
                 ->sort()
                 ->values();
             
-
-            // 3. Looping & Formatting
-            $ringkasanPerPeriode = $allPeriods->map(function ($periode) use ($plansByPeriod, $detailsSamplingByPeriod, $detailsSDByPeriod, $jadwalByPeriod) {
-                    
-                    if ($periode === 'non-contract') {
-                        $periodeLabel = 'Non - Kontrak / Ad-hoc';
-                        $cleanPeriode = 'non-contract';
-                        $plan = null;
-                    } else {
-                        $periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');
-                        $cleanPeriode = $periode;
-                        $plan = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
-                    }
+                $getPeriodeAktif=[];
+                // 3. Looping & Formatting
+                $ringkasanPerPeriode = $allPeriods->map(function ($periode) use ($plansByPeriod, $detailsSamplingByPeriod, $detailsSDByPeriod, $jadwalByPeriod,&$getPeriodeAktif) {
+                        
+                        if ($periode === 'non-contract') {
+                            $periodeLabel = 'Non - Kontrak / Ad-hoc';
+                            $cleanPeriode = 'non-contract';
+                            $plan = null;
+                        } else {
+                            $periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');
+                            $cleanPeriode = $periode;
+                            $plan = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
+                        }
 
                     // Ambil Data per Periode
                     $plan           = $plansByPeriod->get($periode) ? $plansByPeriod->get($periode)->first() : null;
@@ -180,6 +180,7 @@ class RingkasanOrderPortalController extends Controller
                     $periodeLabel = "-";
                     if($periode !== 'non-contract') {$periodeLabel = \Carbon\Carbon::parse($periode)->translatedFormat('F Y');};
                     // --- RETURN FINAL ---
+                    array_push($getPeriodeAktif,$periode);
                     return [
                         'periode'           => $periode,
                         'periodeLabel'      => $periodeLabel,
@@ -193,7 +194,7 @@ class RingkasanOrderPortalController extends Controller
                     ];
             });
 
-
+            
             // file summary
             $fileName = null;
             $jadwalFile = null;
@@ -221,26 +222,45 @@ class RingkasanOrderPortalController extends Controller
                 }
             }
             
-            $searchLinkLhp =LinkLhp::where('no_quotation',$ambilDB->no_quotation)
-             ->select('no_quotation','link','periode')->get();
-             if($searchLinkLhp->isNotEmpty()){
-                foreach($searchLinkLhp as $link){
-                    $dataPush =[
-                        'no_quotation' =>$link->no_quotation,
-                        'periode' => $link->periode,
-                        'link' => $link->link
+            // 1. Inisialisasi Query Builder
+            $query = LinkLhp::query(); 
+            // 2. Tambahkan Filter
+            $query->where('no_quotation', $ambilDB->no_quotation);
+            // 3. Cek Tipe QTC
+            // Gunakan empty check untuk array explode agar aman
+            $parts = explode('/', $ambilDB->no_quotation);
+            if (isset($parts[1]) && $parts[1] == 'QTC'){
+                // Pastikan $getPeriodeAktif sudah array (hasil fix sebelumnya)
+                $query->whereIn('periode', $getPeriodeAktif);
+            }
+            // 4. Select & Execute
+            // Filter select langsung di chain ke $query
+            $resultLinkLhp = $query->select('no_quotation', 'link', 'periode')
+            ->orderBy('periode', 'asc')->get();
+            // 5. Olah Hasil
+            // Perbaikan typo >isNotEmpty() menjadi ->isNotEmpty()
+            if ($resultLinkLhp->isNotEmpty()) {
+                foreach ($resultLinkLhp as $link) {
+                    $periodeLabel = "-";
+                    if($link->periode !== null) {$periodeLabel = \Carbon\Carbon::parse($link->periode)->translatedFormat('F Y');};
+                    $dataPush = [
+                        'no_quotation' => $link->no_quotation,
+                        'periode'      => $link->periode,
+                        'periodeLabel'  => $periodeLabel,
+                        'link'         => $link->link
                     ];
-                    array_push($fileLinkLhp,$dataPush);
+                    array_push($fileLinkLhp, $dataPush);
                 }
-             }
-
+            }
              $searchInvoice = Invoice::where('no_quotation',$ambilDB->no_quotation)
-             ->select('no_invoice','filename')
+             ->select('no_invoice','filename','upload_file')
              ->where('is_active',true)
              ->get();
              if($searchInvoice->isNotEmpty()){
                 foreach($searchInvoice as $inv){
-                    $realPath = public_path('invoice/' . $inv->filename);
+                    $fileName = $inv->upload_file ?? $inv->filename;
+                    
+                    $realPath = public_path('invoice/' . $fileName);
                     $encodedContent = $this->encode($realPath);
                     $data =[
                         "nomor_invoice" =>$inv->no_invoice,
@@ -249,10 +269,12 @@ class RingkasanOrderPortalController extends Controller
                     array_push($noInvoice,$data);
                 }
              }
+             
              $absolutePathQuot = public_path('quotation/' . $fileName);
              $absolutePathJadwal = public_path('quotation/' . $jadwalFile);
              $filenameQuotationEndcode = $this->encode($absolutePathQuot);
              $filenameJadwalEndcode = $this->encode($absolutePathJadwal);
+             
             return response()->json([
                 'info_dasar' => [
                     'no_order'      => $orderHeader->no_order,
