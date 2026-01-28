@@ -112,6 +112,84 @@ class FdlCanvasingController extends Controller
         ], 201);
     }
 
+    public function getJabatan()
+    {
+        $jabatan = [
+            ['value' => 'direktur', 'label' => 'Direktur'],
+            ['value' => 'general_manager', 'label' => 'General Manager'],
+            ['value' => 'manager', 'label' => 'Manager'],
+            ['value' => 'assistant_manager', 'label' => 'Assistant Manager'],
+            ['value' => 'supervisor', 'label' => 'Supervisor'],
+            ['value' => 'koordinator', 'label' => 'Koordinator'],
+            ['value' => 'kepala_bagian', 'label' => 'Kepala Bagian'],
+            ['value' => 'kepala_produksi', 'label' => 'Kepala Produksi'],
+            ['value' => 'kepala_gudang', 'label' => 'Kepala Gudang'],
+            ['value' => 'hrd', 'label' => 'HRD / Personalia'],
+            ['value' => 'admin', 'label' => 'Admin'],
+            ['value' => 'staff', 'label' => 'Staff'],
+            ['value' => 'purchasing', 'label' => 'Purchasing'],
+            ['value' => 'finance', 'label' => 'Finance'],
+            ['value' => 'accounting', 'label' => 'Accounting'],
+            ['value' => 'marketing', 'label' => 'Marketing'],
+            ['value' => 'sales', 'label' => 'Sales'],
+            ['value' => 'operator', 'label' => 'Operator'],
+            ['value' => 'teknisi', 'label' => 'Teknisi'],
+            ['value' => 'qc', 'label' => 'Quality Control (QC)'],
+            ['value' => 'hse', 'label' => 'HSE / K3'],
+            ['value' => 'engineering', 'label' => 'Engineering'],
+            ['value' => 'it_support', 'label' => 'IT Support'],
+            ['value' => 'resepsionis', 'label' => 'Resepsionis'],
+            ['value' => 'security', 'label' => 'Security'],
+
+            // Produksi & Operasional
+            ['value' => 'foreman', 'label' => 'Foreman / Mandor'],
+            ['value' => 'leader_produksi', 'label' => 'Group Leader / Team Leader'],
+            ['value' => 'ppic', 'label' => 'PPIC (Production Planning & Inventory Control)'],
+            ['value' => 'maintenance', 'label' => 'Maintenance'],
+            ['value' => 'toolmaker', 'label' => 'Toolmaker'],
+            ['value' => 'welder', 'label' => 'Welder / Juru Las'],
+            ['value' => 'fitter', 'label' => 'Fitter'],
+            
+            // Gudang & Logistik
+            ['value' => 'logistic_specialist', 'label' => 'Logistic Specialist'],
+            ['value' => 'checker', 'label' => 'Checker'],
+            ['value' => 'picker', 'label' => 'Picker / Packer'],
+            ['value' => 'forklift_driver', 'label' => 'Operator Forklift'],
+            ['value' => 'driver', 'label' => 'Driver / Sopir Logistik'],
+            ['value' => 'inventory_admin', 'label' => 'Admin Gudang / Inventory'],
+
+            // Kualitas & Teknis
+            ['value' => 'qa', 'label' => 'Quality Assurance (QA)'],
+            ['value' => 'lab_analyst', 'label' => 'Laboratorium Analyst'],
+            ['value' => 'r_and_d', 'label' => 'Research & Development (R&D)'],
+            ['value' => 'draftsman', 'label' => 'Draftsman / CAD Operator'],
+            
+            // HSE & GA
+            ['value' => 'ga', 'label' => 'General Affair (GA)'],
+            ['value' => 'environment_officer', 'label' => 'Environment Officer'],
+            ['value' => 'paramedik', 'label' => 'Perawat / Paramedik Perusahaan'],
+            
+            // Komersial & Legal
+            ['value' => 'legal_officer', 'label' => 'Legal Officer'],
+            ['value' => 'public_relations', 'label' => 'Public Relations / Humas'],
+            ['value' => 'procurement', 'label' => 'Procurement Specialist'],
+            ['value' => 'tax_officer', 'label' => 'Tax Officer (Perpajakan)'],
+            ['value' => 'internal_auditor', 'label' => 'Internal Auditor'],
+
+            // Pendukung
+            ['value' => 'office_boy', 'label' => 'Office Boy / Cleaning Service'],
+            ['value' => 'driver_operasional', 'label' => 'Driver Operasional'],
+            ['value' => 'messenger', 'label' => 'Kurir / Messenger'],
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => $jabatan,
+            'message' => 'Available Jabatan data retrieved successfully',
+        ], 200); // ← 200 lebih tepat
+    }
+
+
     public function convertImg($foto = '', $type = '', $user = '')
     {
         
