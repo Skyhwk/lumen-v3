@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ForecastSP;
 use App\Services\GetBawahan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -74,6 +75,8 @@ class SummaryQSDController extends Controller
             $teamData['team_total_staff']         = array_sum($teamTotalStaff);
         }
 
+        [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year);
+
         return response()->json([
             'success'           => true,
             'type'              => $type,
@@ -81,6 +84,8 @@ class SummaryQSDController extends Controller
             'data'              => array_values($teamsData),
             'all_total_periode' => $allteam_total_periode,
             'all_total'         => array_sum($allteam_total_periode),
+            'forecast_total'    => $forecastTotal,
+            'forecast_total_periode' => $forecastTotalPeriode,
             'message'           => 'Data berhasil diproses!',
         ], 200);
     }
@@ -300,5 +305,24 @@ class SummaryQSDController extends Controller
         }
 
         return $resignedMembers;
+    }
+
+    private function getForecastTotal($tahun)
+    {
+        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
+
+        $totalSummaryThisYear = 0;
+
+        $totalSummaryPerPeriode = $this->getEmptyOrder();
+
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+
+        foreach ($forecasts as $forecast) {
+            $indexBulan = $monthNames[intval(str_replace('0', '', (explode('-', $forecast->tanggal_sampling_min)[1])))];
+            $totalSummaryPerPeriode[$indexBulan] += $forecast->revenue_forecast;
+            $totalSummaryThisYear += $forecast->revenue_forecast;
+        }
+
+        return [$totalSummaryThisYear, $totalSummaryPerPeriode];
     }
 }
