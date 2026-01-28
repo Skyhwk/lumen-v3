@@ -15,7 +15,7 @@ use Yajra\Datatables\Datatables;
 use App\Models\Canvasing;
 use App\Models\MasterWilayahSampling;
 
-class CanvasingController extends Controller
+class FdlCanvasingController extends Controller
 {
     public function index(Request $request){
         $perPage = $request->input('limit', 10);
