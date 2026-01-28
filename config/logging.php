@@ -213,6 +213,13 @@ return [
             'days' => 90,
         ],
 
+        'forced_update_sampel' => [
+            'driver' => 'daily',  
+            'path' => storage_path('logs/forced_update_sampel/forced_update_sampel.log'),
+            'level' => 'info',
+            'days' => 90,
+        ],
+
         // 'log_request' => [
         //     'driver' => 'daily',
         //     'path' => storage_path('log_request/request.log'),
