@@ -78,30 +78,14 @@ class WsFinalUdaraGetaranController extends Controller
 		)
 			->where('is_active', $request->is_active)
 			->where('kategori_2', '4-Udara')
-			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
 			->where('status', 0)
-			->whereNotNull('tanggal_terima');
-		// Filter by date (YYYY-MM or YYYY-MM-DD)
-		if ($request->filled('date')) {
-			$date = $request->date;
-			if (preg_match('/^\d{4}-\d{2}$/', $date)) {
-				$data->where(function ($q) use ($date) {
-					$q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
-						->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
-				});
-			} elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-				$data->where(function ($q) use ($date) {
-					$q->whereDate('tanggal_sampling', $date)
-						->orWhereDate('tanggal_terima', $date);
-				});
-			}
-		}
+			->whereIn('kategori_3', ["13-Getaran", "14-Getaran (Bangunan)", "15-Getaran (Kejut Bangunan)", "16-Getaran (Kenyamanan & Kesehatan)",  "18-Getaran (Lingkungan)", "19-Getaran (Mesin)",  "20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
+			->whereNotNull('tanggal_terima')
+			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderBy('tanggal_sampling');
 
-		$data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderBy('tanggal_terima');
-
-		return Datatables::of($data)
-			->make(true);
+		return Datatables::of($data)->make(true);
 	}
 
 	public function convertHourToMinute($hour)
@@ -135,85 +119,187 @@ class WsFinalUdaraGetaranController extends Controller
 		return null;
 	}
 
+	// public function detail(Request $request)
+	// {
+	// 	try {
+	// 		$parameters = json_decode(html_entity_decode($request->parameter), true);
+	// 		$parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
+	// 		$data = GetaranHeader::with(['lapangan_getaran', 'lapangan_getaran_personal', 'ws_udara'])->where('no_sampel', $request->no_sampel)
+	// 			->where('is_approve', 1)
+	// 			->where('status', 0)
+	// 			->where('is_active', 1)
+	// 			->get();
+
+	// 		$ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
+
+	// 		if ($parameterArray[1] == 'Getaran (LK) TL') {
+	// 			foreach ($data as $item) {
+	// 				$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
+	// 				$dataLapanganDurasi = json_decode($dataLapanganDurasi);
+	// 				if (is_array($dataLapanganDurasi)) {
+	// 					$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
+	// 				} else {
+	// 					$dataLapanganDurasi = intval($dataLapanganDurasi);
+	// 				}
+	// 				$paparan = $this->convertHourToMinute($dataLapanganDurasi);
+
+	// 				$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
+	// 				if ($paparan < 30) {
+	// 					$item->nab = 20;
+	// 				} else if ($paparan >= 30 && $paparan < 60) {
+	// 					$item->nab = 14;
+	// 				} else if ($paparan >= 60 && $paparan < 120) {
+	// 					$item->nab = 14;
+	// 				} else if ($paparan >= 120 && $paparan < 240) {
+	// 					$item->nab = 7;
+	// 				} else if ($paparan >= 240 && $paparan < 360) {
+	// 					$item->nab = 6;
+	// 				} else if ($paparan >= 360 && $paparan < 480) {
+	// 					$item->nab = 5;
+	// 				}
+	// 				$ws->nab = $item->nab;
+	// 				$ws->save();
+	// 				// dd($item->nab);
+
+	// 			}
+
+	// 		} else if ($parameterArray[1] == 'Getaran (LK) ST') {
+	// 			foreach ($data as $item) {
+	// 				$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
+	// 				$dataLapanganDurasi = json_decode($dataLapanganDurasi);
+	// 				if (is_array($dataLapanganDurasi)) {
+	// 					$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
+	// 				} else {
+	// 					$dataLapanganDurasi = intval($dataLapanganDurasi);
+	// 				}
+	// 				$paparan = $this->convertHourToMinute($dataLapanganDurasi);
+	// 				$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
+	// 				if ($paparan < 60) {
+	// 					$item->nab = 3.4644;
+	// 				} else if ($paparan >= 60 && $paparan < 120) {
+	// 					$item->nab = 2.4497;
+	// 				} else if ($paparan >= 120 && $paparan < 240) {
+	// 					$item->nab = 1.7322;
+	// 				} else if ($paparan >= 240 && $paparan < 480) {
+	// 					$item->nab = 1.2249;
+	// 				} else if ($paparan >= 480) {
+	// 					$item->nab = 0.8661;
+	// 				}
+	// 				$ws->nab = $item->nab;
+	// 				$ws->save();
+	// 			}
+	// 		}
+	// 		return Datatables::of($data)->make(true);
+
+	// 	} catch (\Throwable $th) {
+	// 		return response()->json([
+	// 			'message' => $th->getMessage(),
+	// 		], 401);
+	// 	}
+	// }
+
 	public function detail(Request $request)
 	{
 		try {
 			$parameters = json_decode(html_entity_decode($request->parameter), true);
 			$parameterArray = is_array($parameters) ? array_map('trim', explode(';', $parameters[0])) : [];
-			$data = GetaranHeader::with(['lapangan_getaran', 'lapangan_getaran_personal', 'ws_udara'])->where('no_sampel', $request->no_sampel)
-				->where('is_approve', 1)
-				->where('status', 0)
-				->where('is_active', 1)
+			// Ambil data utama dari WsValueUdara
+			$wsData = WsValueUdara::with([
+					'lapangan_getaran',  // Relasi ke DataLapanganGetaran
+					'lapangan_getaran_personal', // Relasi ke DataLapanganGetaranPersonal
+					'getaran', // Relasi ke GetaranHeader
+					'subkontrak' // Relasi ke Subkontrak
+				])
+				->where('no_sampel', $request->no_sampel)
 				->get();
 
-			$ws = WsValueUdara::where('no_sampel', $request->no_sampel)->first();
-
-			if ($parameterArray[1] == 'Getaran (LK) TL') {
-				foreach ($data as $item) {
-					$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
-					$dataLapanganDurasi = json_decode($dataLapanganDurasi);
-					if (is_array($dataLapanganDurasi)) {
-						$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
-					} else {
-						$dataLapanganDurasi = intval($dataLapanganDurasi);
-					}
-					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
-
-					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
-					if ($paparan < 30) {
-						$item->nab = 20;
-					} else if ($paparan >= 30 && $paparan < 60) {
-						$item->nab = 14;
-					} else if ($paparan >= 60 && $paparan < 120) {
-						$item->nab = 14;
-					} else if ($paparan >= 120 && $paparan < 240) {
-						$item->nab = 7;
-					} else if ($paparan >= 240 && $paparan < 360) {
-						$item->nab = 6;
-					} else if ($paparan >= 360 && $paparan < 480) {
-						$item->nab = 5;
-					}
-					$ws->nab = $item->nab;
-					$ws->save();
-					// dd($item->nab);
-
+			// Gunakan variable hasil query tadi untuk di-loop
+			foreach ($wsData as $item) {
+				// 1. Logic Fallback Durasi (Prioritas Reguler -> Personal)
+				$rawDurasi = null;
+				if (!empty($item->lapangan_getaran->durasi_paparan)) {
+					$rawDurasi = $item->lapangan_getaran->durasi_paparan;
+				} elseif (!empty($item->lapangan_getaran_personal->durasi_paparan)) {
+					$rawDurasi = $item->lapangan_getaran_personal->durasi_paparan;
 				}
 
-			} else if ($parameterArray[1] == 'Getaran (LK) ST') {
-				foreach ($data as $item) {
-					$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
-					$dataLapanganDurasi = json_decode($dataLapanganDurasi);
-					if (is_array($dataLapanganDurasi)) {
-						$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
-					} else {
-						$dataLapanganDurasi = intval($dataLapanganDurasi);
-					}
-					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
-					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
-					if ($paparan < 60) {
-						$item->nab = 3.4644;
-					} else if ($paparan >= 60 && $paparan < 120) {
-						$item->nab = 2.4497;
-					} else if ($paparan >= 120 && $paparan < 240) {
-						$item->nab = 1.7322;
-					} else if ($paparan >= 240 && $paparan < 480) {
-						$item->nab = 1.2249;
-					} else if ($paparan >= 480) {
-						$item->nab = 0.8661;
-					}
-					$ws->nab = $item->nab;
-					$ws->save();
+				$decodedDurasi = json_decode($rawDurasi);
+				$totalDurasi = is_array($decodedDurasi) ? array_sum(array_map('floatval', $decodedDurasi)) : floatval($decodedDurasi ?? 0);
+				$paparan = $this->convertHourToMinute($totalDurasi);
+
+				// 2. Logic Perhitungan NAB
+				$nab = 0;
+				if ($parameterArray[1] == 'Getaran (LK) TL') {
+					if ($paparan < 30) $nab = 20.0;
+					else if ($paparan < 120) $nab = 14.0; 
+					else if ($paparan < 240) $nab = 7.0;
+					else if ($paparan < 360) $nab = 6.0;
+					else if ($paparan < 480) $nab = 5.0;
+				} else if ($parameterArray[1] == 'Getaran (LK) ST') {
+					if ($paparan < 60) $nab = 3.4644;
+					else if ($paparan < 120) $nab = 2.4497;
+					else if ($paparan < 240) $nab = 1.7322;
+					else if ($paparan < 480) $nab = 1.2249;
+					else $nab = 0.8661;
 				}
+
+				$hasilUji = null;
+				$parameterHeader = '';
+				$analyst = '';
+				$catatan = '';
+				if (isset($item->subkontrak) && isset($item->subkontrak->parameter)) {
+					$parameterHeader = $item->subkontrak->parameter;
+					$analyst = $item->subkontrak->approved_by;
+					$catatan = $item->subkontrak->note ?? '';
+				} else if (isset($item->getaran) && isset($item->getaran->parameter)) {
+					$parameterHeader = $item->getaran->parameter;
+					$analyst = $item->getaran->created_by;
+					$catatan = $item->getaran->notes_reject ?? '';
+				} 
+
+				if (str_contains(strtolower($parameterHeader), 'hz')) {
+
+					if (!empty($item->hasil1)) {
+						$decoded = json_decode($item->hasil1, true);
+						$hasilUji = $decoded['Kecepatan'] ?? null;
+					} else {
+						$hasilUji = $item->f_koreksi_1 ?? null;
+					}
+				}
+				
+				// Simpan NAB ke DB (karena NAB biasanya memang disimpan)
+				$item->nab = $nab;
+				$item->save();
+				
+				// Inject ke Object Collection untuk dibawa ke frontend via Datatables
+				$item->hasil_uji = is_numeric($hasilUji) ? floatval($hasilUji) : null;
+				$item->parameter = $parameterHeader;
+				$item->analyst = $analyst;
+				$item->catatan = $catatan;
 			}
-			return Datatables::of($data)->make(true);
+
+		$wsData = $wsData->unique('parameter')->values();
+
+		// Kembalikan data ke Datatables
+		return Datatables::of($wsData)
+			->addColumn('hasil_uji', function($row) {
+				return $row->hasil_uji;
+			})->addColumn('parameter', function($row) {
+				return $row->parameter;
+			})->addColumn('analyst', function($row) {
+				return $row->analyst;
+			})->addColumn('catatan', function($row) {
+				return $row->catatan;
+			})
+			->make(true);
 
 		} catch (\Throwable $th) {
 			return response()->json([
 				'message' => $th->getMessage(),
-			], 401);
+				'line' => $th->getLine()
+			], 500);
 		}
 	}
-
 
 	public function getDetailCfr(Request $request)
 	{
@@ -933,6 +1019,11 @@ class WsFinalUdaraGetaranController extends Controller
 				]);
 
 			GetaranHeader::whereIn('no_sampel', $request->no_sampel_list)
+				->update([
+					'lhps' => 1,
+				]);
+			
+			SubKontrak::whereIn('no_sampel', $request->no_sampel_list)
 				->update([
 					'lhps' => 1,
 				]);

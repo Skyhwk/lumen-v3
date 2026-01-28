@@ -289,7 +289,7 @@ class LhpTemplate
         $defaultFontConfig = (new FontVariables())->getDefaults();
         $fontData = $defaultFontConfig['fontdata'];
 
-        $mpdf = new \Mpdf\Mpdf([
+        $mpdf = new \App\Services\MpdfService([
             'mode' => 'utf-8',
             'format' => 'A4',
             'margin_header' => ($mode == 'downloadLHPFinal' ? 12 : 17),
@@ -443,7 +443,18 @@ class LhpTemplate
             } else if ($kategori === 4 && ($sub_kategori === 27 || $sub_kategori === 11 ) && !collect($dataDecode)->contains(function ($item) {
                 return in_array(
                     strtolower($item),
-                    ['235;fungal counts', '266;jumlah bakteri total', '619;t. bakteri (kudr - 8 jam)', '620;t. jamur (kudr - 8 jam)', '563;medan magnet','309;pencahayaan', '316;power density', '277;medan listrik','236;gelombang elektro']
+                    [
+                    '235;fungal counts', 
+                    '266;jumlah bakteri total', 
+                    '619;t. bakteri (kudr - 8 jam)', 
+                    '620;t. jamur (kudr - 8 jam)', 
+                    '563;medan magnet','309;pencahayaan', 
+                    '316;power density', 
+                    '277;medan listrik',
+                    '236;gelombang elektro',
+                    '578;t.bakteri (8 jam)',
+                    '579;t. jamur (8 jam)'
+                    ]
                 );
             })) {
                 if (collect($dataDecode)->contains(fn($item) => in_array($item, ['324;Sinar UV']))) {

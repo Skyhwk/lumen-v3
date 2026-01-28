@@ -80,28 +80,12 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 			->where('kategori_2', '4-Udara')
 			->whereIn('kategori_3', ["20-Getaran (Seluruh Tubuh)", "17-Getaran (Lengan & Tangan)"])
 			->where('status', 0)
-			->whereNotNull('tanggal_terima');
-		// Filter by date (YYYY-MM or YYYY-MM-DD)
-		if ($request->filled('date')) {
-			$date = $request->date;
-			if (preg_match('/^\d{4}-\d{2}$/', $date)) {
-				$data->where(function ($q) use ($date) {
-					$q->where(DB::raw("DATE_FORMAT(tanggal_sampling, '%Y-%m')"), $date)
-						->orWhere(DB::raw("DATE_FORMAT(tanggal_terima, '%Y-%m')"), $date);
-				});
-			} elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-				$data->where(function ($q) use ($date) {
-					$q->whereDate('tanggal_sampling', $date)
-						->orWhereDate('tanggal_terima', $date);
-				});
-			}
-		}
+			->whereNotNull('tanggal_terima')
+			->when($request->date, fn($q) => $q->whereYear('tanggal_sampling', explode('-', $request->date)[0])->whereMonth('tanggal_sampling', explode('-', $request->date)[1]))
+			->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
+			->orderBy('tanggal_sampling');
 
-		$data->groupBy('cfr', 'kategori_2', 'kategori_3', 'nama_perusahaan', 'no_order')
-			->orderBy('tanggal_terima');
-
-		return Datatables::of($data)
-			->make(true);
+		return Datatables::of($data)->make(true);
 	}
 
 	public function convertHourToMinute($hour)
@@ -163,9 +147,11 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
 					$dataLapanganDurasi = json_decode($dataLapanganDurasi);
 					if (is_array($dataLapanganDurasi)) {
-						$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
+						// Gunakan floatval supaya 0.01 tidak berubah jadi 0
+						$dataLapanganDurasi = array_sum(array_map('floatval', $dataLapanganDurasi));
 					} else {
-						$dataLapanganDurasi = intval($dataLapanganDurasi);
+						// Gunakan floatval untuk menangani nilai tunggal desimal
+						$dataLapanganDurasi = floatval($dataLapanganDurasi);
 					}
 					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
 
@@ -194,9 +180,11 @@ class WsFinalUdaraGetaranPersonalController extends Controller
 					$dataLapanganDurasi = $item->lapangan_getaran_personal->durasi_paparan ? $item->lapangan_getaran_personal->durasi_paparan : null;
 					$dataLapanganDurasi = json_decode($dataLapanganDurasi);
 					if (is_array($dataLapanganDurasi)) {
-						$dataLapanganDurasi = array_sum(array_map('intval', $dataLapanganDurasi));
+						// Gunakan floatval supaya 0.01 tidak berubah jadi 0
+						$dataLapanganDurasi = array_sum(array_map('floatval', $dataLapanganDurasi));
 					} else {
-						$dataLapanganDurasi = intval($dataLapanganDurasi);
+						// Gunakan floatval untuk menangani nilai tunggal desimal
+						$dataLapanganDurasi = floatval($dataLapanganDurasi);
 					}
 					$paparan = $this->convertHourToMinute($dataLapanganDurasi);
 					$item->lapangan_getaran_personal->durasi_paparan = $dataLapanganDurasi;
