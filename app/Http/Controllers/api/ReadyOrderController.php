@@ -563,7 +563,8 @@ class ReadyOrderController extends Controller
             // if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
             //     self::createInvoice($data, $dataQuotation, $request, false);
             // }
-
+            //kirim email ringkasan order
+                $name = $data->konsultan ?: $data->nama_perusahaan;
                     $emailBody = "
                         <p>Yth. Bapak/Ibu {$name},</p>
 
