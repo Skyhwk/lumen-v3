@@ -9,6 +9,7 @@ use App\Models\Jadwal;
 use App\Models\MasterKaryawan;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Services\GetBawahan;
 
 class MonitoringJadwalSamplingSalesController extends Controller
 {
