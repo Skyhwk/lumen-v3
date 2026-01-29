@@ -33,24 +33,24 @@ class BillingComand extends Command
 
         // 1️⃣ Order detail → map no_order => tgl_sampling
         $orderSamplingMap = OrderDetail::query()
-            ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
-            ->where('order_detail.is_active', 1)
-            ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
-            ->selectRaw('
-                order_detail.no_order,
-                MIN(order_detail.tanggal_sampling) AS tgl_sampling,
-                oh.sales_id
-            ')
-            ->groupBy('order_detail.no_order', 'oh.sales_id')
-            ->get()
-            ->keyBy('no_order')
-            ->map(function ($row) {
-                return [
-                    'tgl_sampling' => $row->tgl_sampling,
-                    'sales_id'     => $row->sales_id,
-                ];
-            })
-            ->toArray();
+        ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+        ->where('order_detail.is_active', 1)
+        ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+        ->selectRaw('
+            order_detail.no_order,
+            MIN(order_detail.tanggal_sampling) AS tgl_sampling,
+            oh.sales_id
+        ')
+        ->groupBy('order_detail.no_order', 'oh.sales_id')
+        ->get()
+        ->keyBy('no_order')
+        ->map(function ($row) {
+            return [
+                'tgl_sampling' => $row->tgl_sampling,
+                'sales_id'     => $row->sales_id,
+            ];
+        })
+        ->toArray();
 
         // 2️⃣ Ambil pelanggan + invoice + relasi
         $data = MasterPelanggan::query()
@@ -85,18 +85,18 @@ class BillingComand extends Command
                             : 0;
                     });
 
-                    $noOrder = $group->pluck('no_order')->unique()->values();
                     $periode = $group->pluck('periode')->filter()->unique()->values();
+                    $noOrder = $group->pluck('no_order')->unique()->values();
 
                     $tglSampling = $noOrder
-                        ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
-                        ->filter()
-                        ->values();
+                    ->map(fn ($no) => $orderSamplingMap[$no]['tgl_sampling'] ?? null)
+                    ->filter()
+                    ->values();
 
                     $sales_id = $noOrder
-                        ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
-                        ->filter()
-                        ->first(); // biasanya 1 invoice = 1 sales
+                    ->map(fn ($no) => $orderSamplingMap[$no]['sales_id'] ?? null)
+                    ->filter()
+                    ->first(); // biasanya 1 invoice = 1 sales
 
                     return [
                         'id_pelanggan'   => $first->pelanggan_id,
@@ -135,7 +135,7 @@ class BillingComand extends Command
         ->values()
         ->toArray();
 
-        printf("\n[BillingComand] [%s] Complete Calculate Data", date('Y-m-d H:i:s'));
+        printf("\n[BillingComand] [%s] Complete Calculate Data, total data : " . count($data), date('Y-m-d H:i:s'));
 
         printf("\n[BillingComand] [%s] Start Insert or Update", date('Y-m-d H:i:s'));
         $this->sync($data);
