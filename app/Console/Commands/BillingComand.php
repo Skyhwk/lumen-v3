@@ -33,12 +33,24 @@ class BillingComand extends Command
 
         // 1️⃣ Order detail → map no_order => tgl_sampling
         $orderSamplingMap = OrderDetail::query()
-        ->where('is_active', 1)
-        ->whereYear('tanggal_sampling', '>=', 2024)
-        ->selectRaw('no_order, MIN(tanggal_sampling) as tgl_sampling')
-        ->groupBy('no_order')
-        ->pluck('tgl_sampling', 'no_order')
-        ->toArray();
+            ->join('order_header as oh', 'oh.no_order', '=', 'order_detail.no_order')
+            ->where('order_detail.is_active', 1)
+            ->whereYear('order_detail.tanggal_sampling', '>=', 2024)
+            ->selectRaw('
+                order_detail.no_order,
+                MIN(order_detail.tanggal_sampling) AS tgl_sampling,
+                oh.sales_id
+            ')
+            ->groupBy('order_detail.no_order', 'oh.sales_id')
+            ->get()
+            ->keyBy('no_order')
+            ->map(function ($row) {
+                return [
+                    'tgl_sampling' => $row->tgl_sampling,
+                    'sales_id'     => $row->sales_id,
+                ];
+            })
+            ->toArray();
 
         // 2️⃣ Ambil pelanggan + invoice + relasi
         $data = MasterPelanggan::query()
