@@ -318,7 +318,7 @@ class SummaryQSDController extends Controller
         $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
 
         foreach ($forecasts as $forecast) {
-            $indexBulan = $monthNames[intval(str_replace('0', '', (explode('-', $forecast->tanggal_sampling_min)[1])))];
+            $indexBulan = $monthNames[intval(explode('-', $forecast->tanggal_sampling_min)[1])];
             $totalSummaryPerPeriode[$indexBulan] += $forecast->revenue_forecast;
             $totalSummaryThisYear += $forecast->revenue_forecast;
         }
