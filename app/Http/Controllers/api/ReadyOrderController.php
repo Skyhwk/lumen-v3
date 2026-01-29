@@ -546,7 +546,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->save();
 
             self::createInvoice($data, $dataQuotation, $request);
-            if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
+            if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -1002,7 +1002,7 @@ class ReadyOrderController extends Controller
             $dataQuotation->flag_status = 'ordered';
             $dataQuotation->save();
             self::createInvoice($data, $dataQuotation, $request);
-            if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
+            if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                 self::createInvoice($data, $dataQuotation, $request, false);
             }
 
@@ -2328,7 +2328,7 @@ class ReadyOrderController extends Controller
                 $periode = $dataQuotation->detail->pluck('periode_kontrak')->toArray();
                 foreach ($periode as $key => $value) {
                     self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, true, $key == 0);
-                    if((float)$key == 0 && $dataQuotation->detail[0]->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)){
+                    if($key == 0 && (float)$dataQuotation->detail[0]->biaya_akhir > (float)str_replace(',', '', $request->tagihan_awal)){
                         self::createInvoiceKontrakPeriode($dataOrderHeader, $dataQuotation, $request, $value, false, true);
                     }
                 }
@@ -2570,29 +2570,33 @@ class ReadyOrderController extends Controller
     }
 
     private function generateQrInvoice($noInvoice, $insert){
-        $filename = 'INVOICE' . '_' . preg_replace('/\\//', '_', $noInvoice) . '.pdf';
+        // dd($insert, $noInvoice);
+        $filename = \str_replace("/", "_", $noInvoice);
         $path = public_path() . "/qr_documents/" . $filename . '.svg';
-        $link = 'https://www.intilab.com/validation/';
-        $unique = 'isldc' . (int) floor(microtime(true) * 1000);
-
-        QrCode::size(200)->generate($link . $unique, $path);
-        $dataQr = [
-            'type_document' => 'invoice',
-            'kode_qr' => $unique,
-            'file' => $filename,
-            'data' => json_encode([
-                'no_document' => $noInvoice,
-                'nama_customer' => $insert['nama_perusahaan'],
+        if(!file_exists($path)){
+            $link = 'https://www.intilab.com/validation/';
+            $unique = 'isldc' . (int) floor(microtime(true) * 1000);
+    
+            QrCode::size(200)->generate($link . $unique, $path);
+            $dataQr = [
                 'type_document' => 'invoice',
-                'Tanggal_Pengesahan' => Carbon::parse($insert['tgl_invoice'])->locale('id')->isoFormat('DD MMMM YYYY'),
-                'Disahkan_Oleh' => $insert['nama_pj'],
-                'Jabatan' => $insert['jabatan_pj']
-            ]),
-            'created_at' => Carbon::now(),
-            'created_by' => 'System',
-        ];
-
-        DB::table('qr_documents')->insert($dataQr);
+                'kode_qr' => $unique,
+                'file' => $filename,
+                'data' => json_encode([
+                    'no_document' => $noInvoice,
+                    'nama_customer' => $insert['nama_perusahaan'],
+                    'type_document' => 'invoice',
+                    'Tanggal_Pengesahan' => Carbon::parse($insert['tgl_invoice'])->locale('id')->isoFormat('DD MMMM YYYY'),
+                    'Disahkan_Oleh' => $insert['nama_pj'],
+                    'Jabatan' => $insert['jabatan_pj']
+                ]),
+                'created_at' => Carbon::now(),
+                'created_by' => 'System',
+            ];
+    
+            DB::table('qr_documents')->insert($dataQr);
+        }
+        // dd($dataQr);
     }
 
     private function generateInvoice($no_order){
