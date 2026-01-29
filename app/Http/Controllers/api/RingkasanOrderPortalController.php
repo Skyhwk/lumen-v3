@@ -220,6 +220,7 @@ class RingkasanOrderPortalController extends Controller
                     $fileName =$searchFileName->filename;
                     $jadwalFile = $searchFileName->jadwalfile;
                 }
+               
             }
             
             // 1. Inisialisasi Query Builder
@@ -258,9 +259,8 @@ class RingkasanOrderPortalController extends Controller
              ->get();
              if($searchInvoice->isNotEmpty()){
                 foreach($searchInvoice as $inv){
-                    $fileName = $inv->upload_file ?? $inv->filename;
-                    
-                    $realPath = public_path('invoice/' . $fileName);
+                    $fileNameInvoice = $inv->upload_file ?? $inv->filename;
+                    $realPath = public_path('invoice/' . $fileNameInvoice);
                     $encodedContent = $this->encode($realPath);
                     $data =[
                         "nomor_invoice" =>$inv->no_invoice,
@@ -268,12 +268,14 @@ class RingkasanOrderPortalController extends Controller
                     ];
                     array_push($noInvoice,$data);
                 }
+                
              }
              
              $absolutePathQuot = public_path('quotation/' . $fileName);
              $absolutePathJadwal = public_path('quotation/' . $jadwalFile);
              $filenameQuotationEndcode = $this->encode($absolutePathQuot);
              $filenameJadwalEndcode = $this->encode($absolutePathJadwal);
+            //   dd($absolutePathQuot,$fileName,$filenameQuotationEndcode);
              
             return response()->json([
                 'info_dasar' => [
