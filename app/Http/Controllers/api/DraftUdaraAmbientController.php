@@ -5,6 +5,7 @@ use App\Helpers\HelperSatuan;
 use App\Http\Controllers\Controller;
 use App\Jobs\CombineLHPJob;
 use App\Models\DirectLainHeader;
+use App\Models\DataLapanganPartikulatMeter;
 use App\Models\GenerateLink;
 use App\Models\HistoryAppReject;
 use App\Models\KonfirmasiLhp;
@@ -43,57 +44,64 @@ class DraftUdaraAmbientController extends Controller
     public function index(Request $request)
     {
         $data = OrderDetail::with([
-            'lhps_ling',
-            'allDetailLingkunganHidup',
-            'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
+        'lhps_ling',
+        'allDetailLingkunganHidup',
+        'dataLapanganPartikulatMeter', // Relasi ini sudah dipanggil
+        'orderHeader:id,nama_pic_order,jabatan_pic_order,no_pic_order,email_pic_order,alamat_sampling',
         ])
-            ->where([
-                ['is_active', true],
-                ['status', 2],
-                ['kategori_2', '4-Udara'],
-                ['kategori_3', '11-Udara Ambient'],
-            ])
-            ->get()
-            ->map(function ($item) {
-                // Decode methode_sampling sekali saja
-                $lapangan = $item->allDetailLingkunganHidup;
-                $lhps     = $item->lhps_ling;
-                if (! empty($item->lhps_ling->methode_sampling)) {
-                    $item->lhps_ling->methode_sampling = json_decode($item->lhps_ling->methode_sampling);
-                }
+        ->where([
+            ['is_active', true],
+            ['status', 2],
+            ['kategori_2', '4-Udara'],
+            ['kategori_3', '11-Udara Ambient'],
+        ])
+        ->get()
+        ->map(function ($item) {
+            $lhps = $item->lhps_ling;
+            $lapangan = collect($item->allDetailLingkunganHidup);
+            $partikulat = DataLapanganPartikulatMeter::where('no_sampel', $item->no_sampel)
+                ->get();
+            // Ambil data partikulat sebagai collection
 
-                // Tentukan data_lapangan_lingkungan_hidup
-                // $item->data_lapangan_lingkungan_hidup = collect($item->allDetailLingkunganHidup)
-                //     ->when($item->kategori_1 == 'S24', fn($q) => $q->where('shift_pengambilan', 'L2'))
-                //     ->take(1)
-                //     ->values();
-                $all = collect($item->allDetailLingkunganHidup);
-                $item->data_lapangan_lingkungan_hidup = $all->where('shift_pengambilan', 'L2')->take(1)->values()->isNotEmpty()
-                    ? $all->where('shift_pengambilan', 'L2')->take(1)->values()
-                    : $all->take(1)->values();
+            if (!empty($lhps->methode_sampling)) {
+                $lhps->methode_sampling = json_decode($lhps->methode_sampling);
+            }
 
+            // Tentukan data lapangan lingkungan hidup
+            $shiftL2 = $lapangan->where('shift_pengambilan', 'L2')->take(1)->values();
+            $item->data_lapangan_lingkungan_hidup = $shiftL2->isNotEmpty() 
+                ? $shiftL2 
+                : $lapangan->take(1)->values();
+
+            if ($lapangan->isNotEmpty()) {
                 $minDate = $lapangan->min('created_at');
                 $maxDate = $lapangan->max('created_at');
+            } else {
+                $minDate = $partikulat->pluck('created_at')->min();
+                $maxDate = $partikulat->pluck('created_at')->max();
+            }
 
-                if (empty($lhps) || (
-                    empty($lhps->tanggal_sampling_awal) &&
-                    empty($lhps->tanggal_sampling_akhir) &&
-                    empty($lhps->tanggal_analisa_awal) &&
-                    empty($lhps->tanggal_analisa_akhir)
-                )) {
-                    $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
-                    $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
-                    $item->tanggal_analisa_awal   = $item->tanggal_terima;
-                    $item->tanggal_analisa_akhir  = Carbon::now()->format('Y-m-d');
-                } else {
-                    $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
-                    $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
-                    $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
-                    $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
-                }
+            $hasLhpsDates = $lhps && (
+                $lhps->tanggal_sampling_awal || 
+                $lhps->tanggal_sampling_akhir || 
+                $lhps->tanggal_analisa_awal || 
+                $lhps->tanggal_analisa_akhir
+            );
 
-                return $item;
-            });
+            if (!$hasLhpsDates) {
+                $item->tanggal_sampling_awal  = $minDate ? Carbon::parse($minDate)->format('Y-m-d') : null;
+                $item->tanggal_sampling_akhir = $maxDate ? Carbon::parse($maxDate)->format('Y-m-d') : null;
+                $item->tanggal_analisa_awal   = $item->tanggal_terima;
+                $item->tanggal_analisa_akhir  = Carbon::now()->format('Y-m-d');
+            } else {
+                $item->tanggal_sampling_awal  = $lhps->tanggal_sampling_awal;
+                $item->tanggal_sampling_akhir = $lhps->tanggal_sampling_akhir;
+                $item->tanggal_analisa_awal   = $lhps->tanggal_analisa_awal;
+                $item->tanggal_analisa_akhir  = $lhps->tanggal_analisa_akhir;
+            }
+
+            return $item;
+        });
 
         return Datatables::of($data)->make(true);
     }
