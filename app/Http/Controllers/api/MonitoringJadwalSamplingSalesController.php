@@ -45,7 +45,7 @@ class MonitoringJadwalSamplingSalesController extends Controller
 
             // ATASAN SALES
             } elseif (in_array($jabatan, [21, 15, 154, 157])) {
-                $bawahan = GetBawahan::where('id', $this->user_id)
+                $bawahan = GetBawahan::where('id', $this->user_id)->get()
                     ->pluck('id')
                     ->toArray();
 
