@@ -557,6 +557,7 @@ class ReadyOrderController extends Controller
                 if ($dataQuotation->biaya_akhir > $request->tagihan_awal) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
+            }
 
             self::createInvoice($data, $dataQuotation, $request);
             if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
@@ -596,8 +597,6 @@ class ReadyOrderController extends Controller
                     $linkRingkasanOrder->emailed_by = $this->karyawan;
                     $linkRingkasanOrder->emailed_at = Carbon::now();
                     $linkRingkasanOrder->save();
-                }
-            }
 
             DB::commit();
             
