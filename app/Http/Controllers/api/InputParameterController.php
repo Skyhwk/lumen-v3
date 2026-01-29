@@ -3029,7 +3029,7 @@ class InputParameterController extends Controller
 										$l25 = DetailLingkunganKerja::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
 										// dd($l25);
 										if ($l25) {
-											$waktu = explode(",", $l25->durasi_pengambilan);
+											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
 											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
 											$durasiFin = ((int)$jam * 60) + (int)$menit;
@@ -3041,7 +3041,7 @@ class InputParameterController extends Controller
 									if (count($lingVolatile) > 0) {
 										$l25 = DetailSenyawaVolatile::where('no_sampel', $request->no_sample)->where('parameter', $parame)->where('shift_pengambilan', 'L25')->first();
 										if ($l25) {
-											$waktu = explode(",", $l25->durasi_pengambilan);
+											$waktu = explode(",", $l25->durasi_pengujian);
 											$jam = preg_replace('/\s+/', '', ($waktu[0] != '') ? str_replace("Jam", "", $waktu[0]) : 0);
 											$menit = preg_replace('/\s+/', '', ($waktu[1] != '') ? str_replace("Menit", "", $waktu[1]) : 0);
 											$durasiFin = ((int)$jam * 60) + (int)$menit;
