@@ -256,7 +256,7 @@ class TestingController extends Controller
                     ])
                     ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
                     ->where('is_active', 1)
-                    ->where('id_pelanggan', 'KSDE01')
+                    // ->where('id_pelanggan', 'KSDE01')
                     ->whereHas('invoices')
                     ->get()
                     ->map(function ($pelanggan) use ($orderSamplingMap) {
