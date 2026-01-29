@@ -652,7 +652,7 @@ trait RenderNonKontrak
                 ' <tr>
                     <td style="text-align:center;font-size: 10px;" colspan="2">
                         <b>
-                            <u>Sebagai tanda persetujuan, agar dapat menandatangani serta mengirimkan kembali kepada pihak kami melalui email : sales@intilab.com</u>
+                            <u>Mohon Bapak/Ibu dapat meninjau kembali form penawaran ini untuk memastikan seluruh data kebutuhan telah sesuai. Sebagai bentuk persetujuan, mohon menandatangani dan mengirimkan kembali kepada kami melalui email: sales@intilab.com</u>
                         </b>
                     </td>
                 </tr>'

@@ -109,27 +109,43 @@ class SalesDailyQSD
                 WHERE COALESCE(nilai_pembayaran, 0) > 0
             ");
 
+            // DB::statement("
+            //     UPDATE daily_qsd
+            //     SET tanggal_kelompok = CASE 
+            //         -- jika tanggal_pembayaran NULL → pakai tanggal_sampling_min
+            //         WHEN tanggal_pembayaran IS NULL THEN tanggal_sampling_min
+
+            //         -- jika tanggal_pembayaran < tanggal_sampling_min → pakai tanggal_pembayaran
+            //         WHEN STR_TO_DATE(
+            //                 SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+            //                 '%Y-%m-%d'
+            //             ) < tanggal_sampling_min
+            //         THEN STR_TO_DATE(
+            //                 SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+            //                 '%Y-%m-%d'
+            //             )
+
+            //         -- selain itu → tetap tanggal_sampling_min
+            //         ELSE tanggal_sampling_min
+            //     END
+            //     WHERE tanggal_kelompok IS NULL
+            // ");
+
             DB::statement("
                 UPDATE daily_qsd
                 SET tanggal_kelompok = CASE 
-                    -- jika tanggal_pembayaran NULL → pakai tanggal_sampling_min
                     WHEN tanggal_pembayaran IS NULL THEN tanggal_sampling_min
-
-                    -- jika tanggal_pembayaran < tanggal_sampling_min → pakai tanggal_pembayaran
-                    WHEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        ) < tanggal_sampling_min
-                    THEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        )
-
-                    -- selain itu → tetap tanggal_sampling_min
+                    WHEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') < tanggal_sampling_min
+                        THEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d')
                     ELSE tanggal_sampling_min
                 END
                 WHERE tanggal_kelompok IS NULL
+                OR (
+                        tanggal_pembayaran IS NULL
+                        AND tanggal_kelompok <> tanggal_sampling_min
+                    );
             ");
+
             printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));
         }
         Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');

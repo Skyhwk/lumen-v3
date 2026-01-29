@@ -158,6 +158,14 @@ class BillingComand extends Command
             WHERE b.tgl_sampling IS NULL
             AND b.periode = 'all';
         ");
+
+        DB::statement("
+            UPDATE billing_list_detail b
+            JOIN order_header oh 
+                ON oh.no_order = b.no_order
+            SET b.sales_id = oh.sales_id;
+        ");
+
         printf("\n[BillingComand] [%s] Complete Query Update ", date('Y-m-d H:i:s'));
     }
 
