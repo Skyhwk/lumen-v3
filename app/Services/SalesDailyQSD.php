@@ -16,12 +16,13 @@ class SalesDailyQSD
     {
         $now = Carbon::now();
         $currentYear = $now->format('Y');
+        printf("\n[SchaduleUpdateQsd] [%s] Running untuk tahun %d\n", $now->format('Y-m-d H:i:s'), $currentYear);
         self::handle((int)$currentYear);
     }
 
     private static function handle(int $currentYear): bool
     {
-        Log::info('[SalesDailyQSD] Starting QSD data update...');
+        Log::info('[SchaduleUpdateQsd] Starting QSD data update...');
         $arrayYears = self::getYearRange($currentYear);
 
         $rekapOrder = self::buildQueryQsd($arrayYears);
@@ -38,6 +39,7 @@ class SalesDailyQSD
         // Simpan ke DB
         $totalInserted = 0;
         if ($result->isNotEmpty()) {
+            printf("[SchaduleUpdateQsd] [%s] Inserting data to daily_qsd\n", Carbon::now()->format('Y-m-d H:i:s'));
             DB::disableQueryLog();
             DB::transaction(function () use ($result, $arrayYears, &$totalInserted) {
                 $now = Carbon::now()->subHours(7);
@@ -107,30 +109,47 @@ class SalesDailyQSD
                 WHERE COALESCE(nilai_pembayaran, 0) > 0
             ");
 
+            // DB::statement("
+            //     UPDATE daily_qsd
+            //     SET tanggal_kelompok = CASE 
+            //         -- jika tanggal_pembayaran NULL → pakai tanggal_sampling_min
+            //         WHEN tanggal_pembayaran IS NULL THEN tanggal_sampling_min
+
+            //         -- jika tanggal_pembayaran < tanggal_sampling_min → pakai tanggal_pembayaran
+            //         WHEN STR_TO_DATE(
+            //                 SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+            //                 '%Y-%m-%d'
+            //             ) < tanggal_sampling_min
+            //         THEN STR_TO_DATE(
+            //                 SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
+            //                 '%Y-%m-%d'
+            //             )
+
+            //         -- selain itu → tetap tanggal_sampling_min
+            //         ELSE tanggal_sampling_min
+            //     END
+            //     WHERE tanggal_kelompok IS NULL
+            // ");
+
             DB::statement("
                 UPDATE daily_qsd
                 SET tanggal_kelompok = CASE 
-                    -- jika tanggal_pembayaran NULL → pakai tanggal_sampling_min
                     WHEN tanggal_pembayaran IS NULL THEN tanggal_sampling_min
-
-                    -- jika tanggal_pembayaran < tanggal_sampling_min → pakai tanggal_pembayaran
-                    WHEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        ) < tanggal_sampling_min
-                    THEN STR_TO_DATE(
-                            SUBSTRING_INDEX(tanggal_pembayaran, ',', 1),
-                            '%Y-%m-%d'
-                        )
-
-                    -- selain itu → tetap tanggal_sampling_min
+                    WHEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d') < tanggal_sampling_min
+                        THEN STR_TO_DATE(SUBSTRING_INDEX(tanggal_pembayaran, ',', 1), '%Y-%m-%d')
                     ELSE tanggal_sampling_min
                 END
                 WHERE tanggal_kelompok IS NULL
+                OR (
+                        tanggal_pembayaran IS NULL
+                        AND tanggal_kelompok <> tanggal_sampling_min
+                    );
             ");
+
+            printf("[SchaduleUpdateQsd] [%s] Updating daily_qsd completed", Carbon::now()->format('Y-m-d H:i:s'));
         }
-        Log::info('[SalesDailyQSD] Inserted ' . $totalInserted . ' rows');
-        Log::info('[SalesDailyQSD] Completed successfully');
+        Log::info('[SchaduleUpdateQsd] Inserted ' . $totalInserted . ' rows');
+        Log::info('[SchaduleUpdateQsd] Completed successfully');
         return true;
     }
 
@@ -138,7 +157,7 @@ class SalesDailyQSD
     {
         $nextYear = (int)Carbon::create($currentYear, 12, 1)->addYear(1)->endOfMonth()->format('Y');
         $arrayYears = [];
-        for ($i = ($currentYear - 1); $i <= $nextYear; $i++) {
+        for ($i = 2024; $i <= $nextYear; $i++) {
             $arrayYears[] = $i;
         }
         return $arrayYears;
@@ -146,6 +165,8 @@ class SalesDailyQSD
 
     private static function buildQueryQsd(array $arrayYears)
     {
+        printf("[SchaduleUpdateQsd] [%s] Building query QSD for years %s\n", Carbon::now()->format('Y-m-d H:i:s'), implode(', ', $arrayYears));
+
         $maxDateNextYear = Carbon::create(end($arrayYears), 12, 1)->endOfMonth()->format('Y-m-d');
         $rekapOrder = DB::table('order_detail')
             ->selectRaw('
@@ -218,6 +239,7 @@ class SalesDailyQSD
             order_detail.kontrak, 
             CASE WHEN order_detail.kontrak="C" THEN rqkd.periode_kontrak ELSE NULL END
         ');
+        printf("[SchaduleUpdateQsd] [%s] Query QSD built successfully\n", Carbon::now()->format('Y-m-d H:i:s'));
         return $rekapOrder;
     }
 
@@ -337,6 +359,7 @@ class SalesDailyQSD
 
     private static function bufferMapping($rows, $invoiceMap)
     {
+        printf("[SchaduleUpdateQsd] [%s] Buffering mapping data\n", Carbon::now()->format('Y-m-d H:i:s'));
         $buffer = [];
         foreach ($rows as $row) {
             $keyExact = $row->no_quotation . '|' . $row->periode;
@@ -379,11 +402,13 @@ class SalesDailyQSD
                 'created_at'           => Carbon::now()->subHours(7),
             ];
         }
+        printf("[SchaduleUpdateQsd] [%s] Buffering mapping data completed\n", Carbon::now()->format('Y-m-d H:i:s'));
         return $buffer;
     }
 
     private static function processGroupings($buffer, $spesialInv, $mapedInv, $groupedInvSpesial, $noQTSpesial)
     {
+        printf("[SchaduleUpdateQsd] [%s] Processing groupings\n", Carbon::now()->format('Y-m-d H:i:s'));
         $collection = collect($buffer);
         $withInvoice = $collection->filter(fn ($row) => !empty($row['no_invoice']));
         $withoutInvoice = $collection->filter(fn ($row) => empty($row['no_invoice']));
@@ -481,6 +506,7 @@ class SalesDailyQSD
             ];
         })->values();
         $result = $grouped->merge($firstGrouped)->values();
+        printf("[SchaduleUpdateQsd] [%s] Processing groupings completed\n", Carbon::now()->format('Y-m-d H:i:s'));
         return [$withInvoice, $groupedSpesial, $withoutInvoice, $firstGrouped, $grouped, $result];
     }
 

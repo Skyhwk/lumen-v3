@@ -106,7 +106,7 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Services\SalesDailyQSD;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 
 Carbon::setLocale('id');
 
@@ -226,6 +226,191 @@ class TestingController extends Controller
             //code...
             
             switch ($request->menu) {
+                case 'getForecast' :
+
+                    $invoice = MasterPelanggan::with('invoices')
+                    ->selectRaw('id_pelanggan, nama_pelanggan, sales_penanggung_jawab, sales_id')
+                    ->where('is_active', 1)
+                    ->whereHas('invoices')
+                    ->get()
+                    ->map(function($q) {
+                        $tagihan = $q->invoices->sum('nilai_tagihan');
+                        $terbayar = $q->invoices->reduce(function($carry, $b) {
+                            $pembayaran = $b->recordPembayaran->sum('nilai_pembayaran') ?? 0;
+                            $withdraw = $b->recordWithdraw->sum('nilai_pembayaran') ?? 0;
+                            return $carry + $pembayaran + $withdraw;
+                        }, 0);
+            
+                        $status = abs($tagihan - $terbayar) <= 10 ? 1 : 0;
+            
+                        $invoices = $q->invoices->map(function($qq) {
+                            $tgl_sampling = null;
+                            
+                            $terbayarInvoice = ($qq->recordPembayaran->sum('nilai_pembayaran') ?? 0) + ($qq->recordWithdraw->sum('nilai_pembayaran') ?? 0);
+                            
+                            $pph = $qq->recordWithdraw->sum(function($item) {
+                                return ($item->keterangan_pelunasan == 'PPH' ? $item->nilai_pembayaran : 0);
+                            }) ?? 0;
+            
+                            $statusInvoice = abs($qq->nilai_tagihan - $terbayarInvoice) <= 10 ? 1 : 0;
+                            
+                            return [
+                                "id_pelanggan" => $qq->pelanggan_id,
+                                "no_quotation" => $qq->no_quotation,
+                                "no_order" => $qq->no_order,
+                                "no_invoice" => $qq->no_invoice,
+                                "periode" => $qq->periode,
+                                "tgl_sampling" => $tgl_sampling,
+                                "tgl_invoice" => $qq->tgl_invoice,
+                                "tgl_jatuh_tempo" => $qq->tgl_jatuh_tempo,
+                                "nilai_tagihan" => $qq->nilai_tagihan,
+                                "terbayar" => $terbayarInvoice,
+                                "pph" => $pph,
+                                "is_complete" => $statusInvoice,
+                            ];
+                        })->values()->toArray();
+            
+                        $totalPph = collect($invoices)->sum(function($invoice) {
+                            return $invoice['pph'] ?? 0;
+                        });
+            
+                        return [
+                            'id_pelanggan' => $q->id_pelanggan,
+                            'nama_pelanggan' => $q->nama_pelanggan,
+                            'sales_penanggung_jawab' => $q->sales_penanggung_jawab,
+                            'sales_id' => $q->sales_id,
+                            'jumlah_invoice' => $q->invoices->count(),
+                            'nilai_tagihan' => $tagihan,
+                            'terbayar' => $terbayar,
+                            'total_pph' => $totalPph,
+                            'is_complete' => $status,
+                            'invoices' => $invoices,
+                        ];
+                    })->values()->toArray();
+
+                    // $pelanggan = MasterPelanggan::query()
+                    //     ->select('id_pelanggan', 'nama_pelanggan', 'sales_penanggung_jawab', 'sales_id')
+                    //     ->where('is_active', 1)
+                    //     ->whereHas('invoices')
+                    //     ->with([
+                    //         'invoices' => function ($q) {
+                    //             $q->withSum('recordPembayaran as total_bayar', 'nilai_pembayaran')
+                    //             ->withSum('recordWithdraw as total_withdraw', 'nilai_pembayaran')
+                    //             ->withSum([
+                    //                     'recordWithdraw as pph' => function ($q) {
+                    //                         $q->where('keterangan_pelunasan', 'PPH');
+                    //                     }
+                    //                 ], 'nilai_pembayaran');
+                    //         }
+                    //     ])
+                    //     ->get();
+
+                    // /**
+                    //  * Ambil tanggal sampling SEKALI SAJA
+                    //  */
+                    // $samplingMap = OrderDetail::query()
+                    //     ->where('is_active', 1)
+                    //     ->selectRaw("
+                    //         no_order,
+                    //         COALESCE(NULLIF(periode,'null'),'all') as periode,
+                    //         MIN(tanggal_sampling) as tgl_sampling
+                    //     ")
+                    //     ->groupBy('no_order', 'periode')
+                    //     ->get()
+                    //     ->groupBy(fn ($i) => $i->no_order.'|'.$i->periode);
+
+                    // /**
+                    //  * Mapping final
+                    //  */
+                    // $result = $pelanggan->map(function ($q) use ($samplingMap) {
+
+                    //     $totalTagihan = $q->invoices->sum('nilai_tagihan');
+                    //     $totalTerbayar = $q->invoices->sum(fn ($b) => ($b->total_bayar ?? 0) + ($b->total_withdraw ?? 0));
+
+                    //     $invoices = $q->invoices->map(function ($b) use ($samplingMap) {
+
+                    //         $periode = in_array($b->periode, ['all', null, 'null']) ? 'all' : $b->periode;
+                    //         $key = $b->no_order.'|'.$periode;
+
+                    //         $tgl_sampling = optional(
+                    //             optional($samplingMap->get($key))->first()
+                    //         )->tgl_sampling;
+
+                    //         $totalBayar = ($b->total_bayar ?? 0) + ($b->total_withdraw ?? 0);
+
+                    //         return [
+                    //             "id_pelanggan"    => $b->pelanggan_id,
+                    //             "no_quotation"    => $b->no_quotation,
+                    //             "no_order"        => $b->no_order,
+                    //             "no_invoice"      => $b->no_invoice,
+                    //             "periode"         => $b->periode,
+                    //             "tgl_sampling"    => $tgl_sampling,
+                    //             "tgl_invoice"     => $b->tgl_invoice,
+                    //             "tgl_jatuh_tempo" => $b->tgl_jatuh_tempo,
+                    //             "nilai_tagihan"   => $b->nilai_tagihan,
+                    //             "terbayar"        => $totalBayar,
+                    //             "pph"             => $b->pph ?? 0,
+                    //             "is_complete"     => abs($b->nilai_tagihan - $totalBayar) <= 10 ? 1 : 0,
+                    //         ];
+                    //     })->values()->toArray();
+
+                    //     return [
+                    //         'id_pelanggan'            => $q->id_pelanggan,
+                    //         'nama_pelanggan'          => $q->nama_pelanggan,
+                    //         'sales_penanggung_jawab'  => $q->sales_penanggung_jawab,
+                    //         'sales_id'                => $q->sales_id,
+                    //         'jumlah_invoice'          => count($invoices),
+                    //         'nilai_tagihan'           => $totalTagihan,
+                    //         'terbayar'                => $totalTerbayar,
+                    //         'total_pph'               => collect($invoices)->sum('pph'),
+                    //         'is_complete'             => abs($totalTagihan - $totalTerbayar) <= 10 ? 1 : 0,
+                    //         'invoices'                => $invoices,
+                    //     ];
+                    // })->values()->toArray();
+                    
+                    return response()->json([
+                        'success' => true,
+                        'julahData' => count($invoice),
+                        'data' => $invoice
+                    ]);
+
+
+                    $jadwalKontrak = Jadwal::selectRaw('no_quotation, periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNotNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation', 'periode')
+                        ->get();
+
+                    $jadwalNonKontrak = Jadwal::selectRaw('no_quotation, NULL as periode, MIN(tanggal) as tanggal')
+                        ->whereYear('tanggal', '2026')
+                        ->where('is_active', 1)
+                        ->whereNull('periode')
+                        ->whereNotNull('no_quotation')
+                        ->groupBy('no_quotation')
+                        ->get();
+                    
+                    $order = OrderHeader::where('is_active', 1)
+                        ->where('is_revisi', 0)
+                        ->pluck('no_document')->toArray();
+
+                    $data = $jadwalKontrak
+                        ->concat($jadwalNonKontrak)
+                        ->filter(function($q) use ($order) {
+                            return !in_array($q->no_quotation, $order);
+                        })
+                        ->sortBy('tanggal')
+                        ->values()->toArray();
+                    
+                    dd(count($data));
+
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data
+                    ]);
+                    
+                    break;
                 case 'generateSertificate':
                     $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
                     $getDetail = $getHeader->details;

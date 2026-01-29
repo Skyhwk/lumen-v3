@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\{SampelDiantar,OrderDetail,SampelDiantarDetail};
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 
 class RenderSD
 {
@@ -681,7 +681,7 @@ class RenderSD
                 // The following code is unreachable due to the return statement above
                 try {
                     $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-                } catch (\App\Services\MpdfService as MpdfException $e) {
+                } catch (\Exception $e) {
                     dd("Gagal simpan PDF: " . $e->getMessage());
                 }
                 // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
@@ -857,7 +857,7 @@ class RenderSD
             // The following code is unreachable due to the return statement above
             try {
                 $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
-            } catch (\App\Services\MpdfService as MpdfException $e) {
+            } catch (\Exception $e) {
                 dd("Gagal simpan PDF: " . $e->getMessage());
             }
             // $pdf->Output($filePath, \Mpdf\Output\Destination::FILE);
