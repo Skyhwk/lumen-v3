@@ -31,7 +31,7 @@ use App\Http\Controllers\defaultApi\HelpersController as Helpers;
 use App\Http\Controllers\EandDcriptController as Edcript;
 use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 use GuzzleHttp\Client;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
@@ -705,6 +705,17 @@ class GenerateQrPsikologiController extends Controller
                 }
             }
 
+            $cc = $request->input('cc', []);
+
+            $ccArray = [];
+            if (!empty($cc)) {
+                if (is_array($cc)) {
+                    $ccArray = $cc;
+                } else {
+                    $ccArray = array_filter(array_map('trim', explode(',', $cc)));
+                }
+            }
+
             $validAttachments = [];
             foreach ($request->attachments as $item) {
                 $filePath = base_path('public/qr_psikologi/' . $item['name']);
@@ -718,7 +729,7 @@ class GenerateQrPsikologiController extends Controller
             $email = SendEmail::where('to', $request->to)
                 ->where('subject', $request->subject)
                 ->where('body', $request->content)
-                ->where('cc', $request->cc)
+                ->where('cc', $ccArray)
                 ->where('bcc', $bcc)
                 ->where('attachment', $validAttachments)
                 ->where('karyawan', $this->karyawan)

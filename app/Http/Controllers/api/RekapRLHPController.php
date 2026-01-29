@@ -25,6 +25,7 @@ use App\Services\Notification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+
 use Yajra\Datatables\Datatables;
 
 class RekapRLHPController extends Controller
@@ -35,16 +36,9 @@ class RekapRLHPController extends Controller
         try {
             $department = $request->attributes->get('user')->karyawan->id_department;
 
-            if (($department == 17 || $department == 7) && ! in_array($this->user_id, [10, 15, 93, 123])) {
+            if (($department == 17 || $department == 7 || in_array($this->user_id, [13])) && ! in_array($this->user_id, [10, 15, 93, 123])) {
                 $data = TicketRLHP::where('is_active', true)
-                    ->whereIn('status', ['DONE', 'REJECT', 'VOID', 'WAITING PROCESS'])
-                    ->where(function ($q) {
-                        $q->where('kategori', 'TANGGAL')
-                            ->where('status', '!=', 'WAITING PROCESS')
-                            ->orWhere(function ($q2) {
-                                $q2->where('kategori', 'DATA');
-                            });
-                    })
+                    ->whereIn('status', ['DONE', 'REJECT', 'VOID'])
                     ->orderByDesc('id');
 
                 return DataTables::of($data)

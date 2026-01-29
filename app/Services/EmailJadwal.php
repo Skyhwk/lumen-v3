@@ -15,7 +15,7 @@ use App\Models\QrDocument;
 use App\Models\SamplingPlan;
 use PHPMailer\PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\DB;
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 use Carbon\Carbon;
 use Exception;
 

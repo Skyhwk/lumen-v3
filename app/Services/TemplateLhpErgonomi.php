@@ -1,7 +1,7 @@
 <?php
 namespace App\Services;
 
-use \Mpdf\Mpdf as PDF;
+use \App\Services\MpdfService as PDF;
 use Illuminate\Support\Facades\View;
 use App\Models\{DataLapanganErgonomi};
 use Carbon\Carbon;

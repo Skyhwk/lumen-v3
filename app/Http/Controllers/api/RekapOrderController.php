@@ -84,6 +84,12 @@ class RekapOrderController extends Controller
             }
         }
 
+        // Hanya yang sudah ada LHP rilis
+        $rekapOrder->where(function ($q) {
+            $q->whereNotNull('link_lhp.jumlah_lhp_rilis')
+            ->where('link_lhp.jumlah_lhp_rilis', '>', 0);
+        });
+
         /** 
          * ===============================
          *         FILTER LOGIC

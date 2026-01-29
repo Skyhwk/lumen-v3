@@ -35,4 +35,9 @@ class SertifikatWebinarHeader extends Sector
         return $this->belongsTo(TemplateBackground::class, 'id_template', 'id');
     }
 
+    public function survei()
+    {
+        return $this->belongsTo(SertifikatWebinarSurvei::class, 'id', 'header_id');
+    }
+
 }

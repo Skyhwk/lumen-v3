@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 class RenderSlipGaji
 {

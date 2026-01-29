@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\api;
 
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 use App\Models\Jadwal;
 use Illuminate\Http\Request;

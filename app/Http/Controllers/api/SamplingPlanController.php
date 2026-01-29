@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateDocumentSamplingJob;
 use App\Jobs\RenderAndEmailJadwal;
 use App\Jobs\RenderSamplingPlan;
 use App\Models\Jadwal;
@@ -640,12 +641,34 @@ class SamplingPlanController extends Controller
             // TAMBAHAN UNTUK UPDATE ORDER DETAIL
             $this->updateOrderDetail($dataObject, $request->tanggal);
 
-            if ($type == 'QT') {
+
+            switch ($type) {
+                case 'QT':
                 $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                GenerateDocumentSampling::onNonKontrak($quotation->id)->save();
-            } else {
+                $jobTaskId = JobTask::insert([
+                        'job'         => 'GenerateDocumentSampling',
+                        'status'      => 'processing',
+                        'no_document' => $quotation->no_document,
+                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                $this->dispatch($job);                              
+                break;
+
+                case 'QTC':
                 $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                GenerateDocumentSampling::onKontrak($quotation->id)->onPeriode($request->periode)->renderPartialKontrak();
+                $jobTaskId = JobTask::insert([
+                    'job'         => 'GenerateDocumentSampling',
+                    'status'      => 'processing',
+                    'no_document' => $quotation->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                $this->dispatch($job);
+                
+                default:
+                    Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
+                    break;
             }
 
             if ($jadwal) {
@@ -708,13 +731,36 @@ class SamplingPlanController extends Controller
 
             $this->updateOrderDetail($dataObject, $request->tanggal);
 
-            if ($type == 'QT') {
+           
+            switch ($type) {
+                case 'QT':
                 $quotation = QuotationNonKontrak::where('no_document', $request->no_quotation)->first();
-                GenerateDocumentSampling::onNonKontrak($quotation->id)->save();
-            } else {
+                $jobTaskId = JobTask::insert([
+                        'job'         => 'GenerateDocumentSampling',
+                        'status'      => 'processing',
+                        'no_document' => $quotation->no_document,
+                        'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+                $job = new GenerateDocumentSamplingJob('QT',$quotation->id,null,$this->karyawan);
+                $this->dispatch($job);                              
+                break;
+
+                case 'QTC':
                 $quotation = QuotationKontrakH::where('no_document', $request->no_quotation)->first();
-                GenerateDocumentSampling::onKontrak($quotation->id)->onPeriode($request->periode)->renderPartialKontrak();
+                $jobTaskId = JobTask::insert([
+                    'job'         => 'GenerateDocumentSampling',
+                    'status'      => 'processing',
+                    'no_document' => $quotation->no_document,
+                    'timestamp'   => Carbon::now()->format('Y-m-d H:i:s'),
+                ]);
+                $job = new GenerateDocumentSamplingJob('QTC', $quotation->id, $request->periode, $this->karyawan);
+                $this->dispatch($job);
+                
+                default:
+                    Log::info('Render GenerateDocumentSamplingJob Gagal. No Quotation: ' . $request->no_quotation);
+                    break;
             }
+
 
             if ($jadwal) {
                 return response()->json([
@@ -758,6 +804,7 @@ class SamplingPlanController extends Controller
 
     public function cancelJadwal(Request $request)
     {
+        
         DB::beginTransaction();
         try {
             if (! is_array($request->mode['batchId'])) {
@@ -766,7 +813,8 @@ class SamplingPlanController extends Controller
                 $batchId = $request->mode['batchId'];
             }
             $temptMessage = '';
-            if ($request->mode['parsial'] !== null) { //menandakan data yg terpilih adalah partial
+            if ($request->mode['parsial'] !== "") { //menandakan data yg terpilih adalah partial
+              
                 $dataParsial = Jadwal::whereIn('id', $batchId)
                     ->where('is_active', true)
                     ->update([
@@ -804,6 +852,7 @@ class SamplingPlanController extends Controller
                     ], 401);
                 }
             }
+            
             // $message = "No QT :" . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh staff :". $karyawan->karyawan($this->db,$this->karyawan)."\n" . ($temptMessage != '') ? $temptMessage : "";
             $message = "No QT: " . $request->no_quotation . "\ndengan Tanggal Jadwal " . $request->tanggal . " sudah di cancel oleh " . $this->karyawan . "\n" . (($temptMessage != '') ? $temptMessage : "");
 

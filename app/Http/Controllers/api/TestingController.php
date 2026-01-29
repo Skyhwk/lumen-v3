@@ -70,7 +70,12 @@ use App\Models\{
     DataPsikologi,
     DetailFlowMeter,
     DetailSoundMeter,
-    DailyQsd
+    DailyQsd,
+    SertifikatWebinarHeader,
+    SertifikatWebinarDetail,
+    LayoutCertificate,
+    JenisFont,
+    TemplateBackground
 };
 use App\Services\{
     GetAtasan,
@@ -101,7 +106,7 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Services\SalesDailyQSD;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 Carbon::setLocale('id');
 
@@ -222,25 +227,55 @@ class TestingController extends Controller
             
             switch ($request->menu) {
                 case 'generateSertificate':
-                    $path = GenerateWebinarSertificate::make('dedi-test.pdf')
-                    ->options([
-                        // 'template' => 'bg-biru.png',
-                        'template' => 'bg-biru-v1.webp',
-                        'layout' => 'layout-1',
-                        // 'font' => [
-                        //     'fontName' => 'greatvibes',
-                        //     'filename' => 'GreatVibes-Regular.ttf'
-                        // ],
-                        'recipientName' => 'Rangga Manggala Yudha Bahtiayar',
-                        'id' => 14527,
-                        'webinarTitle' => 'Kelas Online',
-                        'webinarTopic' => 'Kebijakan Terbaru Pengelolaan Air Limbah Domestik',
-                        'webinarDate' => '2026-01-14',
-                        'panelis' => ['<strong>Abidah Walfatiyyah</strong> (Technical Expertise)', '<strong>Bima Ghafara</strong> (Technical Expertise)'],
-                        'noSertifikat' => 'ISL012601-0001',
-                    ])
-                    ->generate();
-                    dd($path);
+                    $getHeader = SertifikatWebinarHeader::with(['details'])->where('id', 7)->first();
+                    $getDetail = $getHeader->details;
+                    $layout = LayoutCertificate::where('id', $getHeader->id_layout)->first();
+                    $font = JenisFont::where('id', $getHeader->id_font)->first();
+                    $template = TemplateBackground::where('id', $getHeader->id_template)->first();
+                    foreach ($getDetail as $key => $value) {
+                        /**
+                         * Mulai generate sertifikat satu per satu
+                         */
+
+                        $panelis = collect($getHeader->speakers)->map(function ($speaker) {
+                            unset($speaker['karyawan_id']);
+                            return $speaker;
+                        })->values()->toArray();
+
+                        $no_sertifikat = $getHeader->webinar_code . '-' . $value->number_attend;
+                        $filename = $no_sertifikat . '.pdf';
+                        $generate = GenerateWebinarSertificate::make($filename)
+                        ->options([
+                            'layout'            => $layout->nama_file,
+                            'font'              => $font->jenis_font ?? 'roboto',
+                            'template'          => $template->nama_template,
+                            'recipientName'     => $value->name,
+                            'id'                => $value->id,
+                            'webinarTitle'      => $getHeader->title,
+                            'webinarTopic'      => $getHeader->topic,
+                            'webinarSubTopic'   => $getHeader->sub_topic,
+                            'webinarDate'       => $getHeader->date,
+                            'panelis'           => $panelis,
+                            'noSertifikat'      => $no_sertifikat,
+                        ])
+                        ->generate();
+
+                        if($generate instanceof Exception) {
+                            return response()->json([
+                                'message' => 'Gagal menggenerate sertifikat',
+                                'line' => $generate->getLine(),
+                                'status' => '500'
+                            ], 500);
+                        }
+
+                        $value->update([
+                            'filename' => $filename
+                        ]);
+
+                        FacadesLog::info('update ' . $value->id . ' ' . $filename);
+                    }
+                    
+                    dd('done');
                     break;
                 case 'addSubscriber':
                     $endpoint = 'https://mail.intilab.com/api/promotion@intilab.com/subscribers';
@@ -2028,24 +2063,50 @@ class TestingController extends Controller
 
                             foreach ($listPersiapan as $item) {
                                 
-                                $labelParameter = $item['type_botol'] ?? '-';
+                                $labelParameter = $item['type_botol'] ?? $item['parameter'];
 
                                 // Buka baris baru jika counter genap
                                 if ($counter % 2 == 0) {
                                     $pdf->WriteHTML("<tr>");
                                 }
-                                $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                // $padding = ($counter % 2 == 0) ? '2% 40% 0% 0%' : '2% 0% 0% 0%';
+                                $styleContainer = ($counter % 2 == 0) 
+                                ? 'padding: 10px 20px 10px 10px;'  // Kolom Kiri
+                                : 'padding: 10px 10px 10px 20px;'; // Kolom Kanan
 
                                 // Render SATU KOTAK STIKER
                                 // Kita gunakan <div> dengan border-radius di dalam <td>
+                                // $pdf->WriteHTML('
+                                //     <th style="padding: ' . $styleContainer . ';">
+                                //         <table width="100%">
+                                //             <tr>
+                                //                 <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                //                 <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                //                 <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                //             </tr>
+                                //             <tr>
+                                //                 <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                //                     ' . $noSampel . '
+                                //                 </td>
+                                //             </tr>
+                                //         </table>
+                                //     </th>
+                                // ');
                                 $pdf->WriteHTML('
-                                    <th style="padding: ' . $padding . ';">
-                                        <table width="100%">
+                                    <th style="' . $styleContainer . '"> 
+                                            <table width="100%">
                                             <tr>
-                                                <td style="text-align: left;"><img src="' . public_path() . $pathQR . $qrImageFile . '"></td>
-                                                <td style="text-align: center !important;">' . $labelParameter . '</td>
+                                                <td style="text-align: left; width: 40%; padding-left: 10px;">
+                                                    <img src="' . public_path() . $pathQR . $qrImageFile . '" style="width: 25mm;"> </td>
+                                                <td style="text-align: center !important; vertical-align: middle;">
+                                                    <span style="font-size: 14px; font-weight: bold;">' . $labelParameter . '</span>
+                                                </td>
                                             </tr>
-                                            <tr><td colspan="2" style="font-size: 12px;">' . $noSampel . '</td></tr>
+                                            <tr>
+                                                <td colspan="2" style="font-size: 12px; text-align: left; padding-left: 10px; padding-top: 5px;">
+                                                    ' . $noSampel . '
+                                                </td>
+                                            </tr>
                                         </table>
                                     </th>
                                 ');

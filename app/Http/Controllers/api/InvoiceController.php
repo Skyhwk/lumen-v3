@@ -196,6 +196,7 @@ class InvoiceController extends Controller
                     DB::raw('MAX(invoice.tgl_jatuh_tempo) AS tgl_jatuh_tempo'),
                     DB::raw('MAX(invoice.filename) AS filename'),
                     DB::raw('MAX(invoice.upload_file) AS upload_file'),
+                    DB::raw('MAX(invoice.file_pph) AS file_pph'),
 
                     DB::raw('MAX(order_header.konsultan) AS consultant'),
                     DB::raw('MAX(order_header.no_document) AS document'),
@@ -287,6 +288,21 @@ class InvoiceController extends Controller
                     ['%' . $request->no_spk . '%']
                 );
             }
+
+            if ($request->filled('nilai_invoice')) {
+                $data->havingRaw(
+                    'SUM(invoice.nilai_tagihan) LIKE ?',
+                    ['%' . $request->nilai_invoice . '%']
+                );
+            }
+
+            if ($request->filled('pembayaran')) {
+                $data->havingRaw(
+                    '(SUM(invoice.nilai_pelunasan) + COALESCE(MAX(w.total_pembayaran), 0)) LIKE ?',
+                    ['%' . $request->pembayaran . '%']
+                );
+            }
+
             if ($request->filled('emailed_by')) {
                 $data->havingRaw(
                     'MAX(invoice.emailed_by) LIKE ?',

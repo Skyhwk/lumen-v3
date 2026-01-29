@@ -8,7 +8,7 @@ use App\Models\QrDocument;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Mpdf\Mpdf;
+use App\Services\MpdfService as Mpdf;
 
 class RenderPersiapanSample
 {
