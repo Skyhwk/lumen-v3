@@ -1746,50 +1746,41 @@ class RenderKontrak
                             <b>' . $th_left1 . "</b>
                         </td>"
                 );
-                $buildKey = function ($row, $periode) use ($x_) {
-                    return implode('|', [
-                        strtoupper(explode("-", $row->kategori_1)[1] ?? ''),
-                        strtoupper(explode("-", htmlspecialchars_decode($row->kategori_2))[1] ?? ''),
-                        $row->jumlah_titik ?? 0,
-                        $x_,
-                        $row->penamaan_titik ?? '',
-                        $row->total_parameter ?? 0,
-                        implode(" ", $row->parameter ?? []),
-                        $periode ?? ''
-                    ]);
-                };
-
-                $periodeHeader = $a->periode ?? $a->periode_kontrak ?? null;
-
-                $th_left_key = $buildKey($a, $periodeHeader);
-
                 foreach ($detail as $key => $value) {
-
                     foreach (json_decode($value->data_pendukung_sampling) as $keys => $values) {
-
-                        $num_ = $values->data_sampling;
+                        if (is_array($values->data_sampling)) {
+                            $object = $values->data_sampling;
+                        } else {
+                            $object = json_decode($values->data_sampling);
+                        }
+                        
+                        $num_ = self::gabungDataDanJumlahTitik($object);
                         $bollean = false;
-
+                        $periode_found = [];
+                        
                         foreach ($num_ as $key_ => $val_) {
+                            
+                            $td_kat = implode(" ", [
+                                strtoupper(explode("-", $val_->kategori_1)[1]),
+                                strtoupper(explode("-", htmlspecialchars_decode($val_->kategori_2))[1]),
+                                $val_->jumlah_titik,
+                                $x_,
+                                $val_->total_parameter,
+                                implode(" ", $val_->parameter)
+                            ]);
 
-                            $periodeDetail = $values->periode 
-                                ?? $val_->periode 
-                                ?? $value->periode_kontrak 
-                                ?? null;
-
-                            $td_key = $buildKey($val_, $periodeDetail);
-
-                            if ($th_left_key === $td_key) {
+                            $td_kat1 = strtoupper(
+                                explode("-", $a->kategori_2)[1]
+                            );
+                            
+                            if (in_array($values->periode_kontrak, $a->periode) && !in_array($values->periode_kontrak, $periode_found) && $th_left == $td_kat) {
+                                $periode_found[] = $values->periode_kontrak;
                                 $pdf->WriteHTML(
-                                    '<td style="font-size: 8px; text-align:center;">'
-                                    . $val_->jumlah_titik .
-                                    '</td>'
+                                    '<td style="font-size: 8px; text-align:center;">' . $val_->jumlah_titik . "</td>"
                                 );
                                 $bollean = true;
-                                break;
                             }
                         }
-
                         if ($bollean == false) {
                             $pdf->WriteHTML("<td></td>");
                         }
