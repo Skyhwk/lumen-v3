@@ -75,7 +75,7 @@ class SummaryQSDController extends Controller
             $teamData['team_total_staff']         = array_sum($teamTotalStaff);
         }
 
-        [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year);
+        [$forecastTotal, $forecastTotalPeriode] = $this->getForecastTotal($year, $type);
 
         return response()->json([
             'success'           => true,
@@ -307,9 +307,26 @@ class SummaryQSDController extends Controller
         return $resignedMembers;
     }
 
-    private function getForecastTotal($tahun)
+    private function getForecastTotal($tahun, $type)
     {
-        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun)->get();
+        $forecasts = ForecastSP::whereYear('tanggal_sampling_min', $tahun);
+
+        // Apply type filters
+        switch ($type) {
+            case 'contract':
+                $forecasts->where('status_quotation', 'kontrak');
+                break;
+
+            case 'new':
+                $forecasts->where('status_customer', 'new');
+                break;
+
+            default:
+                // By default, get all forecasts
+                break;
+        }
+
+        $forecasts = $forecasts->get();
 
         $totalSummaryThisYear = 0;
 
