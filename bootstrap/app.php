@@ -126,6 +126,18 @@ if (!class_exists('Repository')) {
 if (!class_exists('Telegram')) {
     class_alias('Telegram\Bot\Laravel\Facades\Telegram', 'Telegram');
 }
+
+if (!class_exists('Mpdf')) {
+    class_alias(App\Services\MpdfService::class, 'Mpdf');
+}
+
+if (!class_exists('Log')) {
+    class_alias(Illuminate\Support\Facades\Log::class, 'Log');
+}
+
+if (!class_exists('DB')) {
+    class_alias(Illuminate\Support\Facades\DB::class, 'DB');
+}
 /*
 |--------------------------------------------------------------------------
 | Load The Application Routes

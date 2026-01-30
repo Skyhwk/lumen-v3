@@ -16,7 +16,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
 use App\Models\OrderHeader;
 use App\Models\OrderDetail;
-use App\Services\MpdfService as Mpdf;
+use Mpdf;
 
 class QuoteSampleController extends Controller
 {

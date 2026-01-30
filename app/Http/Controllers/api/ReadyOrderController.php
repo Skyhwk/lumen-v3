@@ -555,19 +555,15 @@ class ReadyOrderController extends Controller
             if($dataQuotation->data_lama == null || ($dataQuotation->data_lama != null && $data_lama->no_order == null)) 
             {
                 self::createInvoice($data, $dataQuotation, $request);
-                if ($dataQuotation->biaya_akhir > $request->tagihan_awal) 
-                {
+                if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
                     self::createInvoice($data, $dataQuotation, $request, false);
                 }
+            }
 
-                self::createInvoice($data, $dataQuotation, $request);
-                if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) 
-                {
-                    self::createInvoice($data, $dataQuotation, $request, false);
-                }
-                $linkRingkasanOrder = LinkRingkasanOrder::where('no_order', $data->no_order)->latest()->first();
-                if ($linkRingkasanOrder) {
-                    $name = $data->konsultan ?: $data->nama_perusahaan;
+            // self::createInvoice($data, $dataQuotation, $request);
+            // if ((float)$dataQuotation->biaya_akhir > (float)$request->tagihan_awal) {
+            //     self::createInvoice($data, $dataQuotation, $request, false);
+            // }
 
                     $emailBody = "
                         <p>Yth. Bapak/Ibu {$name},</p>
@@ -602,9 +598,8 @@ class ReadyOrderController extends Controller
                     $linkRingkasanOrder->emailed_by = $this->karyawan;
                     $linkRingkasanOrder->emailed_at = Carbon::now();
                     $linkRingkasanOrder->save();
-                }
-            }
-                DB::commit();
+
+            DB::commit();
             
             // self::generateInvoice($no_order);
             return response()->json([

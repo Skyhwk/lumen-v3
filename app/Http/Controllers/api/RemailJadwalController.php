@@ -2,17 +2,14 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateDocumentJadwalJob;
 use App\Models\GenerateLink;
 use App\Models\MasterCabang;
 use App\Models\MasterKaryawan;
-use App\Models\QuotationKontrakD;
 use App\Models\QuotationKontrakH;
 use App\Models\QuotationNonKontrak;
-use App\Models\SamplingPlan;
 use App\Services\GetAtasan;
 use App\Services\SendEmail;
-use App\Services\GenerateDocumentJadwal;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
@@ -25,33 +22,48 @@ class RemailJadwalController extends Controller
         return response()->json($data);
     }
 
-
     public function index(Request $request)
     {
         try {
             if ($request->mode == 'non_kontrak') {
-                $data = QuotationNonKontrak::with(['sales', 'order:no_order,no_document'])
-                    ->select('request_quotation.*') // tambahkan ini
+                $data = QuotationNonKontrak::with(['sales', 'order:no_order,no_document', 'sampling'])
+                    ->select('request_quotation.*')
                     ->where('request_quotation.id_cabang', $request->cabang)
-                    ->whereIn('request_quotation.flag_status', ['ordered','sp'])
+                    ->whereIn('request_quotation.flag_status', ['ordered', 'sp'])
                     ->where('request_quotation.is_approved', true)
                     ->where('request_quotation.is_emailed', true)
                     ->whereYear('request_quotation.tanggal_penawaran', $request->year)
+                    ->whereIn('request_quotation.id', function ($query) {
+                        $query->select('quotation_id')
+                            ->from('sampling_plan')
+                            ->whereNull('status_quotation')
+                            ->where('is_active', 1)
+                            ->groupBy('quotation_id')
+                            ->havingRaw('COUNT(*) = SUM(CASE WHEN is_approved = 1 THEN 1 ELSE 0 END)');
+                    })
                     ->orderBy('request_quotation.tanggal_penawaran', 'desc');
             } else if ($request->mode == 'kontrak') {
-                $data = QuotationKontrakH::with(['sales', 'order:no_order,no_document'])
+                $data = QuotationKontrakH::with(['sales', 'order:no_order,no_document', 'sampling'])
                     ->select('request_quotation_kontrak_H.*')
                     ->where('request_quotation_kontrak_H.id_cabang', $request->cabang)
-                    ->whereIn('request_quotation_kontrak_H.flag_status', ['ordered','sp'])
+                    ->whereIn('request_quotation_kontrak_H.flag_status', ['ordered', 'sp'])
                     ->where('request_quotation_kontrak_H.is_approved', true)
                     ->where('request_quotation_kontrak_H.is_emailed', true)
                     ->whereYear('request_quotation_kontrak_H.tanggal_penawaran', $request->year)
+                    ->whereIn('request_quotation_kontrak_H.id', function ($query) {
+                        $query->select('quotation_id')
+                            ->from('sampling_plan')
+                            ->where('status_quotation', 'kontrak')
+                            ->where('is_active', 1)
+                            ->groupBy('quotation_id')
+                            ->havingRaw('COUNT(*) = SUM(CASE WHEN is_approved = 1 THEN 1 ELSE 0 END)');
+                    })
                     ->orderBy('request_quotation_kontrak_H.tanggal_penawaran', 'desc');
             }
-
             $jabatan = $request->attributes->get('user')->karyawan->id_jabatan;
             switch ($jabatan) {
                 case 24: // Sales Staff
+                case 148:
                     $data->where('sales_id', $this->user_id);
                     break;
                 case 21: // Sales Supervisor
@@ -79,7 +91,6 @@ class RemailJadwalController extends Controller
 
     public function generateFile(Request $request)
     {
-        $timestamp = Carbon::now()->format('Y-m-d H:i:s');
         DB::beginTransaction();
         try {
             if ($request->mode == 'non_kontrak') {
@@ -99,44 +110,14 @@ class RemailJadwalController extends Controller
                 ], 401);
             }
 
-            $filename = ($request->mode == 'non_kontrak')
-                ? GenerateDocumentJadwal::onNonKontrak($cek->id)->save()
-                : GenerateDocumentJadwal::onKontrak($cek->id)->renderPartialKontrak();
-
-            if (! $filename) {
-                throw new \Exception('Gagal membuat dokumen jadwal');
-            }
-
-            if ($filename && $cek) {
-                $key   = $cek->created_by . DATE('YmdHis');
-                $gen   = MD5($key);
-                $token = $this->encrypt($gen . '|' . $cek->email_pic_order);
-                $data  = [
-                    'token'            => $token,
-                    'key'              => $gen,
-                    'expired'          => Carbon::parse($cek->expired)->addMonths(3)->format('Y-m-d'),
-                    //'password' => $cek->nama_pic_order[4] . DATE('dym', strtotime($cek->add_at)),
-                    'created_at'       => Carbon::parse($timestamp)->format('Y-m-d'),
-                    'created_by'       => $this->karyawan,
-                    // 'fileName' => json_encode($data_file) ,
-                    'fileName_pdf'     => $filename,
-                    'is_reschedule'    => 1,
-                    'quotation_status' => $request->mode,
-                    'type'             => 'jadwal',
-                    'id_quotation'     => $cek->id,
-                ];
-                $dataLink          = GenerateLink::insert($data);
-                $cek->expired      = Carbon::parse($cek->expired)->addMonths(1)->format('Y-m-d');
-                $cek->generated_at = $timestamp;
-                $cek->generated_by = $this->karyawan;
-                $cek->jadwalfile   = $filename;
-                $cek->is_generated = true;
-                $cek->save();
+            if ($request->mode == 'non_kontrak') {
+                $job = new GenerateDocumentJadwalJob('QT', $cek->id, $this->karyawan);
+                $this->dispatch($job);
             } else {
-                throw new \Exception('Gagal membuat dokumen jadwal, silahkan coba lagi atau hubungi IT.');
+                $job = new GenerateDocumentJadwalJob('QTC', $cek->id, $this->karyawan);
+                $this->dispatch($job);
             }
 
-            DB::commit();
             return response()->json([
                 'message' => 'Dokumen jadwal berhasil dibuat',
             ], 200, );
@@ -231,34 +212,7 @@ class RemailJadwalController extends Controller
 
     public function sendEmail(Request $request)
     {
-        DB::beginTransaction();
         try {
-            $status_sampling = [];
-            $nonPengujian    = false;
-            if ($request->mode == 'non_kontrak') {
-                $data              = QuotationNonKontrak::with('sales')->where('id', $request->id)->first();
-                $data->flag_status = 'emailed';
-                $data->is_emailed  = true;
-                $data->emailed_at  = Carbon::now()->format('Y-m-d H:i:s');
-                $data->emailed_by  = $this->karyawan;
-
-                if (empty(json_decode($data->data_pendukung_sampling, true))) {
-                    $nonPengujian = true;
-                }
-
-                array_push($status_sampling, $data->status_sampling);
-            } else if ($request->mode == 'kontrak') {
-                $data              = QuotationKontrakH::with('sales')->where('id', $request->id)->first();
-                $data->flag_status = 'emailed';
-                $data->is_emailed  = true;
-                $data->emailed_at  = Carbon::now()->format('Y-m-d H:i:s');
-                $data->emailed_by  = $this->karyawan;
-
-                $detail = QuotationKontrakD::where('id_request_quotation_kontrak_h', $request->id)->get();
-                foreach ($detail as $key => $v) {
-                    array_push($status_sampling, $v->status_sampling);
-                }
-            }
 
             // $emails = GetAtasan::where('id', $data->sales_id)->get()->pluck('email');
             // Jika $request->cc adalah array dengan satu elemen kosong, ubah menjadi array kosong
@@ -276,48 +230,11 @@ class RemailJadwalController extends Controller
                 ->fromAdmsales()
                 ->send();
 
-            if ($email) {
-                if ($data->data_lama !== null && $data->data_lama !== 'null') {
-                    $data_lama = json_decode($data->data_lama);
-                    if ($data_lama->status_sp == 'false') {
-                        $cek_sp = SamplingPlan::where('no_quotation', $data->no_document)->where('is_active', 1)->where('is_approved', 1)->exists();
-                        if ($cek_sp) {
-                            $data->flag_status    = 'sp';
-                            $data->is_ready_order = 1;
-                        }
-                    }
-                }
+            return response()->json([
+                'message' => 'Email berhasil dikirim',
+            ], 200);
 
-                $status_sampling = array_unique($status_sampling);
-                if (count($status_sampling) == 1) {
-                    if (in_array('SD', $status_sampling)) {
-                        $data->flag_status    = 'sp';
-                        $data->is_ready_order = 1;
-                    } else if ($nonPengujian) {
-                        $data->flag_status    = 'sp';
-                        $data->is_ready_order = 1;
-                    }
-                }
-
-                if ($data->is_generate_data_lab == 0) {
-                    $data->flag_status    = 'sp';
-                    $data->is_ready_order = 1;
-                    // $data->is_konfirmasi_order = 1;
-                }
-
-                $data->save();
-                DB::commit();
-                return response()->json([
-                    'message' => 'Email berhasil dikirim',
-                ], 200);
-            } else {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Email gagal dikirim',
-                ], 400);
-            }
         } catch (\Throwable $th) {
-            DB::rollBack();
             return response()->json([
                 'message' => $th->getMessage(),
             ], 500);
